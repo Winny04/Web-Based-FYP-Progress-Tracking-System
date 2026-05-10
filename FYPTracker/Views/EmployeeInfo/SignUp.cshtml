@@ -1,0 +1,270 @@
+﻿@using FYPTracker.Common
+@model FYPTracker.Controllers.EmployeeInfoVM
+
+@{
+    var departmentList = new List<SelectListItem>();
+    departmentList = Departments.DepartmentList();
+}
+<!DOCTYPE html>
+<!--
+Author: Keenthemes
+Product Name: Metronic - Bootstrap 5 HTML, VueJS, React, Angular & Laravel Admin Dashboard Theme
+Purchase: https://1.envato.market/EA4JP
+Website: http://www.keenthemes.com
+Contact: support@keenthemes.com
+Follow: www.twitter.com/keenthemes
+Dribbble: www.dribbble.com/keenthemes
+Like: www.facebook.com/keenthemes
+License: For each use you must have a valid license purchased only from above link in order to legally use the theme for your project.
+-->
+<html lang="en">
+<!--begin::Head-->
+<head>
+    <base href="../../../">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:type" content="article" />
+    <link rel="shortcut icon" href="assets/media/logos/Sophic5.png" />
+    <!--begin::Fonts-->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Poppins:300,400,500,600,700" />
+    <!--end::Fonts-->
+    <!--begin::Global Stylesheets Bundle(used by all pages)-->
+    <link href="assets/plugins/global/plugins.bundle.css" rel="stylesheet" type="text/css" />
+    <link href="assets/css/style.bundle.css" rel="stylesheet" type="text/css" />
+    <!--end::Global Stylesheets Bundle-->
+</head>
+<!--end::Head-->
+<!--begin::Body-->
+<!--begin::Main-->
+<!--begin::Root-->
+@*<form method="post">*@
+    <div class="d-flex flex-column flex-root" style="margin-top:250px;">
+        <!--begin::Authentication - Sign-up -->
+        <div class="d-flex flex-column flex-column-fluid bgi-position-y-bottom position-x-center bgi-no-repeat bgi-size-contain bgi-attachment-fixed" style="background-image: url(assets/media/illustrations/sigma-1/14.png">
+            <!--begin::Content-->
+            <div class="d-flex flex-center flex-column flex-column-fluid p-10 pb-lg-20">
+                <!--begin::Logo-->
+                <a href="/Home" class="mb-12">
+                    <img alt="Logo" src="assets/media/logos/Sophic3.png" style="width:300px;" />
+                </a>
+                <!--end::Logo-->
+                <!--begin::Wrapper-->
+                <div class="w-lg-600px bg-body rounded shadow-sm p-10 p-lg-15 mx-auto">
+                    <!--begin::Form-->
+                   @* <form class="form w-100" novalidate="novalidate" id="kt_sign_up_form">*@
+                        <!--begin::Heading-->
+                        <div class="mb-10 text-center">
+                            <!--begin::Title-->
+                            <h1 class="text-dark mb-3">Create an Account</h1>
+                            <!--end::Title-->
+                            <!--begin::Link-->
+                            <div class="text-gray-400 fw-bold fs-4">
+                                Already have an account?
+                                <a href="/EmployeeInfo/Login" class="link-primary fw-bolder">Sign in here</a>
+                            </div>
+                            <!--end::Link-->
+                        </div>
+                        <!--end::Heading-->
+                        <!--end::Action-->
+                        <!--begin::Separator-->
+                        <div class="d-flex align-items-center mb-10">
+                            <div class="border-bottom border-gray-300 mw-50 w-100"></div>
+                            <span class="fw-bold text-gray-400 fs-7 mx-2">OR</span>
+                            <div class="border-bottom border-gray-300 mw-50 w-100"></div>
+                        </div>
+                        <!--end::Separator-->
+                        <!--begin::Input group-->
+                        @*<div class="fv-row mb-7">
+                            <label class="form-label fw-bolder text-dark fs-6">Username </label>
+                            <label>@Html.ValidationMessageFor(model => model.UserName, "", new { @class = "text-danger" })</label>
+                            @Html.TextBoxFor(model => model.UserName, new { @class = "form-control form-control-lg form-control-solid" })
+                        </div>*@
+
+                        <div class="fv-row mb-7">
+                            <label class="form-label fw-bolder text-dark fs-6">Employee ID</label>
+                            <label>@Html.ValidationMessageFor(model => model.EmplooyeeInfoID, "", new { @class = "text-danger" })</label>
+                            @Html.TextBoxFor(model => model.EmplooyeeInfoID, new { @class = "form-control form-control-lg form-control-solid" })
+                        </div>
+
+                        <div class="fv-row mb-7">
+                            <label class="form-label fw-bolder text-dark fs-6">Full Name</label>
+                            <label>@Html.ValidationMessageFor(model => model.FullName, "", new { @class = "text-danger" })</label>
+                            @Html.TextBoxFor(model => model.FullName, new { @class = "form-control form-control-lg form-control-solid" })
+                        </div>
+
+                        <div class="fv-row mb-7">
+                            <label class="form-label fw-bolder text-dark fs-6">Short Name</label>
+                            <label>@Html.ValidationMessageFor(model => model.ShortName, "", new { @class = "text-danger" })</label>
+                            @Html.TextBoxFor(model => model.ShortName, new { @class = "form-control form-control-lg form-control-solid" })
+                        </div>
+                        <!--end::Input group-->
+                        <!--begin::Input group-->
+                        <div class="mb-10 fv-row" data-kt-password-meter="true">
+                            <!--begin::Wrapper-->
+                            <div class="mb-1">
+                                <label class="form-label fw-bolder text-dark fs-6">Password</label>
+                                <label>@Html.ValidationMessageFor(model => model.PassCode, "", new { @class = "text-danger" })</label>
+                                <div class="position-relative mb-3">
+                                    @Html.TextBoxFor(model => model.PassCode, new { @class = "form-control form-control-lg form-control-solid",  type = "password", name = "password" })
+                                    <span class="btn btn-sm btn-icon position-absolute translate-middle top-50 end-0 me-n2" data-kt-password-meter-control="visibility">
+                                        <i class="bi bi-eye-slash fs-2"></i>
+                                        <i class="bi bi-eye fs-2 d-none"></i>
+                                    </span>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div class="fv-row mb-7">
+                            <label class="form-label fw-bolder text-dark fs-6">Email</label>
+                            <label>@Html.ValidationMessageFor(model => model.Email, "", new { @class = "text-danger" })</label>
+                            @Html.TextBoxFor(model => model.Email, new { @class = "form-control form-control-lg form-control-solid",  type = "email"  })
+                        </div>
+
+                        <div class="fv-row mb-7">
+                            <label class="form-label fw-bolder text-dark fs-6">Department</label>
+                            @Html.DropDownListFor(model => model.Department, departmentList, new {@class = "form-select form-select-solid form-select-lg fw-bold"})
+                        </div>
+
+          @*              new SelectListItem{ Text="BD", Value = "BD" },
+                            new SelectListItem{ Text="OE", Value = "OE" },
+                            new SelectListItem{ Text="FSE", Value = "FSE" },
+                            new SelectListItem{ Text="SI", Value = "SI" },
+                            new SelectListItem{ Text="MEC", Value = "MEC" },
+                            new SelectListItem{ Text="ACC & FIN", Value = "ACC & FIN" }*@
+                        @*<div class="fv-row mb-7">
+                            <label class="form-label fw-bolder text-dark fs-6">Contact</label>
+                            <label>@Html.ValidationMessageFor(model => model.Contact, "", new { @class = "text-danger" })</label>
+                            @Html.TextBoxFor(model => model.Contact, new { @class = "form-control form-control-lg form-control-solid" })
+                            </div>*@
+                        <!--end::Input group-->
+                        <!--end::Input group-->
+                        <!--begin::Actions-->
+                        <div class="text-center">
+                            <button type="button" id="kt_sign_up_submit" class="btn btn-lg btn-primary">
+                                <span class="indicator-label">Create</span>
+                                <span class="indicator-progress">
+                                    Please wait...
+                                    <span class="spinner-border spinner-border-sm align-middle ms-2"></span>
+                                </span>
+                            </button>
+                        </div>
+                        <!--end::Actions-->
+                    @*</form>*@
+                    <!--end::Form-->
+                </div>
+                <!--end::Wrapper-->
+            </div>
+            <!--end::Content-->
+            <!--begin::Footer-->
+            <!--end::Footer-->
+        </div>
+        <!--end::Authentication - Sign-up-->
+    </div>
+@*</form>*@
+<!--end::Body-->
+</html>
+
+
+@section scripts{
+<script>
+     $(document).ready(function() {
+        $("#kt_sign_up_submit").click(function(){
+
+                var UserName = $("#EmplooyeeInfoID").val();
+                var EmplooyeeInfoID = $("#EmplooyeeInfoID").val();
+                var FullName = $("#FullName").val();
+                var ShortName = $("#ShortName").val();
+                var PassCode = $("#PassCode").val();
+                var Email = $("#Email").val();
+                var Department = $("#Department").val();
+
+
+                if(EmplooyeeInfoID == '' || FullName == '' || ShortName == '' || PassCode == '' || Email == '' || Department == ''){
+                    Swal.fire({
+                            text: "Please fill in all fields.",
+                            icon: "warning",
+                            buttonsStyling: false,
+                            confirmButtonText: "Ok, got it!",
+                            customClass: {
+                                confirmButton: "btn btn-primary",
+                            }
+                        });
+                     return false;
+                }
+                else if(Email == null || Email.indexOf("sophicautomation.com") < 0){ //if not found
+                    Swal.fire({
+                            text: "Inccorect email format. Please use company's email address.",
+                            icon: "warning",
+                            buttonsStyling: false,
+                            confirmButtonText: "Ok, got it!",
+                            customClass: {
+                                confirmButton: "btn btn-primary",
+                            }
+                        });
+                     return false;
+                }
+               
+
+            var form = {
+                UserName : UserName,
+                EmplooyeeInfoID : EmplooyeeInfoID, 
+                FullName : FullName,
+                ShortName : ShortName,
+                PassCode : PassCode,
+                Email : Email,
+                Department : Department
+            };
+
+            $.ajax({
+                url: "/EmployeeInfo/Create",
+                method: "POST",
+                data: {
+                    newEmployee: form
+                },
+                success:function(result) {
+                    if(result.status){
+                        Swal.fire({
+                            text: result.msg,
+                            icon: "success",
+                            buttonsStyling: false,
+                            confirmButtonText: "Ok, got it!",
+                            customClass: {
+                                confirmButton: "btn btn-primary",
+                            }
+                        }).then(function() {
+                            window.location.href = '/EmployeeInfo/Login';
+                        });
+                    }
+                    else{
+                         Swal.fire({
+                            text: result.msg,
+                            icon: "warning",
+                            buttonsStyling: false,
+                            confirmButtonText: "Ok, got it!",
+                            customClass: {
+                                confirmButton: "btn btn-primary",
+                            }
+                        });
+                    }
+                },
+                error:function(result) {
+                    Swal.fire({
+                            text: result.msg,
+                            icon: "error",
+                            buttonsStyling: false,
+                            confirmButtonText: "Ok, got it!",
+                            customClass: {
+                                confirmButton: "btn btn-primary",
+                            }
+                        });
+                }
+            });
+        });
+
+    }); //End $(document).ready
+               
+</script>
+}
+

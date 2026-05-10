@@ -1,0 +1,359 @@
+﻿@model Po
+
+@{
+    ViewBag.Title = "Edit";
+}
+
+<div class="card card-xxl-stretch mb-5 mb-xxl-10">
+    <div class="card-header">
+        <div class="card-title">
+			<h3>Edit form - @Model.FormName</h3>
+		</div>
+    </div>
+    <div class="card-body pb-0">
+        <form id="fillForm" asp-action="Edit" method="post">
+            <div class="form-horizontal">
+                @ViewBag.countUser
+                <div class="form-group">
+                    @Html.LabelFor(model => model.FormName, "Name", htmlAttributes: new { @class = "control-label col-md-2" })
+                    <div class="col-md-10">
+                        @Html.EditorFor(model => model.FormName, new { htmlAttributes = new { @class = "form-control", required = "", disabled = "disabled" } })
+                        @Html.ValidationMessageFor(model => model.FormName, "", new { @class = "text-danger" })
+                    </div>
+                </div>
+                <input type="hidden" name="Data" value="" />
+                <input type="hidden" name="DataResponse" id="DataResponse" value="" />
+                <input type="hidden" name="id" value="@Model.Id" />
+                <input type="hidden" name="AssignUser" value="" />
+
+                <div id="builder" hidden></div>
+
+                <div class="card">
+                    <div class="card-body" style="overflow-x:auto">
+                        <div id="render"></div>
+                    </div>
+                </div>
+
+                <div class="form-group pt-3">
+                    <div class="d-flex flex-row justify-content-between">
+                         <div>
+                             <button type="button" id="cancelBtn" class="btn btn-secondary mr-2">Cancel</button>
+                              <button type="button" class="btn btn-danger mr-2" id="rejectBtn">Reject</button>
+                         </div>
+                        <div>
+                            <input type="submit" id="updateButton" name="updateButton" value="Save" class="btn btn-success mr-2" />
+                            <button type="button" id="submitBtn" name="submitButton" class="btn btn-primary">Submit</button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div>
+                    <a href="@Url.Action("Index", "PurchaseOrder",new {id = Model.Prid})">Back to List</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="modal_reject_formList" tabindex="-1" aria-hidden="true">
+	<!--begin::Modal dialog-->
+	<div class="modal-dialog modal-dialog-centered mw-650px">
+		<!--begin::Modal content-->
+		<div class="modal-content rounded">
+			<!--begin::Modal header-->
+			<div class="modal-header pb-0 border-0 justify-content-end">
+				<!--begin::Close-->
+				<div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+					<!--begin::Svg Icon | path: icons/duotune/arrows/arr061.svg-->
+					<span class="svg-icon svg-icon-1">
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+							<rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+							<rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+						</svg>
+					</span>
+					<!--end::Svg Icon-->
+				</div>
+				<!--end::Close-->
+			</div>
+			<!--begin::Modal header-->
+			<!--begin::Modal body-->
+			<div class="modal-body scroll-y px-10 px-lg-15 pt-0 pb-15">
+				<!--begin:Form-->
+				<form id="new_reject_form" asp-controller="FormList" asp-action="rejectForm" method="post" class="form">
+					<!--begin::Heading-->
+					<div class="mb-13 text-center">
+						<!--begin::Title-->
+						<h1 class="mb-3">Reject Form</h1>
+						<!--end::Title-->
+						<!--begin::Description-->
+						<div class="text-muted fw-bold fs-5">If you need more info, please check
+						<a href="#" class="fw-bolder link-primary">Project Guidelines</a>.</div>
+						<!--end::Description-->
+					</div>
+					<!--end::Heading-->
+					<!--begin::Input group-->
+					<div class="d-flex flex-column mb-8 fv-row">
+						<label class="required fs-6 fw-bold mb-2">Remark</label>
+						<textarea class="form-control form-control-flush mb-3" rows="2" name="remark" required></textarea>
+					</div>
+					<!--end::Input group-->
+					<input type="hidden" value=@Model.Id name="id"/>
+					<!--begin::Actions-->
+					<div class="text-center">
+						<button type="button" data-dismiss="modal" class="btn btn-light me-3">Cancel</button>
+						<button type="submit" class="btn btn-primary">
+							<span class="indicator-label">Submit</span>
+							<span class="indicator-progress">Please wait...
+							<span class="spinner-border spinner-border-sm align-middle ms-2"></span></span>
+						</button>
+					</div>
+					<!--end::Actions-->
+				</form>
+				<!--end:Form-->
+			</div>
+			<!--end::Modal body-->
+		</div>
+		<!--end::Modal content-->
+	</div>
+	<!--end::Modal dialog-->
+</div>
+
+
+@section Scripts {
+    <script>
+        // Function To Edit Form
+        $(document).ready(function () {
+
+            var model1 = document.getElementById("modal_reject_formList");
+			var rejectModal = new bootstrap.Modal(model1);
+
+            var hideRejectBtn = ["new","bom reject"];
+
+            $('#submitBtn').click(function(){
+                var form = $('#fillForm').serialize();
+                //if (!renderer.checkData()) {
+                //    alert("Please fill all the required form before submit")
+                //} 
+                //else 
+                //{
+                    Swal.fire({
+					text: "Are you sure you would like to submit?",
+					icon: "warning",
+					showCancelButton: true,
+					buttonsStyling: false,
+					confirmButtonText: "Yes",
+					cancelButtonText: "No",
+					customClass: {
+						confirmButton: "btn btn-primary",
+						cancelButton: "btn btn-active-light"
+					}
+				}).then(function (result) {
+					if (result.value) {
+						//form.reset(); // Reset form	
+						    $.post('@Url.Action("GeneratePOForm","PurchaseOrder")', form,function(){
+                            window.location.href = '@Url.Action("Index","PurchaseOrder",new {id = Model.Prid})';
+                        });
+					} else if (result.dismiss === 'cancel') {
+						Swal.fire({
+							text: "Your form has not been cancelled!.",
+							icon: "error",
+							buttonsStyling: false,
+							confirmButtonText: "Ok, got it!",
+							customClass: {
+								confirmButton: "btn btn-primary",
+							}
+						});
+					}
+				});
+                //}
+            })
+
+            $('#cancelBtn').click(function(){
+                Swal.fire({
+					text: "Are you sure you would like to cancel?",
+					icon: "warning",
+					showCancelButton: true,
+					buttonsStyling: false,
+					confirmButtonText: "Yes, cancel it!",
+					cancelButtonText: "No, return",
+					customClass: {
+						confirmButton: "btn btn-primary",
+						cancelButton: "btn btn-active-light"
+					}
+				}).then(function (result) {
+					if (result.value) {
+						//form.reset(); // Reset form	
+						window.location.href = '@Url.Action("Index","PurchaseOrder",new {id = Model.Prid})';	
+					} else if (result.dismiss === 'cancel') {
+						Swal.fire({
+							text: "Your form has not been cancelled!.",
+							icon: "error",
+							buttonsStyling: false,
+							confirmButtonText: "Ok, got it!",
+							customClass: {
+								confirmButton: "btn btn-primary",
+							}
+						});
+					}
+				});
+            })
+
+          
+                $('#rejectBtn').hide();
+
+
+            $('#rejectBtn').click(function(){
+                Swal.fire({
+					text: "Are you sure you would like to reject?",
+					icon: "warning",
+					showCancelButton: true,
+					buttonsStyling: false,
+					confirmButtonText: "Yes, reject it!",
+					cancelButtonText: "No, return",
+					customClass: {
+						confirmButton: "btn btn-primary",
+						cancelButton: "btn btn-active-light"
+					}
+				}).then(function (result) {
+					if (result.value) {
+                        rejectModal.show();
+						@*$.post('@Url.Action("rejectForm","FormList")',{id:@Model.Id,remark:'something...'},function(data,status){
+                            console.log(status);
+                            window.location.href = '@Url.Action("Index","FormList",new {id = Model.ProjectId})';
+                        })*@
+					} else if (result.dismiss === 'cancel') {
+						Swal.fire({
+							text: "The form has not been reject!.",
+							icon: "error",
+							buttonsStyling: false,
+							confirmButtonText: "Ok, got it!",
+							customClass: {
+								confirmButton: "btn btn-primary",
+							}
+						});
+					}
+				});
+            })
+            
+        })
+
+
+        const data = @Html.Raw(string.IsNullOrEmpty(Model.Data) ? "{}" : Model.Data);
+        const submission = @Html.Raw(string.IsNullOrEmpty(Model.DataResponse) ? "{data:{}}" : Model.DataResponse);
+        var formStatus = {
+            "label": "Form Status",
+            "labelPosition": "left-left",
+            "disabled": true,
+            "tableView": true,
+            "key": "formStatus",
+            "hidden": true,
+            "type": "textfield",
+            "input": true,
+           
+        }
+
+        if(JSON.stringify(data) !== JSON.stringify({})){
+            data.components.unshift(formStatus);
+        }
+
+        var builder;
+        var renderer;
+        var state = {
+            formioVersion: 'default',
+            form: data,
+            submission: submission,
+            options: {},
+        };
+
+        function initBuilder(form) {
+            if (builder) {
+                builder.instance.destroy();
+            }
+            builder = new Formio.FormBuilder(document.getElementById('builder'), form, _.cloneDeep(state.options));
+
+            builder.instance.ready.then(function () {
+                builder.instance.on('change', function (event, flags) {
+                    if (!flags) {
+                        setForm(builder.instance.schema, 'builder');
+                    }
+                });
+            })
+        }
+
+        function initRenderer(form) {
+            if (renderer) {
+                renderer.destroy();
+            }
+            Formio.createForm(document.getElementById('render'), form, _.cloneDeep(state.options))
+                .then(function (self) {
+                    renderer = self;
+                    renderer.submission = state.submission;
+                    renderer.on('change', function (event, flags) {
+                        if (flags && !flags.fromSubmission) {
+                            setSubmission(renderer.submission, 'renderer');
+                        }
+                    });
+                });
+
+            document.getElementsByName('Data')[0].value = JSON.stringify(form)
+        }
+
+        function setForm(form, from) {
+            console.log('setForm', form, from);
+            state.form = form;
+            if (!renderer.checkData()) {
+                document.getElementById("submitBtn").disabled = true;
+            } else {
+                document.getElementById("submitBtn").disabled = false;
+            }
+
+        }
+
+        function setSubmission(submission, from) {
+            console.log('setSubmission', submission, from);
+            if (renderer && from !== 'renderer') {
+                renderer.submission = submission;
+            }
+
+            document.getElementsByName('DataResponse')[0].value = JSON.stringify(submission);
+            document.getElementsByName('DataResponse')[1].value = JSON.stringify(submission);
+        }
+
+        initBuilder(state.form);
+        initRenderer(state.form);
+
+
+                if (submission == null) {
+            submission.data.push({
+                projectCode: '@ViewBag.projectCode',
+                poNumber: '@ViewBag.poNo',
+                projectName: '@ViewBag.projectName',
+                category: '@ViewBag.category',
+                customer: '@ViewBag.customer'
+            });
+        } else {
+
+                            submission.data.projectCode = '@ViewBag.projectCode';
+                            submission.data.poNumber = '@ViewBag.poNo';
+                            submission.data.projectName = '@ViewBag.projectName';
+                            submission.data.category = '@ViewBag.category';
+                            submission.data.customer = '@ViewBag.customer';
+
+
+            //console.log(submission.data.dataGrid.length);
+            //if (submission.data.dataGrid != undefined || submission.data.dataGrid != null) {
+            //    for (i = 0; i < submission.data.dataGrid.length; i++) {
+
+            //        if (submission.data.dataGrid[i].keyInUser1 == "Admin") {
+            //            data.components.filter(a => a.key === 'dataGrid').at(0).components.at(i).columns.at(0).components.at(0).disabled = true;
+            //            /*data.components.filter(a => a.key === 'dataGrid').at(0).components.at(i).columns.at(1).components.at(0).hidden = true;*/
+            //        }
+            //    }
+            //}
+
+
+
+        }
+    </script>
+}

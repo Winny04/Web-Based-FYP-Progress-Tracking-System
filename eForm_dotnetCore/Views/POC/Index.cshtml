@@ -1,0 +1,255 @@
+﻿@using eForm_dotnetCore.Common
+@using eForm_dotnetCore.Helpers
+@using eForm_dotnetCore.ViewModels
+@using Microsoft.AspNetCore.Authorization
+@using eForm_dotnetCore.Configuration.Auhtorization;
+
+@inject IAuthorizationService AuthorizationService
+
+@model IEnumerable<PRApprovalViewModel>
+
+@{
+    ViewData["Title"] = "POC";
+}
+<div id="kt_content_container" class="container-fluid d-flex flex-column-fluid align-items-start">
+    <div class="content flex-row-fluid" id="kt_content">
+        <div class="card card-flush mb-5 mb-xl-8">
+            <div class="card-header">
+                <div class="card-title"><h3>POC</h3></div>
+                <div class="card-toolbar flex-row-fluid justify-content-end gap-5">
+                    <div class="d-flex align-items-center py-3 py-md-1">
+                        <div class="me-4">
+                            <!--start:: Btn Create-->
+                            <button class="btn btn-primary" id="transferBtn" onclick="transferPos()" style="display:none">Transfer</button>
+                           
+                            <!--end:: Btn Create-->
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center py-3 py-md-1">
+                        <span class="font-weight-bold fs-4">Total Price: RM @Math.Round(Model.Select(x => x.TotalPrice).Sum(),2) </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-body py-0">
+                <div class="table-responsive">
+                    <!--begin::Table-->
+                    <table id="formListTable" class="table table-row-gray-300 align-middle gs-0 gy-4">
+                        <!--begin::Table head-->
+                        <thead>
+                            <tr class="fw-bolder fs-6 text-uppercase text-center">
+                                <th class="min-w-35px tableCellBorderLeft tableCellBorderRight smallThText">
+                                    <div class="form-check form-check-sm form-check-custom form-check-solid">
+                                        <input id="checkedAll" class="form-check-input" type="checkbox" value="" data-kt-check="true" data-kt-check-target=".widget-9-check" style="margin-left:7px;" />
+                                    </div>
+                                </th>
+                                @*<th class="min-w-70px tableCellBorderRight smallThText"><b>Status</b></th>*@
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>Request by</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Project Code</b></th>
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>Project PO</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Customer</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Project Name</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Category</b></th>
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>PR</b></th>
+                                @*<th class="min-w-50px tableCellBorderRight smallThText"><b>PO</b></th>*@
+                                @*<th class="min-w-70px tableCellBorderRight smallThText"><b>GRN</b></th>*@
+                                @*<th class="min-w-70px tableCellBorderRight smallThText"><b>Remark</b></th>*@
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Action</b></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+
+                            @foreach (var form in Model)
+                            {
+                                <tr id="@form.Id" class="text-center">
+                                    <td class="text-center tableCellBorderLeft smallTdText">
+                                        <div class="form-check form-check-sm form-check-custom form-check-solid">
+                                            <input class="form-check-input checkSingle" id="checkBox" type="checkbox" value="@form.POCId" data-kt-check="true" data-kt-check-target=".widget-9-check" style="margin-left:7px;" />
+                                        </div>
+                                    </td>
+                                    @*Requestor*@
+                                    <td class="text-center tableCellBorderRight smallThText">
+                                        @form.RequestBy
+                                    </td>
+                                    @*ProjectCode*@
+                                    <td class="text-center tableCellBorderRight smallTdText">
+                                        @form.Project.Code
+                                    </td>
+                                    @*ProjectPO*@
+                                    <td class="text-center tableCellBorderRight smallTdText">
+                                        @form.Project.PoNumber
+                                    </td>
+                                    @*Customer*@
+                                    <td class="text-center tableCellBorderRight smallTdText">
+                                        @form.Project.Customer
+                                    </td>
+                                    @*Project Name*@
+                                    <td class="text-center tableCellBorderRight smallTdText">
+                                        @form.Project.Name
+                                    </td>
+                                    @*Project Category*@
+                                    <td class="text-center tableCellBorderRight smallThText">
+                                        @form.Category
+                                    </td>
+
+                                    @*PR*@
+                                    <td class="tableCellStandard">
+                                        <div class="menu-item">
+                                            <a href="/PurchaseRequisition/Edit/@form.Id" class="link-primary"><b>@form.Prname</b></a>
+                                        </div>
+                                    </td>
+
+
+                                    @*PO*@
+                                    @*<td class="text-center tableCellBorderRight smallThText">
+                                @if (form.PO != null)
+                                {
+                                if (form.PO.Where(x => x.Type == "PO").Any())
+                                {
+                                var sfId = form.PO.FirstOrDefault(x => x.Type == "PO").SupportFileId;
+                                <a href="#" onclick="openPDF(@sfId)">@form.PO.FirstOrDefault(x => x.Type == "PO").SupportFile.FileName</a>
+                                }
+                                }
+                                </td>*@
+
+                                    <td class="text-center tableCellBorderRight smallThText" style="border-right: 2px solid #D3D3D3;">
+                                        @{
+                                            <a href="#" class="btn btn-sm btn-light btn-active-light-primary" data-kt-menu-trigger="click" data-kt-menu-placement="bottom-end" style="font-size:9px; font-weight:bold; width:90%;padding-right:5px;padding-left:5px;">
+                                                Actions
+                                                <span class="svg-icon svg-icon-5 m-0">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                                        <path d="M11.4343 12.7344L7.25 8.55005C6.83579 8.13583 6.16421 8.13584 5.75 8.55005C5.33579 8.96426 5.33579 9.63583 5.75 10.05L11.2929 15.5929C11.6834 15.9835 12.3166 15.9835 12.7071 15.5929L18.25 10.05C18.6642 9.63584 18.6642 8.96426 18.25 8.55005C17.8358 8.13584 17.1642 8.13584 16.75 8.55005L12.5657 12.7344C12.2533 13.0468 11.7467 13.0468 11.4343 12.7344Z" fill="black" />
+                                                    </svg>
+                                                </span>
+                                            </a>
+
+                                            <div class="menu menu-sub menu-sub-dropdown menu-column menu-rounded menu-gray-600 menu-state-bg-light-primary fw-bold fs-7 w-125px py-4" data-kt-menu="true">
+                                                <div class="menu-item px-3">
+                                                    <a href="@Url.Action("Transfer",new {id = form.POCId})" class="menu-link px-3">Transfer</a>
+                                                </div>
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+@section scripts{
+    <script>
+        
+        var selectedPO = [];
+
+        $(document).ready(function () {
+            var table = document.getElementById("formListTable");
+            $("#attachFileItem").hide();
+
+            var dataTable = $(table).DataTable({
+                "info": false,
+                "order": [],
+                "columnDefs": [{
+                    'targets': [0], /* column index [0,1,2,3]*/
+                    'orderable': false, /* true or false */
+                }],
+            });
+
+            //var filterSearch = document.getElementById('filter_search');
+            //filterSearch.addEventListener('keyup', function (e) {
+            //    dataTable.search(e.target.value).draw();
+            //});
+
+            //Checkbox
+            var allPages = $("#formListTable").dataTable().fnGetNodes();
+            $("#checkedAll").click(function () {
+                if (this.checked) {
+                    $('.checkSingle', allPages).prop('checked', true).change();
+                } else {
+                    $('.checkSingle', allPages).prop('checked', false).change();
+                }
+                CheckHasSelectedPO();
+            });
+
+            $(".checkSingle", allPages).change(function (e) {
+                var isChecked = $(this).is(":checked");
+                if (isChecked) {
+                    var PrId = $(this).attr('value');
+                    selectedPO.push(PrId);
+                    //console.log("prid " + JSON.stringify(selectedPO));
+                }
+                else {
+                    var PrId = $(this).attr('value');
+                    selectedPO = $.grep(selectedPO, function (n) {
+                        return n != PrId;
+                    });
+                    //console.log("prid " + JSON.stringify(selectedPO));
+                }
+                CheckHasSelectedPO();
+            });
+
+        }); //End $(document).ready()
+
+        function CheckHasSelectedPO() {
+            var allPages = $("#formListTable").dataTable().fnGetNodes();
+            if ($('input[type="checkbox"]:checked', allPages).length > 0) {
+
+                $("#btnPrintIssueForm").attr('disabled', false);
+            }
+            else {
+                $("#btnPrintIssueForm").attr('disabled', 'disabled');
+            }
+
+            //Button Mark as Completed
+            selectedPr = [];
+            $('input[type="checkbox"]:checked', allPages).each(function () {
+                var chkboxValue = $(this).attr('value');
+                if (chkboxValue != "" && chkboxValue != null) {
+                    selectedPr.push($(this).attr('value'));
+                }
+            });
+
+            if(selectedPO.length > 0){
+                $("#transferBtn").css("display", "block");
+            }else{
+                $("#transferBtn").css("display", "none");
+            }
+
+        }
+
+        function transferPos(){
+            Swal.fire({
+                text: "Are you sure want to transfer selected POC?",
+                icon: "info",
+                showCancelButton: true,
+                buttonsStyling: false,
+                confirmButtonText: "Yes",
+                cancelButtonText: "No, return",
+                customClass: {
+                    confirmButton: "btn btn-primary",
+                    cancelButton: "btn btn-active-light"
+                }
+            }).then(function (result) {
+                if (result.value) {
+                    Swal.fire({
+                        html: 'Loading...',
+                        ProgressBar: true,
+                        didOpen: () => {
+                            Swal.showLoading()
+                        }
+                    })
+                    console.log('psps', selectedPO)
+                    $.post('@Url.Action("Transfers","POC")', { ids: selectedPO }, function () {
+                        location.reload();
+                    })
+                }
+            });
+        }
+
+    </script>
+}

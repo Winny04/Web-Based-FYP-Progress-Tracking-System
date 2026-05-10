@@ -1,0 +1,136 @@
+@using FYPTracker.Models
+@model IEnumerable<MeetingBooking>
+@{
+    ViewData["Title"] = "Manage Meetings";
+}
+
+<div class="card mb-5 mb-xl-8">
+    <div class="card-header border-0 pt-5">
+        <h3 class="card-title align-items-start flex-column">
+            <span class="card-label fw-bolder fs-3 mb-1">Student Meeting Requests</span>
+            <span class="text-muted mt-1 fw-bold fs-7">@Model.Count(m => m.Status == "Pending") pending requests</span>
+        </h3>
+    </div>
+    <div class="card-body py-3">
+        @if (TempData["Success"] != null)
+        {
+            <div class="alert alert-success">@TempData["Success"]</div>
+        }
+
+        <div class="table-responsive">
+            <table class="table align-middle gs-0 gy-4">
+                <thead>
+                    <tr class="fw-bolder text-muted bg-light">
+                        <th class="ps-4 min-w-150px">Student</th>
+                        <th class="min-w-150px">Requested Date/Time</th>
+                        <th class="min-w-200px">Agenda / Notes</th>
+                        <th class="min-w-120px">Status</th>
+                        <th class="text-end min-w-100px pe-4">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in Model)
+                    {
+                        <tr>
+                            <td class="ps-4">
+                                <span class="text-dark fw-bolder d-block fs-6">@m.Student?.FullName</span>
+                            </td>
+                            <td>
+                                <span class="text-dark fw-bolder d-block fs-6">@m.MeetingDate.ToString("dd MMM yyyy") @m.MeetingTime</span>
+                            </td>
+                            <td>
+                                <span class="text-gray-600 d-block fs-7">@m.Reason</span>
+                                @if (!string.IsNullOrEmpty(m.SupervisorNote))
+                                {
+                                    <span class="text-primary d-block fs-7 mt-1">Your Note: @m.SupervisorNote</span>
+                                }
+                            </td>
+                            <td>
+                                @if (m.Status == "Pending")
+                                {
+                                    <span class="badge badge-light-warning">Pending</span>
+                                }
+                                else if (m.Status == "Approved")
+                                {
+                                    <span class="badge badge-light-success">Approved</span>
+                                }
+                                else if (m.Status == "Postponed")
+                                {
+                                    <span class="badge badge-light-primary">Postponed</span>
+                                }
+                                else
+                                {
+                                    <span class="badge badge-light-danger">Rejected / Cancelled</span>
+                                }
+                            </td>
+                            <td class="text-end pe-4">
+                                @if (m.Status == "Pending")
+                                {
+                                    <button type="button" class="btn btn-sm btn-light-primary" data-bs-toggle="modal" data-bs-target="#meetingModal_@m.Id">Respond</button>
+
+                                    <!-- Respond Modal -->
+                                    <div class="modal fade" id="meetingModal_@m.Id" tabindex="-1">
+                                        <div class="modal-dialog">
+                                            <div class="modal-content text-start">
+                                                <form asp-action="RespondMeeting" method="post">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title">Respond to Meeting Request</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <input type="hidden" name="meetingId" value="@m.Id" />
+                                                        <div class="mb-5">
+                                                            <label class="form-label fw-bold">Response</label>
+                                                            <select name="status" class="form-select form-select-solid" required onchange="toggleProposedDate(this, @m.Id)">
+                                                                <option value="Approved">Approve</option>
+                                                                <option value="Rejected">Reject</option>
+                                                                <option value="Postponed">Postpone to New Date</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mb-5 d-none" id="proposedDateDiv_@m.Id">
+                                                            <label class="form-label fw-bold">Proposed New Date/Time</label>
+                                                            <input type="datetime-local" name="proposedDate" class="form-control form-control-solid" />
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-bold">Note to Student</label>
+                                                            <textarea name="note" class="form-control form-control-solid" rows="3" placeholder="Optional notes (e.g. Please bring your draft)"></textarea>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                        <button type="submit" class="btn btn-primary">Send Response</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted fw-bold">Responded</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    @if (!Model.Any())
+                    {
+                        <tr><td colspan="5" class="text-center py-4 text-muted">No meeting requests found.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleProposedDate(selectElem, id) {
+        var div = document.getElementById('proposedDateDiv_' + id);
+        if (selectElem.value === 'Postponed') {
+            div.classList.remove('d-none');
+            div.querySelector('input').setAttribute('required', 'required');
+        } else {
+            div.classList.add('d-none');
+            div.querySelector('input').removeAttribute('required');
+        }
+    }
+</script>

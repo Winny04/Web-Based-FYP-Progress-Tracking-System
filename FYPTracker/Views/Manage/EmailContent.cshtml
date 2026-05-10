@@ -1,0 +1,87 @@
+﻿@model EmailTemplateConfig
+@using Microsoft.Net.Http.Headers;
+
+@{
+    ViewData["Title"] = "Email Content";
+}
+
+<style>
+    #editor {
+        min-height: 200px; /* Adjust this value as needed */
+    }
+</style>
+
+<div class="card card-xxl-stretch mb-5 mb-xxl-10">
+    <div class="card-header d-flex justify-content-between">
+        <div class="card-title">
+            <h3>Email Content For @Model.ConfigKey</h3>
+        </div>
+    </div>
+    <div class="card-body">
+        <div id="editor">
+            <p>Start typing here...</p>
+        </div>
+    </div>
+    <div class="card-footer">
+        <div class="d-flex justify-content-between">
+            @if (@Context.Request != null)
+            {
+                <a href="@Context.Request.Headers[HeaderNames.Referer]" class="btn btn-secondary">Discharge</a>
+            }
+            else
+            {
+                <a href="@Url.Action("Index")" class="btn btn-secondary">Discharge</a>
+            }
+            <button type="button" class="btn btn-primary" onclick="submitContent()">Submit</button>
+        </div>
+    </div>
+</div>
+
+@section Scripts{
+    <script>
+        var quill;
+        $(document).ready(function() {
+            quill = new Quill('#editor', {
+                theme: 'snow'
+            });
+            var existingContent = "@Html.Raw(Model.ConfigValue)";
+            quill.setContents(quill.clipboard.convert(existingContent));
+        })
+
+        function submitContent(){
+            var content = quill.root.innerHTML;
+            $.ajax({
+                url:"@Url.Action("UpdateEmailContent")",
+                method:"POST",
+                data:{
+                    type:"@Model.ConfigKey",
+                    content
+                },
+                success:function(e){
+                    if(e.result){
+                        Swal.fire({
+                            text: "Email content has been save!",
+                            icon: "success",
+                            buttonsStyling: false,
+                            confirmButtonText: "Ok, got it!",
+                            customClass: {
+                                confirmButton: "btn btn-primary",
+                            }
+                        });
+                    }
+                    else{
+                        Swal.fire({
+                            text: e.msg,
+                            icon: "error",
+                            buttonsStyling: false,
+                            confirmButtonText: "Ok, got it!",
+                            customClass: {
+                                confirmButton: "btn btn-primary",
+                            }
+                        });
+                    }
+                }
+            })
+        }
+    </script>
+}

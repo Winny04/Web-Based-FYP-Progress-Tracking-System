@@ -1,0 +1,299 @@
+@using FYPTracker.Models
+@model FYPProject?
+@{
+    ViewData["Title"] = "Project Details";
+    var currentUser = ViewBag.CurrentUser as EmployeeInfo;
+    var milestones  = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
+    int total       = milestones.Count;
+    int approved    = milestones.Count(m => m.Status == "Approved");
+    int pct         = total > 0 ? (int)((double)approved / total * 100) : 0;
+}
+
+<style>
+    :root { --teal-grad: linear-gradient(135deg, #0d9488 0%, #06b6d4 100%); }
+
+    .page-hero {
+        background: var(--teal-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(13, 148, 136, 0.28);
+    }
+
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid rgba(13, 148, 136, 0.1);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        transition: transform 0.25s, box-shadow 0.25s;
+    }
+    .glass-card:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,0.1); }
+
+    .info-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; margin-bottom: 2px; }
+    .info-value { font-size: .95rem; font-weight: 600; color: #111827; }
+
+    .milestone-row { border-left: 3px solid #e5e7eb; padding-left: 16px; position: relative; }
+    .milestone-row::before {
+        content: '';
+        position: absolute;
+        left: -7px; top: 12px;
+        width: 12px; height: 12px;
+        border-radius: 50%;
+        background: #0d9488;
+    }
+    .milestone-row.approved::before  { background: #10b981; }
+    .milestone-row.rejected::before  { background: #ef4444; }
+    .milestone-row.pending::before   { background: #f59e0b; }
+    .milestone-row.submitted::before { background: #3b82f6; }
+
+    .status-pill {
+        font-size: .72rem; font-weight: 700;
+        padding: 3px 11px; border-radius: 999px;
+        text-transform: uppercase;
+    }
+    .pill-approved    { background: #d1fae5; color: #065f46; }
+    .pill-rejected    { background: #fee2e2; color: #991b1b; }
+    .pill-pending     { background: #fef9c3; color: #854d0e; }
+    .pill-submitted   { background: #dbeafe; color: #1e40af; }
+    .pill-underreview { background: #ede9fe; color: #5b21b6; }
+</style>
+
+<div class="container-fluid py-4">
+
+    @* ── Hero ─────────────────────────────────────────────── *@
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-project-diagram me-2"></i>Project Details</h2>
+            <p class="mb-0 opacity-80">View your FYP information, milestone progress, and deadlines.</p>
+        </div>
+        <div class="text-end">
+            <div class="fw-bold fs-4">@pct%</div>
+            <small class="opacity-75">Overall Completion</small>
+        </div>
+    </div>
+
+    @if (Model == null)
+    {
+        <div class="text-center py-5">
+            <div class="glass-card p-5 d-inline-block">
+                <i class="fas fa-folder-open fs-1 text-muted opacity-40 mb-3 d-block"></i>
+                <h4 class="fw-bold text-muted">No Project Found</h4>
+                <p class="text-muted mb-4">You have not submitted a project proposal yet.</p>
+                <a href="/Student/Forms" class="btn btn-primary rounded-3 px-4" style="background:var(--teal-grad);border:none;">
+                    <i class="fas fa-plus me-1"></i> Submit Proposal
+                </a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+
+            @* ── Project Info ──────────────────────────────────── *@
+            <div class="col-lg-8">
+                <div class="glass-card p-4 mb-4">
+                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-info-circle text-teal me-2" style="color:#0d9488;"></i>Project Information</h5>
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <div class="info-label">Project Title</div>
+                            <div class="info-value fs-5">@Model.Title</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-label">Status</div>
+                            @{
+                                var pCls = Model.Status switch {
+                                    "Approved"   => "pill-approved",
+                                    "Rejected"   => "pill-rejected",
+                                    "InProgress" => "pill-submitted",
+                                    "Completed"  => "pill-approved",
+                                    _            => "pill-pending"
+                                };
+                            }
+                            <span class="status-pill @pCls">@Model.Status</span>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-label">Supervisor</div>
+                            <div class="info-value">@(Model.Supervisor?.FullName ?? "Not Assigned")</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-label">Start Date</div>
+                            <div class="info-value">@(Model.StartDate?.ToString("dd MMM yyyy") ?? "—")</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-label">End Date</div>
+                            <div class="info-value">@(Model.EndDate?.ToString("dd MMM yyyy") ?? "—")</div>
+                        </div>
+                        @if (!string.IsNullOrEmpty(Model.Description))
+                        {
+                            <div class="col-md-12">
+                                <div class="info-label">Description</div>
+                                <div class="text-muted" style="font-size:.9rem;line-height:1.6;">@Model.Description</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @* ── Progress Bar ─────────────────────────────────── *@
+                <div class="glass-card p-4 mb-4">
+                    <h5 class="fw-bold text-dark mb-3"><i class="fas fa-tasks me-2" style="color:#0d9488;"></i>Overall Progress</h5>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted fw-semibold">Completion Rate</span>
+                        <span class="fw-bold" style="color:#0d9488;">@pct%</span>
+                    </div>
+                    <div class="progress mb-2" style="height:14px;border-radius:7px;">
+                        <div class="progress-bar" role="progressbar"
+                             style="width:@pct%;background:var(--teal-grad);"
+                             aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <div class="d-flex gap-4 mt-3" style="font-size:.8rem;">
+                        <span class="text-muted">✅ Approved: <strong>@milestones.Count(m => m.Status == "Approved")</strong></span>
+                        <span class="text-muted">⏳ Pending: <strong>@milestones.Count(m => m.Status == "Pending")</strong></span>
+                        <span class="text-muted">🔵 Submitted: <strong>@milestones.Count(m => m.Status == "Submitted" || m.Status == "UnderReview")</strong></span>
+                        <span class="text-muted">❌ Rejected: <strong>@milestones.Count(m => m.Status == "Rejected")</strong></span>
+                    </div>
+                </div>
+
+                @* ── Milestones / Chapters ─────────────────────────── *@
+                <div class="glass-card p-4">
+                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-list-check me-2" style="color:#0d9488;"></i>Milestones & Chapters</h5>
+
+                    @if (!milestones.Any())
+                    {
+                        <div class="text-center py-4 text-muted">
+                            <i class="fas fa-inbox fs-1 d-block mb-2 opacity-30"></i>
+                            No milestones set for this project yet.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-flex flex-column gap-3">
+                            @foreach (var ms in milestones.OrderBy(m => m.DueDate))
+                            {
+                                var rowCls = ms.Status.ToLower() switch {
+                                    "approved"    => "approved",
+                                    "rejected"    => "rejected",
+                                    "submitted"   => "submitted",
+                                    "underreview" => "submitted",
+                                    _             => "pending"
+                                };
+                                var pillCls = ms.Status switch {
+                                    "Approved"    => "pill-approved",
+                                    "Rejected"    => "pill-rejected",
+                                    "Submitted"   => "pill-submitted",
+                                    "UnderReview" => "pill-underreview",
+                                    _             => "pill-pending"
+                                };
+                                int? daysLeft = ms.DueDate.HasValue
+                                    ? (int)(ms.DueDate.Value - DateTime.Today).TotalDays
+                                    : null;
+
+                                <div class="milestone-row @rowCls">
+                                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                        <div>
+                                            <div class="fw-bold text-dark">@ms.Title</div>
+                                            @if (!string.IsNullOrEmpty(ms.Description))
+                                            {
+                                                <div class="text-muted" style="font-size:.82rem;">@ms.Description</div>
+                                            }
+                                            @if (ms.DueDate.HasValue)
+                                            {
+                                                <small class="text-muted">
+                                                    Due: @ms.DueDate.Value.ToString("dd MMM yyyy")
+                                                    @if (daysLeft.HasValue && ms.Status != "Approved")
+                                                    {
+                                                        if (daysLeft < 0)
+                                                        { <span class="text-danger fw-semibold">&nbsp;(Overdue by @Math.Abs(daysLeft.Value) days)</span> }
+                                                        else if (daysLeft <= 3)
+                                                        { <span class="text-warning fw-semibold">&nbsp;(@daysLeft days left)</span> }
+                                                        else
+                                                        { <span class="text-muted">&nbsp;(@daysLeft days left)</span> }
+                                                    }
+                                                </small>
+                                            }
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="status-pill @pillCls">@ms.Status</span>
+                                        </div>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(ms.Remarks))
+                                    {
+                                        <div class="mt-2 p-2 rounded-2 bg-light text-muted" style="font-size:.8rem;">
+                                            <i class="fas fa-comment-alt me-1"></i> @ms.Remarks
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* ── Right Sidebar: Supervisor + Deadlines ─────────── *@
+            <div class="col-lg-4">
+
+                @* Supervisor Card *@
+                <div class="glass-card p-4 mb-4">
+                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-user-tie me-2" style="color:#0d9488;"></i>Supervisor</h6>
+                    @if (Model.Supervisor != null)
+                    {
+                        var sup = Model.Supervisor;
+                        var ini = string.Join("", (sup.FullName ?? "S").Split(' ').Take(2).Select(w => w[0]));
+                        <div class="d-flex align-items-center gap-3">
+                            <div style="width:50px;height:50px;border-radius:50%;background:var(--teal-grad);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:18px;flex-shrink:0;">
+                                @ini
+                            </div>
+                            <div>
+                                <div class="fw-bold text-dark">@sup.FullName</div>
+                                <small class="text-muted d-block">@(sup.Email ?? "—")</small>
+                                <small class="text-muted d-block">@(sup.EmpDepartment?.Name ?? sup.Department ?? "—")</small>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted py-3">
+                            <i class="fas fa-user-slash mb-2 d-block opacity-30 fs-2"></i>
+                            Not assigned yet.
+                            <br/>
+                            <a href="/Student/SelectSupervisor" class="btn btn-sm btn-outline-secondary mt-2 rounded-3">Select Supervisor</a>
+                        </div>
+                    }
+                </div>
+
+                @* Upcoming Deadlines *@
+                <div class="glass-card p-4">
+                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-clock me-2 text-warning"></i>Upcoming Deadlines</h6>
+                    @{
+                        var upcoming = milestones
+                            .Where(m => m.DueDate.HasValue && m.DueDate.Value >= DateTime.Today && m.Status != "Approved")
+                            .OrderBy(m => m.DueDate)
+                            .Take(5)
+                            .ToList();
+                    }
+                    @if (!upcoming.Any())
+                    {
+                        <p class="text-muted text-center py-2">No upcoming deadlines.</p>
+                    }
+                    else
+                    {
+                        <div class="d-flex flex-column gap-2">
+                            @foreach (var ms in upcoming)
+                            {
+                                var d  = (int)(ms.DueDate!.Value - DateTime.Today).TotalDays;
+                                var cl = d <= 3 ? "text-danger" : (d <= 7 ? "text-warning" : "text-muted");
+                                <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                                    <div>
+                                        <div class="fw-semibold text-dark" style="font-size:.85rem;">@ms.Title</div>
+                                        <small class="text-muted">@ms.DueDate!.Value.ToString("dd MMM yyyy")</small>
+                                    </div>
+                                    <span class="fw-bold @cl" style="font-size:.82rem;">@d days</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>

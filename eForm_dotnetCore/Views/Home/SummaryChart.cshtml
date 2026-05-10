@@ -1,0 +1,302 @@
+﻿@using eForm_dotnetCore.ViewModels;
+
+@model ProjectOverviewViewModel
+@{
+    //ViewData["Title"] = "Dashboard(Project)";
+    ViewData["Title"] = "Summary Chart";
+}
+<div class="row gy-5 g-xl-10">
+    <div class="col-xl-12 mb-5 mb-xl-10">
+        <div class="row gx-5 gx-xl-8 mb-4 mb-xl-8">
+            <div class="col-12">
+                <div class="card h-100">
+                    <div class="card-body p-9">
+                        <div class="fs-2hx fw-bolder">@Model.Projects.Count()</div>
+                        <div class="fs-4 fw-bold text-gray-400 mb-7">Current Projects</div>
+                        <div class="d-flex flex-wrap">
+                            <div class="d-flex flex-center h-100px w-100px me-9 mb-5">
+                                <canvas id="kt_project_list_chart"></canvas>
+                            </div>
+                            <div class="d-flex flex-column justify-content-center flex-row-fluid pe-11 mb-5">
+                                <!--begin::Label-->
+                                <div class="d-flex fs-6 fw-bold align-items-center mb-3">
+                                    <div class="bullet bg-primary me-3"></div>
+                                    <div class="text-gray-400">Active</div>
+                                    <div class="ms-auto fw-bolder text-gray-700">@Model.Projects.Where(x => x.Status == "Active").Count()</div>
+                                </div>
+                                <!--end::Label-->
+                                <!--begin::Label-->
+                                <div class="d-flex fs-6 fw-bold align-items-center mb-3">
+                                    <div class="bullet bg-success me-3"></div>
+                                    <div class="text-gray-400">Completed</div>
+                                    <div class="ms-auto fw-bolder text-gray-700">@Model.Projects.Where(x => x.Status == "Completed").Count()</div>
+                                </div>
+                                <!--end::Label-->
+                                <!--begin::Label-->
+                                <div class="d-flex fs-6 fw-bold align-items-center">
+                                    <div class="bullet bg-gray-300 me-3"></div>
+                                    <div class="text-gray-400">Overdue</div>
+                                    <div class="ms-auto fw-bolder text-gray-700">@Model.Projects.Where(x => x.Status == "Overdue").Count()</div>
+                                </div>
+                                <!--end::Label-->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="row gx-5 gx-xl-8 mb-4 mb-xl-8">
+            <div class="col-12">
+                <div class="card card-xl-stretch mb-xl-3">
+                    <div class="card-header">
+                        <h3 class="card-title align-items-start flex-column">
+                            <span class="card-label fw-bolder text-dark">Sources Total Price Saving
+                                <div id="loading-spinner" style="text-align:center;display:none;margin-top:20px;">
+                                    <div class="spinner-border text-info" role="status">
+                                        <span class="sr-only">Loading...</span>
+                                    </div>
+                                </div>
+                            </span>
+                        </h3>
+                        <div class="card-toolbar">
+                            <select id="sourceYear" class="form-control">
+                                <option value="2022" selected>2022</option>
+                                <option value="2023" selected>2023</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="sourceChart" class="ms-n5 me-n3 min-h-auto w-100" style="height: 400px"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts{
+<script>
+
+
+        var sourceChartElement = document.getElementById("sourceChart");
+        const months = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ];
+
+        var sourceChartHeight = parseInt(KTUtil.css(sourceChartElement, 'height'))
+        var sourceOptions = {
+            series: [{
+                name: 'Total Save Price',
+                data: [0,0,0,0,0,0,0,0,0,0,0,0]
+            }],
+            chart: {
+                fontFamily: 'inherit',
+                type: 'area',
+                height: sourceChartHeight,
+                toolbar: {
+                    show: false
+                }
+            },
+            plotOptions: {
+
+            },
+            legend: {
+                show: false
+            },
+            dataLabels: {
+                enabled: false
+            },
+            fill: {
+                type: "gradient",
+                gradient: {
+                    shadeIntensity: 1,
+                    opacityFrom: 0.3,
+                    opacityTo: 0.7,
+                    stops: [0, 90, 100]
+                }
+            },
+            stroke: {
+                curve: 'smooth',
+                show: true,
+                width: 3,
+            },
+            xaxis: {
+                categories: months,
+                axisBorder: {
+                    show: false,
+                },
+                axisTicks: {
+                    show: false
+                },
+                tickAmount: 5,
+                labels: {
+                    rotate: 0,
+                    rotateAlways: true,
+                    style: {
+                        fontSize: '13px'
+                    }
+                },
+                crosshairs: {
+                    position: 'front',
+                    stroke: {
+                        width: 1,
+                        dashArray: 3
+                    }
+                },
+                tooltip: {
+                    enabled: true,
+                    formatter: undefined,
+                    offsetY: 0,
+                    style: {
+                        fontSize: '13px'
+                    }
+                }
+            },
+            states: {
+                normal: {
+                    filter: {
+                        type: 'none',
+                        value: 0
+                    }
+                },
+                hover: {
+                    filter: {
+                        type: 'none',
+                        value: 0
+                    }
+                },
+                active: {
+                    allowMultipleDataPointsSelection: false,
+                    filter: {
+                        type: 'none',
+                        value: 0
+                    }
+                }
+            },
+            tooltip: {
+                style: {
+                    fontSize: '12px'
+                },
+                y: {
+                    formatter: function (val) {
+                        return 'RM' + val
+                    }
+                }
+            },
+            grid: {
+                strokeDashArray: 4,
+                yaxis: {
+                    lines: {
+                        show: true
+                    }
+                }
+            },
+            markers: {
+                strokeWidth: 3
+            }
+        };
+        var soureChart = new ApexCharts(sourceChartElement, sourceOptions);
+        soureChart.render();
+
+        $(document).ready(function () {
+            var element = document.getElementById("kt_project_list_chart");
+            var config = {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [
+                            @Model.Projects.Where(x => x.Status == "Active").Count(),
+                            @Model.Projects.Where(x => x.Status == "Completed").Count(),
+                            @Model.Projects.Where(x => x.Status == "Overdue").Count()
+                        ],
+                        backgroundColor: ['#00A3FF', '#50CD89', '#E4E6EF']
+                    }],
+                    labels: ['Active', 'Completed', 'Overdue']
+                },
+                options: {
+                    chart: {
+                        fontFamily: 'inherit'
+                    },
+                    cutout: '75%',
+                    cutoutPercentage: 65,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    title: {
+                        display: false
+                    },
+                    animation: {
+                        animateScale: true,
+                        animateRotate: true
+                    },
+                    tooltips: {
+                        enabled: true,
+                        intersect: false,
+                        mode: 'nearest',
+                        bodySpacing: 5,
+                        yPadding: 10,
+                        xPadding: 10,
+                        caretPadding: 0,
+                        displayColors: false,
+                        backgroundColor: '#20D489',
+                        titleFontColor: '#ffffff',
+                        cornerRadius: 4,
+                        footerSpacing: 0,
+                        titleSpacing: 0
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            };
+
+            var ctx = element.getContext('2d');
+            new Chart(ctx, config);
+
+            const sourceYearElement = document.getElementById("sourceYear");
+
+            sourceYearElement.addEventListener("change", function () {
+                fetchSourceData()
+            });
+
+            fetchSourceData()
+
+        })
+
+        function fetchSourceData(){
+
+            $("#loading-spinner").css("display", "block");
+            const sourceYearElement = document.getElementById("sourceYear");
+            $.ajax({
+                url: '@Url.Action("GetSourceDataByYear","Home")',
+                data: { year: sourceYearElement.value },
+                type: 'get',
+                contentType: "application/json; charset=utf-8",
+                success: function (response) {
+                    const keys = [];
+                    const values = [];
+                    const data = response.data
+                    for (const key in data) {
+                        if (data.hasOwnProperty(key)) {
+                            keys.push(key);
+                            values.push(data[key]);
+                        }
+                    }
+
+                    console.log('fetch source',values)
+
+                    const updateData = {
+                        series: [{
+                            data: values
+                        }],
+                    }
+
+                    soureChart.updateSeries(updateData.series);
+                    $("#loading-spinner").css("display", "none");
+                }
+            });
+        }
+</script>
+}

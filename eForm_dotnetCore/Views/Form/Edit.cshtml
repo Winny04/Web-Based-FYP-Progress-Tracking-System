@@ -1,0 +1,338 @@
+﻿@model Form
+
+@{
+    ViewBag.Title = "Edit";
+    ViewBag.Rev = "Rev " + ViewBag.NewRevision;
+}
+@if (ViewBag.Recovery != null)
+{
+    <div class="alert alert-danger" role="alert">
+        @ViewBag.Recovery
+    </div>
+}
+<style>
+
+    @@media only screen and (min-width: 540px) {
+        .code-list {
+            right: 0px;
+            top: 20%;
+            width: 70%;
+            height: 70%;
+            overflow-y: auto;
+            position: fixed;
+            border-radius: 20px;
+            border: 1px solid black;
+            background-color: aliceblue;
+            padding: 20px;
+        }
+
+        .btn-cancel {
+            position: fixed;
+            right: 71%;
+            top: 20%;
+        }
+    }
+
+    @@media only screen and (min-width: 768px) {
+        .code-list {
+            right: 0px;
+            top: 15%;
+            width: 30%;
+            height: 80%;
+            overflow-y: auto;
+            position: fixed;
+            border-radius: 20px;
+            border: 1px solid black;
+            background-color: aliceblue;
+            padding: 20px;
+        }
+
+        .btn-cancel {
+            position: fixed;
+            right: 31%;
+            top: 14%;
+        }
+    }
+
+    .btn-check:checked + .btn.btn-active-icon-primary i, .btn-check:active + .btn.btn-active-icon-primary i, .btn.btn-active-icon-primary:focus:not(.btn-active) i, .btn.btn-active-icon-primary:hover:not(.btn-active) i, .btn.btn-active-icon-primary:active:not(.btn-active) i, .btn.btn-active-icon-primary.active i, .btn.btn-active-icon-primary.show i, .show > .btn.btn-active-icon-primary i {
+        color: #009EF7;
+    }
+
+    .btn-check:checked + .btn.btn-active-icon-primary .svg-icon svg [fill]:not(.permanent):not(g), .btn-check:active + .btn.btn-active-icon-primary .svg-icon svg [fill]:not(.permanent):not(g), .btn.btn-active-icon-primary:focus:not(.btn-active) .svg-icon svg [fill]:not(.permanent):not(g), .btn.btn-active-icon-primary:hover:not(.btn-active) .svg-icon svg [fill]:not(.permanent):not(g), .btn.btn-active-icon-primary:active:not(.btn-active) .svg-icon svg [fill]:not(.permanent):not(g), .btn.btn-active-icon-primary.active .svg-icon svg [fill]:not(.permanent):not(g), .btn.btn-active-icon-primary.show .svg-icon svg [fill]:not(.permanent):not(g), .show > .btn.btn-active-icon-primary .svg-icon svg [fill]:not(.permanent):not(g) {
+        transition: fill 0.3s ease;
+        fill: #009EF7;
+    }
+
+    .btn-check:checked + .btn.btn-active-icon-primary .svg-icon svg:hover [fill]:not(.permanent):not(g), .btn-check:active + .btn.btn-active-icon-primary .svg-icon svg:hover [fill]:not(.permanent):not(g), .btn.btn-active-icon-primary:focus:not(.btn-active) .svg-icon svg:hover [fill]:not(.permanent):not(g), .btn.btn-active-icon-primary:hover:not(.btn-active) .svg-icon svg:hover [fill]:not(.permanent):not(g), .btn.btn-active-icon-primary:active:not(.btn-active) .svg-icon svg:hover [fill]:not(.permanent):not(g), .btn.btn-active-icon-primary.active .svg-icon svg:hover [fill]:not(.permanent):not(g), .btn.btn-active-icon-primary.show .svg-icon svg:hover [fill]:not(.permanent):not(g), .show > .btn.btn-active-icon-primary .svg-icon svg:hover [fill]:not(.permanent):not(g) {
+        transition: fill 0.3s ease;
+    }
+
+    .btn-check:checked + .btn.btn-active-icon-primary.dropdown-toggle:after, .btn-check:active + .btn.btn-active-icon-primary.dropdown-toggle:after, .btn.btn-active-icon-primary:focus:not(.btn-active).dropdown-toggle:after, .btn.btn-active-icon-primary:hover:not(.btn-active).dropdown-toggle:after, .btn.btn-active-icon-primary:active:not(.btn-active).dropdown-toggle:after, .btn.btn-active-icon-primary.active.dropdown-toggle:after, .btn.btn-active-icon-primary.show.dropdown-toggle:after, .show > .btn.btn-active-icon-primary.dropdown-toggle:after {
+        color: #009EF7;
+    }
+</style>
+<div class="card" style="width: 110%;margin-left: -5%;">
+    <div class="card-header">
+        <div class="card-title fs-3 fw-bolder">Edit Form</div>
+    </div>
+    <div class="card-body">
+        <form id="editForm">
+
+            <div class="card-body p-9">
+                <div class="row mb-8">
+                    <div class="col-xl-3">
+                        <div class="fs-6 fw-bold mt-2 mb-3">Name</div>
+                    </div>
+                    <div class="col-xl-9 fv-row">
+                        <input type="text" class="form-control h-40px" name="Name" value="@Model.Name" />
+                    </div>
+                </div>
+                <div class="row mb-8">
+                    <!--begin::Col-->
+                <div class="col-xl-3">
+                        <div class="fs-6 fw-bold mt-2 mb-3">Revision</div>
+                    </div>
+                    <!--end::Col-->
+                    <!--begin::Col-->
+                <div class="col-xl-9 fv-row">
+                        <input type="text" class="form-control h-40px" name="Revision" value="@Model.Revision" />
+                    </div>
+                </div>
+                <div class="row mb-8">
+                    <!--begin::Col-->
+                <div class="col-xl-3">
+                        <div class="fs-6 fw-bold mt-2 mb-3">Document Name</div>
+                    </div>
+                    <!--end::Col-->
+                    <!--begin::Col-->
+                <div class="col-xl-9 fv-row">
+                        <input type="text" class="form-control  h-40px" name="DocumentName" value="@Model.DocumentName" />
+                    </div>
+                    <!--begin::Col-->
+            </div>
+
+                <input type="hidden" name="Data" id="Data" value="" />
+                <input type="hidden" name="DataResponse" id="DataResponse" value="" />
+                <input type="hidden" name="Data2" id="Data2" value="" />
+                <input type="hidden" name="id" id="id" value="@Model.Id" />
+                <input type="hidden" name="addedBy" id="Data" value="@Model.AddedBy" />
+                <input type="hidden" name="status" id="Data" value="@Model.Status" />
+
+                <div class="card" style="overflow-x:auto">
+                    <div class="card-body">
+                        <h3>Builder</h3>
+                        <div id="builder"></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body" style="overflow-x:auto">
+                        <h3>Preview</h3>
+                        <div id="render">Please click on the Save button above to see preview</div>
+                    </div>
+                </div>
+            </div>
+
+            <!--begin::Card footer-->
+            <div class="card-footer d-flex justify-content-end py-6 px-9">
+                <button type="button" data-item1="@Model.Id" class="btn btn-light btn-active-light-primary me-2 cancelform" data-target="#cancel" data-toggle="modal">Discard</button>
+                <button type="button" id="publishBtn" class="btn btn-success me-2">Publish</button>
+                <button type="submit" class="btn btn-primary" id="kt_project_settings_submit">Save Changes</button>
+            </div>
+            <!--end::Card footer-->
+        </form>
+    </div>
+</div>
+
+
+<div class="modal fade" id="cancel" tabindex="-1" role="dialog" aria-hidden="true" style="display: none;">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title">Cancel Confirmation</h4>
+                <button type="button" class="btn-sm btn-active-icon-primary close" data-dismiss="modal" aria-hidden="true">
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                </button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to cancel edit form?
+                <br>
+                @using (Html.BeginForm("Cancel", "Form", FormMethod.Post, new { id = "myform2", @class = "" }))
+                {
+                    @Html.AntiForgeryToken()
+                    <p id="chooseId2" hidden></p>
+                    <div class="modal-footer">
+                        <button id="myInput" type="submit" class="btn btn-danger" value="Cancel">Cancel</button>
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Back</button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts {
+    <script>
+
+        $(document).ready(function () {
+            $("#kt_datepicker_1").flatpickr();
+
+            $(".showList").click(function () {
+                $(".code-list").toggle();
+            });
+
+            $('#publishBtn').click(function(){
+                Swal.fire({
+					text: "Are you sure you would like to publish this form?",
+					icon: "warning",
+					showCancelButton: true,
+					buttonsStyling: false,
+					confirmButtonText: "Yes, publish it!",
+					cancelButtonText: "No, return",
+					customClass: {
+						confirmButton: "btn btn-primary",
+						cancelButton: "btn btn-active-light"
+					}
+				}).then(function (result) {
+					if (result.value) {
+						var form = $('#editForm').serialize();
+
+                        $.post('@Url.Action("Publish","Form")', form);
+					} else if (result.dismiss === 'cancel') {
+						Swal.fire({
+							text: "Your form has not been publish!.",
+							icon: "error",
+							buttonsStyling: false,
+							confirmButtonText: "Ok, got it!",
+							customClass: {
+								confirmButton: "btn btn-primary",
+							}
+						});
+					}
+				});
+            });
+
+            $('#editForm').submit(function(e){
+                e.preventDefault();
+                var form = $('#editForm').serialize();
+                $.post('@Url.Action("Edit","Form")', form,function(){
+                    Swal.fire("Form save!", "Your form has been save!", "success");
+                });
+            });
+
+            //$("#formStatus").val(@Model.Status);
+
+        });
+
+        const data = @Html.Raw(string.IsNullOrEmpty(Model.Data) ? "{}" : Model.Data);
+        var formId = @ViewBag.FormId;
+        var builder;
+        var renderer;
+        var state = {
+            formioVersion: 'default',
+            form: data,
+            submission: {
+                data: {}
+            },
+            options: {
+                noDefaultSubmitButton: true
+            },
+        };
+
+        function initBuilder(form) {
+            if (builder) {
+                builder.instance.destroy();
+            }
+
+            console.log("init form")
+            builder = new Formio.FormBuilder(document.getElementById('builder'), form, _.cloneDeep(state.options));
+
+            builder.instance.ready.then(function () {
+                console.log("formio ready...")
+                builder.instance.on('change', function (event, flags) {
+                    if (!flags) {
+                        setForm(builder.instance.schema, 'builder');
+                    }
+                });
+            })
+        }
+
+        function initRenderer(form) {
+            if (renderer) {
+                renderer.destroy();
+            }
+            Formio.createForm(document.getElementById('render'), form, _.cloneDeep(state.options))
+                .then(function (self) {
+                    renderer = self;
+                    renderer.submission = state.submission;
+                    renderer.on('change', function (event, flags) {
+                        if (flags && !flags.fromSubmission) {
+                            setSubmission(renderer.submission, 'renderer');
+                        }
+                    });
+                });
+
+                console.log("form data",form)
+            document.getElementsByName('Data')[0].value = JSON.stringify(form)
+        }
+
+        function setForm(form, from) {
+            console.log('setForm', form, from);
+            state.form = form;
+            if (builder && from !== 'builder') {
+                initBuilder(form);
+            }
+            if (renderer && from !== 'renderer') {
+                initRenderer(_.cloneDeep(form));
+            }
+        }
+
+        function setSubmission(submission, from) {
+            console.log('setSubmission', submission, from);
+            if (renderer && from !== 'renderer') {
+                renderer.submission = submission;
+            }
+
+            document.getElementsByName('DataResponse')[0].value = JSON.stringify(submission)
+        }
+        
+        function removeFile(bomId,name,i){
+            alert(i);
+        }
+
+        initBuilder(state.form);
+        initRenderer(state.form);
+
+        // Function To Safe Save Form (Old)
+        $(document).ready(function () {
+            $(document).on("click", ".deletform", function () {
+                var itemId = $(this).data("item1");
+                document.getElementById("chooseId1").innerHTML = "Form Id: " + itemId;
+                $('#myform1').attr('action', "@Url.Action("Delete", "Form")/" + itemId);
+                //document.getElementById("myInput").value = itemId;
+            });
+            //$(document).on("change", ".skuName", GetId);
+        });
+
+        $(document).ready(function () {
+
+            $(document).on("change", ".revNo", function () {
+                var revToString = document.getElementById("RevisionInt").value;
+                document.getElementById("Revision").value = "Rev " + revToString;
+            });
+        });
+    </script>
+}
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,125 @@
+﻿@model SupplierInfoEditModel
+
+@using eForm_dotnetCore.Common
+@using Microsoft.Net.Http.Headers;
+
+@{
+    ViewData["Title"] = "Edit Vendor - " + (Model.VendorName);
+}
+
+
+<div class="card card-xxl-stretch mb-5 mb-xxl-10">
+    <div class="card-header d-flex justify-content-between">
+        <div class="card-title">
+            <h3>Edit Vendor - @Model.VendorName</h3>
+        </div>
+        <div class="card-title">
+            <a href="#" class="btn btn-outline-success mx-2">Export To Excel</a>
+        </div>
+    </div>
+    <form id="fillForm">
+        <div class="card-body pb-0">
+            <div class="form-horizontal">
+                <div class="form-group">
+                    @Html.LabelFor(model => model.VendorName, "Name", htmlAttributes: new { @class = "control-label col-md-2" })
+                    <div class="col-md-10">
+                        @Html.EditorFor(model => model.VendorName, new { htmlAttributes = new { @class = "form-control", required = "", disabled = "disabled" } })
+                    </div>
+                </div>
+
+                <input type="hidden" name="Data" value="" />
+                <input type="hidden" name="DataResponse" id="DataResponse" value="" />
+                <input type="hidden" name="id" value="@Model.Id" />
+
+                <div class="card">
+                    <div class="card-body" style="overflow-x:auto">
+                        <div id="render"></div>
+                    </div>
+                </div>
+
+                <div class="form-group pt-3">
+                    <div class="d-flex flex-row justify-content-end">
+                        @{
+                            <a href="@Url.Action("Index","SupplierInfo")" class="btn btn-secondary mx-2">Back</a>
+                            <button type="submit" class="btn btn-success">Save</button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+
+
+    @section Scripts {
+        <script>
+            // Function To Edit Form
+            $(document).ready(function() {
+            $('#fillForm').submit(function (e) {
+                e.preventDefault();
+                var form = $('#fillForm').serialize();
+                $.post('@Url.Action("Edit","SupplierInfo")', form,function(){
+                    Swal.fire("Form save!", "Your data has been save!", "success");
+                });
+            });
+
+            });
+
+            const data = @Html.Raw(string.IsNullOrEmpty(Model.Data) ? "{}" : Model.Data);
+            const submission = @Html.Raw(string.IsNullOrEmpty(Model.DataResponse) ? "{data:{}}" : Model.DataResponse);
+            var stateOptions = {};
+
+            var renderer;
+            var state = {
+                formioVersion: 'default',
+                form: data,
+                submission: submission,
+                options: stateOptions,
+            };
+
+            function initRenderer(form) {
+                if (renderer) {
+                    renderer.destroy();
+                }
+                Formio.createForm(document.getElementById('render'), form, _.cloneDeep(state.options))
+                    .then(function(self) {
+                        renderer = self;
+                        renderer.submission = state.submission;
+                        renderer.on('change', function(event, flags) {
+                            console.log('onchange', flags)
+
+                            if (flags && !flags.fromSubmission) {
+                                setSubmission(renderer.submission, 'renderer');
+                            }
+                        });
+                    });
+
+                document.getElementsByName('Data')[0].value = JSON.stringify(form);
+            }
+
+            function setForm(form, from) {
+                console.log('setForm', form, from);
+                state.form = form;
+                if (!renderer.checkData()) {
+                    document.getElementById("submitBtn").disabled = true;
+                } else {
+                    document.getElementById("submitBtn").disabled = false;
+                }
+
+            }
+
+            function setSubmission(submission, from) {
+                console.log('setSubmission', submission, from);
+                if (renderer && from !== 'renderer') {
+                    renderer.submission = submission;
+                }
+
+                document.getElementsByName('DataResponse')[0].value = JSON.stringify(submission);
+                //document.getElementsByName('DataResponse')[1].value = JSON.stringify(submission);
+            }
+
+            initRenderer(state.form);
+
+        </script>
+    }

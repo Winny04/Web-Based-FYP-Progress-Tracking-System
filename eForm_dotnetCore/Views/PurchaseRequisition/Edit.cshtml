@@ -1,0 +1,1033 @@
+@using eForm_dotnetCore.Helpers
+@model Pr
+@using Microsoft.Net.Http.Headers;
+@using eForm_dotnetCore.Common;
+
+@{
+    ViewData["Title"] = "Edit PR - "+(Model.Prname);
+    var userType = Context.GetUserType();
+    var isProjectCompleted = ViewBag.isProjectCompleted;
+    var IsDepartmentSame = ViewBag.IsDepartmentSame;
+    var isFabrication = ViewBag.isFabrication;
+    var allowSubmit = ViewBag.allowSubmit;
+    var bomStatus = ViewBag.BomStatus;
+}
+
+<style>
+    div.formio-component-textarea > div > div:nth-child(1){
+        padding:10px 10px !important;
+    }
+
+    .formio-component.table-no-borders table,
+    .formio-component.table-no-borders td,
+    .formio-component.table-no-borders th {
+        border: none !important;
+        box-shadow: none !important;
+    }
+
+    .formio-component.table-no-borders table tbody tr td {
+        border-bottom: none !important;
+    }
+
+    .formio-component.panel-fit {
+        width: fit-content;
+    }
+</style>
+
+<div class="card card-xxl-stretch mb-5 mb-xxl-10">
+    <div class="card-header d-flex justify-content-between">
+        <div class="card-title">
+            <button type="button" id="backtoBOM" class="btn btn-primary">Back to BOM</button>
+            <h3 class="mx-2">Edit form - @Model.Prname</h3>
+        </div>
+        <div class="card-title">
+            <a href="@Url.Action("DownloadPRDrawing", new { id = Model.Id })" @{
+               if (isFabrication)
+               {
+                   @:class="btn btn-info mx-2"
+               }
+               else
+               {
+                   @:hidden="true"
+               }
+            }>
+                Download Drawing
+            </a>
+            @*<a href="@Url.Action("ExportToPDF",new {id = Model.Id})" class="btn btn-danger mx-2">Export To PDF</a>*@
+            <button onclick="exportExcel(@Model.Id)" class="btn btn-outline-success mx-2">Export To Excel</button>
+            <button onclick="exportExcel2026(@Model.Id)" class="btn btn-outline-success mx-2">Export To Excel 2026</button>
+        </div>
+    </div>
+    <form id="fillForm" asp-action="Edit" method="post">
+        <div class="card-body pb-0">
+            <div class="form-horizontal">
+                <div class="form-group">
+                    @Html.LabelFor(model => model.Prname, "Name", htmlAttributes: new { @class = "control-label col-md-2" })
+                    <div class="col-md-10">
+                        @Html.EditorFor(model => model.Prname, new { htmlAttributes = new { @class = "form-control", required = "", disabled = "disabled" } })
+                        @Html.ValidationMessageFor(model => model.Prname, "", new { @class = "text-danger" })
+                    </div>
+                </div>
+                <input type="hidden" name="Data" value="" />
+                <input type="hidden" name="DataResponse" id="DataResponse" value="" />
+                <input type="hidden" name="id" value="@Model.Id" />
+                <input type="hidden" name="ProjectId" value="@Model.ProjectId" />
+
+                <div id="builder" hidden></div>
+
+                <div class="card">
+                    <div class="card-body" style="overflow-x:auto">
+                        <div id="render"></div>
+                    </div>
+                </div>
+
+                <div class="form-group pt-3">
+                    <div class="row gy-5 g-xl-10 justify-content-center">
+                        @if (bomStatus == "PR Sent")
+                        {
+                            <div class="col-sm-12 col-lg-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <div class="card-title fs-3 fw-bolder">Approver 1</div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row mb-6">
+                                            <div class="col-6 text-start">
+                                                <span class="w-100 fs-4 fw-bolder">@ViewBag.HODDept HOD</span>
+                                            </div>
+                                            <div class="col-6">
+                                                @if (Model.PRApprovers != null && Model.PRApprovers.Where(x => x.Type == "HOD" && x.Approved == true).Any())
+                                                {
+                                                    <span>@Model.PRApprovers.FirstOrDefault(x => x.Type == "HOD" && x.Approved == true).Approver.UserName</span>
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="row mb-6">
+                                            <div class="col-4 text-start">
+                                                <span class="w-100 fs-4 fw-bolder">Status</span>
+                                            </div>
+                                            <div class="col-8">
+                                                <div class="d-flex flex-row justify-content-center">
+                                                    @if (Model.PRApprovers != null && Model.PRApprovers.Where(x => x.Type == "HOD" && x.Approved == true).Any())
+                                                    {
+                                                        <div class="badge badge-light-success badge-status">Approved</div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button type="button"
+                                                        @{
+                                                        if(!isProjectCompleted && (userType == "HOD" || userType == "SuperAdmin") && IsDepartmentSame)
+                                                        {
+                                                                                            @:class="btn btn-sm btn-primary me-3"
+                                                                                            @:onclick="approveOrReject('HOD',1)"
+                                                        }
+                                                        else{
+                                                                                            @:class="btn btn-sm btn-secondary me-3"
+                                                                                            @:disabled="disabled"
+                                                        }
+                                                        }>
+                                                            Approve
+                                                        </button>
+                                                        <button type="button"
+                                                        @{
+                                                        if(!isProjectCompleted && (userType == "HOD" || userType == "SuperAdmin") && IsDepartmentSame)
+                                                        {
+                                                                                            @:class="btn btn-sm btn-danger me-3"
+                                                                                            @:onclick="approveOrReject('HOD',0)"
+                                                        }
+                                                        else{
+                                                                                            @:class="btn btn-sm btn-secondary me-3"
+                                                                                            @:disabled="disabled"
+                                                        }
+                                                        }>
+                                                            Reject
+                                                        </button>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row mb-6">
+                                            <div class="col-6 text-start">
+                                                <span class="w-100 fs-4 fw-bolder">Date</span>
+                                            </div>
+                                            <div class="col-6">
+                                                @if (Model.PRApprovers != null && Model.PRApprovers.Where(x => x.Type == "HOD" && x.Approved == true).Any())
+                                                {
+                                                    <span>@Model.PRApprovers.FirstOrDefault(x => x.Type == "HOD" && x.Approved == true).LastUpdated.ToString("dd MMM yyyy HHmm")</span>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            @if (Model.totalApprover > 1)
+                            {
+                                <div class="col-sm-12 col-lg-4">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <div class="card-title fs-3 fw-bolder">Approver 2</div>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row mb-6">
+                                                <div class="col-6 text-start">
+                                                    <span class="w-100 fs-4 fw-bolder">GFC</span>
+                                                </div>
+                                                <div class="col-6">
+                                                    @if (Model.PRApprovers != null && Model.PRApprovers.Where(x => x.Type == "GFC" && x.Approved == true).Any())
+                                                    {
+                                                        <span>@Model.PRApprovers.FirstOrDefault(x => x.Type == "GFC" && x.Approved == true).Approver.UserName</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div class="row mb-6">
+                                                <div class="col-4 text-start">
+                                                    <span class="w-100 fs-4 fw-bolder">Status</span>
+                                                </div>
+                                                <div class="col-8">
+                                                    <div class="d-flex flex-row justify-content-center">
+                                                        @if (Model.PRApprovers != null && Model.PRApprovers.Where(x => x.Type == "GFC" && x.Approved == true).Any())
+                                                        {
+                                                            <div class="badge badge-light-success badge-status">Approved</div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button type="button"
+                                                        @{
+                                                        if(!isProjectCompleted && (userType == "GFC" || userType == "SuperAdmin") && Model.PRApprovers.Any(x => x.Type == "HOD" && x.Approved))
+                                                        {
+                                                                                            @:class="btn btn-sm btn-primary me-3"
+                                                                                            @:onclick="approveOrReject('GFC',1)"
+                                                        }
+                                                        else{
+                                                                                            @:class="btn btn-sm btn-secondary me-3"
+                                                                                            @:disabled="disabled"
+                                                        }
+                                                        }>
+                                                                Approve
+                                                            </button>
+                                                            <button type="button"
+                                                        @{
+                                                        if(!isProjectCompleted && (userType == "GFC" || userType == "SuperAdmin") && Model.PRApprovers.Any(x => x.Type == "HOD" && x.Approved))
+                                                        {
+                                                                                            @:class="btn btn-sm btn-danger me-3"
+                                                                                            @:onclick="approveOrReject('GFC',0)"
+                                                        }
+                                                        else{
+                                                                                            @:class="btn btn-sm btn-secondary me-3"
+                                                                                            @:disabled="disabled"
+                                                        }
+                                                        }>
+                                                                Reject
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row mb-6">
+                                                <div class="col-6 text-start">
+                                                    <span class="w-100 fs-4 fw-bolder">Date</span>
+                                                </div>
+                                                <div class="col-6">
+                                                    @if (Model.PRApprovers != null && Model.PRApprovers.Where(x => x.Type == "GFC" && x.Approved == true).Any())
+                                                    {
+                                                        <span>@Model.PRApprovers.FirstOrDefault(x => x.Type == "GFC" && x.Approved == true).LastUpdated.ToString("dd MMM yyyy HHmm")</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            @if (Model.totalApprover > 2)
+                            {
+                                <div class="col-sm-12 col-lg-4">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <div class="card-title fs-3 fw-bolder">Approver 3</div>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row mb-6">
+                                                <div class="col-6 text-start">
+                                                    <span class="w-100 fs-4 fw-bolder">CEO</span>
+                                                </div>
+                                                <div class="col-6">
+                                                    @if (Model.PRApprovers != null && Model.PRApprovers.Where(x => x.Type == "CEO" && x.Approved == true).Any())
+                                                    {
+                                                        <span>@Model.PRApprovers.FirstOrDefault(x => x.Type == "CEO" && x.Approved == true).Approver.UserName</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div class="row mb-6">
+                                                <div class="col-4 text-start">
+                                                    <span class="w-100 fs-4 fw-bolder">Status</span>
+                                                </div>
+                                                <div class="col-8">
+                                                    <div class="d-flex flex-row justify-content-center">
+                                                        @if (Model.PRApprovers != null && Model.PRApprovers.Where(x => x.Type == "CEO" && x.Approved == true).Any())
+                                                        {
+                                                            <div class="badge badge-light-success badge-status">Approved</div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button type="button"
+                                                        @{
+                                                        if(!isProjectCompleted && (userType == "CEO" || userType == "SuperAdmin") && Model.PRApprovers.Any(x => x.Type == "HOD" && x.Approved) && Model.PRApprovers.Any(x => x.Type == "GFC" && x.Approved))
+                                                        {
+                                                                                            @:class="btn btn-sm btn-primary me-3"
+                                                                                            @:onclick="approveOrReject('CEO',1)"
+                                                        }
+                                                        else{
+                                                                                            @:class="btn btn-sm btn-secondary me-3"
+                                                                                            @:disabled="disabled"
+                                                        }
+                                                        }>
+                                                                Approve
+                                                            </button>
+                                                            <button type="button"
+                                                        @{
+                                                        if(!isProjectCompleted && (userType == "CEO" || userType == "SuperAdmin") && Model.PRApprovers.Any(x => x.Type == "HOD" && x.Approved) && Model.PRApprovers.Any(x => x.Type == "GFC" && x.Approved))
+                                                        {
+                                                                                            @:class="btn btn-sm btn-danger me-3"
+                                                                                            @:onclick="approveOrReject('CEO',0)"
+                                                        }
+                                                        else{
+                                                                                            @:class="btn btn-sm btn-secondary me-3"
+                                                                                            @:disabled="disabled"
+                                                        }
+                                                        }>
+                                                                Reject
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row mb-6">
+                                                <div class="col-6 text-start">
+                                                    <span class="w-100 fs-4 fw-bolder">Date</span>
+                                                </div>
+                                                <div class="col-6">
+                                                    @if (Model.PRApprovers != null && Model.PRApprovers.Where(x => x.Type == "CEO" && x.Approved == true).Any())
+                                                    {
+                                                        <span>@Model.PRApprovers.FirstOrDefault(x => x.Type == "CEO" && x.Approved == true).LastUpdated.ToString("dd MMM yyyy HHmm")</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+
+                            @* <div class="form-group pt-3">
+                                <div class="d-flex flex-row justify-content-end">
+                                    <button type="button" onclick="backToSubmit('RFQ Approved','@FormType.PR')" class="btn btn-primary mx-2" >Back to Submit</button>
+                                </div>
+                            </div> *@
+                        }
+
+                           @if (bomStatus == "PR Sent" || bomStatus == "PR Approved")
+                        {
+                            <div class="form-group pt-3">
+                                <div class="d-flex flex-row justify-content-end">
+                                    <button type="button" onclick="backToSubmit('RFQ Approved','@FormType.PR')" class="btn btn-primary mx-2">Back to Submit</button>
+                                </div>
+                            </div>
+                        }
+
+                        @if (bomStatus == "PO Approved")
+                        {
+                            <div class="form-group pt-3">
+                                <div class="d-flex flex-row justify-content-end">
+                                    <button type="button" class="btn btn-warning mx-2" data-bs-toggle="modal" data-bs-target="#modal_edit_PR">Revise PR</button>
+                                </div>
+                            </div>
+                        }
+
+                        <div class="d-flex flex-row justify-content-end">
+                            @if (bomStatus == "PR Reject")
+                            {
+                                <button type="button" onclick="backToSubmit('RFQ Approved','@FormType.PR')" class="btn btn-primary mx-2">Back to Submit</button>
+
+                            }
+                            @if (((bomStatus == "RFQ Approved" || bomStatus == "PR Reject" || bomStatus == "PO Reject") && bomStatus != "PO Revise") && allowSubmit)
+                            {
+                                <button type="button" id="deleteBtn" class="btn btn-danger mr-2 text-end">Delete</button>
+                               
+                            }
+                            @if((bomStatus == "RFQ Approved" || bomStatus == "PR Reject" || bomStatus == "PO Reject" || bomStatus == "PO Revise") && allowSubmit)
+                            {
+
+                                    <input type="submit" id="updateButton" name="updateButton" value="Save" class="btn btn-success mr-2" />
+                                    <button type="button" id="submitBtn" class="btn btn-primary">Submit</button>          
+                            }
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+@if(@Context.Request != null){
+    <a href="@Context.Request.Headers[HeaderNames.Referer]">Back To Details</a>
+}
+
+<div class="modal fade" id="modal_approve_reject_pr" tabindex="-1" aria-hidden="true">
+    <!--begin::Modal dialog-->
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <!--begin::Modal content-->
+        <div class="modal-content rounded">
+            <!--begin::Modal header-->
+            <div class="modal-header pb-0 border-0 justify-content-end">
+                <!--begin::Close-->
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <!--begin::Svg Icon | path: icons/duotune/arrows/arr061.svg-->
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                    <!--end::Svg Icon-->
+                </div>
+                <!--end::Close-->
+            </div>
+            <!--begin::Modal header-->
+            <!--begin::Modal body-->
+            <div class="modal-body scroll-y px-10 px-lg-15 pt-0 pb-15">
+                <!--begin:Form-->
+                <form asp-action="approveOrReject" method="post" class="form">
+                    <!--begin::Heading-->
+                    <div class="mb-13 text-center">
+                        <!--begin::Title-->
+                        <h1 id="remarkTitle" class="mb-3">Reject Form</h1>
+                        <!--end::Title-->
+                        <!--begin::Description-->
+                        <div class="text-muted fw-bold fs-5">
+                            If you need more info, please check
+                            <a href="#" class="fw-bolder link-primary">Project Guidelines</a>.
+                        </div>
+                        <!--end::Description-->
+                    </div>
+                    <!--end::Heading-->
+                    <!--begin::Input group-->
+                    <div class="d-flex flex-column mb-8 fv-row">
+                        <label class="required fs-6 fw-bold mb-2">Reason</label>
+                        <textarea class="form-control form-control-solid" placeholder="Reason..." rows="2" name="remark" required></textarea>
+                    </div>
+
+                    <input name="approver" id="rm_approver" value="" hidden/>
+                    <input name="empId" value=@Context.GetUserId() hidden/>
+                    <input name="action" id="rejectOrApprove" hidden/>
+                    <input name="prId" value=@Model.Id hidden/>
+                    <!--begin::Actions-->
+                    <div class="text-center">
+                         <button type="submit" class="btn btn-primary">
+                            <span class="indicator-label">Submit</span>
+                        </button>
+                    </div>
+                     <div id="loading-spinner" style="text-align:center;display:none;margin-top:20px;">
+                        <div class="spinner-border text-info" role="status">
+                            <span class="sr-only">Loading...</span>
+                        </div>
+                        <p class="text-active-success">Creating new form. Please wait...</p>
+                    </div>
+                </form>
+                <!--end:Form-->
+            </div>
+            <!--end::Modal body-->
+        </div>
+        <!--end::Modal content-->
+    </div>
+    <!--end::Modal dialog-->
+</div>
+
+@* Back Edit PR Modal*@
+@* <div class="modal fade" id="modal_edit_PR" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content rounded">
+            <div class="modal-header pb-0 border-0 justify-content-end">
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+
+            <div class="modal-body scroll-y px-10 px-lg-15 pt-0 pb-15">
+                <div class="mb-13 text-center">
+                    <h1 class="mb-3">Back to Edit PR</h1>
+                    <div class="text-muted fw-bold fs-5">
+                        Are you sure you want to return to edit the PR?         
+                    </div>
+                </div>
+
+                <div class="text-center">
+                    <button type="button" id="editPR_modal_close" class="btn btn-light me-3" data-bs-dismiss="modal">No</button>
+                    <button type="button" id="editPR_submit" class="btn btn-primary">Yes</button>
+                </div>
+
+                <div id="loading-spinner-editPR" style="text-align:center;display:none;margin-top:20px;">
+                    <div class="spinner-border text-info" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p class="text-active-success">Back in progress. Please wait...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> *@
+
+<div class="modal fade" id="modal_edit_PR" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content rounded">
+            <div class="modal-header pb-0 border-0 justify-content-end">
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1"
+                                  transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1"
+                                  transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+
+            <div class="modal-body scroll-y px-10 px-lg-15 pt-0 pb-15">
+                <div class="mb-8 text-center">
+                    <h1 class="mb-3">Revise Purchase Requisition</h1>
+                    <div class="text-muted fw-bold fs-5">
+                        Please provide a reason for revising this PR.
+                    </div>
+                </div>
+
+                <div class="mb-5">
+                    <label class="form-label fw-bold">Revision Reason</label>
+                    <textarea id="reviseRemark" class="form-control" rows="3"
+                              placeholder="Enter your reason for revision..."></textarea>
+                </div>
+
+                <div class="text-center">
+                    <button type="button" id="editPR_modal_close" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="editPR_submit" class="btn btn-primary">Submit</button>
+                </div>
+
+                <div id="loading-spinner-editPR" style="text-align:center;display:none;margin-top:20px;">
+                    <div class="spinner-border text-info" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p class="text-active-success">Processing revision... Please wait...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script>
+        // Function To Edit Form
+        $(document).ready(function() {
+
+            $("#submitBtn").click(function() {
+                if (!renderer.checkData()) {
+                     //Swal.fire("Please complete the required item before submitting the form!");
+                    var errorField = [];
+                      renderer.everyComponent((component) => {
+                        if (component.component.validate.required === true && (component.getValue() === null || component.getValue() === "")) { 
+                            errorField.push(component.component.label);
+                        }
+                    });
+                    Swal.fire('Please complete the following items:\n' + errorField.toString());
+
+                }
+                else{
+                    var form = $('#fillForm').serialize();
+                    Swal.fire({
+                        text: "Are you sure you would like to submit?",
+                        icon: "warning",
+                        showCancelButton: true,
+                        buttonsStyling: false,
+                        confirmButtonText: "Yes",
+                        cancelButtonText: "No",
+                        customClass: {
+                            confirmButton: "btn btn-primary",
+                            cancelButton: "btn btn-active-light"
+                        }
+                    }).then(function(result) {
+                        if (result.value) {
+                            $.ajax({
+                                url: "@Url.Action("isBudgetExceed")",
+                                type: "GET",
+                                data: { projectId: @Model.ProjectId},
+                                success: function (result) {
+                                    if (result) {
+                                        Swal.fire({
+                                            text: "The total spend have been exceed budget. Are you sure you still want to submit?",
+                                            icon: "info",
+                                            showCancelButton: true,
+                                            buttonsStyling: false,
+                                            confirmButtonText: "Yes, submit it!",
+                                            cancelButtonText: "No, return",
+                                            customClass: {
+                                                confirmButton: "btn btn-primary",
+                                                cancelButton: "btn btn-active-light"
+                                            }
+                                        }).then(function (result) {
+                                            if (result.value) {
+                                                Swal.fire({
+                                                    title: '<div class="spinner-border text-info" role="status"><span class="sr-only">Loading...</span></div>',
+                                                    text: "Please wait...",
+                                                    icon: "success",
+                                                    showCancelButton: false,
+                                                    showConfirmButton: false,
+                                                    buttonsStyling: false,
+                                                });
+                                                //form.reset(); // Reset form
+                                                var isProjectCompleted = false;
+                                                $.post('@Url.Action("Submit", "PurchaseRequisition")', form, function(res) {
+                                                    console.log("result", res);
+                                                    if(res.isCompleted != null){
+                                                        isProjectCompleted = res.isCompleted;
+                                                    }
+                                                    if (res.result === false && isProjectCompleted === false) {
+                                                        Swal.close();
+                                                        alert("You have not authorized to perform this action, please contact admin for further info.");
+                                                    }
+                                                    else if(res.result === false && isProjectCompleted === true) { //project is completed
+                                                        Swal.close();
+                                                        alert("The project already completed. To edit the PR, please go to home page and extend the project due date.");
+                                                    }
+                                                    else {
+                                                        window.location.href = "/BOM/Index/" + res.id;                                                    }
+                                                });
+                                            }
+                                        })
+                                    }
+                                    else {
+                                        Swal.fire({
+                                            title: '<div class="spinner-border text-info" role="status"><span class="sr-only">Loading...</span></div>',
+                                            text: "Please wait...",
+                                            icon: "success",
+                                            showCancelButton: false,
+                                            showConfirmButton: false,
+                                            buttonsStyling: false,
+                                        });
+                                        //form.reset(); // Reset form
+                                        var isProjectCompleted = false;
+                                        $.post('@Url.Action("Submit", "PurchaseRequisition")', form, function(res) {
+                                            console.log("result", res);
+                                            if(res.isCompleted != null){
+                                                isProjectCompleted = res.isCompleted;
+                                            }
+                                            if (res.result === false && isProjectCompleted === false) {
+                                                Swal.close();
+                                                alert("You have not authorized to perform this action, please contact admin for further info.");
+                                            }
+                                            else if(res.result === false && isProjectCompleted === true) { //project is completed
+                                                Swal.close();
+                                                alert("The project already completed. To edit the PR, please go to home page and extend the project due date.");
+                                            }
+                                            else {
+                                                window.location.href = "/BOM/Index/" + res.id;                                            }
+                                        });
+                                    }
+                                }
+                            });
+                        } else if (result.dismiss === 'cancel') {
+                            Swal.fire({
+                                text: "Your form has not been cancelled!.",
+                                icon: "error",
+                                buttonsStyling: false,
+                                confirmButtonText: "Ok, got it!",
+                                customClass: {
+                                    confirmButton: "btn btn-primary",
+                                }
+                            });
+                        }
+
+                        // if (result.value) {
+                        //      Swal.fire({
+                        //         title: '<div class="spinner-border text-info" role="status"><span class="sr-only">Loading...</span></div>',
+                        //         text: "Please wait...",
+                        //         icon: "success",
+                        //         showCancelButton: false,
+                        //         showConfirmButton: false,
+                        //         buttonsStyling: false,
+                        //     });
+                        //     //form.reset(); // Reset form
+                        //     var isProjectCompleted = false;
+                        //     $.post('@Url.Action("Submit","PurchaseRequisition")', form, function(res) {
+                        //         console.log("result", res);
+                        //         if(res.isCompleted != null){
+                        //             isProjectCompleted = res.isCompleted;
+                        //         }
+                        //         if (res.result === false && isProjectCompleted === false) {
+                        //             Swal.close();
+                        //             alert("You have not authorized to perform this action, please contact admin for further info.");
+                        //         }
+                        //         else if(res.result === false && isProjectCompleted === true) { //project is completed
+                        //             Swal.close();
+                        //             alert("The project already completed. To edit the PR, please go to home page and extend the project due date.");
+                        //         }
+                        //         else {
+                        //             window.location.href = "/BOM/Index/" + res.id;
+                        //         }
+                        //     });
+                        // } else if (result.dismiss === 'cancel') {
+                        //     Swal.fire({
+                        //         text: "Your form has not been cancelled!.",
+                        //         icon: "error",
+                        //         buttonsStyling: false,
+                        //         confirmButtonText: "Ok, got it!",
+                        //         customClass: {
+                        //             confirmButton: "btn btn-primary",
+                        //         }
+                        //     });
+                        // }
+                    });
+                }
+            })
+
+            $("#fillForm").submit(function(event) {
+                    Swal.fire({
+                            html: 'Loading...',
+                            ProgressBar: true,
+                            didOpen: () => {
+                                Swal.showLoading()
+                            }
+                        })
+                })
+
+            $('#deleteBtn').click(function() {
+                Swal.fire({
+                    text: "Are you sure delete this PR?",
+                    icon: "warning",
+                    showCancelButton: true,
+                    buttonsStyling: false,
+                    confirmButtonText: "Yes, delete it!",
+                    cancelButtonText: "No, return",
+                    customClass: {
+                        confirmButton: "btn btn-primary",
+                        cancelButton: "btn btn-active-light"
+                    }
+                }).then(function(result) {
+                    if (result.value) {
+                         Swal.fire({
+                                title: '<div class="spinner-border text-info" role="status"><span class="sr-only">Loading...</span></div>',
+                                text: "Please wait...",
+                                icon: "success",
+                                showCancelButton: false,
+                                showConfirmButton: false,
+                                buttonsStyling: false,
+                            });
+
+                            var deleteUrl = "@Url.Action("DeletePR","PurchaseRequisition")" +"/"+@Model.Id;
+
+                        console.log('url delete', deleteUrl)
+                        $.ajax({
+                            url: deleteUrl,
+                            type: 'DELETE',
+                            success: function () {
+                                window.location.href = "@Url.Action("Index","BOM")" + "?id=" + @Model.ProjectId
+                            },
+                            error: function (xhr, status, error) {
+                                // Handle error response
+                            }
+                        });
+                    }
+                    else if (result.dismiss === "cancel") {
+                        Swal.fire({
+                            text: "Your request has been cancelled!.",
+                            icon: "error",
+                            buttonsStyling: false,
+                            confirmButtonText: "Ok, got it!",
+                            customClass: {
+                                confirmButton: "btn btn-primary",
+                            }
+                        });
+                    }
+                })
+            });
+
+        });
+
+        function backToSubmit(status,formType){
+            $.post('@Url.Action("reverseStatus","RFQ")', {id:@Model.Id,status,formType}, function() {
+                location.reload();
+            });
+        }
+        
+        $("#editPR_submit").click(function () {
+            
+            const remark = $("#reviseRemark").val().trim();
+            
+            if (!remark) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Please enter a reason',
+                    text: 'A reason is required before revising the PR.'
+                });
+                return;
+            }
+            
+            // disable buttons and show loading spinner
+            $("#editPR_submit").attr("disabled", true);
+            $("#editPR_modal_close").attr("disabled", true);
+            $("#loading-spinner-editPR").show();
+
+            $.ajax({
+                url: '/PoTracker/POWithRemark', 
+                type: 'POST',
+                data: {
+                    prId: @Model.Id,   
+                    type: 1,          
+                    remark: remark    
+                },
+                success: function () {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'PR revised successfully!',
+                        showConfirmButton: false,
+                        timer: 1500
+                    }).then(() => {
+                        location.reload(); // refresh page after success
+                    });
+                },
+                error: function (xhr) {
+                    console.error(xhr);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error revising PR',
+                        text: 'Something went wrong, please try again.'
+                    });
+                },
+                complete: function () {
+                    $("#loading-spinner-editPR").hide();
+                    $("#editPR_submit").removeAttr("disabled");
+                    $("#editPR_modal_close").removeAttr("disabled");
+                }
+            });
+        });
+
+
+        function approveOrReject(approver, action) {
+            if (approver === 'HOD' && action == 1) {
+                $.ajax({
+                    url: "@Url.Action("isBudgetExceed")",
+                    type: "GET",
+                    data: { projectId: @Model.ProjectId},
+                    success: function (result) {
+                        if (result) {
+                            Swal.fire({
+                                text: "The total spend have been exceed budget. Are you sure you still want to approve?",
+                                icon: "info",
+                                showCancelButton: true,
+                                buttonsStyling: false,
+                                confirmButtonText: "Yes, approve it!",
+                                cancelButtonText: "No, return",
+                                customClass: {
+                                    confirmButton: "btn btn-primary",
+                                    cancelButton: "btn btn-active-light"
+                                }
+                            }).then(function (result) {
+                                if (result.value) {
+                                    showApproveRejectModal(approver, action);
+                                }
+                            });
+                        } else {
+                            showApproveRejectModal(approver, action);
+                        }
+                    }
+                });
+            } else {
+                showApproveRejectModal(approver, action);
+            }
+        }
+
+        function showApproveRejectModal(approver, action) {
+            if(action == 0){
+                $("#remarkTitle").html("Reject Form");
+            }
+            else{
+                $("#remarkTitle").html("Approve Form");
+            }
+             $("#rm_approver").val(approver);
+            $("#rejectOrApprove").val(action);
+            $("#modal_approve_reject_pr").modal("show");
+        }
+
+
+        const data = @Html.Raw(string.IsNullOrEmpty(Model.Data) ? "{}" : Model.Data);
+        
+        try {
+            if (data && Array.isArray(data.components)) {
+                 const findAndFixTotalPrice = (components) => {
+                    if (!components || !Array.isArray(components)) return;
+                    components.forEach(c => {
+                        if (!c) return;
+                        if (c.key === 'totalPrice') {
+                            //c.calculateValue = "value = (row.unitPrice || 0) * (row.totalQuantity || 0);";
+                        }
+                        if (c.components) findAndFixTotalPrice(c.components);
+                        if (Array.isArray(c.columns)) c.columns.forEach(col => findAndFixTotalPrice(col.components));
+                        if (Array.isArray(c.rows)) {
+                            c.rows.forEach(r => {
+                                if (Array.isArray(r)) {
+                                    r.forEach(cell => {
+                                        if (cell && cell.components) findAndFixTotalPrice(cell.components);
+                                    });
+                                }
+                            });
+                        }
+                    });
+                };
+                findAndFixTotalPrice(data.components);
+            }
+        } catch (e) {
+            console.error("Error applying price fix patch:", e);
+        }
+
+        const submission = @Html.Raw(string.IsNullOrEmpty(Model.DataResponse) ? "{data:{'auth':'"+ViewBag.auth+"' ,'gridHeader':[{'code': '"+ ViewBag.projectCode +"','customer':'" + ViewBag.customer + "','poNumber':'" + ViewBag.poNo +"','projectName':'"+ ViewBag.projectName + "','projectCategory':'" + @ViewBag.category + "','poQuantity':'"+ ViewBag.poQuantity + "','requester':'"+ ViewBag.requester+"','department':'"+ViewBag.department+"','buyer':'"+ViewBag.buyer+"' }] }} " : Model.DataResponse);
+        var check = ('@bomStatus' == "RFQ Approved" || '@bomStatus' == "PR Sent" || 
+        '@bomStatus' == "PR Reject" || '@bomStatus' == "PO Reject" || '@bomStatus' ==  "PO Revise") ? true : false;
+        var stateOptions = {};
+        if (!check) {
+            console.log('check')
+           stateOptions = {
+                readOnly: true,
+              //  viewOnly: true
+            }
+        }
+
+        var builder;
+        var renderer;
+        var state = {
+            formioVersion: 'default',
+            form: data,
+            submission: submission,
+            options: stateOptions,
+        };
+
+        function initBuilder(form) {
+            if (builder) {
+                builder.instance.destroy();
+            }
+            builder = new Formio.FormBuilder(document.getElementById('builder'), form, _.cloneDeep(state.options));
+
+            builder.instance.ready.then(function() {
+                builder.instance.on('change', function(event, flags) {
+                    if (!flags) {
+                        setForm(builder.instance.schema, 'builder');
+                    }
+                });
+            })
+        }
+
+        function initRenderer(form) {
+            if (renderer) {
+                renderer.destroy();
+            }
+
+            Formio.createForm(document.getElementById('render'), form, _.cloneDeep(state.options))
+                .then(function(self) {
+                    renderer = self;
+                    renderer.submission = state.submission;
+                    
+                    renderer.ready.then(() => {         
+                        const hideColumnCheckbox = renderer.getComponent('selectBoxes1');
+
+                        if (hideColumnCheckbox) {
+                            // Try to unlock through Form.io API
+                            hideColumnCheckbox.disabled = false;
+                            hideColumnCheckbox.options.readOnly = false;
+                            hideColumnCheckbox.options.disabled = false;
+
+                            // Directly enable the DOM checkboxes (force clickable)
+                            setTimeout(() => {
+                                const inputs = document.querySelectorAll('[name^="data[selectBoxes1]"]');
+                                inputs.forEach(input => {
+                                    input.removeAttribute('disabled');
+                                    input.style.pointerEvents = 'auto';
+                                    input.style.opacity = '1';
+                                    input.disabled = false;
+                                });
+                            }, 300);
+                        }
+                    });
+
+                    renderer.on('change', function(event, flags) {
+                        if (flags && !flags.fromSubmission) {
+                            setSubmission(renderer.submission, 'renderer');
+                        }
+                    });
+                });
+
+            document.getElementsByName('Data').value = JSON.stringify(form)
+        }
+
+        function setForm(form, from) {
+            console.log('setForm', form, from);
+            state.form = form;
+            //if (!renderer.checkData()) {
+            //    document.getElementById("submitBtn").disabled = true;
+            //} else {
+            //    document.getElementById("submitBtn").disabled = false;
+            //}
+
+        }
+
+        function setSubmission(submission, from) {
+            console.log('setSubmission', submission, from);
+            if (renderer && from !== 'renderer') {
+                renderer.submission = submission;
+            }
+            document.getElementsByName('DataResponse')[0].value = JSON.stringify(submission);
+        }
+
+        function addPendingItems(){
+            $.post('@Url.Action("addPendingItems")', { id: @Model.Id, dataResponse: JSON.stringify(renderer.submission) }, function () {
+                location.reload();
+            });
+        }
+
+        function exportExcel(id){
+            Swal.showLoading()
+             $.post('@Url.Action("Edit")', { id, dataResponse: JSON.stringify(renderer.submission) }, function () {
+                window.location.href = '/PurchaseRequisition/ExportToExcel?id='+id;
+                Swal.hideLoading()
+            });
+        }
+
+        function exportExcel2026(id){
+            Swal.showLoading()
+             $.post('@Url.Action("Edit")', { id, dataResponse: JSON.stringify(renderer.submission) }, function () {
+                window.location.href = '/PurchaseRequisition/ExportToExcel2026?id='+id;
+                Swal.hideLoading()
+            });
+        }
+
+        initBuilder(state.form);
+        initRenderer(state.form);
+
+        if (submission == null) {
+            submission.data.header.push({
+                code: '@ViewBag.projectCode',
+                poNumber: '@ViewBag.poNo',
+                projectName: '@ViewBag.projectName',
+                projectCategory: '@ViewBag.category',
+                customer: '@ViewBag.customer',
+                poQuantity: '@ViewBag.poQuantity',
+                supplierName: '@ViewBag.supplierName'
+            });
+        }
+
+        $('#backtoBOM').click(function () {
+            window.location.href = "@Url.Action("Index", "BOM")" + "?id=" + @Model.ProjectId
+        });
+    </script>
+}

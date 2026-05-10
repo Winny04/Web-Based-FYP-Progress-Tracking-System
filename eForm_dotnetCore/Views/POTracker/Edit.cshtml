@@ -1,0 +1,260 @@
+﻿@model Po
+@using eForm_dotnetCore.Helpers
+@using eForm_dotnetCore.Common
+@using Microsoft.AspNetCore.Authorization
+@inject IAuthorizationService AuthorizationService
+@using eForm_dotnetCore.Configuration.Auhtorization;
+@using Microsoft.Net.Http.Headers;
+
+@{
+    ViewData["Title"] = "Edit PO - "+(Model.Poname);
+    var isProjectCompleted = ViewBag.isProjectCompleted;
+    var allowSubmit = ViewBag.allowSubmit;
+    var errorMsg = ViewBag.Error;
+    var bomStatus = ViewBag.BomStatus;
+}
+@{
+    @if (!string.IsNullOrEmpty(errorMsg))
+    {
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        @Html.Raw(ViewBag.Error)
+    </div>
+    }
+}
+
+<div class="card card-xxl-stretch mb-5 mb-xxl-10">
+       <div class="card-header d-flex justify-content-between">
+            <div class="card-title">
+                <h3>PO Detail</h3>
+            </div>
+        </div>
+    <form id="fillForm" asp-action="Edit" method="post">
+        <div class="card-body pb-0">
+            <div class="form-horizontal">
+                <div class="form-group">
+                    @Html.LabelFor(model => model.Pr, "PR No", htmlAttributes: new { @class = "control-label col-md-2" })
+                    <div class="col-md-10">
+                        <a href="@Url.Action("Edit","PurchaseRequisition",new {id = Model.Prid})">@Model.Pr.Prname</a>
+                    </div>
+                </div>
+
+                <input type="hidden" name="Data" value=""/>
+                <input type="hidden" name="DataResponse" id="DataResponse" value="" />
+                <input type="hidden" name="id" id="poId" value="@Model.Id" />
+
+                <div id="builder" hidden></div>
+
+                <div class="card">
+                    <div class="card-body" style="overflow-x:auto">
+                        <div id="render"></div>
+                    </div>
+                </div>
+
+                <div class="form-group pt-3">
+                    <div class="d-flex flex-row justify-content-end gap-2">
+                        @if(!isProjectCompleted){
+                            <button type="submit" class="btn btn-info">
+                                <span class="indicator-label">Save</span>
+                            </button>
+                            <button type="button" class="btn btn-warning" onclick="toggleModal(1)">
+                                <span class="indicator-label">Revise</span>
+                            </button>
+                            <button type="button" class="btn btn-danger" onclick="toggleModal(2)">
+                                <span class="indicator-label">Reject</span>
+                            </button>
+                            <button type="button" id="submitBtn" name="submitButton" class="btn btn-primary text-end">Generate PO</button>    
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+@*Reject PO modal*@
+<div class="modal fade" id="modal_remark" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content rounded">
+            <div class="modal-header pb-0 border-0 justify-content-end">
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+            <div class="modal-body scroll-y px-10 px-lg-15 pt-0 pb-15">
+                <form asp-action="POWithRemark" method="post">
+                    <div class="mb-13 text-center">
+                        <h1 id="modal_title" class="mb-3">Reject PO</h1>
+                    </div>
+                    <input type="hidden" name="prId" value="@Model.Prid" />
+
+                    <div class="d-flex flex-column mb-2 fv-row">
+                        <label class="fs-6 fw-bold mb-2">Please state a reason</label>
+                        <textarea class="form-control-solid" type="text" name="remark"></textarea>
+                    </div>
+
+                    <input type="hidden" name="type" id="remarkType" value="1" />
+
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary">
+                            <span class="indicator-label" id="submitLabel">Reject</span>
+                        </button>
+
+                        <button type="button" id="edit_close" class="btn btn-light me-3">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if(@Context.Request != null){
+    <a href="@Context.Request.Headers[HeaderNames.Referer]">Back To Details</a>
+}
+
+@section Scripts {
+    <script>
+        // Function To Edit Form
+        $(document).ready(function() {
+           
+            $('#fillForm').submit(function() {
+                Swal.fire({
+                    title: '<div class="spinner-border text-info" role="status"><span class="sr-only">Loading...</span></div>',
+                    text: "Please wait...",
+                    icon: "success",
+                    showCancelButton: false,
+                    showConfirmButton: false,
+                    buttonsStyling: false,
+                });
+            });
+
+            $('#submitBtn').click(function() {
+                if (!renderer.checkData()) {
+                     //Swal.fire("Please complete the required item before submitting the form!");
+                    var errorField = [];
+                      renderer.everyComponent((component) => {
+                        if (component.component.validate.required === true && (component.getValue() === null || component.getValue() === "")) { 
+                            errorField.push(component.component.label);
+                        }
+                    });
+                    Swal.fire('Please complete the following items:\n' + errorField.toString());
+                }
+                else {
+                    var form = $('#fillForm').serialize();
+
+                    Swal.fire({
+                        text: "Confirm Generate PO?",
+                        icon: "info",
+                        showCancelButton: true,
+                        buttonsStyling: false,
+                        confirmButtonText: "Yes",
+                        cancelButtonText: "No",
+                        customClass: {
+                            confirmButton: "btn btn-primary",
+                            cancelButton: "btn btn-active-light"
+                        }
+                    }).then(function(result) {
+                        if (result.value) {
+                               $.post('@Url.Action("GeneratePOFormPDF","POTracker")',form, function(result) {
+                                    if(result.status == true){
+                                        window.open('/POTracker/ShowPOFormPDF?fileName=' + result.fileName + '&subject=' + result.poSubject+'&prId='+result.prId, "_blank");
+                                    }
+                                });
+                        } else if (result.dismiss === 'cancel') {
+                        }
+                    });
+                }
+            });
+
+            $("#edit_close").click(function () {
+                $("#modal_remark").modal("hide");
+            });
+
+        });
+        function toggleModal(type){
+            if(type === 1){
+                $("#modal_title").html("Revise PO")
+                $("#submitLabel").html("Revise")
+            }
+            else{
+                $("#modal_title").html("Reject PO")
+                $("#submitLabel").html("Reject")
+            }
+            $("#modal_remark").modal('toggle');
+            $("#remarkType").val(type)
+        }
+
+        const data = @Html.Raw(string.IsNullOrEmpty(Model.Data) ? "{}" : Model.Data);
+        const submission = @Html.Raw(string.IsNullOrEmpty(Model.DataResponse) ? "{data:{}}" : Model.DataResponse);
+        var stateOptions = {};
+
+        var builder;
+        var renderer;
+        var state = {
+            formioVersion: 'default',
+            form: data,
+            submission: submission,
+            options: stateOptions,
+        };
+
+        function initBuilder(form) {
+            if (builder) {
+                builder.instance.destroy();
+            }
+            builder = new Formio.FormBuilder(document.getElementById('builder'), form, _.cloneDeep(state.options));
+
+            builder.instance.ready.then(function() {
+                builder.instance.on('change', function(event, flags) {
+                    if (!flags) {
+                        setForm(builder.instance.schema, 'builder');
+                    }
+                });
+            })
+        }
+
+        function initRenderer(form) {
+            if (renderer) {
+                renderer.destroy();
+            }
+            Formio.createForm(document.getElementById('render'), form, _.cloneDeep(state.options))
+                .then(function(self) {
+                    renderer = self;
+                    renderer.submission = state.submission;
+                    renderer.on('change', function(event, flags) {
+                        console.log('onchange',flags)
+
+                        if (flags && !flags.fromSubmission) {
+                            setSubmission(renderer.submission, 'renderer');
+                        }
+                    });
+                });
+
+            document.getElementsByName('Data')[0].value = JSON.stringify(form);
+        }
+
+        function setForm(form, from) {
+            state.form = form;
+            if (!renderer.checkData()) {
+                document.getElementById("submitBtn").disabled = true;
+            } else {
+                document.getElementById("submitBtn").disabled = false;
+            }
+
+        }
+
+        function setSubmission(submission, from) {
+            if (renderer && from !== 'renderer') {
+                renderer.submission = submission;
+            }
+
+            document.getElementsByName('DataResponse')[0].value = JSON.stringify(submission);
+        }
+
+        initBuilder(state.form);
+        initRenderer(state.form);
+    </script>
+}

@@ -1,0 +1,654 @@
+﻿@using eForm_dotnetCore.Common
+@using eForm_dotnetCore.Helpers
+@using eForm_dotnetCore.ViewModels
+@using Microsoft.AspNetCore.Authorization
+@using eForm_dotnetCore.Configuration.Auhtorization;
+
+@inject IAuthorizationService AuthorizationService
+
+@model IEnumerable<HistoryModel>
+
+@{
+    ViewData["Title"] = PageTitle.History;
+
+    var authResource = new AuthResource("Type", "Finance", null);
+    var canWrite = await AuthorizationService.AuthorizeAsync(User, authResource, new UserTypeRequirement());
+}
+<div id="kt_content_container" class="d-flex flex-column-fluid align-items-start container-xxl">
+    <div class="content flex-row-fluid" id="kt_content">
+
+        <div class="card card-flush mb-5 mb-xl-8">
+            <div class="card-header pt-7">
+                <h3 class="card-title align-items-start flex-column">
+                    <span class="card-label fw-bolder fs-3 mb-1">@PageTitle.History</span>
+
+                </h3>
+                <div class="card-toolbar">
+                    <div class="d-flex flex-stack flex-wrap gap-4">
+                        <div class="d-flex align-items-center position-relative my-1">
+                            <span class="svg-icon svg-icon-3 position-absolute ms-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                    <rect opacity="0.5" x="17.0365" y="15.1223" width="8.15546" height="2" rx="1" transform="rotate(45 17.0365 15.1223)" fill="black" />
+                                    <path d="M11 19C6.55556 19 3 15.4444 3 11C3 6.55556 6.55556 3 11 3C15.4444 3 19 6.55556 19 11C19 15.4444 15.4444 19 11 19ZM11 5C7.53333 5 5 7.53333 5 11C5 14.4667 7.53333 17 11 17C14.4667 17 17 14.4667 17 11C17 7.53333 14.4667 5 11 5Z" fill="black" />
+                                </svg>
+                            </span>
+                            <input type="text" id="filter_search" class="form-control form-control-solid form-select-sm w-150px ps-9" placeholder="Search table" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body py-3">
+                <div class="table-responsive">
+                    <table id="formListTable" class="table table-row-gray-300 align-middle gs-0 gy-4">
+                        <thead>
+                            <tr class="fw-bolder fs-6 text-uppercase text-center">
+                                <th class="min-w-50px tableCellBorderLeft tableCellBorderRight smallThText"><b>Status</b></th>
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>Request by</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Project Code</b></th>
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>Project PO</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Customer</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Project Name</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Category</b></th>
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>PR</b></th>
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>PO</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Remark</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Action</b></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.Count() > 0)
+                            {
+                                @foreach (var form in Model)
+                                {
+                                    <tr id="@form.Id" class="text-center">
+                                        <td class="text-center tableCellBorderLeft smallTdText">
+                                            @if (form.Status == "Completed")
+                                            {
+                                                <div class="badge badge-light-primary badge-status">@form.Status.ToUpper()</div>
+                                            }
+                                            else if (form.Status == "Item Issued Out")
+                                            {
+                                                <div class="badge badge-light-success badge-status">@form.Status.ToUpper()</div>
+                                            }
+                                            else if (form.Status == "Item Received")
+                                            {
+                                                <div class="badge badge-light-warning badge-status">@form.Status.ToUpper()</div>
+                                            }
+                                            else if (form.Status == "Receiving Reject")
+                                            {
+                                                <div class="badge badge-light-danger badge-status">@form.Status.ToUpper()</div>
+                                            }
+                                            else if (form.Status == "PO Approved")
+                                            {
+                                                <div class="badge badge-light-info badge-status">@form.Status.ToUpper()</div>
+                                            }
+                                            else
+                                            {
+                                                <div class="badge badge-light-danger badge-status">Unknown</div>
+                                            }
+                                        </td>
+                                        @*Requestor*@
+                                        <td class="text-center tableCellBorderRight smallThText">
+                                            @form.Requestor @*(@form.Department)*@
+                                        </td>
+                                        @*ProjectCode*@
+                                        <td class="text-center tableCellBorderRight smallTdText">
+                                            @form.ProjectCode
+                                        </td>
+                                        @*ProjectPO*@
+                                        <td class="text-center tableCellBorderRight smallTdText">
+                                            @form.CustomerPO
+                                        </td>
+                                        @*Customer*@
+                                        <td class="text-center tableCellBorderRight smallTdText">
+                                            @form.Customer
+                                        </td>
+                                        @*Project Name*@
+                                        <td class="text-center tableCellBorderRight smallTdText">
+                                            @form.ProjectName
+                                        </td>
+                                        @*Project Category*@
+                                        <td class="text-center tableCellBorderRight smallThText">
+                                            @form.ProjectCategory
+                                        </td>
+                                         @*PR*@
+                                         <td class="tableCellStandard">
+                                            <div class="menu-item">
+                                                <a href="/PurchaseRequisition/Edit/@form.PrId" class="link-primary"><b>@form.PrName</b></a>
+                                            </div>
+                                        </td>
+                                        @*PO*@
+                                        <td class="text-center tableCellBorderRight smallThText">
+                                            @if (form.PO != null)
+                                            {
+                                                if (form.PO.Where(x => x.Type == "PO").Any())
+                                                {
+                                                    @* <a href="@Url.Action("downloadFile",new {id = form.PO.FirstOrDefault(x => x.Type == "PO").SupportFileId})">
+                                                        @form.PO.FirstOrDefault(x => x.Type == "PO").SupportFile.FileName
+                                                        </a>*@
+                                                    var sfId = form.PO.FirstOrDefault(x => x.Type == "PO").SupportFileId;
+                                                    <a href="#" onclick="openPDF(@sfId)">@form.PO.FirstOrDefault(x => x.Type == "PO").SupportFile.FileName</a>
+                                                    @* <a href="@Url.Action("RemoveFile",new {id = sfId, projectId = form.ProjectId})" class="mx-2 text-danger">X</a>*@
+                                                }
+                                            }
+                                        </td>
+
+                                        @*Remark*@
+                                        <td class="text-center tableCellBorderRight smallThText">
+                                            @form.remark
+                                        </td>
+                                        <td class="text-center tableCellBorderRight smallThText" style="border-right: 2px solid #D3D3D3;">
+                                            @{
+                                                if (canWrite.Succeeded == true)
+                                                {
+                                                    <a href="#" class="btn btn-sm btn-light btn-active-light-primary" data-kt-menu-trigger="click" data-kt-menu-placement="bottom-end" style="font-size:9px; font-weight:bold; width:90%;padding-right:5px;padding-left:5px;">
+                                                        Actions
+                                                        <span class="svg-icon svg-icon-5 m-0">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                                                <path d="M11.4343 12.7344L7.25 8.55005C6.83579 8.13583 6.16421 8.13584 5.75 8.55005C5.33579 8.96426 5.33579 9.63583 5.75 10.05L11.2929 15.5929C11.6834 15.9835 12.3166 15.9835 12.7071 15.5929L18.25 10.05C18.6642 9.63584 18.6642 8.96426 18.25 8.55005C17.8358 8.13584 17.1642 8.13584 16.75 8.55005L12.5657 12.7344C12.2533 13.0468 11.7467 13.0468 11.4343 12.7344Z" fill="black" />
+                                                            </svg>
+                                                        </span>
+                                                    </a>
+
+                                                    <div class="menu menu-sub menu-sub-dropdown menu-column menu-rounded menu-gray-600 menu-state-bg-light-primary fw-bold fs-7 w-125px py-4" data-kt-menu="true">
+                                                        <div class="menu-item px-3">
+                                                            <a href="@Url.Action("View", "History", new { PrId = form.PrId })" class="menu-link px-3" target="_blank" >View</a>
+                                                        </div>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <a href="#" class="btn" style="background-color: #d9d9d9;color: #a3a3a3;" disabled>
+                                                        Actions
+                                                        <span class="svg-icon svg-icon-5 m-0">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="20" viewBox="0 0 24 24" fill="none">
+                                                                <path d="M11.4343 12.7344L7.25 8.55005C6.83579 8.13583 6.16421 8.13584 5.75 8.55005C5.33579 8.96426 5.33579 9.63583 5.75 10.05L11.2929 15.5929C11.6834 15.9835 12.3166 15.9835 12.7071 15.5929L18.25 10.05C18.6642 9.63584 18.6642 8.96426 18.25 8.55005C17.8358 8.13584 17.1642 8.13584 16.75 8.55005L12.5657 12.7344C12.2533 13.0468 11.7467 13.0468 11.4343 12.7344Z" fill="black" />
+                                                            </svg>
+                                                        </span>
+                                                    </a>
+                                                }
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section scripts{
+<script>
+
+       $(document).ready(function () {
+            //$("#kt_daterangepicker_1,kt_daterangepicker_2").flatpickr({
+            //   dateFormat: "Y-m-d",
+            //})
+
+            $(".kt_daterangepicker_1").flatpickr({
+                dateFormat: "Y-m-d",
+            });
+
+            $(".kt_daterangepicker_2").flatpickr({
+                dateFormat: "Y-m-d",
+            });
+
+           var table = document.getElementById("formListTable");
+           $("#attachFileItem").hide();
+
+           var dataTable = $(table).DataTable({
+               "info":false,
+               "order":[]
+           });
+
+            var filterSearch = document.getElementById('filter_search');
+            filterSearch.addEventListener('keyup', function (e) {
+                dataTable.search(e.target.value).draw();
+            });
+
+
+            $("#departmentFilter").change(function(e){
+                $("#picTable").DataTable().columns(1).search(e.target.value).draw();
+            });
+
+            $("#filter_search_pic").keyup(function(e){
+                $("#picTable").DataTable().columns(1).search(e.target.value).draw();
+            });
+
+            $("#file-do").change(function(){
+                if($(this).val() != ''){
+                    $("#btnDelDO").css("display","inline-block");
+                }
+                else{
+                     $("#btnDelDO").css("display","none");
+                }
+            });
+
+             $("#file-invoice").change(function(){
+                if($(this).val() != ''){
+                    $("#btnDelINV").css("display","inline-block");
+                }
+                else{
+                     $("#btnDelINV").css("display","none");
+                }
+            });
+
+             $("#file-grn").change(function(){
+                if($(this).val() != ''){
+                    $("#btnDelGRN").css("display","inline-block");
+                }
+                else{
+                     $("#btnDelGRN").css("display","none");
+                }
+            });
+
+             $("#btnDelDO").click(function(e){
+                 e.preventDefault();
+                 $("#file-do").val('');
+                 $(this).css("display","none");
+             });
+
+              $("#btnDelINV").click(function(e){
+                 e.preventDefault();
+                 $("#file-invoice").val('');
+                  $(this).css("display","none");
+             });
+
+              $("#btnDelGRN").click(function(e){
+                 e.preventDefault();
+                 $("#file-grn").val('');
+                  $(this).css("display","none");
+             });
+
+           $("#ItemCategory").change(function(){
+               if($("#ItemCategory").val() == "@BomItemCategory.Fabrication.ToString()"){
+                   $("#attachFileItem").show();
+               }else{
+                   $("#attachFileItem").hide();
+                   $("#attachFileItem").val(null);
+               }
+           })
+
+           var picDataTable = $(picTable).DataTable({
+            "info":false,
+            "processing": false,
+            "serverSide": false,
+            "deferRender": true,
+            "order": [[ 1, "asc" ]],
+            "drawCallback": function(settings){
+                 var value = $("#picsContainer").val();
+                    $(".chkboxPIC").prop('checked', false);
+
+                    //var piclist = value.split(',');
+                    //$.each(piclist, function(index, value) {
+                        $("#Chkbox-"+ value).prop('checked', true);
+                    //});
+                }
+        });
+
+           var filterSearch = document.getElementById("filter_search");
+           filterSearch.addEventListener("keyup", function (e) {
+               dataTable.search(e.target.value).draw();
+           });
+
+            $("#edit_bom_reject").click(function(e){
+                e.preventDefault();
+                var bomId = $("#hBomId").val();
+                //var prId = $("#hPRId").val();
+                var remark = $("#rejectReason").val();
+
+                if(bomId != null){
+                    Swal.fire({
+                        text: "Are you sure want to reject?",
+                        icon: "warning",
+                        showCancelButton: true,
+                        buttonsStyling: false,
+                        confirmButtonText: "Yes!",
+                        cancelButtonText: "No, return",
+                        customClass: {
+                            confirmButton: "btn btn-primary",
+                            cancelButton: "btn btn-active-light"
+                        }
+                    }).then(function (result) {
+                        if (result.value)
+                        {
+                            $.ajax({
+                                url: '@Url.Action("RejectRec","ReceivingTracker")',
+                                type: 'POST',
+                                data: { bomId: bomId, remark: remark },
+                                success: function(result) {
+                                    if(result.status){
+                                            Swal.fire({
+                                            text: result.msg,
+                                            icon: "success",
+                                            showCancelButton: false,
+                                            buttonsStyling: false,
+                                            confirmButtonText: "Done",
+                                            customClass: {
+                                                confirmButton: "btn btn-success"
+                                            }
+                                            }).then(function (result) {
+                                                location.reload();
+                                            });
+                                        }
+                                    },
+                                error: function(result){
+                                      Swal.fire({
+                                            text: result.msg,
+                                            icon: "error",
+                                            showCancelButton: false,
+                                            buttonsStyling: false,
+                                            confirmButtonText: "OK",
+                                            customClass: {
+                                                confirmButton: "btn btn-primary"
+                                            }
+                                        });
+                                  }
+                            });
+                        }
+                    });
+                }//end if
+            });
+
+            $("#btn-reject").click(function(e){
+                e.preventDefault();
+                $("#modal_edit").modal('toggle');
+                $("#modal_reject").modal('toggle');
+            });
+
+            $("#edit_receiving_submit").click(function(){
+                var dos = $("#file-do").val();
+                var inv = $("#file-invoice").val();
+                var old_do = $("#hFile-do").val();
+                var old_inv = $("#hFile-invoice").val();
+                var remark = $("#eRemark").val();
+
+                if(remark == ''){
+                    if((old_do != '' || dos != '') && (old_inv != '' || inv != '') ){
+                         $('#btn_edit_submit').trigger('click');
+                    }
+                    else{
+                        Swal.fire({
+                            text: "Please enter a remark if do not have DO or Invoice",
+                            icon: "error",
+                            buttonsStyling: false,
+                            confirmButtonText: "Ok, got it!",
+                            customClass: {
+                                confirmButton: "btn btn-primary",
+                            }
+                        });
+
+                    }
+                }
+                else{
+                    $('#btn_edit_submit').trigger('click');
+                }
+
+            });
+
+            $("#eReceivedQty").change(function(){
+                var poQty = $("#ePOQty").val();
+                var receivedQty = $(this).val();
+                var balanceQty = "0";
+
+                var qty = poQty - receivedQty;
+                if(qty > 0){
+                    qty = qty * -1
+                    balanceQty =  qty;
+                }
+                else if(qty < 0){
+                     qty = qty * -1
+                     balanceQty = "+" + qty;
+                }
+                else{
+                     balanceQty = qty;
+                }
+                $("#eBalanceQty").val(balanceQty);
+
+            });
+
+
+             $("#eIssueOutQty").change(function(){
+                var recQty = $("#eReceivedQty").val();
+                var issueOutQty = $(this).val();
+                var balanceIssueQty = "0";
+                var qty = recQty - issueOutQty;
+
+                if(qty > 0){
+                    qty = qty * -1
+                    balanceIssueQty =  qty;
+                }
+                else if(qty < 0){
+                     qty = qty * -1
+                     balanceIssueQty = "+" + qty;
+                }
+                else{
+                     balanceIssueQty = qty;
+                }
+
+                $("#eBalanceToIssueOutQty").val(balanceIssueQty);
+
+            });
+
+
+            $("#modal_edit_pics").on('hidden.bs.modal', function () {
+                $("#modal_edit").modal('toggle');
+            });
+
+
+            $("#btnSavePIC").click(function(){
+                var value = $("#picsContainer").val();
+                var preview = $("#picPreview").val();
+                $("#eIssueOutBy").val(preview);
+                $("#hIssueOutPicId").val(value);
+                $("#modal_edit_pics").modal('toggle');
+                $("#modal_edit").modal('toggle');
+                $("#modal_edit").css("overflow-y","auto");
+            });
+
+            //Allowed only one PIC (checkbox) can be selected
+            $('.chkboxPIC').click(function() {
+                $('.chkboxPIC').not(this).prop('checked', false);
+            });
+
+          }); //End $(document).ready()
+
+
+       function disableAllColumn(){
+            $("#eCustomer").attr("readonly", true);
+            $("#eProjectPoNo").attr("readonly", true);
+            $("#eProjectCategory").attr("readonly", true);
+            $("#eRequestor").attr("readonly", true);
+            $("#eDepartment").attr("readonly", true);
+            $("#eVendorName").attr("readonly", true);
+            $("#eVendorQuotation").attr("readonly", true);
+            $("#ePOQuantity").attr("readonly", true);
+            $("#eUnitPrice").attr("readonly", true);
+            $("#eTotalPrice").attr("readonly", true);
+            $("#eEstDeliveryDate").attr("readonly", true);
+            $("#eReceivedDate").attr("readonly", true);
+            $("#eReceivedQty").attr("readonly", true);
+            $("#doFile").prop("disabled", true);
+            $("#invFile").prop("disabled", true);
+            $("#GRNFile").prop("disabled", true);
+            $("#eBalanceToReceivedQty").attr("readonly", true);
+        }
+
+       function deleteRec(Id){
+           Swal.fire({
+                   text: "Are you sure delete?",
+                   icon: "warning",
+                   showCancelButton: true,
+                   buttonsStyling: false,
+                   confirmButtonText: "Yes, delete it!",
+                   cancelButtonText: "No, return",
+                   customClass: {
+                       confirmButton: "btn btn-primary",
+                       cancelButton: "btn btn-active-light"
+                   }
+               }).then(function (result) {
+                   if (result.value) {
+                       var table = $("#formListTable").DataTable();
+                       $.ajax({
+                            url : "@Url.Action("DeleteRec")",
+                            method : "delete",
+                            data : {
+                               id :Id
+                            },
+                            success: function() {
+                               //table.row("#"+ PrId).remove().draw();
+                               location.reload();
+                            }
+                       });
+                   } else if (result.dismiss === "cancel") {
+                       Swal.fire({
+                           text: "Your form has not been cancelled!.",
+                           icon: "error",
+                           buttonsStyling: false,
+                           confirmButtonText: "Ok, got it!",
+                           customClass: {
+                               confirmButton: "btn btn-primary",
+                           }
+                       });
+                   }
+               });
+       }
+
+       function SetBomId(bomId, projectId){
+           $("#hBomId").val("");
+           $("#hBomId").val(bomId);
+           $("#hBomIdPIC").val(bomId);
+           $("#hProjectId").val("");
+           $("#hProjectId").val(projectId);
+       }
+
+        function openUploadFileModal(bomId, type) {
+            $("#uploadFile_bomId").val(bomId);
+            $("#uploadFileType").val(type);
+            $("#modal_upload_file").modal("show");
+        }
+
+       //close popup
+       $("#new_request_close").click(function(){
+           $("#modal_new").modal("hide");
+       });
+
+       $("#edit_close").click(function(){
+           $("#modal_edit").modal("hide");
+       });
+
+         $("#import_modal_close").click(function(){
+           $("#modal_import_BOM").modal("hide");
+       });
+       //end close popup
+
+
+      function HideAndSeek(status){
+            console.log(status);
+            if(status === "PO Approved"){
+                $("#div-file-do").show();
+                $("#div-file-inv").show();
+                $("#div-file-grn").hide();
+                $("#divReceivedDate").show();
+                $("#divReceivedQty").show();
+                $("#divBalanceQty").hide();
+                $("#divIssueOutBy").hide();
+                $("#divIssueOutDate").hide();
+                $("#divIssueOutQty").hide();
+                $("#divBalanceToIssueOutQty").hide();
+                $("#divRemark").show();
+            }
+            else if(status == "Item Received")
+            {
+                $("#div-file-do").hide();
+                $("#div-file-inv").hide();
+                $("#div-file-grn").hide();
+                $("#divReceivedDate").hide();
+                $("#divReceivedQty").hide();
+                $("#divBalanceQty").hide();
+                $("#divIssueOutBy").show();
+                $("#divIssueOutDate").show();
+                $("#divIssueOutQty").show();
+                $("#divBalanceToIssueOutQty").show();
+                $("#divRemark").show();
+            }
+            else if(status == "Item Issued Out")
+            {
+                $("#div-file-do").hide();
+                $("#div-file-inv").hide();
+                $("#div-file-grn").show();
+                $("#divReceivedDate").hide();
+                $("#divReceivedQty").hide();
+                $("#divBalanceQty").hide();
+                $("#divIssueOutBy").hide();
+                $("#divIssueOutDate").hide();
+                $("#divIssueOutQty").hide();
+                $("#divBalanceToIssueOutQty").hide();
+                $("#divRemark").show();
+            }
+
+      }
+
+    function selectPIC(userId, value, dept){
+        var elemId = "Chkbox-" + userId;
+        var isChecked = document.getElementById(elemId).checked
+        var oldSelected = $("#picsContainer").val();
+        var newSelected = "";
+
+        if(isChecked){
+            $("#picsContainer").val(userId);
+             $.ajax({
+                    url : "@Url.Action("GetShortName","ReceivingTracker")",
+                    method : 'POST',
+                    data : {
+                    userIds :userId
+                    },
+                    success: function(result) {
+                        $("#picPreview").val(result);
+                    }
+                });
+        }
+        else{
+            $("#picsContainer").val('');
+            $("#picsContainer").val('');
+        }
+    }
+
+
+    function editPICSetPID(){
+
+        var bomId =  $("#hBomId").val();
+        var value = $("#hIssueOutPicId").val();
+
+        $("#picsContainer").val(value);
+        $(".chkboxPIC").prop('checked', false);
+        var splitResponse = value.split(',');
+        $.each(splitResponse, function(index, value) {
+            $("#Chkbox-"+ value).prop('checked', true);
+        });
+
+
+        $("#modal_edit_pics").css("overflow-y","auto");
+            $.ajax({
+                    url : "@Url.Action("GetShortName","ReceivingTracker")",
+                    method : 'POST',
+                    data : {
+                    userIds :value
+                    },
+                    success: function(result) {
+                        $("#picPreview").val(result);
+                    }
+            });
+        }
+
+
+       function openPDF(supportFileId){
+        window.open("/BOM/ShowPDF?supportFileId=" + supportFileId, "_blank");
+       }
+
+</script>
+}

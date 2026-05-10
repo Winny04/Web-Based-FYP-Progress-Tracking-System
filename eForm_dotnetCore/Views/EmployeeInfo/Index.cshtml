@@ -1,0 +1,580 @@
+﻿@using eForm_dotnetCore.Common
+@using eForm_dotnetCore.Helpers
+@model eForm_dotnetCore.Controllers.EmployeeInfoVM
+
+@{
+    //ViewBag.Title = "Configuration>Users";
+    ViewBag.Title = PageTitle.ManageUser;
+    var departmentList = new List<SelectListItem>();
+    departmentList = Departments.DepartmentList();
+    var userTypeList = new List<SelectListItem>();
+    userTypeList = UserTypes.UserTypeFilterList();
+}
+<style>
+    .tableBorder {
+        border-right: 2px solid #D3D3D3;
+        color: black;
+        font-size: 15px;
+    }
+</style>
+
+<div class="card">
+    <h3 style="margin-left:30px; margin-top:20px;">Manage User</h3>
+    <div class="card-header border-0">
+
+        <div class="card-toolbar">
+            <div class="d-flex flex-stack flex-wrap gap-4">
+                <div class="d-flex align-items-center position-relative my-1">
+                    <span class="svg-icon svg-icon-1 position-absolute px-1" style="margin-right:1.5rem !important;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="17.0365" y="15.1223" width="8.15546" height="2" rx="1" transform="rotate(45 17.0365 15.1223)" fill="black" />
+                            <path d="M11 19C6.55556 19 3 15.4444 3 11C3 6.55556 6.55556 3 11 3C15.4444 3 19 6.55556 19 11C19 15.4444 15.4444 19 11 19ZM11 5C7.53333 5 5 7.53333 5 11C5 14.4667 7.53333 17 11 17C14.4667 17 17 14.4667 17 11C17 7.53333 14.4667 5 11 5Z" fill="black" />
+                        </svg>
+                    </span>
+                    <input type="text" id="searchBar" class="form-control form-control-solid w-250px" placeholder="Search user" style="padding-left:2.8rem !important;" />
+                </div>
+                <div class="d-flex align-items-center fw-bolder">
+                    <!--begin::Select-->
+                    @Html.DropDownListFor(model => model.UserType, userTypeList, new {@class = "form-select form-select-solid form-select-lg fw-bold",id = "typeFilter"})
+                    <!--end::Select-->
+                </div>
+            </div>
+        </div>
+        <div class="card-toolbar">
+            <div class="d-flex align-items-center py-3 py-md-1">
+                <div class="me-4">
+                    <!--start:: Btn Create-->
+                    <a href="#" id="btn-Create" class="btn btn-success " data-bs-toggle="modal" data-bs-target="#createAcc" value="Create">Create</a>
+                    <!--end:: Btn Create-->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body py-0">
+        @* <label>@Html.ValidationMessageFor(model => model.EmplooyeeInfoID, "", new { @class = "text-danger" })</label>*@
+        <div class="table-responsive">
+            <table id="mytable" class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
+                <thead>
+                    <tr class="fw-bolder text-muted text-center">
+                        <th class="w-25px" style="color:black">ID</th>
+                        <th class="min-w-200px" style="color:black;font-size:15px; border-right: 2px solid #D3D3D3;"><b>User</b></th>
+                        @*<th class="min-w-200px">Position</th>
+                        <th class="min-w-200px">Department</th>*@
+                        <th class="min-w-200px" style="color:black; font-size:15px; border-right: 2px solid #D3D3D3;"><b>User Type</b></th>
+                        <th class="min-w-200px" style="color:black;font-size:15px; border-right: 2px solid #D3D3D3;"><b>Date Created</b></th>
+                        <th class="min-w-200px" style="color:black;font-size:15px; border-right: 2px solid #D3D3D3;"><b>Is Resign</b></th>
+                        <th class="min-w-200px" style="color:black;font-size:15px;border-right: 2px solid #D3D3D3;"><b>Action</b></th>
+                    </tr>
+                </thead>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+@*<div id="div-modal">
+    @Html.Partial("~/Views/EmployeeInfo/Modal/_Modal_popup.cshtml", Model)
+    </div>*@
+
+<div class="modal fade" id="createAcc" tabindex="-1" aria-hidden="true">
+    <!--begin::Modal dialog-->
+    <div class="modal-dialog modal-dialog-centered mw-600px">
+        <!--begin::Modal content-->
+        <div class="modal-content">
+            <!--begin::Modal header-->
+            <div class="modal-header">
+                <!--begin::Modal title-->
+                <h2 id="modal-title">Create New User</h2>
+                <!--end::Modal title-->
+                <!--begin::Close-->
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <!--begin::Svg Icon | path: icons/duotune/arrows/arr061.svg..... just a 'X' button-->
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                    <!--end::Svg Icon-->
+                </div>
+                <!--end::Close-->
+            </div>
+
+            <div class="modal-body p-5">
+                <div class="stepper stepper-pills stepper-column flex-column flex-xl-row flex-row-fluid" id="create_new_user_modal_stepper">
+                    <div class="justify-content-center justify-content-xl-start">
+                        <div class="stepper-nav ps-lg-8 pr-4">
+                            <div class="form-horizontal">
+
+                                <div class="fv-row mb-7">
+                                    <label class="form-label fw-bolder text-dark fs-6">Employee ID</label>
+                                    <label>@Html.ValidationMessageFor(model => model.EmplooyeeInfoID, "", new { @class = "text-danger" })</label>
+                                    @Html.TextBoxFor(model => model.EmplooyeeInfoID, new { @class = "form-control form-control-lg form-control-solid" })
+                                </div>
+
+                                <div class="fv-row mb-7">
+                                    <label class="form-label fw-bolder text-dark fs-6">Full Name</label>
+                                    <label>@Html.ValidationMessageFor(model => model.FullName, "", new { @class = "text-danger" })</label>
+                                    @Html.TextBoxFor(model => model.FullName, new { @class = "form-control form-control-lg form-control-solid" })
+                                </div>
+
+                                <div class="fv-row mb-7">
+                                    <label class="form-label fw-bolder text-dark fs-6">Short Name</label>
+                                    <label>@Html.ValidationMessageFor(model => model.ShortName, "", new { @class = "text-danger" })</label>
+                                    @Html.TextBoxFor(model => model.ShortName, new { @class = "form-control form-control-lg form-control-solid" })
+                                </div>
+                                <div class="mb-10 fv-row" data-kt-password-meter="true">
+                                    <div class="mb-1">
+                                        <label class="form-label fw-bolder text-dark fs-6">Password</label>
+                                        <label>@Html.ValidationMessageFor(model => model.PassCode, "", new { @class = "text-danger" })</label>
+                                        <div class="position-relative mb-3">
+                                            @Html.TextBoxFor(model => model.PassCode, new { @class = "form-control form-control-lg form-control-solid",  type = "password", name = "password" })
+                                            <span class="btn btn-sm btn-icon position-absolute translate-middle top-50 end-0 me-n2" data-kt-password-meter-control="visibility">
+                                                <i class="bi bi-eye-slash fs-2"></i>
+                                                <i class="bi bi-eye fs-2 d-none"></i>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="fv-row mb-7">
+                                    <label class="form-label fw-bolder text-dark fs-6">Email</label>
+                                    <label>@Html.ValidationMessageFor(model => model.Email, "", new { @class = "text-danger" })</label>
+                                    @Html.TextBoxFor(model => model.Email, new { @class = "form-control form-control-lg form-control-solid",  type = "email"  })
+                                </div>
+
+                                <div class="fv-row mb-7">
+                                    <label class="form-label fw-bolder text-dark fs-6">Department</label>
+                                    @Html.DropDownListFor(model => model.Department, departmentList, new {@class = "form-select form-select-solid form-select-lg fw-bold"})
+                                </div>
+
+                                <div class="fv-row mb-7">
+                                    <label class="form-label fw-bolder text-dark fs-6">User Type</label>
+                                    @Html.DropDownListFor(model => model.UserType, userTypeList, new {@class = "form-select form-select-solid form-select-lg fw-bold"})
+                                </div>
+
+                                <div class="text-center">
+                                    <button type="button" id="kt_sign_up_submit" class="btn btn-lg btn-primary">
+                                        <span class="indicator-label">Create</span>
+                                        <span class="indicator-progress">
+                                            Please wait...
+                                            <span class="spinner-border spinner-border-sm align-middle ms-2"></span>
+                                        </span>
+                                    </button>
+                                </div>
+
+                            </div>
+                        </div>
+                        <!--end::Nav-->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function () {
+        LoadTable();
+
+        function hideModal() {
+            $('#createAcc').modal('hide');
+        }
+
+        $("#kt_sign_up_submit").click(function () {
+
+            var UserName = $("#EmplooyeeInfoID").val();
+            var EmplooyeeInfoID = $("#EmplooyeeInfoID").val();
+            var FullName = $("#FullName").val();
+            var ShortName = $("#ShortName").val();
+            var PassCode = $("#PassCode").val();
+            var Email = $("#Email").val();
+            var Department = $("#Department").val();
+            var UserType = $("#UserType").val();
+
+
+            if (EmplooyeeInfoID == '' || FullName == '' || ShortName == '' || PassCode == '' || Email == '' || Department == '' || UserType == '') {
+                Swal.fire({
+                    text: "Please fill in all fields.",
+                    icon: "warning",
+                    buttonsStyling: false,
+                    confirmButtonText: "Ok, got it!",
+                    customClass: {
+                        confirmButton: "btn btn-primary",
+                    }
+                });
+                return false;
+            }
+            else if (Email == null || (Email.indexOf("sophicautomation.com") < 0 && Email.indexOf("sophic.my") < 0)) { //if not found
+                Swal.fire({
+                    text: "Inccorect email format. Please use company's email address.",
+                    icon: "warning",
+                    buttonsStyling: false,
+                    confirmButtonText: "Ok, got it!",
+                    customClass: {
+                        confirmButton: "btn btn-primary",
+                    }
+                });
+                return false;
+            }
+
+
+            var form = {
+                UserName: UserName,
+                EmplooyeeInfoID: EmplooyeeInfoID,
+                FullName: FullName,
+                ShortName: ShortName,
+                PassCode: PassCode,
+                Email: Email,
+                Department: Department,
+                UserType: UserType
+            };
+
+            $.ajax({
+                url: "/EmployeeInfo/Create",
+                method: "POST",
+                data: {
+                    newEmployee: form
+                },
+                success: function (result) {
+                    if (result.status) {
+                        Swal.fire({
+                            text: result.msg,
+                            icon: "success",
+                            buttonsStyling: false,
+                            confirmButtonText: "Ok, got it!",
+                            customClass: {
+                                confirmButton: "btn btn-primary",
+                            }
+                        }).then(function () {
+                            window.location.href = '/EmployeeInfo';
+                        });
+                    }
+                    else {
+                        Swal.fire({
+                            text: result.msg,
+                            icon: "warning",
+                            buttonsStyling: false,
+                            confirmButtonText: "Ok, got it!",
+                            customClass: {
+                                confirmButton: "btn btn-primary",
+                            }
+                        });
+                    }
+                },
+                error: function (result) {
+                    Swal.fire({
+                        text: result.msg,
+                        icon: "error",
+                        buttonsStyling: false,
+                        confirmButtonText: "Ok, got it!",
+                        customClass: {
+                            confirmButton: "btn btn-primary",
+                        }
+                    });
+                }
+            });
+        });
+
+
+
+    });
+    $("#typeFilter").change(function (e) {
+        $("#mytable").DataTable().columns(2).search(e.target.value).draw();
+    });
+
+    function OpenEditModal(employeeId, isViewOnly) {
+        var isView = false;
+        EditableModal();
+        if (isViewOnly == "View") {
+            $("#modal-title").text("View");
+            isView = true;
+        }
+        else {
+            $("#modal-title").text("Edit");
+        }
+
+        $.ajax({
+            type: "POST",
+            url: '/EmployeeInfo/Edit',
+            data: {
+                id: employeeId
+            },
+            success: function (data, row) {
+                var imagePath = data.Image;
+                $("#EmployeeInfo_Id").val(data.Id);
+                $("#EmployeeInfo_FullName").val(data.FullName);
+                $("#EmployeeInfo_Email").val(data.Email);
+                $("#EmployeeInfo_PassCode").val(data.PassCode);
+                if (data.Image != null) {
+                    $("#UserImage").attr("value", data.Image);
+                    $("#uploadedImg").attr("src", data.Image);
+                    $("#backImg").css("background-image", "url(" + data.Image + ")");
+                    $("#backImg1").css("background-image", "url(" + data.Image + ")");
+                }
+                else {
+                    $("#UserImage").attr("value", '');
+                    $("#uploadedImg").attr("src", '');
+                    $("#backImg").css("background-image", "url(" + "assets/media/svg/avatars/blank.svg" + ")");
+                    $("#backImg1").css("background-image", "url(" + "assets/media/svg/avatars/blank.svg" + ")");
+
+                }
+                $('#create_new_user_modal').modal('show');
+                //CheckHasImage(isView);
+            },
+            error: function (data) {
+            }
+
+        });
+        $("#div-submit").html('<input type="submit" value="Save" class="btn btn-primary" />');
+    };
+
+
+    $("#SearchDepartmentName").change(function (e) {
+        e.stopPropagation();
+        ReloadTable();
+    });
+
+    $('#searchBar').keyup(function () {
+        $("#mytable").DataTable().search($(this).val()).draw();
+    });
+
+    function ReloadTable() {
+        $("#mytable tbody").remove();
+        LoadTable();
+    }
+
+    function LoadTable() {
+        $.post("@Url.Action("Data")", { DepartmentName: $('#SearchDepartmentName').val() }, function (d) {
+            $("#mytable").DataTable(
+                {
+                    dom: 'ltip',
+                    buttons: [],
+                    processing: true,
+                    searching: true,
+                    destroy: true,
+                    data: d.data,
+                    columnDefs: [
+                        {
+                            "defaultContent": "-",
+                            "targets": "_all"
+                        }, 
+                        {
+                            targets: 1,
+                            createdCell: function (td) {
+                                $(td).css('color', 'black');
+                                $(td).css('font-size', '15px');
+                                $(td).css('border-right', '2px solid #D3D3D3');
+
+                            }
+                        },
+                        {
+                            targets: 2,
+                            createdCell: function (td, cellData, rowData, row, col) {
+                                $(td).css('color', 'black');
+                                $(td).css('font-size', '15px');
+                                $(td).css('border-right', '2px solid #D3D3D3');
+                                $(td).css('text-align', 'center');
+
+                            }
+                        },
+                        {
+                            targets: 3,
+                            createdCell: function (td, cellData, rowData, row, col) {
+                                $(td).css('color', 'black');
+                                $(td).css('font-size', '15px');
+                                $(td).css('border-right', '2px solid #D3D3D3');
+                                $(td).css('text-align', 'center');
+
+                            }
+                        },
+                        {
+                            targets: 4,
+                            createdCell: function (td, cellData, rowData, row, col) {
+                                $(td).css('color', 'black');
+                                $(td).css('font-size', '15px');
+                                $(td).css('border-right', '2px solid #D3D3D3');
+                                $(td).css('text-align', 'center');
+
+                            }
+                        },
+                        {
+                            targets: 5,
+                            createdCell: function (td, cellData, rowData, row, col) {
+                                $(td).css('color', 'black');
+                                $(td).css('font-size', '15px');
+                                $(td).css('border-right', '2px solid #D3D3D3');
+                                $(td).css('text-align', 'center');
+
+                            }
+                        },
+                        {
+                            "targets": 3, "render": function (data, type, row, meta) {
+                                return moment(data.toString()).format('DD MMM YYYY HHmm');
+                            }
+                        }],
+                    order: [[3, 'desc']],// order by date desc
+                    aoColumns: [
+                        { mData: "id", visible: false },
+                        {
+                            render: function (data, type, row, meta) {
+                                let imageComponent = ""
+
+                                if (row.image !== "") {
+                                    imageComponent = '<div class="symbol symbol-45px me-5"><img alt="Pic" src="' + row.image + '"/></div>';
+                                } else {
+                                    imageComponent = '<div class="symbol symbol-45px me-5"><span class="symbol-label bg-light-danger text-danger fw-bolder">' + row.fullName.charAt(0).toUpperCase() + '</span></div>'
+                                }
+
+                                let detailComponent = '<div class="d-flex justify-content-start flex-column"><a style="cursor: pointer;" id="' + row.id + '" onclick="OpenViewModal(' + row.id + ')" class="text-muted fw-bold text-muted d-block fs-7"><span class="text-dark fw-bolder text-hover-primary fs-6" style="color:black">' + row.fullName + '</span></a><a href="" class="text-dark fw-bold text-dark d-block fs-7" style="color:black"><span class="text-dark">Email</span>:' + row.email + '</a></div>';
+
+                                //Edit and Delete buttons
+                                let buttonComponent = '<div id="actionContainer">' +
+                                    '<a id="' + row.id + '" onclick="Edit(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm me-1" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit">' +
+                                    '<span class="svg-icon svg-icon-3">' +
+                                    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">' +
+                                    '<path opacity="0.3" d="M21.4 8.35303L19.241 10.511L13.485 4.755L15.643 2.59595C16.0248 2.21423 16.5426 1.99988 17.0825 1.99988C17.6224 1.99988 18.1402 2.21423 18.522 2.59595L21.4 5.474C21.7817 5.85581 21.9962 6.37355 21.9962 6.91345C21.9962 7.45335 21.7817 7.97122 21.4 8.35303ZM3.68699 21.932L9.88699 19.865L4.13099 14.109L2.06399 20.309C1.98815 20.5354 1.97703 20.7787 2.03189 21.0111C2.08674 21.2436 2.2054 21.4561 2.37449 21.6248C2.54359 21.7934 2.75641 21.9115 2.989 21.9658C3.22158 22.0201 3.4647 22.0084 3.69099 21.932H3.68699Z" fill="black" />' +
+                                    '<path d="M5.574 21.3L3.692 21.928C3.46591 22.0032 3.22334 22.0141 2.99144 21.9594C2.75954 21.9046 2.54744 21.7864 2.3789 21.6179C2.21036 21.4495 2.09202 21.2375 2.03711 21.0056C1.9822 20.7737 1.99289 20.5312 2.06799 20.3051L2.696 18.422L5.574 21.3ZM4.13499 14.105L9.891 19.861L19.245 10.507L13.489 4.75098L4.13499 14.105Z" fill="black" />' +
+                                    '</svg>' +
+                                    '</span>' +
+                                    '</a>' +
+                                    '<a id="' + row.id + '" onclick="Delete(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Delete">' +
+                                    '<span class="svg-icon svg-icon-3">' +
+                                    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">' +
+                                    '<path d="M5 9C5 8.44772 5.44772 8 6 8H18C18.5523 8 19 8.44772 19 9V18C19 19.6569 17.6569 21 16 21H8C6.34315 21 5 19.6569 5 18V9Z" fill="black" />' +
+                                    '<path opacity="0.5" d="M5 5C5 4.44772 5.44772 4 6 4H18C18.5523 4 19 4.44772 19 5V5C19 5.55228 18.5523 6 18 6H6C5.44772 6 5 5.55228 5 5V5Z" fill="black" />' +
+                                    '<path opacity="0.5" d="M9 4C9 3.44772 9.44772 3 10 3H14C14.5523 3 15 3.44772 15 4V4H9V4Z" fill="black" />' +
+                                    '</svg>' +
+                                    '</span>' +
+                                    '</a></div>';
+
+                                return '<div class="d-flex align-items-center">' + imageComponent + detailComponent + '</div>';
+                            }
+                        },
+                        { mData: "userType" },
+                        { mData: "dateCreated" },
+                        {
+                            render: function (data, type, row, meta) {
+                                if(row.isResign){
+                                    return `<div class="badge badge-light-danger">Resign</div>`
+                                }
+                                else{
+                                    return `<div class="badge badge-light-success">Active</div>`
+                                }
+                            }
+                        },
+                        {
+                            render: function (data, type, row, meta) {
+
+                                let buttonComponent =
+                                    '<a id="' + row.id + '" onclick="Edit(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm me-1" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit">' +
+                                    '<span class="svg-icon svg-icon-3">' +
+                                    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">' +
+                                    '<path opacity="0.3" d="M21.4 8.35303L19.241 10.511L13.485 4.755L15.643 2.59595C16.0248 2.21423 16.5426 1.99988 17.0825 1.99988C17.6224 1.99988 18.1402 2.21423 18.522 2.59595L21.4 5.474C21.7817 5.85581 21.9962 6.37355 21.9962 6.91345C21.9962 7.45335 21.7817 7.97122 21.4 8.35303ZM3.68699 21.932L9.88699 19.865L4.13099 14.109L2.06399 20.309C1.98815 20.5354 1.97703 20.7787 2.03189 21.0111C2.08674 21.2436 2.2054 21.4561 2.37449 21.6248C2.54359 21.7934 2.75641 21.9115 2.989 21.9658C3.22158 22.0201 3.4647 22.0084 3.69099 21.932H3.68699Z" fill="black" />' +
+                                    '<path d="M5.574 21.3L3.692 21.928C3.46591 22.0032 3.22334 22.0141 2.99144 21.9594C2.75954 21.9046 2.54744 21.7864 2.3789 21.6179C2.21036 21.4495 2.09202 21.2375 2.03711 21.0056C1.9822 20.7737 1.99289 20.5312 2.06799 20.3051L2.696 18.422L5.574 21.3ZM4.13499 14.105L9.891 19.861L19.245 10.507L13.489 4.75098L4.13499 14.105Z" fill="black" />' +
+                                    '</svg>' +
+                                    '</span>' +
+                                    '</a>' +
+                                    '<a id="' + row.id + '" onclick="Delete(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Delete">' +
+                                    '<span class="svg-icon svg-icon-3">' +
+                                    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">' +
+                                    '<path d="M5 9C5 8.44772 5.44772 8 6 8H18C18.5523 8 19 8.44772 19 9V18C19 19.6569 17.6569 21 16 21H8C6.34315 21 5 19.6569 5 18V9Z" fill="black" />' +
+                                    '<path opacity="0.5" d="M5 5C5 4.44772 5.44772 4 6 4H18C18.5523 4 19 4.44772 19 5V5C19 5.55228 18.5523 6 18 6H6C5.44772 6 5 5.55228 5 5V5Z" fill="black" />' +
+                                    '<path opacity="0.5" d="M9 4C9 3.44772 9.44772 3 10 3H14C14.5523 3 15 3.44772 15 4V4H9V4Z" fill="black" />' +
+                                    '</svg>' +
+                                    '</span>' +
+                                    '</a>';
+
+                                return buttonComponent;
+                            }
+                        }
+                    ],
+                }
+            )
+
+        });
+    }
+
+    function Delete(employeeId) {
+        if (confirm("Confirm delete?")) {
+            $.ajax({
+                type: "POST",
+                url: '/EmployeeInfo/Delete',
+                data: {
+                    id: employeeId
+                },
+                success: function (data) {
+                    LoadTable();
+                },
+                error: function (data) {
+                    LoadTable();
+                }
+            });
+        }
+    }
+
+    function Edit(employeeId) {
+        window.location.href = '/EmployeeInfo/EditUser?id=' + employeeId;
+
+    }
+
+    function ResetModal() {
+        $("#EmployeeInfo_Id").val('');
+        $("#EmployeeInfo_FullName").val('');
+        $("#EmployeeInfo_Email").val('');
+        $("#EmployeeInfo_PassCode").val('');
+        $("#UserImage").attr('value', '');
+        $("#uploadedImg").attr('src', '');
+    }
+
+    function ViewModal() {
+        $("#EmployeeInfo_FullName").attr('readonly', true);
+        $("#EmployeeInfo_Email").attr('readonly', true);
+        $("#EmployeeInfo_PassCode").attr('readonly', true);
+        //$("#UserImage").hide();
+        $("#lbl-UserImage").hide();
+        $("#btn-removeImg").hide();
+        $("#div-submit").hide();
+    }
+
+    function EditableModal() {
+        $("#EmployeeInfo_FullName").attr('readonly', false);
+        $("#EmployeeInfo_Email").attr('readonly', false);
+        $("#EmployeeInfo_PassCode").attr('readonly', false);
+        //$("#UserImage").show();
+        $("#lbl-UserImage").show();
+        //$("#btn-removeImg").show();
+        $("#div-submit").show();
+    }
+
+
+    function RemoveImg() {
+        $("#UserImage").attr('value', '');
+        $("#uploadedImg").attr('src', '');
+        $("#isImgChanged").val('false');
+    }
+
+    $("#UserImage").click(function () {
+        $("#UserImage").attr('value', '');
+        $("#uploadedImg").attr('src', '');
+    });
+
+
+    $("#UserImage").change(function () {
+        $("#isImgChanged").val('true');
+    });
+
+    $("#UserImage").click(function () {
+        this.value = null;
+        //CheckHasImage();
+    });
+
+    function OpenViewModal(employeeId) {
+        ResetModal();
+        OpenEditModal(employeeId, "View");
+        ViewModal();
+    }
+
+</script>
+

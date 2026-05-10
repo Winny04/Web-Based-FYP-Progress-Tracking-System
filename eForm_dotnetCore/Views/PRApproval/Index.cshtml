@@ -1,0 +1,526 @@
+﻿@using eForm_dotnetCore.ViewModels
+@model IEnumerable<PRApprovalViewModel>
+@{
+    ViewData["Title"] = "PR Approval";
+}
+
+@*far fa-eye*@
+<div id="kt_content_container" class="d-flex flex-column-fluid align-items-start container-xxl">
+    <div class="content flex-row-fluid" id="kt_content">
+        <div class="card card-flush mb-5 mb-xl-8">
+            <div class="card-header pt-7">
+                <h3 class="card-title align-items-start flex-column">
+                    <span class="card-label fw-bolder fs-3 mb-1 font-weight-bold">PR Approval</span>
+                </h3>
+                <div class="card-toolbar">
+                   @* <div class="d-flex flex-stack flex-wrap gap-4">
+                        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modal_select_pr">Select PR</button>
+                    </div>*@
+                </div>
+            </div>
+            <div class="card-body py-3">
+                <div class="table-responsive">
+                    <table id="formListTable" class="table table-row-gray-300 align-middle gs-0 gy-4">
+                        <thead>
+                            <tr class="fw-bolder fs-6 text-uppercase">
+                                <th class="text-center min-w-100px smallThText tableCellBorderLeft tableCellBorderRight" ><b>Status</b></th>
+                                <th class="text-center min-w-70px smallThText tableCellBorderRight" ><b>Category</b></th>
+                                <th class="text-center min-w-70px smallThText tableCellBorderRight" ><b>Create Date</b></th>
+                                <th class="text-center min-w-70px smallThText tableCellBorderRight" ><b>Last Update Date</b></th>
+                                <th class="text-center min-w-50px smallThText tableCellBorderRight" ><b>Project Code</b></th>
+                                <th class="text-center min-w-70px smallThText tableCellBorderRight" ><b>Project PO</b></th>
+                                <th class="text-center min-w-80px smallThText tableCellBorderRight" ><b>Customer</b></th>
+                                <th class="text-center min-w-80px smallThText tableCellBorderRight" ><b>Project Name</b></th>
+                                <th class="text-center min-w-70px smallThText tableCellBorderRight" ><b>PR no.</b></th>
+                                <th class="text-center min-w-70px smallThText tableCellBorderRight" ><b>Request by</b></th>
+                                <th class="text-center min-w-70px smallThText tableCellBorderRight" ><b>Department</b></th>
+                                <th class="text-center min-w-70px smallThText tableCellBorderRight" ><b>Total Price</b></th>
+                                @*<th class="text-center min-w-70px smallThText tableCellBorderRight" ><b>Action</b></th>*@
+                                <th class="text-center min-w-70px smallThText tableCellBorderRight" ><b>Remark</b></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.Where(x => !x.isMerge).ToList())
+                            {
+                                <tr class="text-center">
+                                    <td class="tableCellStandard tableCellBorderLeft">
+                                        @{
+                                                        <div>
+                                                            <p @{
+                                           if(item.PRApprovers.Where(x => x.Type == "HOD" && x.Approved).Any()){
+                                                                           @:class="bg-light-success"
+                                           }
+                                           else{
+                                                                           @:class="bg-light-warning"
+                                           }
+                                                           }>
+                                                                HOD @{
+                                                        if (item.PRApprovers.Where(x => x.Type == "HOD" && x.Approved).Any())
+                                                        {
+                                                                                    <span class="fw-bolder">Approved</span>
+                                                        }
+                                                        else
+                                                        {
+                                                                                    <span class="fw-bolder">Pending</span>
+                                                        }
+                                                                }
+                                                            </p>
+                                                            @if (item.totalApprover > 1)
+                                                {
+                                                                <p @{
+                                           if(item.PRApprovers.Where(x => x.Type == "GFC" && x.Approved).Any()){
+                                                                           @:class="bg-light-success"
+                                           }
+                                           else{
+                                                                           @:class="bg-light-warning"
+                                           }
+                                                           }>
+                                                                    GFC @{
+                                                            if (item.PRApprovers.Where(x => x.Type == "GFC" && x.Approved).Any())
+                                                            {
+                                                                                        <span class="fw-bolder">Approved</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                                        <span class="fw-bolder">Pending</span>
+                                                            }
+                                                                    }
+                                                                </p>
+                                                }
+                                                            @if (item.totalApprover > 2)
+                                                {
+                                                                <p @{
+                                           if(item.PRApprovers.Where(x => x.Type == "CEO" && x.Approved).Any()){
+                                                                           @:class="bg-light-success"
+                                           }
+                                           else{
+                                                                           @:class="bg-light-warning"
+                                           }
+                                                           }>
+                                                                    CEO @{
+                                                            if (item.PRApprovers.Where(x => x.Type == "CEO" && x.Approved).Any())
+                                                            {
+                                                                                        <span class="fw-bolder">Approved</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                                        <span class="fw-bolder">Pending</span>
+                                                            }
+                                                                    }
+                                                                </p>
+                                                }
+                                                        </div>
+                                        }
+                                    </td>
+                                    <td class="tableCellStandard">@item.Category</td>
+                                    <td class="tableCellStandard">
+                                           @if (item.CreatedDate != null)
+                                            {
+                                                <p>@item.CreatedDate?.ToString("yyyy-MM-dd")</p>
+                                            }
+                                            else
+                                            {
+                                                <p>-</p>
+                                            }
+                                    </td>
+                                    <td class="tableCellStandard">
+                                        @if (item.LastUpdatedDate != null)
+                                            {
+                                                <p>@item.LastUpdatedDate?.ToString("yyyy-MM-dd")</p>
+                                            }
+                                            else
+                                            {
+                                                <p>-</p>
+                                            }
+                                    </td>
+                                    <td class="tableCellStandard">@item.Project.Code</td>
+                                    <td class="tableCellStandard">@item.Project.PoNumber</td>
+                                    <td class="tableCellStandard">@item.Project.Customer</td>
+                                    <td class="tableCellStandard">@item.Project.Name</td>
+                                    <td class="tableCellStandard">
+                                         @if (item.Id > 0)
+                                            {
+                                                <div class="menu-item">
+                                                    <a href="/PurchaseRequisition/Edit/@item.Id" class="link-primary"><b>@item.Prname</b></a>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="menu-item">
+                                                    <button type="button" id="@item.Id" onclick="SetBomId(@item.Bomid, @item.ProjectId)" class="btn btn-primary">
+                                                        <span class="indicator-label">Create PR</span>
+                                                    </button>
+                                                </div>
+                                            }
+                                    </td>
+                                    <td class="tableCellStandard">@item.RequestBy</td>
+                                    <td class="tableCellStandard">@item.Department</td>
+                                    <td class="tableCellStandard">@item.TotalPrice</td>
+                                    
+                                    @*<td class="tableCellStandard">
+                                        <a href="@Url.Action("Edit","PurchaseRequisition",new {id = item.Id})">
+                                            <i class="fa fa-solid fa-eye bg-hover-light-primary"></i>
+                                        </a>
+                                    </td>*@
+                                     <td class="tableCellStandard tableCellBorderRight">@item.Remark</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@*Add new PR Model*@
+<div class="modal fade" id="modal_select_pr" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-1000px">
+        <div class="modal-content rounded">
+            <div class="modal-header pb-0 border-0 justify-content-end">
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+            <div class="modal-body scroll-y px-10 px-lg-15 pt-0 pb-15">
+                <div class="card card-flush mb-5 mb-xl-8">
+                    <div class="card-header pt-7">
+                        <h3 class="card-title align-items-start flex-column">
+                            <span class="card-label fw-bolder fs-3 mb-1 font-weight-bold">Select PR</span>
+                        </h3>
+                        <div class="card-toolbar">
+                            <div class="d-flex flex-stack flex-wrap gap-4">
+                                <div class="d-flex align-items-center fw-bolder">
+                                    <!--begin::Label-->
+                                    <div class="text-muted fs-7 me-2">Project</div>
+                                    <!--end::Label-->
+                                    <!--begin::Select-->
+                                    <select class="form-select form-select-transparent text-dark fs-7 lh-1 fw-bolder py-0 ps-3 w-auto" data-control="select2" data-hide-search="true" data-dropdown-css-class="w-150px" data-placeholder="Select an project" id="projectFilter">
+                                        @{
+                                            var projectCount = 0;
+                                            foreach (var project in Model.Where(x => !x.isMerge).Select(x => x.Project).Distinct().ToList())
+                                            {
+                                                if (projectCount == 0)
+                                                {
+                                                                <option value="@project.Name" selected>@project.Name</option>
+                                                }
+                                                else
+                                                {
+                                                                <option value="@project.Name">@project.Name</option>
+                                                }
+
+                                                projectCount++;
+                                            }
+                                        }
+                                    </select>
+                                    <!--end::Select-->
+
+                                    <div class="text-muted fs-7 me-2">Request By</div>      
+                                    <select class="form-select form-select-transparent text-dark fs-7 lh-1 fw-bolder py-0 ps-3 w-auto" data-control="select2" data-hide-search="true" data-dropdown-css-class="w-150px" data-placeholder="Select an requester" id="requestByFilter">
+                                        <option value=""> </option>
+                                        @{
+                                            var requesterCount = 0;
+                                            foreach(var requester in Model.Where(x => !x.isMerge).Select(x => x.RequestBy).Distinct().ToList())
+                                            {
+                                                if(requesterCount == 0)
+                                                {
+                                                                    <option value="@requester" selected>@requester</option>
+                                                }
+                                                else
+                                                {
+                                                                    <option value="@requester">@requester</option>
+                                                }
+
+                                                requesterCount++;
+                                            }
+                                        }
+                                    </select>
+                                    
+                                    <div class="text-muted fs-7 me-2">Vendor Name</div>      
+                                    <select class="form-select form-select-transparent text-dark fs-7 lh-1 fw-bolder py-0 ps-3 w-auto" data-control="select2" data-hide-search="true" data-dropdown-css-class="w-150px" data-placeholder="Select an Vendor Name" id="supplierFilter">
+                                        @{
+                                            var supplierCount = 0;
+                                            foreach(var supplier in Model.Where(x => !x.isMerge).Select(x => x.VendorName).Distinct().ToList())
+                                            {
+                                                if(supplierCount == 0)
+                                                {
+                                                                    <option value="@supplier" selected>@supplier</option>
+                                                }
+                                                else
+                                                {
+                                                                    <option value="@supplier">@supplier</option>
+                                                }
+
+                                                supplierCount++;
+                                            }
+                                        }
+                                    </select>
+                                    
+                                    <div class="text-muted fs-7 me-2">Type of Purchase</div>      
+                                    <select class="form-select form-select-transparent text-dark fs-7 lh-1 fw-bolder py-0 ps-3 w-auto" data-control="select2" data-hide-search="true" data-dropdown-css-class="w-150px" data-placeholder="Select an type of purchase" id="typeOfPurchaseFilter">
+                                        @{
+                                            var typeOfPurchaseCount = 0;
+                                            foreach(var typeOfPurchase in Model.Where(x => !x.isMerge).Select(x => x.TypeOfPurchase).Distinct().ToList())
+                                            {
+                                                if(typeOfPurchaseCount == 0)
+                                                {
+                                                                 <option value="@typeOfPurchase" selected>@typeOfPurchase</option>
+                                                }
+                                                else
+                                                {
+                                                                 <option value="@typeOfPurchase">@typeOfPurchase</option>
+                                                }
+
+                                                typeOfPurchaseCount++;
+                                            }
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body py-3">
+                        <table id="prListTable" class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
+                            <thead>
+                                <tr class="text-center text-uppercase fw-bolder">
+                                    <th>
+                                        <div class="form-check form-check-sm form-check-custom form-check-solid">
+                                            <input class="form-check-input" type="checkbox" value="1" id="checkAll" />
+                                        </div>
+                                    </th>
+                                    <th>Form Name</th>
+                                    <th>Project Name</th>
+                                    <th>Project Category</th>
+                                    <th>BOM Module</th>
+                                    <th>Last Updated</th>
+                                    <th>Status</th>
+                                    <th style="display:none"></th>
+                                    <th style="display:none"></th>
+                                    <th style="display:none"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.Where(x => !x.isMerge).Count() > 0)
+                                {
+                                    @foreach (var form in Model.Where(x => !x.isMerge).ToList())
+                                    {
+                                        <tr id="@form.Id" class="text-center">
+                                            <td>
+                                                <div class="form-check form-check-sm form-check-custom form-check-solid me-2">
+                                                    <input class="form-check-input widget-9-check btn-chkBox" type="checkbox" value="@form.Id" />
+                                                </div>
+                                            </td>
+                                            <td>@form.FormName</td>
+                                            <td>@form.Project.Name</td>
+                                            <td>@form.Project.Category</td>
+                                            <td>@form.Bom.Module</td>
+                                            <td>@form.LastUpdatedDate</td>
+                                            <td>@form.Bom.Status</td>
+                                            <td style="display:none">@form.RequestBy</td>
+                                            <td style="display:none">@form.VendorName</td>
+                                            <td style="display:none">@form.TypeOfPurchase</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="card-footer py-5 text-end">
+                        <button id="mergeBtn" type="button" class="btn btn-primary" hidden>Merge in one</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal_select_bom" tabindex="-1" aria-hidden="true">
+    <!--begin::Modal dialog-->
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <!--begin::Modal content-->
+        <div class="modal-content rounded">
+            <!--begin::Modal header-->
+            <div class="modal-header pb-0 border-0 justify-content-end">
+                <!--begin::Close-->
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <!--begin::Svg Icon | path: icons/duotune/arrows/arr061.svg-->
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                    <!--end::Svg Icon-->
+                </div>
+                <!--end::Close-->
+            </div>
+            <!--begin::Modal header-->
+            <!--begin::Modal body-->
+            <div class="modal-body scroll-y px-10 px-lg-15 pt-0 pb-15">
+                <!--begin:Form-->
+                <form asp-action="MergePRs" method="post" class="form">
+                    <!--begin::Heading-->
+                    <div class="mb-13 text-center">
+                        <!--begin::Title-->
+                        <h1 class="mb-3">Select a Main PR</h1>
+                        <!--end::Title-->
+                        <!--begin::Description-->
+                        <div class="text-muted fw-bold fs-5">
+                            If you need more info, please check
+                            <a href="#" class="fw-bolder link-primary">Project Guidelines</a>.
+                        </div>
+                        <!--end::Description-->
+                    </div>
+                    <!--end::Heading-->
+                    <!--begin::Input group-->
+                    <div class="d-flex flex-column mb-8 fv-row">
+                        <label class="required fs-6 fw-bold mb-2">Select Target PR</label>
+                        <select name="bomId" id="bomSelectList" class="form-select form-select-sm form-select-solid" data-control="select2" aria-label="Select a BOM">
+                        </select>
+                    </div>
+
+                    <input name="prs" id="selectPrs" value="" hidden />
+
+                    <!--begin::Actions-->
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary">
+                            <span class="indicator-label">Submit</span>
+                            <span class="indicator-progress">
+                                Please wait...
+                                <span class="spinner-border spinner-border-sm align-middle ms-2"></span>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+                <!--end:Form-->
+            </div>
+            <!--end::Modal body-->
+        </div>
+        <!--end::Modal content-->
+    </div>
+    <!--end::Modal dialog-->
+</div>
+
+
+@section scripts{
+<script>
+    $(document).ready(function() {
+        var selectedArray = [];
+        var table = document.getElementById("formListTable");
+        var prTale = document.getElementById("prListTable");
+
+        var dataTable = $(table).DataTable({
+            "info": false,
+            "order": []
+        });
+
+        var dataTable2 = $(prTale).DataTable({
+            "info": false,
+            "order": []
+        });
+
+        dataTable2.columns(2).search($("#projectFilter").val()).draw();
+        dataTable2.columns(7).search($("#requestByFilter").val()).draw();
+        dataTable2.columns(8).search($("#supplierFilter").val()).draw();
+        dataTable2.columns(9).search($("#typeOfPurchaseFilter").val()).draw();
+
+        $("#projectFilter").change(function(e){
+            selectedArray = new Array();
+             $(".btn-chkBox").prop('checked', false);
+            btnCheckChange();
+            dataTable2.columns(2).search(e.target.value).draw();
+        });
+
+         $("#requestByFilter").change(function(e){
+            selectedArray = new Array();
+             $(".btn-chkBox").prop('checked', false);
+            btnCheckChange();
+            dataTable2.columns(7).search(e.target.value).draw();
+        });
+
+         $("#supplierFilter").change(function(e){
+            selectedArray = new Array();
+             $(".btn-chkBox").prop('checked', false);
+            btnCheckChange();
+            dataTable2.columns(8).search(e.target.value).draw();
+        });
+
+         $("#typeOfPurchaseFilter").change(function(e){
+            selectedArray = new Array();
+             $(".btn-chkBox").prop('checked', false);
+            btnCheckChange();
+            dataTable2.columns(9).search(e.target.value).draw();
+        });
+
+        $(document).on("change", ".btn-chkBox", function() {
+            btnCheckChange();
+        });
+
+        $("#checkAll").click(function() {
+            if ($(this).is(":checked")) {
+                $(".btn-chkBox").prop('checked', true);
+                btnCheckChange();
+            }
+            else {
+                $(".btn-chkBox").prop('checked', false);
+                btnCheckChange();
+            }
+        });
+
+        $("#mergeBtn").click(function() {
+            Swal.fire({
+                text: "Are you sure want to merge the selected PR?",
+                icon: "info",
+                showCancelButton: true,
+                buttonsStyling: false,
+                confirmButtonText: "Yes",
+                cancelButtonText: "No, return",
+                customClass: {
+                    confirmButton: "btn btn-primary",
+                    cancelButton: "btn btn-active-light"
+                }
+            }).then(function(result) {
+                if (result.value) {
+                    var selectedPRs = selectedArray.toString();
+                    $.post('@Url.Action("MergePRs","PRApproval")', { prs: selectedPRs }, function(data, status) {
+                        console.log(status);
+                        location.reload();
+                    })
+                }
+            });
+        });
+
+        function btnCheckChange() {
+            selectedArray = new Array();
+            var checkboxes = document.querySelectorAll('.btn-chkBox:checked');
+
+            if (checkboxes.length > 0) {
+                for (var i = 0; i < checkboxes.length; i++) {
+                    selectedArray.push(checkboxes[i].value);
+                }
+
+                console.log(selectedArray);
+            }
+
+            toggleMergeBtn(checkboxes.length);
+        }
+
+    }); //end document ready
+
+    function toggleMergeBtn(length) {
+        var mergeBtn = document.getElementById("mergeBtn");
+        if (length > 1) {
+            mergeBtn.hidden = false;
+        }
+        else {
+            mergeBtn.hidden = true;
+        }
+    }
+</script>
+}

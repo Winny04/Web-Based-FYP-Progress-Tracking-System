@@ -1,0 +1,222 @@
+﻿@using FYPTracker.Components
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="shortcut icon" href="~/assets/media/logos/Sophic5.png" />
+    <!--begin::Fonts-->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Poppins:300,400,500,600,700" />
+    <!--end::Fonts-->
+    <!--begin::Page Vendor Stylesheets(used by this page)-->
+    <link href="~/assets/plugins/custom/fullcalendar/fullcalendar.bundle.css" rel="stylesheet" type="text/css" />
+    <link href="~/assets/plugins/custom/datatables/datatables.bundle.css" rel="stylesheet" type="text/css" />
+    <!--end::Page Vendor Stylesheets-->
+    <!--begin::Global Stylesheets Bundle(used by all pages)-->
+    <link href="~/assets/plugins/global/plugins.bundle.css" rel="stylesheet" type="text/css" />
+    <link href="~/assets/css/style.bundle.css" rel="stylesheet" type="text/css" />
+    <link href="~/css/custom.css" rel="stylesheet" type="text/css" />
+    <link href="~/css/site.css" rel="stylesheet" type="text/css" />
+    <link rel='stylesheet' href='https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css' />
+    <link rel='stylesheet' href='https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css' />
+    <link rel="stylesheet" href="~/css/quill.snow.css" type="text/css"/>
+    @* <link rel="stylesheet" href="https://cdn.form.io/formiojs/formio.full.min.css">*@
+    <link rel="stylesheet" href="~/assets//css/choice.min.css" />
+    <link rel="stylesheet" href="~/css/tail.select-light.css" type="text/css" />
+     <link href="~/lib/formio/formio.full.min.css" rel="stylesheet" type="text/css" />
+    <title>@ViewData["Title"]</title>
+
+    <!--end::Global Stylesheets Bundle-->
+
+</head>
+<body id="kt_body" style="background-image: url(/assets/media/patterns/header-bg.jpg)" class="page-loading-enabled page-loading header-fixed header-tablet-and-mobile-fixed toolbar-enabled">
+    @await Component.InvokeAsync(typeof(LoaderViewComponent))
+    @await Component.InvokeAsync(typeof(MasterViewComponent))
+    <div id="carouselExampleControls" class="carousel slide" data-ride="carousel" style="display:flex;">
+        <div class="carousel-inner text-center bg-primary border border-dark mx-5 my-2 shadow p-3">
+            <div class="carousel-item active">
+               <span>&#10069; Please protect you account by reset your password regulary.</span>
+            </div>
+            <div class="carousel-item">
+                <span>&#10069;Sometimes you will encounter the system cannot browse or pause. At that time, the system may be under maintenance, please try it again in 5 minutes.</span>
+            </div>
+           @* <div class="carousel-item">
+                <span>&#10071; 26/02/23 The hosting server have been collapsed which causing related documents lost, including quotation, invoice, and so on.Therefore, you may encounter the situation where document can't view.</span>
+            </div>*@
+            <div class="carousel-item">
+                <span>&#10069;Please take note that old documents has been recover, including quotation,drawing,po etc.</span>
+            </div>
+        </div>
+        <a class="carousel-control-prev" href="#carouselExampleControls" role="button" data-slide="prev">
+            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+            <span class="sr-only">Previous</span>
+        </a>
+        <a class="carousel-control-next" href="#carouselExampleControls" role="button" data-slide="next">
+            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+            <span class="sr-only">Next</span>
+        </a>
+    </div>
+    <!--begin::Javascript-->
+    <script>var hostUrl = "~/assets/";</script>
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"></script>
+    <!--begin::Global Javascript Bundle(used by all pages)-->
+    <script src="~/assets/plugins/global/plugins.bundle.js"></script>
+    <script src="~/assets/js/scripts.bundle.js"></script>
+    <script src="~/assets//js/quill.js"></script>
+    <!--end::Global Javascript Bundle-->
+    <!--begin::Page Vendors Javascript(used by this page)-->
+    <script src="~/assets/plugins/custom/fullcalendar/fullcalendar.bundle.js"></script>
+    <script src="~/assets/plugins/custom/datatables/datatables.bundle.js"></script>
+    <script src="~/assets/js/choice.min.js"></script>
+     <script src="~/js/Natural.js"></script>
+    <!--end::Page Vendors Javascript-->
+    <!--begin::Page Custom Javascript(used by this page)-->
+    <script src="~/assets/js/widgets.bundle.js"></script>
+    <script src="~/assets/js/custom/widgets.js"></script>
+    <script src="~/assets/js/custom/apps/chat/chat.js"></script>
+    <script src="~/assets/js/custom/intro.js"></script>
+    <script src="~/assets/js/custom/utilities/modals/upgrade-plan.js"></script>
+    <script src="~/assets/js/custom/utilities/modals/create-app.js"></script>
+    <script src="~/assets/js/custom/utilities/modals/create-campaign.js"></script>
+    <script src="~/assets/js/custom/utilities/modals/users-search.js"></script>
+    @* <script src="https://cdn.form.io/formiojs/formio.full.min.js"></script>*@
+    <script src="~/lib/formio/formio.full.min.js"></script>
+    <script src="~/js/tail.select.min.js"></script>
+    <script src="~/js/MultiMailPlugin.js"></script>
+    <script>
+
+        //$("#noticeSlider").css("display", "none");
+        //var myCarousel = document.getElementById('carouselExampleSlidesOnly')
+        //var carousel = new bootstrap.Carousel(myCarousel)
+        //console.log(carousel)
+        //carousel.to(1)
+        $(document).ready(function () {
+            $("#toggleNotify").change(function (e) {
+                if ($('#toggleNotify').is(':checked')){
+                    $("#carouselExampleControls").css("display", "flex");
+                    setCookie('eform_notify', "1")
+                }
+                else{
+                    $("#carouselExampleControls").css("display", "none");
+                    setCookie('eform_notify', "0")
+                }
+            });
+
+            toggleNotifyCookie();
+        })
+
+        function toggleNotifyCookie(){
+            if (getCookie("eform_notify") !== null) {
+                if (getCookie("eform_notify") === "1") {
+                    $('#toggleNotify').prop('checked', true);
+                    $("#carouselExampleControls").css("display", "flex");
+                }
+                else {
+                    $('#toggleNotify').prop('checked', false);
+                    $("#carouselExampleControls").css("display", "none");
+                }
+            }
+            else {
+                setCookie('eform_notify', "1")
+            }
+        }
+
+        //setInterval(function () {
+        //    console.log('c')
+        //    if(getCookie("eform_notify") !== null){
+        //        if (getCookie("eform_notify") === "590"){
+        //            setCookie('eform_notify',"10")
+        //            //show next slide
+        //            if (getCookie("eform_notify_index") !== null) {
+        //                var slideIndex = parseInt(getCookie("eform_notify_index"));
+        //                slideIndex += 1;
+
+        //                //slideIndex = slideIndex > 3 ? 0 : slideIndex;
+        //                carousel.to(slideIndex)
+        //                setCookie('eform_notify_index', slideIndex.toString())
+        //            }
+        //            else{
+        //                setCookie('eform_notify_index', "0")
+        //                carousel.to(0)
+        //            }
+
+        //            $("#noticeSlider").css("display", "block");
+        //            setTimeout(function(){
+        //                $("#noticeSlider").css("display", "none");
+        //            }, 15000)
+        //        }
+        //        else{
+        //            var getSecond = parseInt(getCookie("eform_notify"))
+        //            getSecond += 10;
+        //            console.log('hi')
+        //            $("#noticeSlider").css("display", "none");
+        //            setCookie('eform_notify', getSecond.toString())
+        //        }
+        //    }
+        //    else{
+        //        setCookie('eform_notify', "10")
+        //    }
+        //}, 10000);
+
+        function setCookie(name,value) {
+            document.cookie = name + "=" + (value || "")+"; path=/";
+        }
+        function getCookie(name) {
+            var nameEQ = name + "=";
+            var ca = document.cookie.split(';');
+            for (var i = 0; i < ca.length; i++) {
+                var c = ca[i];
+                while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+                if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+            }
+            return null;
+        }
+
+        function downloadUserManual() {
+            var a = document.createElement('a');
+            a.href = "E-Form Internal System User Manual V1.1.docx";
+            a.download = "E-Form Internal System User Manual V1.1.docx";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+    <!--end::Page Custom Javascript-->
+    <!--end::Javascript-->
+    <!--begin::Main-->
+    <!--begin::Root-->
+    <div class="d-flex flex-column flex-root">
+        <!--begin::Page-->
+        <div class="page d-flex flex-row flex-column-fluid">
+            <!--begin::Wrapper-->
+            <div class="wrapper d-flex flex-column flex-row-fluid" id="kt_wrapper">
+
+                <!--begin::Chart-->
+                @*                <div class="mixed-widget-5-chart card-rounded-top" data-kt-chart-color="success" style="height: 150px"></div>
+                *@                <!--end::Chart-->
+                @* @await Component.InvokeAsync(typeof(HeaderViewComponent))
+
+                    <div class="toolbar py-5 py-lg-15" id="kt_toolbar">
+                    @await Component.InvokeAsync(typeof(PageTitleViewComponent))
+                    </div>*@
+
+                <div class="container-fluid">
+                    <main role="main" class="pb-3">
+                        @RenderBody()
+                    </main>
+                </div>
+
+                <footer class="border-top footer text-muted">
+                    @await Component.InvokeAsync(typeof(FooterViewComponent))
+                </footer>
+            </div>
+        </div>
+    </div>
+    @if (IsSectionDefined("scripts"))
+    {
+        RenderSection("scripts");
+    }
+    <ejs-scripts></ejs-scripts>
+</body>
+</html>

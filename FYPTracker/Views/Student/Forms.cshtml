@@ -1,0 +1,309 @@
+@using FYPTracker.Models
+@model FYPProject?
+@{
+    ViewData["Title"] = "Submission Forms";
+    var currentUser = ViewBag.CurrentUser as EmployeeInfo;
+    var milestones  = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
+}
+
+<style>
+    :root { --orange-grad: linear-gradient(135deg, #f97316 0%, #fbbf24 100%); }
+
+    .page-hero {
+        background: var(--orange-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(249,115,22,.28);
+    }
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid rgba(249,115,22,.1);
+        box-shadow: 0 4px 20px rgba(0,0,0,.06);
+        transition: transform .25s, box-shadow .25s;
+    }
+    .glass-card:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,.1); }
+
+    .upload-zone {
+        border: 2px dashed #e5e7eb;
+        border-radius: 14px;
+        padding: 32px;
+        text-align: center;
+        cursor: pointer;
+        transition: all .2s;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+        border-color: #f97316;
+        background: #fff7ed;
+    }
+    .upload-zone input[type=file] { display:none; }
+
+    .btn-upload {
+        background: var(--orange-grad);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 9px 24px;
+        font-weight: 700;
+        transition: opacity .2s;
+    }
+    .btn-upload:hover:not(:disabled) { opacity:.85; color:white; }
+    .btn-upload:disabled { opacity:.45; cursor:not-allowed; }
+
+    .status-pill {
+        font-size:.7rem; font-weight:700;
+        padding:3px 10px; border-radius:999px; text-transform:uppercase;
+    }
+    .pill-approved    { background:#d1fae5; color:#065f46; }
+    .pill-rejected    { background:#fee2e2; color:#991b1b; }
+    .pill-pending     { background:#fef9c3; color:#854d0e; }
+    .pill-submitted   { background:#dbeafe; color:#1e40af; }
+    .pill-underreview { background:#ede9fe; color:#5b21b6; }
+
+    .milestone-tab { cursor:pointer; border-radius:10px; border:2px solid #e5e7eb; padding:10px 16px; transition:all .18s; }
+    .milestone-tab:hover, .milestone-tab.active { border-color:#f97316; background:#fff7ed; }
+
+    .file-item { border-radius:10px; background:#f9fafb; border:1px solid #f3f4f6; padding:10px 14px; }
+    .file-icon { font-size:1.4rem; }
+
+    .form-control, .form-select {
+        border-radius: 10px; border:2px solid #e5e7eb;
+        font-size:.88rem; padding:9px 14px;
+        transition: border-color .2s;
+    }
+    .form-control:focus, .form-select:focus { border-color:#f97316; box-shadow:0 0 0 3px rgba(249,115,22,.12); }
+
+    .table th { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:#9ca3af; font-weight:700; }
+    .table td { font-size:.87rem; vertical-align:middle; }
+</style>
+
+<div class="container-fluid py-4">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2">
+            <i class="fas fa-check-circle fs-4"></i> <span>@TempData["Success"]</span>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2">
+            <i class="fas fa-exclamation-circle fs-4"></i> <span>@TempData["Error"]</span>
+        </div>
+    }
+
+    @* ── Hero ─────────────────────────────────────────────── *@
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-file-upload me-2"></i>Submission Forms</h2>
+            <p class="mb-0 opacity-80">Upload your FYP documents — Proposal, Progress Reports, and Final Submission.</p>
+        </div>
+        <div class="text-end">
+            <div class="badge bg-white fw-bold px-3 py-2 rounded-pill" style="color:#f97316;font-size:.88rem;">
+                <i class="fas fa-paperclip me-1"></i>
+                @milestones.Sum(m => m.SubmissionFiles?.Count ?? 0) Files Uploaded
+            </div>
+        </div>
+    </div>
+
+    @if (Model == null)
+    {
+        <div class="text-center py-5">
+            <div class="glass-card p-5 d-inline-block">
+                <i class="fas fa-exclamation-triangle fs-1 text-warning opacity-60 mb-3 d-block"></i>
+                <h4 class="fw-bold text-muted">No Active Project</h4>
+                <p class="text-muted">You need an approved project before you can upload documents.</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+
+            @* ── LEFT: Upload Form ─────────────────────────────── *@
+            <div class="col-lg-5">
+                <div class="glass-card p-4">
+                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-cloud-upload-alt me-2" style="color:#f97316;"></i>Upload Document</h5>
+
+                    <form asp-action="UploadSubmission" asp-controller="Student"
+                          method="post" enctype="multipart/form-data" id="uploadForm">
+                        @Html.AntiForgeryToken()
+
+                        @* Milestone Selector *@
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">Select Milestone / Chapter</label>
+                            @if (!milestones.Any())
+                            {
+                                <div class="alert alert-warning rounded-3 mb-0">No milestones defined for your project yet.</div>
+                            }
+                            else
+                            {
+                                <select name="milestoneId" class="form-select" required>
+                                    <option value="">— Choose a milestone —</option>
+                                    @foreach (var ms in milestones.OrderBy(m => m.DueDate))
+                                    {
+                                        <option value="@ms.Id">@ms.Title (@ms.Status)</option>
+                                    }
+                                </select>
+                            }
+                        </div>
+
+                        @* Drop Zone *@
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">Document File</label>
+                            <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                                <input type="file" id="fileInput" name="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.zip" required
+                                       onchange="showFileName(this)" />
+                                <i class="fas fa-cloud-upload-alt fs-2 mb-2 d-block" style="color:#f97316;opacity:.7;"></i>
+                                <div id="dropLabel" class="fw-semibold text-muted">Click or drag & drop a file here</div>
+                                <small class="text-muted d-block mt-1">PDF, DOC, DOCX, PPT, PPTX, ZIP — Max 20 MB</small>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-upload btn w-100"
+                                @(milestones.Any() ? "" : "disabled")>
+                            <i class="fas fa-paper-plane me-2"></i> Upload & Submit
+                        </button>
+                    </form>
+                </div>
+
+                @* Submission Types Guide *@
+                <div class="glass-card p-4 mt-4">
+                    <h6 class="fw-bold text-dark mb-3">📋 Submission Types</h6>
+                    <div class="d-flex flex-column gap-2" style="font-size:.85rem;">
+                        <div class="d-flex gap-2 align-items-start">
+                            <span class="status-pill pill-pending mt-1">Proposal</span>
+                            <span class="text-muted">Initial project proposal document and supporting files.</span>
+                        </div>
+                        <div class="d-flex gap-2 align-items-start">
+                            <span class="status-pill pill-submitted mt-1">Progress</span>
+                            <span class="text-muted">Chapter drafts and progress reports for each milestone.</span>
+                        </div>
+                        <div class="d-flex gap-2 align-items-start">
+                            <span class="status-pill pill-approved mt-1">Final</span>
+                            <span class="text-muted">Complete thesis and presentation slides for final submission.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* ── RIGHT: Submission History ─────────────────────── *@
+            <div class="col-lg-7">
+                <div class="glass-card p-4">
+                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-history me-2" style="color:#f97316;"></i>Submission History</h5>
+
+                    @{
+                        var allFiles = milestones
+                            .SelectMany(m => (m.SubmissionFiles ?? new List<FYPSubmissionFile>())
+                                .Select(f => new { Milestone = m, File = f }))
+                            .OrderByDescending(x => x.File.UploadedDate)
+                            .ToList();
+                    }
+
+                    @if (!allFiles.Any())
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <i class="fas fa-inbox fs-1 d-block mb-2 opacity-30"></i>
+                            <p class="mb-0">No documents uploaded yet.</p>
+                            <small>Use the form on the left to upload your first document.</small>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>File</th>
+                                        <th>Milestone</th>
+                                        <th>Size</th>
+                                        <th>Uploaded</th>
+                                        <th>Status</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var entry in allFiles)
+                                    {
+                                        var ext = System.IO.Path.GetExtension(entry.File.FileName).ToLowerInvariant();
+                                        var icon = ext switch {
+                                            ".pdf"  => "fas fa-file-pdf text-danger",
+                                            ".doc"  => "fas fa-file-word text-primary",
+                                            ".docx" => "fas fa-file-word text-primary",
+                                            ".ppt"  => "fas fa-file-powerpoint text-warning",
+                                            ".pptx" => "fas fa-file-powerpoint text-warning",
+                                            ".zip"  => "fas fa-file-archive text-secondary",
+                                            _       => "fas fa-file text-muted"
+                                        };
+                                        var pillCls = entry.Milestone.Status switch {
+                                            "Approved"    => "pill-approved",
+                                            "Rejected"    => "pill-rejected",
+                                            "Submitted"   => "pill-submitted",
+                                            "UnderReview" => "pill-underreview",
+                                            _             => "pill-pending"
+                                        };
+                                        var sizeKb = entry.File.FileSize.HasValue
+                                            ? (entry.File.FileSize.Value / 1024.0).ToString("F0") + " KB"
+                                            : "—";
+
+                                        <tr>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i class="@icon" style="font-size:1.3rem;"></i>
+                                                    <div>
+                                                        <div class="fw-semibold text-dark" style="font-size:.85rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                                            @entry.File.FileName
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td><span class="text-muted" style="font-size:.82rem;">@entry.Milestone.Title</span></td>
+                                            <td><span class="text-muted" style="font-size:.82rem;">@sizeKb</span></td>
+                                            <td><span class="text-muted" style="font-size:.82rem;">@entry.File.UploadedDate.ToString("dd MMM yy")</span></td>
+                                            <td><span class="status-pill @pillCls">@entry.Milestone.Status</span></td>
+                                            <td>
+                                                <a href="@entry.File.FilePath" target="_blank"
+                                                   class="btn btn-sm btn-light rounded-3 text-muted">
+                                                    <i class="fas fa-download"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@section scripts {
+<script>
+    function showFileName(input) {
+        const label = document.getElementById('dropLabel');
+        if (input.files.length > 0) {
+            const f = input.files[0];
+            label.textContent = '📎 ' + f.name;
+            label.style.color = '#f97316';
+        }
+    }
+
+    // Drag & drop support
+    const zone = document.getElementById('dropZone');
+    if (zone) {
+        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+        zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+        zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            const fi = document.getElementById('fileInput');
+            fi.files = e.dataTransfer.files;
+            showFileName(fi);
+        });
+    }
+</script>
+}

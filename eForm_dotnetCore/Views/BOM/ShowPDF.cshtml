@@ -1,0 +1,24 @@
+﻿@using eForm_dotnetCore.ViewModels
+@model ShowPDFModel
+
+@{
+    if (Context.User.Identity.IsAuthenticated)
+    {
+        Layout = "~/Views/Shared/_Layout.cshtml";
+    }
+    else
+    {
+        Layout = "~/Views/Shared/_LayoutAnonymous.cshtml";
+    }
+
+    var fileString = Model.Base64String + "#toolbar=0";
+}
+<div class="d-flex justify-content-end">
+    <a href="@Url.Action("downloadFile",new {id = Model.SupportFileId})" class="btn btn-primary">Download</a>
+</div>
+
+<div class="text-center my-3">
+    <embed style="width: 100%; height: 800px"
+           src="@fileString"
+           title="@Model.FileName"/>
+</div>

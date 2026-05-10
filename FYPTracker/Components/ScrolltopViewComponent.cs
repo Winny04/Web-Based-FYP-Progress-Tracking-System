@@ -1,0 +1,27 @@
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System;
+using System.Threading.Tasks;
+
+namespace FYPTracker.Components
+{
+    [ViewComponent(Name = "ScrolltopViewComponent")] 
+    public class ScrolltopViewComponent : ViewComponent
+    {
+        #region Constructors
+
+        public ScrolltopViewComponent()
+        {
+        }
+
+        #endregion
+
+        public async Task<IViewComponentResult> InvokeAsync()
+        {
+            return View("/Views/Shared/_Scrolltop.cshtml");
+        }
+    }
+}

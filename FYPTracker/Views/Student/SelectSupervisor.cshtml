@@ -1,0 +1,354 @@
+@using FYPTracker.Models
+@{
+    ViewData["Title"] = "Select Supervisor";
+    var currentUser    = ViewBag.CurrentUser as EmployeeInfo;
+    var supervisors    = ViewBag.Supervisors as List<EmployeeInfo> ?? new();
+    var myRequests     = ViewBag.MyRequests  as List<SupervisorRequest> ?? new();
+    var hasPending     = myRequests.Any(r => r.Status == "Pending");
+    var hasApproved    = myRequests.Any(r => r.Status == "Approved");
+}
+
+<style>
+    :root {
+        --purple-grad: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+        --green-grad:  linear-gradient(135deg, #10b981 0%, #34d399 100%);
+    }
+
+    .page-hero {
+        background: var(--purple-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(124, 58, 237, 0.3);
+    }
+
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid rgba(124, 58, 237, 0.1);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .glass-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,0.1); }
+
+    .supervisor-card {
+        border-radius: 16px;
+        border: 2px solid transparent;
+        transition: all 0.25s ease;
+        cursor: default;
+    }
+
+    .supervisor-card:hover {
+        border-color: #7c3aed;
+        box-shadow: 0 6px 24px rgba(124,58,237,0.15);
+    }
+
+    .avatar-circle {
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        font-weight: 700;
+        color: white;
+        background: var(--purple-grad);
+        flex-shrink: 0;
+    }
+
+    .status-badge {
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 4px 12px;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .badge-pending  { background: #fef9c3; color: #854d0e; }
+    .badge-approved { background: #dcfce7; color: #14532d; }
+    .badge-rejected { background: #fee2e2; color: #991b1b; }
+
+    .btn-request {
+        background: var(--purple-grad);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 7px 18px;
+        font-size: 0.83rem;
+        font-weight: 600;
+        transition: opacity 0.2s;
+    }
+    .btn-request:hover:not(:disabled) { opacity: 0.88; color: white; }
+    .btn-request:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .search-box {
+        border-radius: 12px;
+        border: 2px solid #e5e7eb;
+        padding: 10px 16px;
+        font-size: 0.9rem;
+        transition: border-color 0.2s;
+        width: 100%;
+    }
+    .search-box:focus { border-color: #7c3aed; outline: none; box-shadow: 0 0 0 3px rgba(124,58,237,0.12); }
+
+    .timer-bar {
+        height: 6px;
+        border-radius: 3px;
+        background: #e5e7eb;
+        overflow: hidden;
+    }
+    .timer-fill { height: 100%; background: var(--purple-grad); border-radius: 3px; }
+
+    .table th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 700; border-bottom: 2px solid #f3f4f6; }
+    .table td { font-size: 0.88rem; vertical-align: middle; border-bottom: 1px solid #f9fafb; }
+
+    .alert-info-custom {
+        background: linear-gradient(135deg, rgba(124,58,237,0.07), rgba(168,85,247,0.05));
+        border: 1.5px solid rgba(124,58,237,0.2);
+        border-radius: 14px;
+        color: #5b21b6;
+    }
+</style>
+
+<div class="container-fluid py-4">
+
+    @* ── Alerts ─────────────────────────────────────────────── *@
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2" role="alert">
+            <i class="fas fa-check-circle fs-4"></i>
+            <span>@TempData["Success"]</span>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2" role="alert">
+            <i class="fas fa-exclamation-circle fs-4"></i>
+            <span>@TempData["Error"]</span>
+        </div>
+    }
+
+    @* ── Page Hero ──────────────────────────────────────────── *@
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1">Select a Supervisor</h2>
+            <p class="mb-0 opacity-80">Browse available supervisors and send a supervision request. Requests expire after <strong>7 days</strong> if not responded to.</p>
+        </div>
+        <div class="text-end">
+            <span class="badge bg-white text-purple fw-bold px-3 py-2 rounded-pill" style="color:#7c3aed;">
+                <i class="fas fa-users me-1"></i> @supervisors.Count Supervisors Available
+            </span>
+        </div>
+    </div>
+
+    @if (hasApproved)
+    {
+        var approvedReq = myRequests.First(r => r.Status == "Approved");
+        <div class="alert alert-info-custom p-4 mb-4 d-flex align-items-center gap-3">
+            <i class="fas fa-shield-alt fs-2 text-purple"></i>
+            <div>
+                <div class="fw-bold fs-5">Supervisor Assigned ✓</div>
+                <div>You are currently supervised by <strong>@approvedReq.Supervisor?.FullName</strong>. No further requests needed.</div>
+            </div>
+        </div>
+    }
+
+    <div class="row g-4">
+
+        @* ── LEFT: Supervisor Table ──────────────────────────── *@
+        <div class="col-lg-8">
+            <div class="glass-card p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <h5 class="fw-bold text-dark mb-0">Available Supervisors</h5>
+                    <input id="supervisorSearch" type="text" class="search-box" style="max-width:260px;"
+                           placeholder="🔍 Search name or department…" />
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table align-middle" id="supervisorTable">
+                        <thead>
+                            <tr>
+                                <th>Supervisor</th>
+                                <th>Department</th>
+                                <th>Email</th>
+                                <th class="text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var sup in supervisors)
+                            {
+                                var initials = string.Join("", (sup.FullName ?? "S").Split(' ').Take(2).Select(w => w[0]));
+                                // check if student already has any request to this supervisor
+                                var existingReq = myRequests.FirstOrDefault(r => r.SupervisorId == sup.Id);
+                                var canRequest  = existingReq == null && !hasApproved;
+
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="avatar-circle" style="width:40px;height:40px;font-size:15px;">
+                                                @initials
+                                            </div>
+                                            <div>
+                                                <div class="fw-semibold text-dark">@sup.FullName</div>
+                                                <small class="text-muted">@(sup.EmployeeId ?? "—")</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                            <span class="text-muted">@(sup.EmpDepartment?.Name ?? sup.Department ?? "—")</span>
+                                    </td>
+                                    <td><span class="text-muted">@(sup.Email ?? "—")</span></td>
+                                    <td class="text-center">
+                                        @if (existingReq != null)
+                                        {
+                                            var cls = existingReq.Status switch {
+                                                "Approved" => "badge-approved",
+                                                "Rejected" => "badge-rejected",
+                                                _          => "badge-pending"
+                                            };
+                                            <span class="status-badge @cls">@existingReq.Status</span>
+                                        }
+                                        else if (!hasApproved)
+                                        {
+                                            <button class="btn-request btn-sm"
+                                                    onclick="openRequestModal(@sup.Id, '@sup.FullName')"
+                                                    @(hasPending ? "disabled title=\"Cancel your pending request first\"" : "")>
+                                                <i class="fas fa-paper-plane me-1"></i> Request
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    @if (!supervisors.Any())
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <i class="fas fa-user-slash fs-1 mb-3 d-block opacity-30"></i>
+                            No supervisors are currently available.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* ── RIGHT: My Requests History ────────────────────────── *@
+        <div class="col-lg-4">
+            <div class="glass-card p-4 h-100">
+                <h5 class="fw-bold text-dark mb-4">My Requests</h5>
+
+                @if (!myRequests.Any())
+                {
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-inbox fs-1 mb-3 d-block opacity-30"></i>
+                        <p class="mb-0">No requests sent yet.</p>
+                        <small>Click <strong>Request</strong> to get started.</small>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex flex-column gap-3">
+                        @foreach (var req in myRequests)
+                        {
+                            var initials = string.Join("", (req.Supervisor?.FullName ?? "S").Split(' ').Take(2).Select(w => w[0]));
+                            var daysLeft = (int)(req.ExpiryDate - DateTime.Now).TotalDays;
+                            var pct      = Math.Max(0, Math.Min(100, (int)((double)daysLeft / 7 * 100)));
+                            var badgeCls = req.Status switch {
+                                "Approved" => "badge-approved",
+                                "Rejected" => "badge-rejected",
+                                _          => "badge-pending"
+                            };
+
+                            <div class="p-3 rounded-3 border">
+                                <div class="d-flex align-items-center gap-3 mb-2">
+                                    <div class="avatar-circle" style="width:38px;height:38px;font-size:14px;">@initials</div>
+                                    <div class="flex-grow-1">
+                                        <div class="fw-semibold text-dark" style="font-size:.88rem;">@req.Supervisor?.FullName</div>
+                                        <small class="text-muted">@req.RequestedDate.ToString("dd MMM yyyy")</small>
+                                    </div>
+                                    <span class="status-badge @badgeCls">@req.Status</span>
+                                </div>
+
+                                @if (req.Status == "Pending")
+                                {
+                                    <div class="mb-1 d-flex justify-content-between" style="font-size:.75rem;">
+                                        <span class="text-muted">Expires in</span>
+                                        <span class="fw-semibold @(daysLeft <= 1 ? "text-danger" : "text-warning")">
+                                            @(daysLeft < 1 ? "< 1 day" : $"{daysLeft} days")
+                                        </span>
+                                    </div>
+                                    <div class="timer-bar"><div class="timer-fill" style="width:@pct%;"></div></div>
+                                }
+
+                                @if (!string.IsNullOrEmpty(req.ResponseNote))
+                                {
+                                    <div class="mt-2 p-2 bg-light rounded-2 text-muted" style="font-size:.78rem;">
+                                        <i class="fas fa-comment-alt me-1"></i> @req.ResponseNote
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ── Request Modal ──────────────────────────────────────────── *@
+<div class="modal fade" id="requestModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-4 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="modalSupTitle">Send Supervision Request</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form asp-action="SubmitSupervisorRequest" asp-controller="Student" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="supervisorId" id="modalSupId" />
+                <div class="modal-body pt-3">
+                    <p class="text-muted mb-3">You are sending a supervision request to <strong id="modalSupName"></strong>. The supervisor has <strong>7 days</strong> to respond before it is auto-rejected.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Message (optional)</label>
+                        <textarea name="requestMessage" class="form-control" rows="4"
+                                  placeholder="Introduce yourself and explain your FYP topic…"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn-request btn px-4 rounded-3">
+                        <i class="fas fa-paper-plane me-1"></i> Send Request
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section scripts {
+<script>
+    function openRequestModal(supId, supName) {
+        document.getElementById('modalSupId').value   = supId;
+        document.getElementById('modalSupName').textContent = supName;
+        document.getElementById('modalSupTitle').textContent = 'Request — ' + supName;
+        new bootstrap.Modal(document.getElementById('requestModal')).show();
+    }
+
+    // Live search
+    document.getElementById('supervisorSearch').addEventListener('input', function () {
+        const q    = this.value.toLowerCase();
+        const rows = document.querySelectorAll('#supervisorTable tbody tr');
+        rows.forEach(row => {
+            row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+    });
+</script>
+}

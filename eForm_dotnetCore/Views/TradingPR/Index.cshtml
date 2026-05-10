@@ -1,0 +1,893 @@
+﻿@using System.Collections
+@using eForm_dotnetCore.ViewModel
+@using eForm_dotnetCore.Common
+@using eForm_dotnetCore.Helpers
+@using Microsoft.EntityFrameworkCore;
+@using Microsoft.AspNetCore.Authorization
+@inject IAuthorizationService AuthorizationService
+@using eForm_dotnetCore.Configuration.Auhtorization;
+@using eForm_dotnetCore.Models;
+
+@model BOMOverviewViewModel
+
+@{
+    ViewData["Title"] = PageTitle.TradingPR;
+    var itemCategories = EnumHelpers.ToSelectList<BomItemCategory>();
+    var fabricationBrandList = EnumHelpers.ToSelectList<FabricationBrand>();
+
+    var ableViewActualMCost = Context.GetUserType().Equals("Buyer", StringComparison.OrdinalIgnoreCase)
+                              || Context.GetUserType().Equals("CEO", StringComparison.OrdinalIgnoreCase)
+                              || Context.GetUserType().Equals("GFC", StringComparison.OrdinalIgnoreCase)
+                              || Context.GetUserType().Equals("HOD", StringComparison.OrdinalIgnoreCase)
+                              || Context.GetUserType().Equals("PM", StringComparison.OrdinalIgnoreCase)
+                              || Context.GetUserType().Equals("Quality", StringComparison.OrdinalIgnoreCase)
+                              || Context.GetUserType().Equals("Sales", StringComparison.OrdinalIgnoreCase);
+
+    var ableViewDrawing = Context.GetUserType().Equals("Buyer", StringComparison.OrdinalIgnoreCase)
+                   || Context.GetUserType().Equals("PM", StringComparison.OrdinalIgnoreCase)
+                   || Context.GetUserType().Equals("HOD", StringComparison.OrdinalIgnoreCase);
+
+}
+
+<style>
+    span.prefix {
+        background-color: #afafaf;
+        color: #fff8f8;
+        line-height: 10px;
+        height: 30px;
+        padding: 10px;
+        border: 1px #888 solid;
+        font-size: 9pt;
+    }
+
+    .dataTables_wrapper .dt-buttons .buttons-colvis {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: #fff;
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+        margin: 10px;
+    }
+
+        .dataTables_wrapper .dt-buttons .buttons-colvis:hover {
+            background-color: #0069d9;
+            border-color: #0062cc;
+            color: #fff;
+        }
+</style>
+
+<div id="kt_content_container" class="d-flex flex-column-fluid align-items-start container-xxxl">
+    <div class="content flex-row-fluid" id="kt_content">
+        <div class="card card-flush">
+            <div class="card-header" style="padding: 0px 12px">
+                <div class="card-toolbar">
+                    <div class="d-flex flex-stack flex-wrap gap-2">
+                        <div class="d-flex align-items-center fw-bolder">
+                            <!--begin::Select Category-->
+                            <select class="form-control" id="categoryFilter">
+                                <option value=" " selected>Category</option>
+                                @foreach (var item in itemCategories)
+                                {
+                                    var shortName = EnumHelpers.ToSelectList<BomItemCategoryShortName>().Where(x => x.Id == item.Id).Select(x => x.Text).FirstOrDefault();
+                                    <option value="@item.Text">@item.Text Part (@shortName)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="d-flex align-items-center fw-bolder">
+                            <select class="form-control" id="statusFilter">
+                                <option value=" " selected>Status</option>
+                                <option value="New">New</option>
+                                <option value="RFQ Sent">RFQ Sent</option>
+                                <option value="RFQ Updated">RFQ Updated</option>
+                                <option value="RFQ Approved">RFQ Approved</option>
+                                <option value="RFQ Reject">RFQ Reject</option>
+                                <option value="PR Sent">PR Sent</option>
+                                <option value="PR Approved">PR Approved</option>
+                                <option value="PR Reject">PR Reject</option>
+                                <option value="PO Approved">PO Approved</option>
+                                <option value="PO Revise">PO Revise</option>
+                                <option value="PO Reject">PO Reject</option>
+                                <option value="ETA Updated">ETA Updated</option>
+                                <option value="Partial Received">Partial Received</option>
+                                <option value="Item Received">Item Received</option>
+                                <option value="Item Issued Out">Item Issued Out</option>
+                                <option value="Completed">Completed</option>
+                            </select>
+                            <!--end::Select-->
+                        </div>
+                        <div class="d-flex align-items-center position-relative my-1">
+                            <!--begin::Svg Icon | path: icons/duotune/general/gen021.svg-->
+                            <span class="svg-icon svg-icon-3 position-absolute ms-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                    <rect opacity="0.5" x="17.0365" y="15.1223" width="8.15546" height="2" rx="1" transform="rotate(45 17.0365 15.1223)" fill="black" />
+                                    <path d="M11 19C6.55556 19 3 15.4444 3 11C3 6.55556 6.55556 3 11 3C15.4444 3 19 6.55556 19 11C19 15.4444 15.4444 19 11 19ZM11 5C7.53333 5 5 7.53333 5 11C5 14.4667 7.53333 17 11 17C14.4667 17 17 14.4667 17 11C17 7.53333 14.4667 5 11 5Z" fill="black" />
+                                </svg>
+                            </span>
+                            <!--end::Svg Icon-->
+                            <input type="text" id="filter_search" class="form-control form-control-solid form-select-sm w-150px ps-9" placeholder="Search Form" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+       
+        <table id="tradingPRTable" class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4" style="background-color:white;">
+            <thead>
+                <tr class="font-weight-bold text-center">
+                    <th class="min-w-100px mw-100px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Project</b></th>
+                    <th class="min-w-50px mw-50px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>BOM No</b></th>
+                    <th class="min-w-50px mw-50px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Status</b></th>
+                    <th class="min-w-50px mw-50px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Cat.</b></th>
+                    <th class="min-w-50px mw-50px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Module</b></th>
+                    <th class="min-w-100px mw-100px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Description</b></th>
+                    <th class="min-w-50px mw-50px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Brand</b></th>
+                    <th class="min-w-100px mw-100px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Part No.</b></th>
+                    <th class="mw-50px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Unit Qty</b></th>
+                    <th class="mw-50px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Total Qty</b></th>
+                    <th class="min-w-80px mw-80px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>PR</b></th>
+                    <th class="min-w-70px mw-70px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Supplier</b></th>
+                    <th class="min-w-70px mw-70px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Vendor Quot.</b></th>
+                    <th class="min-w-70px mw-70px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>PO</b></th>
+                    <th class="min-w-50px mw-50" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>PO Qty</b></th>
+                    <th class="min-w-50px mw-50" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Unit Price(RM)</b></th>
+                    <th class="min-w-50px mw-50" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Total Price(RM)</b></th>
+                    <th class="min-w-80px mw-80px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>ETA</b></th>
+                    <th class="min-w-70px mw-70px" style="color:black;font-size:11px;border-right: 2px solid #D3D3D3;"><b>Recv. Date</b></th>
+                    <th class="min-w-100px mw-100" style="color:black;font-size:11px;"><b>Action</b></th>
+                </tr>
+            </thead>
+        </table>
+        </div>
+    </div>
+</div>
+
+@*Edit BOM modal*@
+<div class="modal fade" id="modal_edit" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content rounded">
+            <div class="modal-header pb-0 border-0 justify-content-end">
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+            <div class="modal-body scroll-y px-10 px-lg-15 pt-0 pb-15">
+                <div class="mb-13 text-center">
+                    <h1 class="mb-3">Edit BOM</h1>
+                    <div class="text-muted fw-bold fs-5">
+                        If you need more info, please check
+                        <a href="#" class="fw-bolder link-primary">Project Guidelines</a>.
+                    </div>
+                </div>
+                <input type="hidden" id="selectedFormId" />
+                <div class="d-flex flex-column mb-2 fv-row">
+                    <label class="fs-6 fw-bold mb-2 required">Module</label>
+                    <input id="eModule" class="form-control form-control-lg form-control-solid" name="Module" type="text" required />
+                    <p id="name-existed-validation" class="text-danger" type="text"></p>
+                </div>
+
+                <div class="d-flex flex-column mb-2 fv-row">
+                    <label class="fs-6 fw-bold mb-2 required">Description</label>
+                    <input id="ePartDesc" class="form-control form-control-lg form-control-solid" name="PartDesc" type="text" />
+                    <p id="name-existed-validation" class="text-danger" type="text"></p>
+                </div>
+
+                <div id="eFBBrandString" class="mb-2 fv-row">
+                    <label class="fs-6 fw-bold mb-2">Brand</label>
+                    <input id="eBrand" class="form-control form-control-lg form-control-solid" name="Brand" type="text" />
+                    @*<p id="evalidateFBBrand" class="text-danger" type="text">The brand of Fabrication Part only accept Sheet Metal,Perspex,Profile,Base Plate, and Structure</p>*@
+                </div>
+
+                <div id="eFBBrandDropdown" class="mb-2 fv-row">
+                    <label class="fs-6 fw-bold mb-2 required">Brand</label>
+                    <select id="eFBBrand" class="form-select form-select-solid" data-control="select2" data-hide-search="true" data-placeholder="Select a Brand" name="Brand" required>
+                        <option value="">Select brand...</option>
+                        @foreach (var i in fabricationBrandList)
+                        {
+                            var brandName = EnumHelpers.ToSelectList<FabricationBrand>().Where(x => x.Id == i.Id).Select(x => x.Text).FirstOrDefault();
+                            <option value="@i.Text.Replace('_', ' ')">@brandName.Replace('_', ' ')</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="d-flex flex-column mb-2 fv-row">
+                    <label class="fs-6 fw-bold mb-2 required">Item Category</label>
+                    <select id="eItemCategory" class="form-select form-select-solid" data-control="select2" data-hide-search="true" data-placeholder="Select a Category" name="ItemCategory" required>
+                        <option value="">Select category...</option>
+                        @foreach (var i in itemCategories)
+                        {
+                            <option value="@i.Text">@i.Text part</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-2 fv-row" id="attachFileItem2">
+                    <label class="fs-6 fw-bold mb-2 required">Part No</label>
+                    <div id="itemFile2Container" hidden></div>
+                    <input type="file" class="form-control" id="itemFile2" accept="application/pdf" multiple />
+                </div>
+                <div class="mb-2 fv-row" id="epartNoContainer">
+                    <label class="fs-6 fw-bold mb-2 required">Part No</label>
+                    <input id="ePartNumber" class="form-control form-control-lg form-control-solid" name="PartNumber" type="text" />
+                </div>
+                <div class="d-flex flex-column mb-2 fv-row">
+                    <label class="fs-6 fw-bold mb-2 required">Unit Qty</label>
+                    <input id="eUnitQty" class="form-control form-control-lg form-control-solid" name="UnitQty" onchange="upTotalQty(this.value,'eRequireQty')" type="number" value="0" />
+                    <p id="name-existed-validation" class="text-danger" type="text"></p>
+                </div>
+                <div class="d-flex flex-column mb-2 fv-row">
+                    <label class="fs-6 fw-bold mb-2 required">Total Qty</label>
+                    <input id="eRequireQty" class="form-control form-control-lg form-control-solid" name="RequireQty" type="number" value="0" />
+                    <p id="name-existed-validation" class="text-danger" type="text"></p>
+                </div>
+
+                <input type="hidden" value="@ViewBag.ProjectId" id="hProjectId" />
+                <input type="hidden" id="hCheckedId" />
+                <div class="text-center">
+                    <button type="button" id="edit_request_close" class="btn btn-light me-3">Cancel</button>
+                    <button type="button" id="edit_bom_submit" class="btn btn-primary">
+                        <span class="indicator-label">Submit</span>
+                    </button>
+                </div>
+                <div id="loading-spinner" style="text-align:center;display:none;margin-top:20px;">
+                    <div class="spinner-border text-info" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p class="text-active-success">Saving form. Please wait...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Part No File -->
+<div class="modal fade" id="modal_upload_file" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content rounded">
+            <div class="modal-header pb-0 border-0 justify-content-end">
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+            <div class="modal-body scroll-y px-10 px-lg-15 pt-0 pb-15">
+                <div class="mb-13 text-center">
+                    <h1 class="mb-3">Upload File</h1>
+                </div>
+
+                <form asp-controller="TradingPR" asp-action="attachFile" method="post" enctype="multipart/form-data">
+                    <div class="mt-3 my-5 ml-5">
+                        <input type="file" name="files" accept="application/pdf" multiple />
+                    </div>
+                    <input type="hidden" id="uploadFile_bomId" name="bomId" />
+                    <input type="hidden" id="uploadFileType" name="types" />
+
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary">Upload</button>
+                    </div>
+
+                    <div id="loading-spinner-import" style="text-align:center;display:none;margin-top:20px;">
+                        <div class="spinner-border text-info" role="status">
+                            <span class="sr-only">Loading...</span>
+                        </div>
+                        <p class="text-active-success">Upload in progress. Please wait...</p>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section scripts {
+    <script>
+        var rfqColors = [];
+        var colorList = ["ff0000", "72aafe", "d38d4a"];
+        var counter = 0;
+        var prCounter = 0;
+
+        function availableBaseStatus(currentStatus, itemStatus) {
+            const statusFlow = [
+                 "New",
+                 "RFQ Sent",
+                 "RFQ Updated",
+                 "RFQ Reject",
+                 "RFQ Approved",
+                 "PR Sent",
+                 "PR Reject",
+                 "PR Approved",
+                 "PO Revise",
+                 "PO Reject",
+                 "PO Approved",
+                 "ETA Updated",
+                 "Partial Received",
+                 "Item Received",
+                 "Item Issued Out",
+                 "Completed"
+                 ];
+
+            const currentIndex = statusFlow.indexOf(currentStatus);
+            const itemIndex = statusFlow.indexOf(itemStatus);
+
+            return itemIndex >= currentIndex;
+        }
+
+        $(document).ready(function() {
+            var table = document.getElementById("tradingPRTable");
+            var dataTable = $(table).DataTable({
+                processing: true,
+                serverSide: true,
+                searching: true,
+                searchDelay: 500,
+                pageLength: 5,
+                "pagingType": "full_numbers",
+                "rowCallback": function (row, data) {
+                    $(row).attr('id', data.id);
+                    $(row).css('max-height','30px')
+                    $(row).css('color', 'black')
+                    $(row).css('font-size', '11px')
+                    $(row).css('border-right', '2px solid #D3D3D3')
+                    $(row).addClass('text-center text-break');
+                },
+                 dom: 'Brti<"bottom"pl><"clear">',
+                buttons: [
+                    'colvis'
+                ],
+                lengthMenu: [[5, 10, 15,-1], [5, 10, 15,"All"]],
+                select: {
+                    style: "os",
+                    selector: "td:first-child"
+                },
+                "ajax": {
+                    "url": "@Url.Action("LoadData")",
+                    "type": "POST",
+                    "data": function(d) {
+                        d.Status = $("#statusFilter").val();
+                        d.Category = $("#categoryFilter").val();
+                    }
+                },
+                columnDefs: [
+                    {
+                        targets: 0,
+                        render: function (data, type, row) {
+                            return row.projectName || '';
+                        }
+                    },
+                    {
+                        targets: 1,
+                        render: function (data, type, row) {
+                            return row.bomNo;
+                        }
+                    },
+                    {
+                        targets: 2,
+                        render: function (data, type, row) {
+                            let statusDiv = ''
+                            let lastUpdatedLabel = ''
+                            let approverDiv = ''
+
+                            if (row.status === "New" || row.status === "PR Sent" || row.status === "Item Issued Out" ) {
+                                statusDiv = `<div class="badge badge-light-primary badge-status">${row.status}</div>`
+                            }
+                            else if (row.status === "RFQ Sent" || row.status === "PR Approved" || row.status === "PO Revise") {
+                                statusDiv = `<div class="badge badge-light-warning badge-status">${row.status}</div>`
+                            }
+                            else if (row.status === "RFQ Updated" || row.status === "PO Approved" || row.status === "ETA Updated" || row.status === "Partial Received") {
+                                statusDiv = `<div class="badge badge-light-info">${row.status}</div>`
+                            }
+                            else if (row.status === "RFQ Approved" || row.status === "Item Received" || row.status === "Completed") {
+                                statusDiv = `<div class="badge badge-light-success">${row.status}</div>`
+                            }
+                            else if (row.status === "RFQ Reject" || row.status === "PR Reject" || row.status === "Receiving Reject" || row.status === "PO Reject" || row.status === "PO Cancelled") {
+                                statusDiv = `<div class="badge badge-light-danger badge-status">${row.status}</div>`
+                            }
+
+                            let convertDateTime = moment(row.lastUpdatedDate).format('DD MMM YYYY')
+                            lastUpdatedLabel = `
+                                <span class="fs-8 fw-light lh-sm d-block">
+                                    <span style="font-size:11px;font-family: sans-serif;">${convertDateTime}</span>
+                                </span>`
+
+                            if (row.totalApprover > 0 && row.status == "PR Sent")
+                            {
+                                const labelBg = ['bg-light-success', 'bg-light-warning']
+                                const labelText = ['Approved', 'Pending']
+                                approverDiv += '<div>';
+
+                                if (row.prApprovers.some(x => x.type === "HOD" && x.approved))
+                                {
+                                    approverDiv += `<p style="font-size=12px" class=${labelBg[0]}>HOD ${labelText[0]}</p>`
+                                }
+                                else
+                                {
+                                    approverDiv += `<p style="font-size=12px" class=${labelBg[1]}>HOD ${labelText[1]}</p>`
+                                }
+
+                                if(row.totalApprover > 1)
+                                {
+                                    if (row.prApprovers.some(x => x.type === "GFC" && x.approved)) {
+                                        approverDiv += `<p style="font-size=12px" class=${labelBg[0]}>GFC ${labelText[0]}</p>`
+                                    }
+                                    else{
+                                        approverDiv += `<p style="font-size=12px" class=${labelBg[1]}>GFC ${labelText[1]}</p>`
+                                    }
+                                }
+                                if (row.totalApprover > 2) {
+                                    if (row.prApprovers.some(x => x.type === "CEO" && x.approved)) {
+                                        approverDiv += `<p style="font-size=12px" class=${labelBg[0]}>CEO ${labelText[0]}</p>`
+                                    }
+                                    else {
+                                        approverDiv += `<p style="font-size=12px" class=${labelBg[1]}>CEO ${labelText[1]}</p>`
+                                    }
+                                }
+                            }
+
+                            approverDiv += '</div>'
+
+                            return statusDiv + lastUpdatedLabel + approverDiv
+                        }
+                    },
+                    {
+                        targets: 3,
+                        render: function (data, type, row) {
+                            return row.itemCategory;
+                        }
+                    },
+                    {
+                        targets: 4,
+                        render: function (data, type, row) {
+                            return row.module;
+                        }
+                    },
+                    {
+                        targets: 5,
+                        render: function (data, type, row) {
+                            return `
+                                <div style="color:black;font-size:11px; word-wrap: break-word;">
+                                    ${row.partDesc}
+                                </div>
+                            `
+                        }
+                    },
+                    {
+                        targets: 6,
+                        render: function (data, type, row) {
+                            return row.brand
+                        }
+                    },
+                    {
+                        targets: 7,
+                        render: function (data, type, row) {
+                            let partNoEle = ''
+                            if (row.itemCategory === "Fabrication") {
+                                if (row.bomSupportFiles != null && row.bomSupportFiles.some(x => x.type === "IC") && ('@ableViewDrawing' === 'True' || row.canViewDrawing)) {
+                                    const bfs = row.bomSupportFiles.filter(x => x.type === "IC");
+                                    const imageTypes = [".png",".jpeg",".jpg"]
+                                    bfs.forEach(sf => {
+                                        var sfId = sf.supportFileId
+                                        var po = sf.supportFile.fileName.split(/ - |_-_/)[0];
+                                        var previewEndPoint = imageTypes.includes(bfs[0].supportFile.contentType) ? "PreviewImage" : "ShowPDF";
+                                        if(previewEndPoint === "PreviewImage"){
+                                            partNoEle += ` <a href="/BOM/${previewEndPoint}?id=${sfId}" target="_blank">${sf.supportFile.fileName}</a>`
+                                        }
+                                        else{
+                                            partNoEle += `<a href="/BOM/${previewEndPoint}?supportFileId=${sfId}" target="_blank">${sf.supportFile.fileName}</a>`
+                                        }
+                                        const removeBtn = `<a href="/TradingPR/removeFile/${sfId}?projectId=${row.projectId}" class="mx-2 text-danger">X</a>`
+                                        partNoEle += removeBtn
+                                    })
+                                }
+                                else
+                                {
+                                    const disabled = row.projectStatus === "Completed"
+                                    const btnClass = disabled ? 'btn-secondary' : 'btn-primary'
+
+                                    if(disabled){
+                                        partNoEle += `
+                                            <button id="uploadPart" class="btn ${btnClass}" disabled>
+                                                Upload
+                                            </button>
+                                        `
+                                    }
+                                    else{
+                                        partNoEle += `
+                                            <button id="uploadPart" class="btn ${btnClass}" onclick="openUploadFileModal(${row.id},'IC')">
+                                                Upload
+                                            </button>
+                                        `
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                partNoEle += row.partNumber
+                            }
+
+                            return partNoEle
+                        }
+                    },
+                    {
+                        targets: 8,
+                        render: function (data, type, row) {
+                            return row.unitQty
+                        }
+                    },
+                    {
+                        targets: 9,
+                        render: function (data, type, row) {
+                            return row.requireQty
+                        }
+                    },
+                    {
+                        targets: 10,
+                        render: function (data, type, row) {
+                            let prEle = ''
+
+                            if (row.pr === null) {
+                                prEle += `<span class="text-muted">-</span>`
+                            }
+                            else {
+                                let colorStr = colorList[prCounter]
+                                if (rfqColors.length > 0 && rfqColors.some(x => x.name === row.prName)) {
+                                    colorStr = rfqColors.find(x => x.name === row.prName).color;
+                                }
+                                else {
+                                    rfqColors.push({
+                                        name: row.prName,
+                                        color: colorStr
+                                    })
+                                    prCounter += 1;
+                                    if (prCounter === 5) {
+                                        prCounter = 0
+                                    }
+                                }
+
+                                prEle += `<a href="/PurchaseRequisition/Edit/${row.prId}" class="link-success" style="color:#${colorStr}"><b>${row.prName}</b></a>`
+                            }
+
+                            return prEle
+                        }
+                    },
+                    {
+                        targets: 11,
+                        render: function (data, type, row) {
+                            return row.supplierName || '-'
+                        }
+                    },
+                    {
+                        targets: 12,
+                        render: function (data, type, row) {
+                            if(row.quotName === ""){
+                                return "-"
+                            }
+
+                            return `<a href="${row.quotUrl}" target="_blank">${row.quotName}</a>`
+                        }
+                    },
+                    {
+                        targets: 13,
+                        render: function (data, type, row) {
+                            let poEle = ''
+                            if (row.bomSupportFiles != null && row.bomSupportFiles.some(x => x.type === "PO")) {
+                                const bfs = row.bomSupportFiles.filter(x => x.type === "PO");
+                                bfs.forEach(sf => {
+                                    var po = sf.supportFile.fileName.split(/ - |_-_/)[0];
+                                    var sfId = sf.supportFileId
+                                    poEle += `<a href="/BOM/ShowPDF?supportFileId=${sfId}" target="_blank">${po}</a>`
+                                })
+                            }
+                            else {
+                                poEle = '-'
+                            }
+
+                            return poEle
+                        }
+                    },
+                    {
+                        targets: 14,
+                        render: function (data, type, row) {
+                            if(row.prQuantity === -1){
+                                return "-"
+                            }
+                            return row.prQuantity
+                        }
+                    },
+                    {
+                        targets: 15,
+                        render: function (data, type, row) {
+                            if(row.prUnitPrice === -1){
+                                return "-"
+                            }
+                            return row.prUnitPrice.toFixed(4)
+                        }
+                    },
+                    {
+                        targets: 16,
+                        render: function (data, type, row) {
+                            if (row.prTotalPrice === -1) {
+                                return "-"
+                            }
+                            return row.prTotalPrice.toFixed(2)
+                        }
+                    },
+                    {
+                        targets: 17,
+                        render: function (data, type, row) {
+                            if (row.eta === null) {
+                                return "-"
+                            }
+                            const convertDateStr = moment(row.eta).format('DD MMMM YYYY')
+                            return convertDateStr
+                        }
+                    },
+                    {
+                        targets: 18,
+                        render: function (data, type, row) {
+                            if (row.receivedDate === null) {
+                                return "-"
+                            }
+                            const convertDateStr = moment(row.receivedDate).format('DD MMMM YYYY')
+                            return convertDateStr
+                        }
+                    },
+                    {
+                        targets: 19,
+                        render: function (data, type, row) {
+                            let actionEle = `<div class="d-flex gap-2 align-items-center justify-content-center">`
+
+                            if (row.projectStatus !== "Completed") {
+                                
+                                actionEle += ` <button type="button" class="btn btn-sm btn-primary" onclick="setEditForm(${row.projectId},${row.id})">Edit</button>`
+                                if ((row.status == "PO Approved" || row.status == "ETA Updated") && ("@Context.GetUserType()" === "PM" || "@Context.GetUserType()" === "SuperAdminAssistant" || "@Context.GetUserType()" === "SuperAdmin" || "@Context.GetUserType()" === "Purchaser"))
+                                {
+                                    actionEle += `<a href="/POTracker/POHistory/${row.id}" class="btn btn-sm btn-info">Reject PO</a>`
+                                }
+                                
+                                if(!availableBaseStatus("PR Approved",row.status))
+                                {
+                                    actionEle += ` <button type="button" class="btn btn-sm btn-danger" onclick="deleteForm(${row.id})">Delete</a>`
+                                }
+                            }
+                           
+                            actionEle += "</div>"
+                            return actionEle
+                        }
+                    },
+                ],
+                "order": [],
+            });
+            
+            $("#eItemCategory").change(function () {
+                if ($("#eItemCategory").val() == "@BomItemCategory.Fabrication.ToString()") {
+                    $("#eFBBrandDropdown").show();
+                    $("#eFBBrandString").hide();
+                    $("#attachFileItem2").show();
+                    $("#epartNoContainer").hide();
+                    $("#epartNoContainer").val(null);
+                } else {
+                    $("#eFBBrandDropdown").hide();
+                    $("#eFBBrandString").show();
+                    $("#attachFileItem2").hide();
+                    $("#attachFileItem2").val(null);
+                    $("#epartNoContainer").show();
+                }
+            });
+            
+            $("#edit_bom_submit").click(function () {
+                var Id = $("#selectedFormId").val();
+                var Module = $("#eModule").val();
+                var PartNumber = $("#ePartNumber").val();
+                var Brand = $("#eBrand").val();
+                var BrandFb = $("#eFBBrand").val();
+                var PartDesc = $("#ePartDesc").val();
+                var ItemCategory = $("#eItemCategory").val();
+                var UnitQty = $("#eUnitQty").val();
+                var RequireQty = $("#eRequireQty").val();
+                //var ProductName = $("#eProductName").val();
+
+                if (ItemCategory == "@BomItemCategory.Fabrication.ToString()") {
+                    Brand = BrandFb;
+                }
+
+                var form = {
+                    Id: Id,
+                    Module: Module,
+                    PartNumber: PartNumber,
+                    Brand: Brand,
+                    PartDesc: PartDesc,
+                    ItemCategory: ItemCategory,
+                    UnitQty: UnitQty,
+                    RequireQty: RequireQty,
+
+                };
+                Swal.fire({
+                    text: "Are you sure edit this bom?",
+                    icon: "warning",
+                    showCancelButton: true,
+                    buttonsStyling: false,
+                    confirmButtonText: "Yes!",
+                    cancelButtonText: "No, return",
+                    customClass: {
+                        confirmButton: "btn btn-primary",
+                        cancelButton: "btn btn-active-light"
+                    }
+                }).then(function (result) {
+                    $("#loading-spinner").css("display", "block");
+
+                    $.ajax({
+                        url: '@Url.Action("Edit", "BOM")',
+                        type: 'POST',
+                        data: { form: form },
+                        success: function (result) {
+                            if (result.result == true) {
+                                var formData = new FormData();
+                                var anyFiles = false;
+
+                                if (document.getElementById("itemFile2").files.length != 0) {
+                                    var file1 = $("#itemFile2").get(0).files;
+                                    anyFiles = true;
+                                    for (var i = 0; i < document.getElementById("itemFile2").files.length; i++) {
+                                        formData.append('files', file1[i]);
+                                    }
+
+                                    formData.append('types', "IC");
+
+                                    formData.append('bomId', result.id);
+
+                                    $.ajax({
+                                        url: "/BOM/attachFile",
+                                        type: "POST",
+                                        data: formData,
+                                        enctype: 'multipart/form-data',
+                                        processData: false,
+                                        contentType: false,
+                                        cache: false,
+                                        success: function (result) {
+                                            $("#kt_modal_new_target_submit").prop("disabled", false);
+                                            $("#new_request_close").prop("disabled", false);
+                                            $("#loading-spinner").css("display", "none");
+                                            //window.location.href = "/BOM/Index/" + result.id;
+                                            location.reload();
+                                        }
+                                    });
+                                }
+
+                                $("#loading-spinner").css("display", "none");
+                                $("#modal_edit").modal("hide");
+                                location.reload();
+                            }
+                            else {
+                                $("#loading-spinner").css("display", "none");
+                                Swal.fire({
+                                    text: result.msg,
+                                    icon: "error",
+                                    confirmButtonText: "Close",
+                                })
+                            }
+                        }
+                    });
+                })
+            });
+
+            // Filter by status
+            $('#statusFilter').change(function() {
+                dataTable.ajax.reload();
+            });
+
+            // Filter by category
+            $('#categoryFilter').change(function() {
+                dataTable.ajax.reload();
+            });
+
+            // Search
+            $('#filter_search').on('keyup', function() {
+                dataTable.search(this.value).draw();
+            });
+        });
+        
+        function openUploadFileModal(bomId, type) {
+            $("#uploadFile_bomId").val(bomId);
+            $("#uploadFileType").val(type);
+            $("#modal_upload_file").modal("show");
+        }
+
+        function setEditForm(projectId, formId) {
+            var id = formId;
+            $("#selectedFormId").val(id);
+            $("#eModule").val("");
+            $("#ePartNumber").val("");
+            $("#eBrand").val("");
+            $("#eFBBrand").val("");
+            $("#ePartDesc").val("");
+            $("#eItemCategory").val("");
+            $("#eUnitQty").val("");
+            $("#eRequireQty").val("");
+
+            $.ajax({
+                url: "/BOM/Edit",
+                data: { id: id, projectId: projectId },
+                success: function (result) {
+                    if (result != null) {
+                        $("#eModule").val(result.data.module);
+                        //$("#eProductName").val(result.data.productName);
+                        $("#ePartNumber").val(result.data.partNumber);
+                        $("#ePartDesc").val(result.data.partDesc);
+                        $("#eItemCategory").val(result.data.itemCategory).change();
+                        if (result.data.itemCategory == "Fabrication") {
+                            $("#eFBBrand").val(result.data.brand).change();
+                        }
+                        else {
+                            $("#eBrand").val(result.data.brand);
+                        }
+                        $("#eUnitQty").val(result.data.unitQty);
+                        $("#eRequireQty").val(result.data.requireQty);
+                        document.getElementById("eUnitQty").disabled = result.block;
+
+                        if (result.data.bomSupportFiles != null) {
+                            var search = result.data.bomSupportFiles.filter(x => x.type === "QUO");
+                            if (search.length > 0) {
+                                var target = search[0];
+                                //var po = target.supportFile.fileName.split(/ - |_-_/)[0];
+                                var opening = "<div class='d-flex justify-content-between'>"
+                                var link = `<a href='/BOM/downloadFile/${target.id}'>${target.supportFile.fileName}</a><a href="#" class="text-danger">x</a>`;
+                                var closing = "</div>";
+                                document.getElementById('itemFile2Container').insertAdjacentHTML("afterbegin", opening + link + closing);
+                                document.getElementById('itemFile2Container').style.display = "block";
+                            }
+                        }
+                        $("#modal_edit").modal("show");
+                    }
+                    else {
+                        alert(result.msg);
+                    }
+                }
+            });
+        }
+        
+        function deleteForm(formId) {
+            Swal.fire({
+                text: "Are you sure delete this bom?",
+                icon: "warning",
+                showCancelButton: true,
+                buttonsStyling: false,
+                confirmButtonText: "Yes, delete it!",
+                cancelButtonText: "No, return",
+                customClass: {
+                    confirmButton: "btn btn-primary",
+                    cancelButton: "btn btn-active-light"
+                }
+            }).then(function (result) {
+                if (result.value) {
+                    var table = $("#tradingPRTable").DataTable();
+                    $.ajax({
+                        url: "@Url.Action("deleteForm", "BOM")",
+                        method: "POST",
+                        data: {
+                            id: formId
+                        },
+                        success: function () {
+                            table.row("#" + formId).remove().draw();
+                        }
+                    });
+                } else if (result.dismiss === "cancel") {
+                    Swal.fire({
+                        text: "Your bom has not been cancelled!.",
+                        icon: "error",
+                        buttonsStyling: false,
+                        confirmButtonText: "Ok, got it!",
+                        customClass: {
+                            confirmButton: "btn btn-primary",
+                        }
+                    });
+                }
+            });
+        }
+  </script>
+}

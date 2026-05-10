@@ -1,0 +1,276 @@
+﻿@using System.Collections
+@using eForm_dotnetCore.ViewModel
+@using eForm_dotnetCore.Common
+@using eForm_dotnetCore.Helpers
+@using Microsoft.EntityFrameworkCore;
+
+@model TradeTracker
+
+@{
+    ViewData["Title"] = "Edit Trading";
+}
+<style>
+    textarea {
+        white-space: pre-line;
+    }
+</style>
+
+<div id="kt_content_container" class="d-flex flex-column-fluid align-items-start container-xxxl">
+    <div class="content flex-row-fluid" id="kt_content">
+        <div class="card card-flush mb-xl-1">
+            <form asp-action="Edit" method="post">
+                <div class="card-body">
+                    <div class="card m-3">
+                        <div class="card-header d-flex justify-content-center align-items-center">
+                            <h3>Sourcing details</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Started Date</span>
+                                        </label>
+                                        <input class="form-control form-control-solid" placeholder="Select a date" id="startedDate" name="startedDate" value="@Model.StartedDate?.ToString("yyyy-MM-dd")" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Sales PIC</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-solid" placeholder="Enter Sales PIC" name="salesPIC" value="@Model.SalesPIC" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="fs-6 fw-bold mb-2">
+                                            <span>Description</span>
+                                        </label>
+                                        <textarea class="form-control form-control-solid" placeholder="Enter description" name="description">@Model.Description</textarea>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Brand</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-solid" placeholder="Enter Brand" name="brand" value="@Model.Brand" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Part No</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-solid" placeholder="Enter Part No" name="partNo" value="@Model.PartNo" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Quantity</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-solid" placeholder="Enter Quantity" name="quantity" value="@Model.Quantity" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Supporting Document</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-solid" placeholder="Enter Supporting Document" name="supportDoc" value="@Model.SupportDoc" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Chances of PO Obtained</span>
+                                        </label>
+                                        <select class="form-select form-select-solid" id="chancesPO" name="chancesPO">
+                                            <option value="">Select an option...</option>
+                                            <option value="Low">Low</option>
+                                            <option value="Medium">Medium</option>
+                                            <option value="High">High</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card m-3">
+                        <div class="card-header d-flex justify-content-center align-items-center">
+                            <h3>Supplier Detail</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Status of Sourcing</span>
+                                        </label>
+                                        <select class="form-select form-select-solid" id="statusSource" name="statusSource">
+                                            <option value="">Select an option...</option>
+                                            <option value="Pending">Pending Information</option>
+                                            <option value="Sent">RFQ Sent</option>
+                                            <option value="Comparison">Comparison</option>
+                                            <option value="Close">Close</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Selected Supplier</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-solid" placeholder="Enter supplier" name="supplier" value="@Model.Supplier" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Selected Competitor</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-solid" placeholder="Enter supplier" name="competitorName" value="@Model.CompetitorName" />
+                                    </div>
+                                </div>
+                                  <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Target Price</span>
+                                        </label>
+                                        <input type="number" step="0.01" class="form-control form-control-solid" placeholder="Enter price" name="targetPrice" value="@Model.TargetPrice" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Final Price</span>
+                                        </label>
+                                        <input type="number" step="0.01" class="form-control form-control-solid" placeholder="Enter price" name="finalPrice" value="@Model.FinalPrice" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Target Lead Time</span>
+                                        </label>
+                                        <input class="form-control form-control-solid" placeholder="Select a date" id="targetLeadTime" name="targetLeadTime" value="@Model.TargetLeadTime?.ToString("yyyy-MM-dd")" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Final Lead Time</span>
+                                        </label>
+                                        <input class="form-control form-control-solid" placeholder="Select a date" id="leadTime" name="leadTime" value="@Model.LeadTime?.ToString("yyyy-MM-dd")" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Warranty(year)</span>
+                                        </label>
+                                        <input type="number" class="form-control form-control-solid" placeholder="Enter Warranty" name="warranty" value="@Model.Warranty" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Remark(If any)</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-solid" placeholder="Enter Remark" name="remark" value="@Model.Remark" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Closed Date</span>
+                                        </label>
+                                        <input class="form-control form-control-solid" placeholder="Select a date" id="closedDate" name="closedDate" value="@Model.ClosedDate?.ToString("yyyy-MM-dd")" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card m-3">
+                        <div class="card-header d-flex justify-content-center align-items-center">
+                            <h3>Sales Detail</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Status of Sales</span>
+                                        </label>
+                                        <select class="form-select form-select-solid" id="statusSales" name="statusSales">
+                                            <option value="">Select an option...</option>
+                                            <option value="Review">Review</option>
+                                            <option value="Quotation Sent">Quotation Sent</option>
+                                            <option value="PO Received">PO Received</option>
+                                            <option value="On Hold">On Hold</option>
+                                            <option value="Lost">Lost</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Customer PO#</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-solid" placeholder="Enter PO#" name="customerPO" value="@Model.CustomerPO" />
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex flex-column mb-8 fv-row">
+                                        <label class="d-flex align-items-center fs-6 fw-bold mb-2">
+                                            <span>Reason for Pending/Lost</span>
+                                        </label>
+                                        <input type="text" class="form-control form-control-solid" placeholder="Enter reason" name="reasonPending" value="@Model.ReasonPending" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="d-flex justify-content-end">
+                        <input type="hidden" name="id" value="@Model.Id"/>
+                        <button type="submit" class="btn btn-primary mr-2">Save</button>
+                        <a href="@Url.Action("Index")" class="btn btn-secondary">Discharge</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@section scripts{
+        <script>
+            $(document).ready(function () {
+
+                $("#startedDate").flatpickr({
+                    dateFormat: "Y-m-d",
+                });
+
+                $("#closedDate").flatpickr({
+                    dateFormat: "Y-m-d",
+                });
+
+                $("#targetLeadTime").flatpickr({
+                    dateFormat: "Y-m-d",
+                });
+
+                $("#leadTime").flatpickr({
+                    dateFormat: "Y-m-d",
+                });
+
+                $("#chancesPO").val("@Model.ChancesPO")
+
+                $("#statusSource").val("@Model.StatusSource")
+                
+                $("#statusSales").val("@Model.StatusSales")
+
+            })
+        </script>
+}

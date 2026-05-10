@@ -1,0 +1,216 @@
+﻿@using eForm_dotnetCore.ViewModels
+@model ShowPDFModel
+
+<style>
+	.mmBox{
+		height:34px !important
+	}
+	.multiMail{
+		margin-left:0 !important	
+	}
+</style>
+
+<div class="d-flex flex-column-fluid justify-content-center">
+	<div class="card w-100">
+        <div class="card-body">
+            <div class="stepper stepper-links d-flex flex-column" id="previewPO">
+				<div class="stepper-nav mb-5">
+					<div class="stepper-item current" data-kt-stepper-element="nav">
+						<h3 class="stepper-title">PO Preview</h3>
+					</div>
+					<div class="stepper-item" data-kt-stepper-element="nav">
+						<h3 class="stepper-title">PO Recipients</h3>
+					</div>
+				</div>
+				<form id="poForm">
+					<div class="current" data-kt-stepper-element="content">
+						<div class="w-100">
+							<div class="fv-row">
+								<!--begin::Row-->
+								<div class="row">
+									<embed style="width: 100%; height: 800px"
+										   src="@Model.Base64String" />
+								</div>
+							</div>
+						</div>
+					</div>
+					<div data-kt-stepper-element="content">
+						<div class="w-100">
+							<div class="fv-row">
+								<!--begin::Row-->
+								<input type="hidden" name="fileName" value="@Model.FileName"/>
+								<input type="hidden" name="prId" value="@Model.Description3" />
+								<div class="d-flex flex-column">
+									<div class="form-group">
+										<label class="control-label">Subject:</label>
+										<input type="text" name="subject" class="form-control" id="subject" value="@Model.Description"/>
+									</div>
+									<div class="form-group">
+										<label class="control-label">Recipients:</label>
+										<input id="input" class="multiMail form-control"/>
+										<input id="mails" name="mails" class="multiMailResult"/>
+										<div id="boxes" class="mmBoxes"></div>
+									</div>
+									
+									<div class="form-group">
+										<div class="d-flex flex-row">
+											<label class="control-label">Upload PO:</label>
+											<div class="form-check form-switch">
+												<input checked="checked" type="checkbox" role="switch" id="toggleUpload">
+											</div>
+										</div>
+									</div>
+
+									<div id="uploadSection">
+										<div class="form-group">
+											<label class="control-label col-2">Upload PO:</label>
+											<input id="poFile" type="file" class="form-control" accept="application/pdf" />
+										</div>
+										@*<div class="form-group">
+											<label class="control-label col-2">Upload Appendix:</label>
+											<input id="appFile" type="file" class="form-control" accept="application/pdf" />
+										</div>*@
+									</div>
+									
+									<div class="row gy-5 g-xl-10 justify-content-center">
+										<div class="card">
+											<div class="card-header d-flex justify-content-between">
+												<div class="card-title">
+													<h3>Email Content</h3>
+												</div>
+											</div>
+											<div class="card-body">
+												<div class="d-flex flex-column">
+													<div class="text-end">
+														<a href="@Url.Action("EmailContent","Manage",new {type = EmailTemplateConfiguration.POEmailContent})" class="btn btn-primary mb-2">Edit Content</a>
+													</div>
+													<div class="card p-3">
+														@Html.Raw(Model.Description2)
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="d-flex flex-stack pt-15">
+						<!--begin::Wrapper-->
+						<div class="mr-2">
+							<button type="button" class="btn btn-lg btn-light-primary me-3" data-kt-stepper-action="previous">
+								<!--begin::Svg Icon | path: icons/duotune/arrows/arr063.svg-->
+								<span class="svg-icon svg-icon-4 me-1">
+									<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+										<rect opacity="0.5" x="6" y="11" width="13" height="2" rx="1" fill="black" />
+										<path d="M8.56569 11.4343L12.75 7.25C13.1642 6.83579 13.1642 6.16421 12.75 5.75C12.3358 5.33579 11.6642 5.33579 11.25 5.75L5.70711 11.2929C5.31658 11.6834 5.31658 12.3166 5.70711 12.7071L11.25 18.25C11.6642 18.6642 12.3358 18.6642 12.75 18.25C13.1642 17.8358 13.1642 17.1642 12.75 16.75L8.56569 12.5657C8.25327 12.2533 8.25327 11.7467 8.56569 11.4343Z" fill="black" />
+									</svg>
+								</span>
+							</button>
+						</div>
+						<div>
+							<button type="button" class="btn btn-lg btn-primary me-3" data-kt-stepper-action="submit" onclick="sendPO()">
+								<span class="indicator-label">
+									Submit
+									<!--begin::Svg Icon | path: icons/duotune/arrows/arr064.svg-->
+									<span class="svg-icon svg-icon-3 ms-2 me-0">
+										<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+											<rect opacity="0.5" x="18" y="13" width="13" height="2" rx="1" transform="rotate(-180 18 13)" fill="black" />
+											<path d="M15.4343 12.5657L11.25 16.75C10.8358 17.1642 10.8358 17.8358 11.25 18.25C11.6642 18.6642 12.3358 18.6642 12.75 18.25L18.2929 12.7071C18.6834 12.3166 18.6834 11.6834 18.2929 11.2929L12.75 5.75C12.3358 5.33579 11.6642 5.33579 11.25 5.75C10.8358 6.16421 10.8358 6.83579 11.25 7.25L15.4343 11.4343C15.7467 11.7467 15.7467 12.2533 15.4343 12.5657Z" fill="black" />
+										</svg>
+									</span>
+									<!--end::Svg Icon-->
+								</span>
+							</button>
+							<button type="button" class="btn btn-lg btn-primary" data-kt-stepper-action="next">
+								Continue
+								<!--begin::Svg Icon | path: icons/duotune/arrows/arr064.svg-->
+								<span class="svg-icon svg-icon-4 ms-1 me-0">
+									<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+										<rect opacity="0.5" x="18" y="13" width="13" height="2" rx="1" transform="rotate(-180 18 13)" fill="black" />
+										<path d="M15.4343 12.5657L11.25 16.75C10.8358 17.1642 10.8358 17.8358 11.25 18.25C11.6642 18.6642 12.3358 18.6642 12.75 18.25L18.2929 12.7071C18.6834 12.3166 18.6834 11.6834 18.2929 11.2929L12.75 5.75C12.3358 5.33579 11.6642 5.33579 11.25 5.75C10.8358 6.16421 10.8358 6.83579 11.25 7.25L15.4343 11.4343C15.7467 11.7467 15.7467 12.2533 15.4343 12.5657Z" fill="black" />
+									</svg>
+								</span>
+								<!--end::Svg Icon-->
+							</button>
+						</div>
+						<!--end::Wrapper-->
+					</div>
+				</form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+	$(document).ready(function () {
+		$("#toggleUpload").change(function (e) {
+			if ($('#toggleUpload').is(':checked')) {
+				$("#uploadSection").css("display", "block");
+			}
+			else {
+				$("#uploadSection").css("display", "none");
+			}
+		});
+	})
+
+	var element = document.querySelector("#previewPO");
+	var stepper = new KTStepper(element);
+	stepper.on("kt.stepper.next", function (stepper) {
+		stepper.goNext(); // go next step
+	});
+	stepper.on("kt.stepper.previous", function (stepper) {
+		stepper.goPrevious(); // go previous step
+	});
+
+	var emailInput = $(".multiMail").multiMailInput({
+		imageDir: "/",
+		validation_error: "is not valid!",
+		duplicate_error: "is already exist!",
+	});
+
+	emailInput.addMail("OpsX@sophicautomation.com");
+	emailInput.addMail("logistics@sophicautomation.com");
+	emailInput.addMail("xinyi.ooi@sophicautomation.com");
+
+	function sendPO(){
+		var mails = emailInput.getMails();
+		console.log('mails.length', mails.length)
+		if (mails.length === 0) {
+			alert("Please enter at least one email.");
+		}
+		else
+		{
+			var formData = new FormData();
+			if ($('#toggleUpload').is(':checked')) {
+				if (document.getElementById("poFile").files.length === 0) {
+					alert("PO file is required")
+					return;
+				}
+
+				var file1 = $("#poFile").get(0).files;
+				for (var i = 0; i < document.getElementById("poFile").files.length; i++) {
+					formData.append('pos', file1[i]);
+				}
+			}
+			//var form = $('#poForm').serialize();
+			formData.append('mails', mails);
+			formData.append('fileName', "@Model.FileName");
+			formData.append('subject', $("#subject").val());
+			formData.append('prId', "@Model.Description3");
+			$.ajax({
+				url: "@Url.Action("SendPO")",
+				method: "post",
+				data: formData,
+				enctype: 'multipart/form-data',
+				processData: false,
+				contentType: false,
+				cache: false,
+				success: function () {
+					window.location.href = "@Url.Action("Index")"
+				}
+			});
+		}
+	}
+
+</script>

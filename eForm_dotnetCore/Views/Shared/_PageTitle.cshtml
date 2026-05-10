@@ -1,0 +1,39 @@
+@*<style>
+    .breadcrumb {
+        background-color: transparent !important;
+        border: none !important;
+    }
+</style>
+<div class="page-title d-flex flex-column me-3">
+    <h1 class="d-flex text-white fw-bolder my-1 fs-3">@ViewData["Title"]</h1>
+    <ul class="breadcrumb breadcrumb-separatorless fw-bold fs-7 my-1">
+        @{
+            int count = 0;
+            foreach (var item in ViewBag.Navigation)
+            {
+                if (count == 0)
+                {
+                    <li class="breadcrumb-item text-white opacity-75">
+                        <a href="@ViewBag.Link[count]" class="text-white text-hover-primary">@item</a>
+                    </li>
+                }
+                else
+                {
+                    <li class="text-white opacity-75">
+                        /		&nbsp
+                    </li>
+                    <li class="breadcrumb-item text-white opacity-75">
+                        <a href="@ViewBag.Link[count]" class="text-white text-hover-primary">@item</a>
+
+                    </li>
+
+                }
+
+
+                count++;
+            }
+        }
+
+    </ul>
+</div>
+*@

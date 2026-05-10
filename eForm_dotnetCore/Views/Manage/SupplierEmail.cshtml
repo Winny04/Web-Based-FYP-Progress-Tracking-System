@@ -1,0 +1,279 @@
+﻿@using eForm_dotnetCore.Helpers
+@using eForm_dotnetCore.Common
+@model SupplierEmailViewModel
+
+@{
+    ViewData["Title"] = "Manage Additional Supplier Email";
+}
+
+<style>
+    .tableBorder {
+        border-right: 2px solid #D3D3D3;
+        color: black;
+        font-size: 15px;
+    }
+
+    .custom-table {
+        border-radius: 8px;
+        overflow: hidden;
+        width: 100%;
+    }
+
+        .custom-table th {
+            background-color: #f8f9fa;
+            text-align: left;
+            font-size: 16px;
+            padding: 10px;
+        }
+
+        .custom-table td {
+            text-align: left;
+            padding: 10px 15px; 
+        }
+
+    .checkbox-column {
+        text-align: left !important;
+        width: 50px;
+        padding-left: 25px;
+    }
+
+        .checkbox-column input[type="checkbox"] {
+            transform: scale(1.2);
+            margin-left: 30px;
+        }
+
+
+    .left-align {
+        text-align: left !important;
+        padding-left: 20px;
+    }
+
+    .striped-table tbody tr:nth-child(odd) {
+        background-color: #f3f3f3;
+    }
+
+    .search-input {
+        width: 280px;
+        margin-bottom: 10px;
+    }
+
+    #btnAddEmail, #btnDeleteEmail {
+        font-size: 12px;
+        padding: 6px 12px;
+        height: auto; 
+    }
+
+</style>
+
+<div class="card">
+    <h3 style="margin-left:30px; margin-top:20px; font-size:22px;">Select Additional Supplier Email</h3>
+
+    <div class="card-header border-0 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <input type="text" id="filter_search_suppliers" class="form-control search-input" placeholder="Search suppliers..." />
+        </div>
+        <button id="btnAddEmail" class="btn btn-primary btn-lg">Add To Email List</button>
+    </div>
+
+    <div class="card-body py-0">
+        <div class="table-responsive">
+            <table id="supplierTable" class="table custom-table striped-table">
+                <thead>
+                    <tr class="fw-bolder text-muted">
+                        <th class="tableBorder checkbox-column">
+                            <input type="checkbox" id="selectAllSuppliers" />
+                        </th>
+                        <th class="tableBorder left-align" style="width: 25%;">Supplier Name</th>
+                        <th class="tableBorder left-align" style="width: 30%;">Brand</th>
+                        <th class="tableBorder left-align" style="width: 30%;">Email</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var supplier in Model.Suppliers)
+                    {
+                        <tr>
+                            <td class="tableBorder checkbox-column">
+                                <input type="checkbox" class="supplier-checkbox" value="@supplier.Id"
+                                       data-name="@supplier.VendorName"
+                                       data-email="@supplier.Email" />
+                            </td>
+                            <td class="tableBorder left-align">@supplier.VendorName</td>
+                            <td>@supplier.BrandNames</td>
+                            <td class="tableBorder left-align">@supplier.Email</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Table 2: Added Suppliers -->
+<div class="card mt-4">
+    <h3 style="margin-left:30px; margin-top:20px; font-size:22px;">Current Additional Supplier Email</h3>
+
+    <div class="card-header border-0 d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <input type="text" id="filter_search_addedSuppliers" class="form-control search-input" placeholder="Search added suppliers..." />
+        </div>
+        <button id="btnDeleteEmail" class="btn btn-danger btn-lg">Delete Selected</button>
+    </div>
+
+    <div class="card-body py-0">
+        <div class="table-responsive">
+            <table id="addedSupplierTable" class="table custom-table striped-table">
+                <thead>
+                    <tr class="fw-bolder text-muted">
+                        <th class="tableBorder checkbox-column">
+                            <input type="checkbox" id="selectAllAddedSuppliers" />
+                        </th>
+                        <th class="tableBorder left-align" style="width: 25%;">Supplier Name</th>
+                        <th class="tableBorder left-align" style="width: 30%;">Brand</th>
+                        <th class="tableBorder left-align" style="width: 30%;">Email</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var supplier in Model.AddedSuppliers)
+                    {
+                        <tr>
+                            <td class="tableBorder checkbox-column">
+                                <input type="checkbox" class="added-supplier-checkbox" value="@supplier.Id" />
+                            </td>
+                            <td class="tableBorder left-align">@supplier.VendorName</td>
+                            <td class="tableBorder left-align">@supplier.BrandNames</td>
+                            <td class="tableBorder left-align">@supplier.Email</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            var supplierTable = $("#supplierTable").DataTable({
+                "info": false,
+                "order": [],
+                "pageLength": 10,
+                "lengthMenu": [10, 25, 50, 100]
+            });
+
+            var addedSupplierTable = $("#addedSupplierTable").DataTable({
+                "info": false,
+                "order": [],
+                "pageLength": 10,
+                "lengthMenu": [10, 25, 50, 100]
+            });
+
+            $("#filter_search_suppliers").on("keyup", function () {
+                supplierTable.search(this.value).draw();
+            });
+
+            $("#filter_search_addedSuppliers").on("keyup", function () {
+                addedSupplierTable.search(this.value).draw();
+            });
+
+            $("#selectAllSuppliers").on("change", function () {
+                $(".supplier-checkbox").prop("checked", $(this).prop("checked"));
+            });
+
+            $("#selectAllAddedSuppliers").on("change", function () {
+                $(".added-supplier-checkbox").prop("checked", $(this).prop("checked"));
+            });
+
+
+                    $("#btnAddEmail").on("click", function () {
+            let selectedSuppliers = [];
+            $(".supplier-checkbox:checked").each(function () {
+                let id = $(this).val().trim();
+                let name = $(this).data("name").trim();
+                let email = $(this).data("email").trim();
+
+                if (id && name && email) {
+                    selectedSuppliers.push({ id, vendorName: name, email });
+                }
+            });
+
+            console.log("✅ Selected Suppliers:", selectedSuppliers);
+
+            if (selectedSuppliers.length === 0) {
+                alert("No suppliers selected. Please choose at least one.");
+                return;
+            }
+
+            if (!confirm("Are you sure you want to add the selected suppliers?")) {
+                return;
+            }
+
+            console.log("✅ Sending to server:", JSON.stringify({ suppliers: selectedSuppliers }));
+
+            $("#btnAddEmail").prop("disabled", true).text("Adding...");
+
+            $.ajax({
+                url: "@Url.Action("AddAdditionalSupplier", "Manage")",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify(selectedSuppliers),
+                success: function (data) {
+                    console.log("Server response:", data);
+                    if (data.success) {
+                        alert("Suppliers added successfully.");
+                        location.reload();
+                    } else {
+                        alert("Failed to add suppliers: " + data.message);
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error("Error sending request:", status, error, xhr.responseText);
+                    alert("Error processing request.");
+                },
+                complete: function () {
+                    $("#btnAddEmail").prop("disabled", false).text("Add Email");
+                }
+            });
+        });
+
+
+        $("#btnDeleteEmail").on("click", function () {
+            let selectedIds = [];
+            $(".added-supplier-checkbox:checked").each(function () {
+                selectedIds.push($(this).val());
+            });
+
+            if (selectedIds.length === 0) {
+                alert("Please select at least one supplier to delete.");
+                return;
+            }
+
+            if (!confirm("Are you sure you want to delete the selected suppliers?")) {
+                return;
+            }
+
+            console.log("✅ Sending to server:", JSON.stringify({ ids: selectedIds }));
+
+            $("#btnDeleteEmail").prop("disabled", true).text("Deleting...");
+
+            $.post("@Url.Action("DeleteAdditionalSupplier", "Manage")", { ids: selectedIds })
+                .done(function (data) {
+                    if (data.success) {
+                        alert("Suppliers deleted successfully.");
+                        location.reload();
+                    } else {
+                        alert("Failed to delete suppliers.");
+                    }
+                })
+                .fail(function () {
+                    alert("Error processing request.");
+                })
+                .always(function () {
+                    $("#btnDeleteEmail").prop("disabled", false).text("Delete Selected");
+                });
+        });
+
+        });
+    </script>
+}

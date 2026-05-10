@@ -1,0 +1,368 @@
+@using FYPTracker.Models
+@{
+    ViewData["Title"] = "Book a Meeting";
+    var currentUser        = ViewBag.CurrentUser as EmployeeInfo;
+    var assignedSupervisor = ViewBag.AssignedSupervisor as EmployeeInfo;
+    var meetings           = ViewBag.Meetings as List<MeetingBooking> ?? new();
+}
+
+<style>
+    :root { --red-grad: linear-gradient(135deg, #ef4444 0%, #f97316 100%); }
+
+    .page-hero {
+        background: var(--red-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(239, 68, 68, 0.28);
+    }
+
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid rgba(239, 68, 68, 0.1);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    }
+
+    .form-label { font-weight: 600; font-size: .85rem; color: #374151; }
+
+    .form-control, .form-select {
+        border-radius: 10px;
+        border: 2px solid #e5e7eb;
+        font-size: .88rem;
+        padding: 9px 14px;
+        transition: border-color .2s, box-shadow .2s;
+    }
+    .form-control:focus, .form-select:focus {
+        border-color: #ef4444;
+        box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+    }
+
+    .btn-book {
+        background: var(--red-grad);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 11px 30px;
+        font-weight: 700;
+        font-size: .93rem;
+        transition: opacity .2s;
+    }
+    .btn-book:hover:not(:disabled) { opacity: .88; color: white; }
+    .btn-book:disabled { opacity: .45; cursor: not-allowed; }
+
+    .meeting-card {
+        border-radius: 14px;
+        border: 2px solid #f3f4f6;
+        transition: border-color .2s;
+    }
+    .meeting-card:hover { border-color: #fca5a5; }
+
+    .status-badge {
+        font-size: .72rem;
+        font-weight: 700;
+        padding: 4px 12px;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+    .badge-pending   { background: #fef9c3; color: #854d0e; }
+    .badge-approved  { background: #dcfce7; color: #14532d; }
+    .badge-rejected  { background: #fee2e2; color: #991b1b; }
+    .badge-postponed { background: #dbeafe; color: #1e40af; }
+
+    .time-slot {
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 8px 14px;
+        cursor: pointer;
+        font-size: .83rem;
+        font-weight: 600;
+        text-align: center;
+        transition: all .18s;
+        user-select: none;
+    }
+    .time-slot:hover, .time-slot.selected {
+        border-color: #ef4444;
+        background: #fef2f2;
+        color: #b91c1c;
+    }
+
+    .stat-mini {
+        border-radius: 12px;
+        padding: 16px 20px;
+        font-size: .82rem;
+        font-weight: 600;
+    }
+
+    .table th { font-size: .73rem; text-transform: uppercase; letter-spacing: .05em; color: #9ca3af; font-weight: 700; }
+    .table td { font-size: .87rem; vertical-align: middle; }
+</style>
+
+<div class="container-fluid py-4">
+
+    @* ── Alerts ─────────────────────────────────────────────── *@
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2" role="alert">
+            <i class="fas fa-check-circle fs-4"></i> <span>@TempData["Success"]</span>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2" role="alert">
+            <i class="fas fa-exclamation-circle fs-4"></i> <span>@TempData["Error"]</span>
+        </div>
+    }
+
+    @* ── Page Hero ──────────────────────────────────────────── *@
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-calendar-check me-2"></i>Book a Meeting</h2>
+            <p class="mb-0 opacity-80">
+                @if (assignedSupervisor != null)
+                {
+                    <span>Schedule a meeting with your supervisor, <strong>@assignedSupervisor.FullName</strong>.</span>
+                }
+                else
+                {
+                    <span>You must have an approved supervisor before booking a meeting.</span>
+                }
+            </p>
+        </div>
+        @{
+            var pending   = meetings.Count(m => m.Status == "Pending");
+            var approved  = meetings.Count(m => m.Status == "Approved");
+            var rejected  = meetings.Count(m => m.Status == "Rejected");
+            var postponed = meetings.Count(m => m.Status == "Postponed");
+        }
+        <div class="d-flex gap-2 flex-wrap">
+            <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-warning-emphasis"><i class="fas fa-clock me-1"></i> @pending Pending</span>
+            <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-success"><i class="fas fa-check me-1"></i> @approved Approved</span>
+            <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-primary"><i class="fas fa-calendar-alt me-1"></i> @postponed Postponed</span>
+        </div>
+    </div>
+
+    <div class="row g-4">
+
+        @* ── LEFT: Booking Form ────────────────────────────── *@
+        <div class="col-lg-5">
+            <div class="glass-card p-4">
+                <h5 class="fw-bold text-dark mb-4">
+                    <i class="fas fa-plus-circle text-danger me-2"></i>New Meeting Request
+                </h5>
+
+                @if (assignedSupervisor == null)
+                {
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-user-times fs-1 mb-3 d-block opacity-30"></i>
+                        <p class="fw-semibold">No supervisor assigned yet.</p>
+                        <p class="mb-3" style="font-size:.85rem;">You need an approved supervisor before you can book a meeting.</p>
+                        <a href="/Student/SelectSupervisor" class="btn btn-outline-danger rounded-3 px-4">
+                            <i class="fas fa-search me-1"></i> Select a Supervisor
+                        </a>
+                    </div>
+                }
+                else
+                {
+                    <form asp-action="SubmitMeetingBooking" asp-controller="Student" method="post" id="meetingForm">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="supervisorId" value="@assignedSupervisor.Id" />
+
+                        @* Supervisor Info Card *@
+                        <div class="p-3 mb-4 rounded-3" style="background:#fef2f2;">
+                            <div class="d-flex align-items-center gap-3">
+                                <div style="width:44px;height:44px;border-radius:50%;background:var(--red-grad);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:16px;">
+                                    @string.Join("", (assignedSupervisor.FullName ?? "S").Split(' ').Take(2).Select(w => w[0]))
+                                </div>
+                                <div>
+                                    <div class="fw-bold text-dark">@assignedSupervisor.FullName</div>
+                                    <small class="text-muted">@(assignedSupervisor.Email ?? "Supervisor")</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        @* Date Picker *@
+                        <div class="mb-3">
+                            <label class="form-label">Meeting Date</label>
+                            <input type="date" name="meetingDate" id="meetingDateInput" class="form-control"
+                                   min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" required />
+                            <div id="dayDisplay" class="text-muted mt-1" style="font-size:.8rem;"></div>
+                        </div>
+
+                        @* Time Slots *@
+                        <div class="mb-3">
+                            <label class="form-label">Preferred Time</label>
+                            <input type="hidden" name="meetingTime" id="meetingTimeInput" required />
+                            <div class="row g-2" id="timeSlots">
+                                @foreach (var slot in new[] {"09:00","10:00","11:00","14:00","15:00","16:00"})
+                                {
+                                    <div class="col-4">
+                                        <div class="time-slot" data-time="@slot" onclick="selectTime(this)">@slot</div>
+                                    </div>
+                                }
+                            </div>
+                            <div id="timeError" class="text-danger mt-1" style="font-size:.78rem;display:none;">Please select a time slot.</div>
+                        </div>
+
+                        @* Reason *@
+                        <div class="mb-4">
+                            <label class="form-label">Reason / Agenda <span class="text-muted fw-normal">(optional)</span></label>
+                            <textarea name="reason" class="form-control" rows="4"
+                                      placeholder="e.g., Chapter 2 progress review, discuss methodology…"></textarea>
+                        </div>
+
+                        <button type="submit" class="btn-book btn w-100" id="submitBtn">
+                            <i class="fas fa-calendar-plus me-2"></i> Submit Meeting Request
+                        </button>
+                    </form>
+                }
+            </div>
+        </div>
+
+        @* ── RIGHT: Meetings List ──────────────────────────── *@
+        <div class="col-lg-7">
+            <div class="glass-card p-4 h-100">
+                <h5 class="fw-bold text-dark mb-4">
+                    <i class="fas fa-list-alt text-danger me-2"></i>My Meeting History
+                </h5>
+
+                @if (!meetings.Any())
+                {
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-calendar-times fs-1 mb-3 d-block opacity-30"></i>
+                        <p class="fw-semibold mb-0">No meetings booked yet.</p>
+                        <small>Fill in the form on the left to book your first meeting.</small>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Date &amp; Time</th>
+                                    <th>Supervisor</th>
+                                    <th>Reason</th>
+                                    <th>Status</th>
+                                    <th>Notes</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{ int idx = 1; }
+                                @foreach (var m in meetings)
+                                {
+                                    var badgeCls = m.Status switch {
+                                        "Approved"  => "badge-approved",
+                                        "Rejected"  => "badge-rejected",
+                                        "Postponed" => "badge-postponed",
+                                        _           => "badge-pending"
+                                    };
+                                    var icon = m.Status switch {
+                                        "Approved"  => "fas fa-check-circle text-success",
+                                        "Rejected"  => "fas fa-times-circle text-danger",
+                                        "Postponed" => "fas fa-calendar-day text-primary",
+                                        _           => "fas fa-hourglass-half text-warning"
+                                    };
+
+                                    <tr>
+                                        <td class="text-muted">@(idx++)</td>
+                                        <td>
+                                            <div class="fw-semibold text-dark">@m.MeetingDate.ToString("dd MMM yyyy")</div>
+                                            <small class="text-muted">@m.MeetingDay &nbsp;@m.MeetingTime</small>
+                                        </td>
+                                        <td>
+                                            <span class="text-dark fw-medium">@(m.Supervisor?.FullName ?? "—")</span>
+                                        </td>
+                                        <td>
+                                            <span class="text-muted" style="font-size:.82rem;">
+                                                @(string.IsNullOrEmpty(m.Reason) ? "—" : (m.Reason.Length > 40 ? m.Reason[..40] + "…" : m.Reason))
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="status-badge @badgeCls">
+                                                <i class="@icon me-1"></i>@m.Status
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (m.Status == "Postponed" && m.ProposedNewDate.HasValue)
+                                            {
+                                                <span class="text-primary fw-semibold" style="font-size:.78rem;">
+                                                    <i class="fas fa-calendar-plus me-1"></i>Suggested: @m.ProposedNewDate.Value.ToString("dd MMM yyyy")
+                                                </span>
+                                            }
+                                            else if (!string.IsNullOrEmpty(m.SupervisorNote))
+                                            {
+                                                <span class="text-muted" style="font-size:.78rem;">@m.SupervisorNote</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (m.Status == "Pending")
+                                            {
+                                                <form asp-action="CancelMeeting" asp-controller="Student"
+                                                      method="post" class="d-inline"
+                                                      onsubmit="return confirm('Cancel this meeting request?');">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="meetingId" value="@m.Id" />
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger rounded-3" style="font-size:.75rem;">
+                                                        <i class="fas fa-times me-1"></i> Cancel
+                                                    </button>
+                                                </form>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts {
+<script>
+    // Show day name when date selected
+    const dateInput = document.getElementById('meetingDateInput');
+    if (dateInput) {
+        dateInput.addEventListener('change', function () {
+            if (this.value) {
+                const d   = new Date(this.value + 'T00:00:00');
+                const day = d.toLocaleDateString('en-US', { weekday: 'long' });
+                document.getElementById('dayDisplay').textContent = '📅 ' + day;
+            }
+        });
+    }
+
+    // Time slot selection
+    function selectTime(el) {
+        document.querySelectorAll('.time-slot').forEach(s => s.classList.remove('selected'));
+        el.classList.add('selected');
+        document.getElementById('meetingTimeInput').value = el.dataset.time;
+        document.getElementById('timeError').style.display = 'none';
+    }
+
+    // Validate time slot before submit
+    const form = document.getElementById('meetingForm');
+    if (form) {
+        form.addEventListener('submit', function (e) {
+            if (!document.getElementById('meetingTimeInput').value) {
+                e.preventDefault();
+                document.getElementById('timeError').style.display = 'block';
+            }
+        });
+    }
+</script>
+}

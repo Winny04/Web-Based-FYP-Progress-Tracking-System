@@ -1,0 +1,113 @@
+@using FYPTracker.Models
+@model IEnumerable<FYPMilestone>
+@{
+    ViewData["Title"] = "Review Submissions";
+}
+
+<div class="card mb-5 mb-xl-8">
+    <div class="card-header border-0 pt-5">
+        <h3 class="card-title align-items-start flex-column">
+            <span class="card-label fw-bolder fs-3 mb-1">Student Submissions</span>
+            <span class="text-muted mt-1 fw-bold fs-7">Review and grade milestones</span>
+        </h3>
+    </div>
+    <div class="card-body py-3">
+        @if (TempData["Success"] != null)
+        {
+            <div class="alert alert-success">@TempData["Success"]</div>
+        }
+
+        <div class="table-responsive">
+            <table class="table align-middle gs-0 gy-4">
+                <thead>
+                    <tr class="fw-bolder text-muted bg-light">
+                        <th class="ps-4 min-w-150px">Project / Student</th>
+                        <th class="min-w-150px">Milestone</th>
+                        <th class="min-w-120px">Date Submitted</th>
+                        <th class="min-w-120px">Files</th>
+                        <th class="min-w-120px">Status</th>
+                        <th class="text-end min-w-150px pe-4">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var ms in Model)
+                    {
+                        <tr>
+                            <td class="ps-4">
+                                <span class="text-dark fw-bolder d-block fs-6">@ms.Project?.Title</span>
+                                <span class="text-muted fw-bold d-block fs-7">@ms.Project?.Student?.FullName</span>
+                            </td>
+                            <td>
+                                <span class="text-dark fw-bolder d-block fs-6">@ms.Title</span>
+                            </td>
+                            <td>
+                                <span class="text-dark fw-bold d-block fs-6">@(ms.SubmittedDate?.ToString("dd MMM yyyy HH:mm") ?? "-")</span>
+                            </td>
+                            <td>
+                                @foreach(var f in ms.SubmissionFiles)
+                                {
+                                    <a href="@f.FilePath" target="_blank" class="badge badge-light-primary mb-1 d-inline-block"><i class="fas fa-file-download me-1 text-primary"></i> @f.FileName</a><br/>
+                                }
+                            </td>
+                            <td>
+                                @if (ms.Status == "Submitted" || ms.Status == "UnderReview")
+                                {
+                                    <span class="badge badge-light-warning">Under Review</span>
+                                }
+                                else if (ms.Status == "Approved")
+                                {
+                                    <span class="badge badge-light-success">Approved</span>
+                                }
+                                else
+                                {
+                                    <span class="badge badge-light-danger">Rejected / Revise</span>
+                                }
+                            </td>
+                            <td class="text-end pe-4">
+                                <button type="button" class="btn btn-sm btn-light-primary" data-bs-toggle="modal" data-bs-target="#reviewModal_@ms.Id">Grade</button>
+
+                                <!-- Review Modal -->
+                                <div class="modal fade" id="reviewModal_@ms.Id" tabindex="-1">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content text-start">
+                                            <form asp-action="ReviewSubmission" method="post">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">Grade Submission: @ms.Title</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <input type="hidden" name="milestoneId" value="@ms.Id" />
+                                                    <div class="mb-5">
+                                                        <label class="form-label fw-bold">Decision</label>
+                                                        <select name="status" class="form-select form-select-solid" required>
+                                                            <option value="">- Select -</option>
+                                                            <option value="Approved" selected="@(ms.Status == "Approved")">Approve (Passed)</option>
+                                                            <option value="Rejected" selected="@(ms.Status == "Rejected")">Reject (Needs Revision)</option>
+                                                            <option value="UnderReview" selected="@(ms.Status == "UnderReview")">Mark as Under Review</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-bold">Feedback / Remarks</label>
+                                                        <textarea name="remarks" class="form-control form-control-solid" rows="4">@ms.Remarks</textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                    <button type="submit" class="btn btn-primary">Save Review</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    @if (!Model.Any())
+                    {
+                        <tr><td colspan="6" class="text-center py-4 text-muted">No student submissions found.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

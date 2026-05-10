@@ -1,0 +1,481 @@
+﻿@using eForm_dotnetCore.Common
+@using eForm_dotnetCore.Helpers
+@using eForm_dotnetCore.ViewModels
+@using Microsoft.AspNetCore.Authorization
+@using eForm_dotnetCore.Configuration.Auhtorization;
+
+@inject IAuthorizationService AuthorizationService
+
+@model IEnumerable<ReceivingModel>
+
+@{
+    ViewData["Title"] = PageTitle.ReceivingTracker;
+
+    var authResource = new AuthResource("Type", "Finance", null);
+    //var canWrite = await AuthorizationService.AuthorizeAsync(User, authResource, new UserTypeRequirement());
+    var canWrite = Context.GetUserType() == "Finance" || Context.GetUserType() == "Receiving" || Context.GetUserType() == "SuperAdminAssistant" || Context.GetUserType() == "SuperAdmin";
+}
+<div id="kt_content_container" class="container-fluid d-flex flex-column-fluid align-items-start">
+    <div class="content flex-row-fluid" id="kt_content">
+        <div class="card card-flush mb-5 mb-xl-8">
+            <div class="card-header">
+                <div class="card-toolbar">
+                    <div class="d-flex flex-stack flex-wrap gap-2">
+                        <h3 class="d-flex align-items-center fw-bolder">
+                            <span class="card-label fw-bolder fs-3 mb-1">@PageTitle.ReceivingTracker</span>
+                        </h3>
+                    </div>
+                </div>
+                <div class="card-toolbar">
+                    <div class="d-flex flex-stack flex-wrap gap-1">
+                        <a href="@Url.Action("OverETAItem")" class="btn btn-info" style="height: 36px;padding: 7px;margin-right:6px;">Over ETA Items</a>
+                        <button type="button" class="btn btn-success" style="height: 36px;padding: 7px;margin-right:6px;" data-bs-toggle="modal" data-bs-target="#modal_import_po_update">
+                            Import PO Update
+                        </button>
+                        <a href="@Url.Action("ReceivedItem")" class="btn btn-primary" style="height: 36px;padding: 7px;margin-right:6px;">Received Items</a>
+                        <button id="btnMarkCompleted" class="btn btn-primary" style="height: 36px;padding: 7px;margin-right:6px;">
+                            Mark as Completed
+                        </button>
+                        <button id="btnPrintIssueForm" class="btn btn-danger" style="height: 36px;padding: 7px;margin-right:6px;">
+                            Print Issue Form
+                        </button>
+                        <div class="d-flex align-items-center position-relative mr-2">
+                            <span class="svg-icon svg-icon-3 position-absolute ms-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                    <rect opacity="0.5" x="17.0365" y="15.1223" width="8.15546" height="2" rx="1" transform="rotate(45 17.0365 15.1223)" fill="black" />
+                                    <path d="M11 19C6.55556 19 3 15.4444 3 11C3 6.55556 6.55556 3 11 3C15.4444 3 19 6.55556 19 11C19 15.4444 15.4444 19 11 19ZM11 5C7.53333 5 5 7.53333 5 11C5 14.4667 7.53333 17 11 17C14.4667 17 17 14.4667 17 11C17 7.53333 14.4667 5 11 5Z" fill="black" />
+                                </svg>
+                            </span>
+                            <input type="text" id="filter_search" class="form-control form-control-solid form-select-sm w-150px ps-9" placeholder="Search table" style="height:36px;" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <!--begin::Table-->
+                    <table id="formListTable" class="table table-row-gray-300 align-middle gs-0 gy-4">
+                        <!--begin::Table head-->
+                        <thead>
+                            <tr class="fw-bolder fs-6 text-uppercase text-center">
+                                <th class="min-w-35px tableCellBorderLeft tableCellBorderRight smallThText">
+                                   @* <div class="form-check form-check-sm form-check-custom form-check-solid">
+                                        <input id="checkedAll" class="form-check-input" type="checkbox" value="" data-kt-check="true" data-kt-check-target=".widget-9-check" style="margin-left:7px;" />
+                                    </div>*@
+                                </th>
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>Status</b></th>
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>Request by</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Project Code</b></th>
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>Project PO</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Customer</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Project Name</b></th>
+                                <th class="min-w-70px tableCellBorderRight smallThText"><b>Category</b></th>
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>PR</b></th>
+                                <th class="min-w-50px tableCellBorderRight smallThText"><b>PO</b></th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+
+            </div>
+
+
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal_import_po_update" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content rounded">
+            <div class="modal-header pb-0 border-0 justify-content-end">
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+            <div class="modal-body scroll-y px-10 px-lg-15 pt-0 pb-15">
+                <div class="mb-13 text-center">
+                    <h1 class="mb-3">Import PO Update</h1>
+                    <div class="text-muted fw-bold fs-5">
+                        Please click the link to download the Excel Template.
+                        <a href="@Url.Action("DownloadPOUpdateTemplate", "ReceivingTracker")" class="fw-bolder link-primary">
+                            Download template
+                        </a>.
+                    </div>
+                </div>
+
+                <div class="mt-3 my-5 ml-5">
+                    <input type="file" name="postedFilePOUpdate" id="postedFilePOUpdate" accept=".csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" />
+                </div>
+
+                <div class="text-center">
+                    <button type="button" id="import_po_update_modal_close" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="import_po_update_submit" class="btn btn-primary">Import</button>
+                    <p id="import-po-update-validation" class="text-warning mt-2" type="text"></p>
+                </div>
+
+                <div id="loading-spinner-import-po-update" style="text-align:center;display:none;margin-top:20px;">
+                    <div class="spinner-border text-info" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p class="text-active-success">Import in progress. Please wait...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts{
+<script>
+       $(document).ready(function () {
+
+           var table = document.getElementById("formListTable");
+
+           var dataTable = $(table).DataTable({
+                processing: true,
+                serverSide: true,
+                searching: true,
+                searchDelay: 500,
+                drawCallback: function () {
+                    $('#mytable td').css('color', 'black');
+                    $('#mytable td').css('font-size', '15px');
+                    $('#mytable td').css('border-right', '2px solid #D3D3D3');
+                },
+                "ajax": {
+                    "url": "@Url.Action("GetReceivingData")",
+                    "type": "POST"
+                },
+                "pagingType": "full_numbers",
+                columnDefs: [
+                    {
+                        targets: 0,
+                        render: function (data, type, row) {
+                            console.log('row',row)
+                            var renderElement = `<input class="form-check-input checkSingle" id="checkBox" type="checkbox" value="${row.prId}" data-kt-check="true" data-kt-check-target=".widget-9-check" style="margin-left:7px;" />`
+
+                            return renderElement;
+                        }
+                    },
+                    {
+                        targets: 1,
+                        render: function (data, type, row) {
+                            if (row.status === "New" || row.status === "PR Sent" || row.status === "Item Issued Out") {
+                                return `<div class="badge badge-light-primary badge-status">${row.status}</div>`
+                            }
+                            else if (row.status === "RFQ Sent" || row.status === "PR Approved" || row.status === "PO Revise") {
+                                return `<div class="badge badge-light-warning badge-status">${row.status}</div>`
+                            }
+                            else if (row.status === "RFQ Updated" || row.status === "PO Approved" || row.status === "Partial Received") {
+                                return `<div class="badge badge-light-info">${row.status}</div>`
+                            }
+                            else if (row.status === "RFQ Approved" || row.status === "Item Received" || row.status === "Completed") {
+                                return `<div class="badge badge-light-success">${row.status}</div>`
+                            }
+                            else if (row.status === "RFQ Reject" || row.status === "PR Reject" || row.status === "Receiving Reject" || row.status === "PO Reject" || row.status === "PO Cancelled") {
+                                return `<div class="badge badge-light-danger badge-status">${row.status}</div>`
+                            }
+                        }
+                    },
+                     {
+                        targets: 2,
+                        render: function (data, type, row) {
+                            return row.requestor
+                        }
+                    },
+                    {
+                        targets: 3,
+                        render: function (data, type, row) {
+                            return row.projectCode
+                        }
+                    },
+                    {
+                        targets: 4,
+                        render: function (data, type, row) {
+                            return row.projectName
+                        }
+                    },
+                    {
+                        targets: 5,
+                        render: function (data, type, row) {
+                            return row.projectCategory
+                        }
+                    },
+                    {
+                        targets:6,
+                        render: function (data, type, row) {
+                            return row.customerPO
+                        }
+                    },
+                    {
+                        targets: 7,
+                        render: function (data, type, row) {
+                            return row.customer
+                        }
+                    },
+                    {
+                        targets: 8,
+                        render: function (data, type, row) {
+                            return `<a href="/PurchaseRequisition/Edit/${row.prId}" class="link-primary"><b>${row.prName}</b></a>`
+                        }
+                    },
+                    {
+                        targets: 9,
+                        render: function (data, type, row) {
+                            if(row.po !== null){
+                                return `<a class="text-primary text-hover-underline" onclick="openPDF(${row.po.supportFileId})">${row.po.supportFile.fileName}</a>`
+                            }
+                        }
+                    },
+                ],
+           });
+
+            $(document).on('change', '.checkSingle', function () {
+                var isChecked = $(this).is(':checked');
+                var rowIndex = $(this).closest('tr').index(); // Get the row index
+                console.log('Checkbox changed in row ' + rowIndex + ': ' + isChecked);
+                // Handle your logic here
+                var isChecked = $(this).is(":checked");
+                if (isChecked) {
+                    var PrId = $(this).attr('value');
+                    selectedPO.push(PrId);
+                    //console.log("prid " + JSON.stringify(selectedPO));
+                }
+                else {
+                    var PrId = $(this).attr('value');
+                    selectedPO = $.grep(selectedPO, function (n) {
+                        return n != PrId;
+                    });
+                    //console.log("prid " + JSON.stringify(selectedPO));
+                }
+                CheckHasSelectedPO();
+            });
+
+            dataTable.on('processing.dt', function (e, settings, processing) {
+                if (processing) {
+                    Swal.showLoading()
+                } else {
+                    Swal.close();
+                }
+            });
+
+            var filterSearch = document.getElementById('filter_search');
+            filterSearch.addEventListener("keyup", function (e) {
+                setTimeout(() => {
+                    dataTable.search(e.target.value).draw();
+                }, 3000);
+            });
+
+            //Checkbox
+            var allPages = $("#formListTable").dataTable().fnGetNodes();
+            $("#checkedAll").click(function() {
+                if (this.checked) {
+                    $('.checkSingle', allPages).prop('checked', true).change();
+                }else {
+                    $('.checkSingle', allPages).prop('checked', false).change();
+                }
+                CheckHasSelectedPO();
+            });
+
+            function checkboxOnchange(e){
+                console.log('checkbox',e)
+            }
+
+            var selectedPO = [];
+            //Print Issue Out Form PDF
+            $("#btnPrintIssueForm").click(function(e){
+                e.preventDefault();
+                var PrIds = selectedPO.join();
+
+                $.ajax({
+                    url: '/ReceivingTracker/GenerateIssueOutFormPDF',
+                    type: 'POST',
+                    async: false,
+                    data: { PrIds : PrIds },
+                    success: function(result) {
+                            if(result.status == true){
+                                window.open('/ReceivingTracker/ShowIssueFormPDF?fileName='+ result.fileName, "_blank");
+                                //Remove file
+                                setTimeout(function(){
+                                    RemovePDFFile(result.fileName);
+                                },10000);
+                            }
+                    }
+
+                });
+            });
+
+            //Mark as Completed
+            $("#btnMarkCompleted").click(function(e){
+                e.preventDefault();
+                var PrIds = selectedPO.join();
+
+                Swal.fire({
+                        text: "Confirm mark as Completed?",
+                        icon: "warning",
+                        showCancelButton: true,
+                        buttonsStyling: false,
+                        confirmButtonText: "Yes",
+                        cancelButtonText: "No",
+                        customClass: {
+                            confirmButton: "btn btn-primary",
+                            cancelButton: "btn btn-active-light"
+                        }
+                    }).then(function (result) {
+                        var bomIds = selectedPO.join();
+                        $.ajax({
+                            url: '/ReceivingTracker/MarkCompleted',
+                            type: 'POST',
+                            data: { PrIds : PrIds },
+                            success: function(result) {
+                                    if(result.status == true){
+                                         Swal.fire({
+                                                text: "BOM has been Marked as Completed",
+                                                icon: "success",
+                                                showCancelButton: false,
+                                                buttonsStyling: false,
+                                                confirmButtonText: "Okay",
+                                                    customClass: {
+                                                        confirmButton: "btn btn-light-success font-weight-bold mr-2",
+                                                    }
+                                            }).then((result) => {
+                                                if (result.isConfirmed) {
+                                                        location.reload();
+                                                }
+                                            }); 
+                                    }
+                                    else{
+                                         Swal.fire({
+                                            text: result.msg,
+                                            icon: "error",
+                                            buttonsStyling: false,
+                                            confirmButtonText: "Ok",
+                                            customClass: {
+                                                confirmButton: "btn btn-primary",
+                                            }
+                                        }).then((result) => {
+                                            if (result.isConfirmed) {
+                                                    //window.location;
+                                                    //location.reload();
+                                            }
+                                        }); //end swal
+                                    }
+                            }//end success
+                        });//end ajax
+
+                    });//end swal
+
+            });
+
+
+            $("#kt_activity_overEta_tab").click(function(){
+                $("#btnMarkCompleted").hide();
+                $("#btnPrintIssueForm").hide();
+            });
+
+
+            $("#kt_activity_recvList_tab").click(function(){
+                $("#btnMarkCompleted").show();
+                $("#btnPrintIssueForm").show();
+            });
+
+            $("#import_po_update_submit").click(function () {
+                $("#import-po-update-validation").text("");
+                var postedFile = document.getElementById("postedFilePOUpdate").files[0];
+                
+                if (!postedFile) {
+                    $("#import-po-update-validation").text("Please select a file to import.");
+                    return;
+                }
+
+                $("#import_po_update_submit").attr("disabled", "disabled");
+                $("#import_po_update_modal_close").attr("disabled", "disabled");
+                $("#loading-spinner-import-po-update").css("display", "block");
+                
+                var formData = new FormData();
+                formData.append("FileUpload", postedFile);
+
+                $.ajax({
+                    url: "/ReceivingTracker/ImportPOUpdate",
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    type: "POST",
+                    success: function (result) {
+                        if (result.success || result.result) {
+                                Swal.fire({
+                                    text: result.msg || "Import PO Update successfully.",
+                                    icon: result.hasErrors ? "error" : "success",
+                                    buttonsStyling: false,
+                                confirmButtonText: "Ok",
+                                customClass: {
+                                    confirmButton: "btn btn-primary",
+                                }
+                            }).then((resultObj) => {
+                                if (resultObj.isConfirmed && !result.hasErrors) {
+                                    location.reload();
+                                } else {
+                                    $("#import-po-update-validation").text("");
+                                    $("#import_po_update_submit").prop("disabled", false);
+                                    $("#import_po_update_modal_close").prop("disabled", false);
+                                    $("#loading-spinner-import-po-update").css("display", "none");
+                                }
+                            });
+                        }
+                        else {
+                            Swal.fire({
+                                text: result.msg || "Import failed.",
+                                icon: "error",
+                                buttonsStyling: false,
+                                confirmButtonText: "Ok",
+                                customClass: {
+                                    confirmButton: "btn btn-primary",
+                                }
+                            });
+                            $("#import-po-update-validation").text("");
+                            $("#import_po_update_submit").prop("disabled", false);
+                            $("#import_po_update_modal_close").prop("disabled", false);
+                            $("#loading-spinner-import-po-update").css("display", "none");
+                        }
+                    },
+                    error: function (result) {
+                        $("#import-po-update-validation").text("An error occurred during import.");
+                        $("#import_po_update_submit").prop("disabled", false);
+                        $("#import_po_update_modal_close").prop("disabled", false);
+                        $("#loading-spinner-import-po-update").css("display", "none");
+                    }
+                });
+            });
+
+        }); //End $(document).ready()
+
+        function RemovePDFFile(fileName){
+             $.ajax({
+                url: '/ReceivingTracker/RemovePDFFile',
+                data: { filename : fileName },
+                async: false,
+                success: function(result) {
+                }
+            });//end ajax
+        }
+
+        function CheckHasSelectedPO(){
+            var allPages = $("#formListTable").dataTable().fnGetNodes();
+            if($('input[type="checkbox"]:checked', allPages).length > 0){
+
+                $("#btnPrintIssueForm").attr('disabled',false);
+            }
+            else{
+                 $("#btnPrintIssueForm").attr('disabled','disabled');
+            }
+        }
+
+       function openPDF(supportFileId){
+        window.open("/BOM/ShowPDF?supportFileId=" + supportFileId, "_blank");
+       }
+
+</script>
+}

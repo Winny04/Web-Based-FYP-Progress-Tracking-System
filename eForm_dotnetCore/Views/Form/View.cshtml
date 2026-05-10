@@ -1,0 +1,319 @@
+﻿@model Form
+@{
+    ViewBag.Title = "View";
+}
+
+<div class="card">
+    <div class="card-header">
+        <div class="card-title fs-3 fw-bolder">View Form</div>
+    </div>
+
+    @using (Html.BeginForm("Edit","Home",FormMethod.Post,new { id = "myform1", @class = "form" }))
+    {
+        @Html.AntiForgeryToken()
+        <div class="card-body p-18">
+            <div class="row mb-8">
+                <div class="col-xl-3">
+					<div class="fs-6 fw-bold mt-2 mb-3">Name</div>
+				</div>
+                <div class="col-xl-9 fv-row">
+					<input type="text" class="form-control form-control-solid h-40px" name="name" value="@Model.Name" disabled/>
+				</div>
+             </div>
+             <div class="row mb-8">
+				<!--begin::Col-->
+				<div class="col-xl-3">
+					<div class="fs-6 fw-bold mt-2 mb-3">Revision</div>
+				</div>
+				<!--end::Col-->
+				<!--begin::Col-->
+				<div class="col-xl-9 fv-row">
+					<input type="text" class="form-control form-control-solid h-40px" name="type" value="@Model.Revision" disabled/>
+				</div>
+			</div>
+            <div class="row mb-8">
+			    <!--begin::Col-->
+			    <div class="col-xl-3">
+				    <div class="fs-6 fw-bold mt-2 mb-3">Document Name</div>
+			    </div>
+			    <!--end::Col-->
+			    <!--begin::Col-->
+			    <div class="col-xl-9 fv-row">
+			   					<input type="text" class="form-control form-control-solid h-40px" name="type" value="@Model.DocumentName" disabled/>
+                </div>
+			    <!--begin::Col-->
+		    </div>
+             <div class="row mb-8">
+			    <!--begin::Col-->
+			    <div class="col-xl-3">
+				    <div class="fs-6 fw-bold mt-2 mb-3">Status</div>
+			    </div>
+			    <!--end::Col-->
+			    <!--begin::Col-->
+			    <div class="col-xl-9 fv-row pt-2">
+                    @if(Model.Status == "Unpublish")
+					{
+						<div class="badge badge-light-warning fs-5">@Model.Status</div>
+					}else if(Model.Status == "Publish"){
+						<div class="badge badge-light-primary fs-5">@Model.Status</div>
+					}
+					else if(Model.Status == "Submitted"){
+						<div class="badge badge-light-success fs-5">@Model.Status</div>
+					}
+					else{
+						<div class="badge badge-light-secondary fs-5">@Model.Status</div>
+					}
+			    </div>
+			    <!--begin::Col-->
+		    </div>
+           
+            <div class="row mb-8">
+			    <!--begin::Col-->
+			    <div class="col-xl-3">
+				    <div class="fs-6 fw-bold mt-2 mb-3">Remark</div>
+			    </div>
+			    <!--end::Col-->
+			    <!--begin::Col-->
+			    <div class="col-xl-9 fv-row">
+				    <textarea name="Remark" class="form-control form-control-solid h-40px" disabled>@Model.Remark</textarea>
+			    </div>
+			    <!--begin::Col-->
+		    </div>
+        </div>
+    }
+
+    @*<div class="card-body">
+        <div class="form-group">
+            <dl class="dl-horizontal">
+                <dt>
+                    @Html.DisplayName("Document Name")
+                </dt>
+
+                <dd>
+                    @Html.DisplayFor(model => model.Name)
+                </dd>
+
+                <dt>
+                    @Html.DisplayName("Document Name")
+                </dt>
+
+                <dd>
+                    @Html.DisplayFor(model => model.DocumentName)
+                </dd>
+
+                <dt>
+                    @Html.DisplayNameFor(model => model.DateCreated)
+                </dt>
+
+                <dd>
+                    @Html.DisplayFor(model => model.DateCreated)
+                </dd>
+
+                <dt>
+                    @Html.DisplayNameFor(model => model.ModifiedBy)
+                </dt>
+
+                <dd>
+                    @Html.DisplayFor(model => model.ModifiedBy)
+                </dd>
+
+                <dt>
+                    @Html.DisplayNameFor(model => model.Revision)
+                </dt>
+
+                <dd>
+                    @Html.DisplayFor(model => model.Revision)
+                </dd>
+
+                <dt>
+                    @Html.DisplayNameFor(model => model.Status)
+                </dt>
+
+                <dd>
+                    @Html.DisplayFor(model => model.Status)
+                </dd>
+
+                <dt>
+                    @Html.DisplayNameFor(model => model.LastUpdated)
+                </dt>
+
+                <dd>
+                    @Html.DisplayFor(model => model.LastUpdated)
+                </dd>
+
+                <dt>
+                    @Html.DisplayNameFor(model => model.Remark)
+                </dt>
+
+                <dd>
+                    @Html.DisplayFor(model => model.Remark)
+                </dd>
+
+            </dl>
+        </div>
+
+    </div>*@
+</div>
+
+<div class="modal fade" id="delete" tabindex="-1" role="dialog" aria-hidden="true" style="display: none;">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true"></button>
+                <h4 class="modal-title">Delete Confirmation</h4>
+            </div>
+            <div class="modal-body">
+
+                Are you sure you want to delete this form?
+                <br>
+                @using (Html.BeginForm("Delete", "Form", FormMethod.Post, new { id = "myform1", @class = "" }))
+                {
+                    @Html.AntiForgeryToken()
+                    <p id="chooseId1" hidden></p>
+                    <div class="modal-footer">
+                        <button id="myInput" type="submit" class="btn btn-danger" value="Delete">Delete</button>
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="archive" tabindex="-1" role="dialog" aria-hidden="true" style="display: none;">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true"></button>
+                <h4 class="modal-title">Archive Confirmation</h4>
+            </div>
+            <div class="modal-body">
+
+                Are you sure you want to archive this form?
+                <br>
+                @using (Html.BeginForm("Archive", "Form", FormMethod.Post, new { id = "myform2", @class = "" }))
+                {
+                    @Html.AntiForgeryToken()
+                    <div class="form-group">
+                        <p class="control-label col-md-2">Remark</p>
+                        <div class="col-md-10">
+                            <input type="text" name="Remark" value="" class="form-control" required />
+                        </div>
+                    </div>
+                    <p id="chooseId2" hidden></p>
+                    <div class="modal-footer">
+                        <button id="myInput" type="submit" class="btn btn-primary" value="Edit">Archive</button>
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="deleted" tabindex="-1" role="dialog" aria-hidden="true" style="display: none;">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true"></button>
+                <h4 class="modal-title">Delete Confirmation</h4>
+            </div>
+            <div class="modal-body">
+
+                Are you sure you want to delete this form?
+                <br>
+                @using (Html.BeginForm("DeleteConfirmed", "Form", FormMethod.Post, new { id = "myform3", @class = "" }))
+                {
+                    @Html.AntiForgeryToken()
+                    <p id="chooseId3" hidden></p>
+                    <div class="modal-footer">
+                        <button id="myInput" type="submit" class="btn btn-danger" value="Delete">Delete</button>
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="unpublish" tabindex="-1" role="dialog" aria-hidden="true" style="display: none;">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true"></button>
+                <h4 class="modal-title">Delete Confirmation</h4>
+            </div>
+            <div class="modal-body">
+
+                Are you sure you want to unpublish this form?
+                <br>
+                @using (Html.BeginForm("Unpublish", "Form", FormMethod.Post, new { id = "myform4", @class = "" }))
+                {
+                    @Html.AntiForgeryToken()
+                    <p id="chooseId4" hidden></p>
+                    <div class="modal-footer">
+                        <button id="myInput" type="submit" class="btn btn-danger" value="Unpublish">Unpublish</button>
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts{
+    <script>
+
+        // Function To Delete Form (Old)
+        $(document).ready(function () {
+            $("#kt_datepicker_1").flatpickr();
+
+
+            $(document).on("click", ".deletform", function () {
+                var itemId = $(this).data("item1");
+                document.getElementById("chooseId1").innerHTML = "Form Id: " + itemId;
+                $('#myform1').attr('action', "@Url.Action("Delete", "Form")/" + itemId);
+                //document.getElementById("myInput").value = itemId;
+            });
+            //$(document).on("change", ".skuName", GetId);
+        });
+
+        // Function To Archive Form
+        $(document).ready(function () {
+            $(document).on("click", ".archiveform", function () {
+                var itemId = $(this).data("item2");
+                document.getElementById("chooseId2").innerHTML = "Form Id: " + itemId;
+                $('#myform2').attr('action', "@Url.Action("Archive", "Form")/" + itemId);
+                //document.getElementById("myInput").value = itemId;
+            });
+            //$(document).on("change", ".skuName", GetId);
+        });
+
+        // Function To DeleteConfirm Form
+        $(document).ready(function () {
+            $(document).on("click", ".deletedform", function () {
+                var itemId = $(this).data("item3");
+                document.getElementById("chooseId3").innerHTML = "Form Id: " + itemId;
+                $('#myform3').attr('action', "@Url.Action("DeleteConfirmed", "Form")/" + itemId);
+                //document.getElementById("myInput").value = itemId;
+            });
+            //$(document).on("change", ".skuName", GetId);
+        });
+
+        // Function To Unpublish Form
+        $(document).ready(function () {
+            $(document).on("click", ".unpublishform", function () {
+                var itemId = $(this).data("item4");
+                document.getElementById("chooseId4").innerHTML = "Form Id: " + itemId;
+                $('#myform4').attr('action', "@Url.Action("Unpublish", "Form")/" + itemId);
+                //document.getElementById("myInput").value = itemId;
+            });
+            //$(document).on("change", ".skuName", GetId);
+        });
+
+
+
+
+
+    </script>
+}
