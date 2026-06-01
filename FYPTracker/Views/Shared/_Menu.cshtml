@@ -1,9 +1,19 @@
 @using Microsoft.AspNetCore.Authorization
 @using FYPTracker.Models
+@using Microsoft.EntityFrameworkCore
 @inject IAuthorizationService AuthorizationService
+@inject FYPTrackerContext _context
 @{
     var currentUser = ViewBag.CurrentUser as EmployeeInfo;
     var userType = currentUser?.UserType ?? "Student"; // Default to Student if not set
+
+    // Check if this student already has a confirmed (Approved) supervisor
+    bool hasSupervisor = false;
+    if (userType == "Student" && currentUser != null)
+    {
+        hasSupervisor = await _context.SupervisorRequests
+            .AnyAsync(r => r.StudentId == currentUser.Id && r.Status == "Approved");
+    }
 }
 
 <!--begin::Menu wrapper-->
@@ -24,11 +34,14 @@
                     <span class="menu-title">Project Details</span>
                 </a>
             </div>
+            @if (!hasSupervisor)
+            {
             <div class="menu-item">
                 <a class="menu-link py-3" href="/Student/SelectSupervisor">
                     <span class="menu-title">Select Supervisor</span>
                 </a>
             </div>
+            }
             <div class="menu-item">
                 <a class="menu-link py-3" href="/Student/Forms">
                     <span class="menu-title">Forms</span>
@@ -73,10 +86,10 @@
                 </a>
             </div>
         }
-        else if (userType == "Admin")
+        else if (userType == "Admin" || userType == "SuperAdmin")
         {
             <div class="menu-item">
-                <a class="menu-link py-3" href="/FYPProjects">
+                <a class="menu-link py-3" href="/EmployeeInfo/ManageProjects">
                     <span class="menu-title">All Projects</span>
                 </a>
             </div>

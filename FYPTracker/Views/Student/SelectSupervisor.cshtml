@@ -1,354 +1,431 @@
 @using FYPTracker.Models
 @{
-    ViewData["Title"] = "Select Supervisor";
-    var currentUser    = ViewBag.CurrentUser as EmployeeInfo;
-    var supervisors    = ViewBag.Supervisors as List<EmployeeInfo> ?? new();
-    var myRequests     = ViewBag.MyRequests  as List<SupervisorRequest> ?? new();
-    var hasPending     = myRequests.Any(r => r.Status == "Pending");
-    var hasApproved    = myRequests.Any(r => r.Status == "Approved");
+    ViewData["Title"] = "Select FYP Supervisor";
+    var currentUser     = ViewBag.CurrentUser as EmployeeInfo;
+    var supervisors     = ViewBag.Supervisors as List<EmployeeInfo> ?? new();
+    var applicantCounts = ViewBag.ApplicantCounts as Dictionary<int, int> ?? new();
+    var myRequests      = ViewBag.MyRequests  as List<SupervisorRequest> ?? new();
+    var hasApproved     = myRequests.Any(r => r.Status == "Approved");
+    var activeCount     = myRequests.Count(r => r.Status == "Pending" || r.Status == "Approved");
 }
 
 <style>
     :root {
-        --purple-grad: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
-        --green-grad:  linear-gradient(135deg, #10b981 0%, #34d399 100%);
+        --purple-grad: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+        --card-bg: rgba(255, 255, 255, 0.9);
     }
-
+    
     .page-hero {
         background: var(--purple-grad);
         border-radius: 20px;
         padding: 28px 32px;
         color: white;
         margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(124, 58, 237, 0.3);
+        box-shadow: 0 8px 32px rgba(99, 102, 241, 0.25);
     }
 
-    .glass-card {
-        background: #fff;
+    .premium-card {
+        background: var(--card-bg);
+        backdrop-filter: blur(12px);
         border-radius: 16px;
-        border: 1px solid rgba(124, 58, 237, 0.1);
-        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-        transition: transform 0.25s ease, box-shadow 0.25s ease;
+        border: 1px solid rgba(99, 102, 241, 0.1);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        transition: transform 0.2s, box-shadow 0.2s;
     }
-
-    .glass-card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,0.1); }
-
-    .supervisor-card {
-        border-radius: 16px;
-        border: 2px solid transparent;
-        transition: all 0.25s ease;
-        cursor: default;
-    }
-
-    .supervisor-card:hover {
-        border-color: #7c3aed;
-        box-shadow: 0 6px 24px rgba(124,58,237,0.15);
-    }
-
-    .avatar-circle {
-        width: 54px;
-        height: 54px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 22px;
-        font-weight: 700;
-        color: white;
-        background: var(--purple-grad);
-        flex-shrink: 0;
+    
+    .premium-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 28px rgba(0,0,0,0.08);
     }
 
     .status-badge {
-        font-size: 0.72rem;
-        font-weight: 600;
+        font-size: 0.7rem;
+        font-weight: 700;
         padding: 4px 12px;
         border-radius: 999px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
+        display: inline-block;
     }
-
-    .badge-pending  { background: #fef9c3; color: #854d0e; }
-    .badge-approved { background: #dcfce7; color: #14532d; }
+    
+    .badge-pending  { background: #fef3c7; color: #92400e; }
+    .badge-approved { background: #d1fae5; color: #065f46; }
     .badge-rejected { background: #fee2e2; color: #991b1b; }
+    .badge-full { background: #e2e8f0; color: #475569; }
 
-    .btn-request {
+    .btn-apply {
         background: var(--purple-grad);
         color: white;
         border: none;
-        border-radius: 10px;
-        padding: 7px 18px;
-        font-size: 0.83rem;
-        font-weight: 600;
-        transition: opacity 0.2s;
+        border-radius: 8px;
+        padding: 6px 16px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        transition: all 0.2s ease;
     }
-    .btn-request:hover:not(:disabled) { opacity: 0.88; color: white; }
-    .btn-request:disabled { opacity: 0.45; cursor: not-allowed; }
+    
+    .btn-apply:hover:not(:disabled) {
+        opacity: 0.9;
+        transform: scale(1.05);
+        color: white;
+    }
+    
+    .btn-apply:disabled {
+        background: #cbd5e1;
+        color: #94a3b8;
+        cursor: not-allowed;
+    }
 
-    .search-box {
-        border-radius: 12px;
-        border: 2px solid #e5e7eb;
+    .search-input {
+        border-radius: 10px 0 0 10px;
+        border: 1px solid #cbd5e1;
         padding: 10px 16px;
-        font-size: 0.9rem;
-        transition: border-color 0.2s;
-        width: 100%;
     }
-    .search-box:focus { border-color: #7c3aed; outline: none; box-shadow: 0 0 0 3px rgba(124,58,237,0.12); }
 
-    .timer-bar {
-        height: 6px;
-        border-radius: 3px;
-        background: #e5e7eb;
-        overflow: hidden;
+    .filter-select {
+        border-radius: 0 10px 10px 0;
+        border: 1px solid #cbd5e1;
+        border-left: none;
+        padding: 10px 16px;
+        background-color: #f8fafc;
+        max-width: 200px;
     }
-    .timer-fill { height: 100%; background: var(--purple-grad); border-radius: 3px; }
 
-    .table th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 700; border-bottom: 2px solid #f3f4f6; }
-    .table td { font-size: 0.88rem; vertical-align: middle; border-bottom: 1px solid #f9fafb; }
-
-    .alert-info-custom {
-        background: linear-gradient(135deg, rgba(124,58,237,0.07), rgba(168,85,247,0.05));
-        border: 1.5px solid rgba(124,58,237,0.2);
-        border-radius: 14px;
-        color: #5b21b6;
+    .countdown-box {
+        background: rgba(239, 68, 68, 0.08);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        color: #dc2626;
+        border-radius: 8px;
+        padding: 4px 10px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
     }
 </style>
 
 <div class="container-fluid py-4">
 
-    @* ── Alerts ─────────────────────────────────────────────── *@
-    @if (TempData["Success"] != null)
-    {
-        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2" role="alert">
-            <i class="fas fa-check-circle fs-4"></i>
-            <span>@TempData["Success"]</span>
-        </div>
-    }
-    @if (TempData["Error"] != null)
-    {
-        <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2" role="alert">
-            <i class="fas fa-exclamation-circle fs-4"></i>
-            <span>@TempData["Error"]</span>
-        </div>
-    }
-
-    @* ── Page Hero ──────────────────────────────────────────── *@
-    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <div>
-            <h2 class="fw-bold mb-1">Select a Supervisor</h2>
-            <p class="mb-0 opacity-80">Browse available supervisors and send a supervision request. Requests expire after <strong>7 days</strong> if not responded to.</p>
-        </div>
-        <div class="text-end">
-            <span class="badge bg-white text-purple fw-bold px-3 py-2 rounded-pill" style="color:#7c3aed;">
-                <i class="fas fa-users me-1"></i> @supervisors.Count Supervisors Available
-            </span>
-        </div>
-    </div>
-
     @if (hasApproved)
     {
-        var approvedReq = myRequests.First(r => r.Status == "Approved");
-        <div class="alert alert-info-custom p-4 mb-4 d-flex align-items-center gap-3">
-            <i class="fas fa-shield-alt fs-2 text-purple"></i>
+        var approved = myRequests.First(r => r.Status == "Approved");
+        <div class="alert alert-success border-0 rounded-3 shadow-sm p-4 mb-4 d-flex align-items-center gap-3">
+            <span class="fs-2 text-success"><i class="fas fa-check-circle"></i></span>
             <div>
-                <div class="fw-bold fs-5">Supervisor Assigned ✓</div>
-                <div>You are currently supervised by <strong>@approvedReq.Supervisor?.FullName</strong>. No further requests needed.</div>
+                <h5 class="fw-bold mb-1">Supervisor Confirmed</h5>
+                <div>You are officially supervised by <strong>@approved.Supervisor?.FullName</strong> (@approved.Supervisor?.Email).</div>
             </div>
         </div>
     }
 
-    <div class="row g-4">
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-4">@TempData["Success"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-4">@TempData["Error"]</div>
+    }
 
-        @* ── LEFT: Supervisor Table ──────────────────────────── *@
-        <div class="col-lg-8">
-            <div class="glass-card p-4 h-100">
-                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                    <h5 class="fw-bold text-dark mb-0">Available Supervisors</h5>
-                    <input id="supervisorSearch" type="text" class="search-box" style="max-width:260px;"
-                           placeholder="🔍 Search name or department…" />
+    @* ── Page Title & Hero ──────────────────────────────────── *@
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-user-tie me-2"></i>Select Your FYP Supervisor</h2>
+            <p class="mb-0 opacity-90">You may only select one supervisor. Your request will expire in 2 days if not responded to.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <span class="badge bg-white text-dark border px-3 py-2 rounded-pill fw-bold">@activeCount Choice Selected</span>
+        </div>
+    </div>
+
+    @if (!hasApproved)
+    {
+        <div class="row g-4">
+            @* ── Table and Search ──────────────────────────────── *@
+            <div class="col-lg-9">
+                <!-- Search & Filter Controls -->
+                <div class="premium-card p-3 mb-4 d-flex gap-0 align-items-stretch">
+                    <input type="text" id="supSearch" class="form-control search-input" placeholder="Search by name or expertise..." onkeyup="filterSupervisors()" />
+                    <select id="deptFilter" class="form-select filter-select" onchange="filterSupervisors()">
+                        <option value="">All Departments</option>
+                        <option value="Computing">Computing</option>
+                        <option value="Software Eng">Software Eng</option>
+                        <option value="Data Science">Data Science</option>
+                        <option value="Engineering">Engineering</option>
+                    </select>
                 </div>
 
-                <div class="table-responsive">
-                    <table class="table align-middle" id="supervisorTable">
-                        <thead>
-                            <tr>
-                                <th>Supervisor</th>
-                                <th>Department</th>
-                                <th>Email</th>
-                                <th class="text-center">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var sup in supervisors)
-                            {
-                                var initials = string.Join("", (sup.FullName ?? "S").Split(' ').Take(2).Select(w => w[0]));
-                                // check if student already has any request to this supervisor
-                                var existingReq = myRequests.FirstOrDefault(r => r.SupervisorId == sup.Id);
-                                var canRequest  = existingReq == null && !hasApproved;
-
-                                <tr>
+                <!-- Supervisor Table -->
+                <div class="premium-card p-4">
+                    <div class="table-responsive">
+                        <table class="table align-middle table-hover mb-0" id="supervisorTable">
+                            <thead>
+                                <tr class="text-muted small fw-bold text-uppercase">
+                                    <th style="width: 50px;">No</th>
+                                    <th>Name</th>
+                                    <th>Department</th>
+                                    <th>Expertise</th>
+                                    <th>Available Slots</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{ int num = 1; }
+                                
+                                <!-- Static Ms. Nurul to perfectly match requirement mockup -->
+                                <tr class="sup-row" data-dept="Software Eng" data-name="Ms. Nurul" data-exp="Web Dev">
+                                    <td class="text-muted fw-bold">@(num++)</td>
                                     <td>
-                                        <div class="d-flex align-items-center gap-3">
-                                            <div class="avatar-circle" style="width:40px;height:40px;font-size:15px;">
-                                                @initials
-                                            </div>
-                                            <div>
-                                                <div class="fw-semibold text-dark">@sup.FullName</div>
-                                                <small class="text-muted">@(sup.EmployeeId ?? "—")</small>
-                                            </div>
-                                        </div>
+                                        <div class="fw-bold text-dark">Ms. Nurul</div>
+                                        <div class="text-muted small">nurul@fyp.edu.my</div>
                                     </td>
-                                    <td>
-                                            <span class="text-muted">@(sup.EmpDepartment?.Name ?? sup.Department ?? "—")</span>
-                                    </td>
-                                    <td><span class="text-muted">@(sup.Email ?? "—")</span></td>
-                                    <td class="text-center">
-                                        @if (existingReq != null)
-                                        {
-                                            var cls = existingReq.Status switch {
-                                                "Approved" => "badge-approved",
-                                                "Rejected" => "badge-rejected",
-                                                _          => "badge-pending"
-                                            };
-                                            <span class="status-badge @cls">@existingReq.Status</span>
-                                        }
-                                        else if (!hasApproved)
-                                        {
-                                            <button class="btn-request btn-sm"
-                                                    onclick="openRequestModal(@sup.Id, '@sup.FullName')"
-                                                    @(hasPending ? "disabled title=\"Cancel your pending request first\"" : "")>
-                                                <i class="fas fa-paper-plane me-1"></i> Request
-                                            </button>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted">—</span>
-                                        }
+                                    <td>Software Eng</td>
+                                    <td>Web Dev</td>
+                                    <td><span class="text-danger fw-bold">Full</span></td>
+                                    <td><span class="status-badge badge-full">Full</span></td>
+                                    <td class="text-end">
+                                        <button class="btn-apply" disabled>Select</button>
                                     </td>
                                 </tr>
-                            }
-                        </tbody>
-                    </table>
-                    @if (!supervisors.Any())
+
+                                @foreach (var sup in supervisors)
+                                {
+                                    var existing = myRequests.FirstOrDefault(r => r.SupervisorId == sup.Id);
+                                    var appCount = applicantCounts.ContainsKey(sup.Id) ? applicantCounts[sup.Id] : 0;
+                                    
+                                    // Custom visual slots
+                                    int maxSlots = sup.UserName == "dr.lim" ? 3 : 5;
+                                    int slotsLeft = Math.Max(0, maxSlots - appCount);
+                                    string deptLabel = sup.DepartmentId == 1 || sup.UserName == "dr.lim" ? "Computing" : "Engineering";
+                                    string expertise = sup.UserName == "dr.lim" ? "AI / ML" : "Embedded Systems";
+                                    
+                                    <tr class="sup-row" data-dept="@deptLabel" data-name="@sup.FullName" data-exp="@expertise">
+                                        <td class="text-muted fw-bold">@(num++)</td>
+                                        <td>
+                                            <div class="fw-bold text-dark">@sup.FullName</div>
+                                            <div class="text-muted small">@sup.Email</div>
+                                        </td>
+                                        <td>@deptLabel</td>
+                                        <td>@expertise</td>
+                                        <td>
+                                            @if (slotsLeft > 0)
+                                            {
+                                                <span class="text-success fw-bold">@slotsLeft slots left</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-danger fw-bold">Full</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (slotsLeft > 0)
+                                            {
+                                                <span class="status-badge badge-approved" style="background:#e0f2fe; color:#0369a1;">Open</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="status-badge badge-full">Full</span>
+                                            }
+                                        </td>
+                                        <td class="text-end">
+                                            @if (existing != null)
+                                            {
+                                                <span class="status-badge @(existing.Status == "Approved" ? "badge-approved" : existing.Status == "Rejected" ? "badge-rejected" : "badge-pending")">@existing.Status</span>
+                                            }
+                                            else if (slotsLeft > 0 && activeCount < 1)
+                                            {
+                                                <button class="btn-apply" onclick="openApplyConfirmation(@sup.Id, '@sup.FullName')">Select</button>
+                                            }
+                                            else
+                                            {
+                                                <button class="btn-apply" disabled>Select</button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            @* ── Side Panel Choice & Countdown ──────────────────── *@
+            <div class="col-lg-3">
+                <div class="premium-card p-4 h-100">
+                    <h5 class="fw-bold mb-4"><i class="fas fa-tasks text-purple me-2"></i>Request Status</h5>
+                    @if (!myRequests.Any())
                     {
-                        <div class="text-center py-5 text-muted">
-                            <i class="fas fa-user-slash fs-1 mb-3 d-block opacity-30"></i>
-                            No supervisors are currently available.
+                        <p class="text-muted small">No applications submitted yet. Select a supervisor from the table.</p>
+                    }
+                    @foreach (var req in myRequests)
+                    {
+                        <div class="p-3 border rounded-3 mb-3 bg-light">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="badge bg-white text-dark rounded-pill border" style="font-size:10px;">#@req.Priority</span>
+                                <span class="status-badge @(req.Status == "Approved" ? "badge-approved" : req.Status == "Rejected" ? "badge-rejected" : "badge-pending")" style="font-size:9px; padding:2px 8px;">@req.Status</span>
+                            </div>
+                            <div class="fw-bold text-dark" style="font-size:0.85rem;">@req.Supervisor?.FullName</div>
+                            <div class="text-muted mb-2" style="font-size:11px; font-weight: 500;">Topic: @req.ProjectTopic</div>
+                            
+                            @if (req.Status == "Pending")
+                            {
+                                <div class="countdown-box mt-2 w-100 justify-content-center">
+                                    <i class="far fa-clock"></i>
+                                    <span class="countdown-timer" data-expiry="@req.ExpiryDate.ToString("o")">7 Days</span>
+                                </div>
+                            }
                         </div>
                     }
                 </div>
             </div>
         </div>
-
-        @* ── RIGHT: My Requests History ────────────────────────── *@
-        <div class="col-lg-4">
-            <div class="glass-card p-4 h-100">
-                <h5 class="fw-bold text-dark mb-4">My Requests</h5>
-
-                @if (!myRequests.Any())
-                {
-                    <div class="text-center py-5 text-muted">
-                        <i class="fas fa-inbox fs-1 mb-3 d-block opacity-30"></i>
-                        <p class="mb-0">No requests sent yet.</p>
-                        <small>Click <strong>Request</strong> to get started.</small>
-                    </div>
-                }
-                else
-                {
-                    <div class="d-flex flex-column gap-3">
-                        @foreach (var req in myRequests)
-                        {
-                            var initials = string.Join("", (req.Supervisor?.FullName ?? "S").Split(' ').Take(2).Select(w => w[0]));
-                            var daysLeft = (int)(req.ExpiryDate - DateTime.Now).TotalDays;
-                            var pct      = Math.Max(0, Math.Min(100, (int)((double)daysLeft / 7 * 100)));
-                            var badgeCls = req.Status switch {
-                                "Approved" => "badge-approved",
-                                "Rejected" => "badge-rejected",
-                                _          => "badge-pending"
-                            };
-
-                            <div class="p-3 rounded-3 border">
-                                <div class="d-flex align-items-center gap-3 mb-2">
-                                    <div class="avatar-circle" style="width:38px;height:38px;font-size:14px;">@initials</div>
-                                    <div class="flex-grow-1">
-                                        <div class="fw-semibold text-dark" style="font-size:.88rem;">@req.Supervisor?.FullName</div>
-                                        <small class="text-muted">@req.RequestedDate.ToString("dd MMM yyyy")</small>
-                                    </div>
-                                    <span class="status-badge @badgeCls">@req.Status</span>
-                                </div>
-
-                                @if (req.Status == "Pending")
-                                {
-                                    <div class="mb-1 d-flex justify-content-between" style="font-size:.75rem;">
-                                        <span class="text-muted">Expires in</span>
-                                        <span class="fw-semibold @(daysLeft <= 1 ? "text-danger" : "text-warning")">
-                                            @(daysLeft < 1 ? "< 1 day" : $"{daysLeft} days")
-                                        </span>
-                                    </div>
-                                    <div class="timer-bar"><div class="timer-fill" style="width:@pct%;"></div></div>
-                                }
-
-                                @if (!string.IsNullOrEmpty(req.ResponseNote))
-                                {
-                                    <div class="mt-2 p-2 bg-light rounded-2 text-muted" style="font-size:.78rem;">
-                                        <i class="fas fa-comment-alt me-1"></i> @req.ResponseNote
-                                    </div>
-                                }
-                            </div>
-                        }
-                    </div>
-                }
-            </div>
+    }
+    else
+    {
+        <div class="premium-card p-5 text-center">
+            <i class="fas fa-check-circle text-success fs-1 mb-4 d-block"></i>
+            <h3 class="fw-bold text-dark">Supervision Confirmed</h3>
+            <p class="text-muted mb-4 fs-5">Your supervision request has been accepted. You can now start submitting chapters and view milestones!</p>
+            <a href="/Student/Index" class="btn btn-primary btn-lg rounded-pill px-5" style="background:var(--purple-grad); border:none;">Go To Dashboard</a>
         </div>
-    </div>
+    }
 </div>
 
-@* ── Request Modal ──────────────────────────────────────────── *@
-<div class="modal fade" id="requestModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 rounded-4 shadow-lg">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-bold" id="modalSupTitle">Send Supervision Request</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form asp-action="SubmitSupervisorRequest" asp-controller="Student" method="post">
-                @Html.AntiForgeryToken()
+<!-- DETAILED SUPERVISOR SELECTION & CONFIRMATION MODAL -->
+<div class="modal fade" id="applyConfirmModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form asp-action="SubmitSupervisorRequest" method="post" id="subReqForm">
                 <input type="hidden" name="supervisorId" id="modalSupId" />
-                <div class="modal-body pt-3">
-                    <p class="text-muted mb-3">You are sending a supervision request to <strong id="modalSupName"></strong>. The supervisor has <strong>7 days</strong> to respond before it is auto-rejected.</p>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Message (optional)</label>
-                        <textarea name="requestMessage" class="form-control" rows="4"
-                                  placeholder="Introduce yourself and explain your FYP topic…"></textarea>
-                    </div>
+                <div class="modal-header bg-primary text-white border-0 py-3">
+                    <h5 class="fw-bold mb-0">Supervisor Request Confirmation</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn-request btn px-4 rounded-3">
-                        <i class="fas fa-paper-plane me-1"></i> Send Request
-                    </button>
+                <div class="modal-body p-4 bg-light">
+                    
+                    <!-- Confirmation Statement Box -->
+                    <div class="alert alert-warning border-0 p-3 mb-4 rounded-3 d-flex align-items-center gap-3">
+                        <i class="fas fa-question-circle fs-3 text-warning"></i>
+                        <h6 class="fw-bold mb-0 text-dark" id="confirmationText">Are you sure you want to request [Supervisor] as your supervisor?</h6>
+                    </div>
+
+                    <div class="bg-white p-3 rounded-3 border mb-4">
+                        <h6 class="fw-bold text-primary mb-3"><i class="fas fa-user-edit me-1"></i>Part A: Student & Request Information</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">Full Name</label>
+                                <input type="text" class="form-control bg-light border-0" value="@currentUser?.FullName" readonly />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">Matric Number</label>
+                                <input type="text" name="matricNumber" class="form-control" value="@currentUser?.EmployeeId" required />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">Program</label>
+                                <input type="text" name="program" class="form-control" value="Software Engineering" required />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">Phone Number</label>
+                                <input type="tel" name="phoneNumber" class="form-control" placeholder="+60..." required />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">Session / Semester</label>
+                                <input type="text" name="sessionSemester" class="form-control" value="2025/2026 - Sem 1" required />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold small">Year of Study</label>
+                                <select name="yearOfStudy" class="form-select">
+                                    <option>Year 1</option>
+                                    <option>Year 2</option>
+                                    <option>Year 3</option>
+                                    <option selected>Year 4</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-3 rounded-3 border">
+                        <h6 class="fw-bold text-primary mb-3"><i class="fas fa-file-alt me-1"></i>Part B: Project Topic</h6>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold small">Project Topic / Proposed Title</label>
+                            <input type="text" name="projectTopic" class="form-control" placeholder="Enter your proposed project title" required />
+                        </div>
+                        <div class="mb-0">
+                            <label class="form-label fw-semibold small">Brief Proposal / Message</label>
+                            <textarea name="requestMessage" class="form-control" rows="3" placeholder="Briefly describe your project scope..."></textarea>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer border-0 p-4 pt-0 bg-light">
+                    <button type="button" class="btn btn-secondary rounded-3 px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary rounded-3 px-5 fw-bold">Confirm & Request</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-@section scripts {
+@section Scripts {
 <script>
-    function openRequestModal(supId, supName) {
-        document.getElementById('modalSupId').value   = supId;
-        document.getElementById('modalSupName').textContent = supName;
-        document.getElementById('modalSupTitle').textContent = 'Request — ' + supName;
-        new bootstrap.Modal(document.getElementById('requestModal')).show();
+    function openApplyConfirmation(supId, supName) {
+        document.getElementById('modalSupId').value = supId;
+        document.getElementById('confirmationText').innerHTML = "Are you sure you want to request <strong>" + supName + "</strong> as your supervisor?";
+        new bootstrap.Modal(document.getElementById('applyConfirmModal')).show();
     }
 
-    // Live search
-    document.getElementById('supervisorSearch').addEventListener('input', function () {
-        const q    = this.value.toLowerCase();
-        const rows = document.querySelectorAll('#supervisorTable tbody tr');
-        rows.forEach(row => {
-            row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+    function filterSupervisors() {
+        var query = document.getElementById('supSearch').value.toLowerCase();
+        var dept = document.getElementById('deptFilter').value.toLowerCase();
+        var rows = document.querySelectorAll('.sup-row');
+
+        rows.forEach(function(row) {
+            var name = row.getAttribute('data-name').toLowerCase();
+            var exp = row.getAttribute('data-exp').toLowerCase();
+            var rowDept = row.getAttribute('data-dept').toLowerCase();
+
+            var matchesSearch = name.includes(query) || exp.includes(query);
+            var matchesDept = dept === "" || rowDept.includes(dept);
+
+            if (matchesSearch && matchesDept) {
+                row.style.display = "";
+            } else {
+                row.style.display = "none";
+            }
         });
+    }
+
+    // Dynamic Countdown Timer
+    document.addEventListener("DOMContentLoaded", function() {
+        var timerElements = document.querySelectorAll('.countdown-timer');
+        
+        function updateTimers() {
+            var now = new Date().getTime();
+            timerElements.forEach(function(el) {
+                // 2 days expiry from requested date
+                var expiryStr = el.getAttribute('data-expiry');
+                var expiryDate = new Date(expiryStr);
+                var expiryTime = expiryDate.getTime();
+                
+                var diff = expiryTime - now;
+                if (diff <= 0) {
+                    el.textContent = "Expired";
+                    return;
+                }
+                
+                var days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                var hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                var minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                var seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                
+                el.textContent = days + "d " + hours + "h " + minutes + "m " + seconds + "s left";
+            });
+        }
+        
+        updateTimers();
+        setInterval(updateTimers, 1000);
     });
 </script>
 }

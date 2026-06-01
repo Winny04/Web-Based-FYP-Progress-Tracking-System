@@ -100,6 +100,14 @@
                             <div class="info-value fs-5">@Model.Title</div>
                         </div>
                         <div class="col-md-6">
+                            <div class="info-label">Category / Field</div>
+                            <div class="info-value">Software Engineering</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="info-label">Academic Year / Session</div>
+                            <div class="info-value">2025/2026</div>
+                        </div>
+                        <div class="col-md-6">
                             <div class="info-label">Status</div>
                             @{
                                 var pCls = Model.Status switch {
@@ -131,6 +139,51 @@
                                 <div class="text-muted" style="font-size:.9rem;line-height:1.6;">@Model.Description</div>
                             </div>
                         }
+                    </div>
+                </div>
+
+                @* ── Visual Stage Indicator (Step-by-step) ───────── *@
+                <div class="glass-card p-4 mb-4">
+                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-route me-2" style="color:#0d9488;"></i>Project Stage Indicator</h5>
+                    @{
+                        // Stages: Proposal (1) -> Chapter Submission (2) -> Mid-Term Review (3) -> Final Submission (4) -> Completed (5)
+                        int activeStage = 1;
+                        if (Model.Status == "Completed") {
+                            activeStage = 5;
+                        } else if (approved >= 6) {
+                            activeStage = 4;
+                        } else if (approved >= 4) {
+                            activeStage = 3;
+                        } else if (approved >= 1) {
+                            activeStage = 2;
+                        }
+                    }
+                    <div class="d-flex justify-content-between position-relative align-items-center" style="margin: 0 10px;">
+                        <!-- Connection lines -->
+                        <div class="position-absolute top-50 start-0 translate-middle-y w-100 bg-secondary" style="height: 4px; z-index: 1;"></div>
+                        <div class="position-absolute top-50 start-0 translate-middle-y bg-success" style="height: 4px; width: @((activeStage - 1) * 25)%; z-index: 2; transition: width 0.5s ease;"></div>
+                        
+                        <!-- Steps -->
+                        <div class="text-center position-relative" style="z-index: 3;">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto shadow-sm @(activeStage >= 1 ? "bg-success text-white" : "bg-white border text-muted")" style="width:36px; height:36px; font-weight:700; line-height: 36px; text-align: center;">1</div>
+                            <span class="d-block mt-2 fw-bold text-dark" style="font-size:0.75rem;">Proposal</span>
+                        </div>
+                        <div class="text-center position-relative" style="z-index: 3;">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto shadow-sm @(activeStage >= 2 ? "bg-success text-white" : "bg-white border text-muted")" style="width:36px; height:36px; font-weight:700; line-height: 36px; text-align: center;">2</div>
+                            <span class="d-block mt-2 fw-bold text-dark" style="font-size:0.75rem;">Chapters</span>
+                        </div>
+                        <div class="text-center position-relative" style="z-index: 3;">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto shadow-sm @(activeStage >= 3 ? "bg-success text-white" : "bg-white border text-muted")" style="width:36px; height:36px; font-weight:700; line-height: 36px; text-align: center;">3</div>
+                            <span class="d-block mt-2 fw-bold text-dark" style="font-size:0.75rem;">Mid-Term</span>
+                        </div>
+                        <div class="text-center position-relative" style="z-index: 3;">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto shadow-sm @(activeStage >= 4 ? "bg-success text-white" : "bg-white border text-muted")" style="width:36px; height:36px; font-weight:700; line-height: 36px; text-align: center;">4</div>
+                            <span class="d-block mt-2 fw-bold text-dark" style="font-size:0.75rem;">Final Sub</span>
+                        </div>
+                        <div class="text-center position-relative" style="z-index: 3;">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto shadow-sm @(activeStage >= 5 ? "bg-success text-white" : "bg-white border text-muted")" style="width:36px; height:36px; font-weight:700; line-height: 36px; text-align: center;">5</div>
+                            <span class="d-block mt-2 fw-bold text-dark" style="font-size:0.75rem;">Completed</span>
+                        </div>
                     </div>
                 </div>
 

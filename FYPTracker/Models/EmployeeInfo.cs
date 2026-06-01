@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -29,6 +29,8 @@ namespace FYPTracker.Models
         public int? DepartmentId { get; set; }
         public bool IsNotificationOn { get; set; }
         public bool IsResign { get; set; }
+        public string? ResetToken { get; set; }
+        public DateTime? ResetTokenExpiry { get; set; }
         [ForeignKey(nameof(DepartmentId))]
         public Department? EmpDepartment { get; set; }
     }

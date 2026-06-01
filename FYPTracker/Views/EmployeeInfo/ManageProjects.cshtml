@@ -1,0 +1,64 @@
+@model IEnumerable<FYPTracker.Models.FYPProject>
+@{
+    ViewData["Title"] = "Project Management";
+}
+
+<div class="container-fluid py-4">
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-header border-0 pt-4 px-4">
+            <h3 class="fw-bolder text-dark mb-0"><i class="fas fa-project-diagram text-warning me-2"></i>All FYP Projects</h3>
+            <p class="text-muted small">Monitor and manage all final year projects across the system.</p>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="bg-light text-muted text-uppercase fs-7 fw-bold">
+                        <tr>
+                            <th>Student</th>
+                            <th>Supervisor</th>
+                            <th>Project Title</th>
+                            <th>Status</th>
+                            <th>Started</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Model)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-bold">@p.Student?.FullName</div>
+                                    <div class="text-muted small">@p.Student?.UserName</div>
+                                </td>
+                                <td>
+                                    @if (p.Supervisor != null)
+                                    {
+                                        <div class="badge badge-light-primary">@p.Supervisor.FullName</div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-danger small"><i class="fas fa-exclamation-triangle me-1"></i> Not Assigned</span>
+                                    }
+                                </td>
+                                <td class="fw-bold text-dark">@p.Title</td>
+                                <td>
+                                    @switch (p.Status)
+                                    {
+                                        case "Approved": <span class="badge bg-success rounded-pill px-3">Active</span> break;
+                                        case "Proposed": <span class="badge bg-info rounded-pill px-3">Proposed</span> break;
+                                        case "Completed": <span class="badge bg-primary rounded-pill px-3">Completed</span> break;
+                                        default: <span class="badge bg-secondary rounded-pill px-3">@p.Status</span> break;
+                                    }
+                                </td>
+                                <td>@(p.StartDate?.ToString("dd MMM yyyy") ?? "-")</td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-light-primary rounded-3">Details</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

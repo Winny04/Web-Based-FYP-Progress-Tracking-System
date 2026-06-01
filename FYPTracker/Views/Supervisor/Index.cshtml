@@ -1,0 +1,194 @@
+@using FYPTracker.Models
+@{
+    ViewData["Title"] = "Supervisor Dashboard";
+    var user           = ViewBag.CurrentUser as EmployeeInfo;
+    var recentRequests = ViewBag.RecentRequests as List<SupervisorRequest> ?? new();
+    var nextMeetings   = ViewBag.NextMeetings as List<MeetingBooking> ?? new();
+}
+
+<style>
+    :root {
+        --blue-grad: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+        --green-grad: linear-gradient(135deg, #059669 0%, #10b981 100%);
+        --orange-grad: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+        --purple-grad: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+    }
+
+    .stat-card {
+        border-radius: 20px;
+        border: none;
+        color: white;
+        padding: 24px;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .stat-card:hover { transform: translateY(-5px); box-shadow: 0 12px 24px rgba(0,0,0,0.15); }
+    .stat-card i { font-size: 3rem; opacity: 0.2; position: absolute; right: 10px; bottom: 10px; }
+    
+    .bg-blue   { background: var(--blue-grad); }
+    .bg-green  { background: var(--green-grad); }
+    .bg-orange { background: var(--orange-grad); }
+    .bg-purple { background: var(--purple-grad); }
+
+    .glass-card {
+        background: #fff;
+        border-radius: 20px;
+        border: 1px solid rgba(0,0,0,0.05);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        height: 100%;
+    }
+
+    .list-item {
+        padding: 16px;
+        border-radius: 12px;
+        transition: background 0.2s;
+        border-bottom: 1px solid #f3f4f6;
+    }
+    .list-item:hover { background: #f9fafb; }
+    .list-item:last-child { border-bottom: none; }
+
+    .avatar-circle {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        color: white;
+        background: #e5e7eb;
+    }
+
+    .welcome-hero {
+        background: #1e293b;
+        border-radius: 24px;
+        padding: 40px;
+        color: white;
+        margin-bottom: 30px;
+        position: relative;
+    }
+    .welcome-hero img { position: absolute; right: 40px; top: -20px; height: 140px; opacity: 0.9; }
+</style>
+
+<div class="container-fluid py-4">
+
+    @* ── Welcome Hero ───────────────────────────────────────── *@
+    <div class="welcome-hero">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1 class="display-6 fw-bold mb-2">Welcome back, Dr. @(user?.FullName?.Split(' ').LastOrDefault() ?? "Supervisor")!</h1>
+                <p class="fs-5 opacity-75 mb-0">Here's what's happening with your students and projects today.</p>
+            </div>
+        </div>
+        <i class="fas fa-chart-line display-1 position-absolute" style="right:40px; top:30px; opacity:0.1;"></i>
+    </div>
+
+    @* ── Stats Grid ─────────────────────────────────────────── *@
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="stat-card bg-blue">
+                <div class="fs-6 opacity-75 mb-1">Active Projects</div>
+                <div class="display-5 fw-bold">@ViewBag.TotalProjects</div>
+                <i class="fas fa-project-diagram"></i>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card bg-orange">
+                <div class="fs-6 opacity-75 mb-1">New Requests</div>
+                <div class="display-5 fw-bold">@ViewBag.PendingRequests</div>
+                <i class="fas fa-user-plus"></i>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card bg-purple">
+                <div class="fs-6 opacity-75 mb-1">Pending Reviews</div>
+                <div class="display-5 fw-bold">@ViewBag.PendingReviews</div>
+                <i class="fas fa-file-signature"></i>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card bg-green">
+                <div class="fs-6 opacity-75 mb-1">Upcoming Meetings</div>
+                <div class="display-5 fw-bold">@ViewBag.UpcomingMeetings</div>
+                <i class="fas fa-calendar-check"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        @* ── Recent Requests ──────────────────────────────────── *@
+        <div class="col-lg-6">
+            <div class="glass-card p-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h5 class="fw-bold mb-0 text-dark"><i class="fas fa-user-clock text-orange me-2"></i>Recent Student Requests</h5>
+                    <a href="/Supervisor/StudentRequests" class="btn btn-sm btn-light rounded-pill px-3 text-primary fw-bold">View All</a>
+                </div>
+
+                @if (!recentRequests.Any())
+                {
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-check-circle fs-1 mb-3 opacity-25"></i>
+                        <p>No pending student requests.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex flex-column gap-2">
+                        @foreach (var req in recentRequests)
+                        {
+                            <div class="list-item d-flex align-items-center gap-3">
+                                <div class="avatar-circle bg-orange text-white">
+                                    @(req.Student?.FullName?[0] ?? 'S')
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold text-dark">@req.Student?.FullName</div>
+                                    <small class="text-muted">Requested on @req.RequestedDate.ToString("dd MMM")</small>
+                                </div>
+                                <a href="/Supervisor/StudentRequests" class="btn btn-sm btn-outline-primary rounded-pill px-3">Review</a>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ── Upcoming Meetings ────────────────────────────────── *@
+        <div class="col-lg-6">
+            <div class="glass-card p-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h5 class="fw-bold mb-0 text-dark"><i class="fas fa-calendar-day text-blue me-2"></i>Upcoming Meetings</h5>
+                    <a href="/Supervisor/ManageMeetings" class="btn btn-sm btn-light rounded-pill px-3 text-primary fw-bold">Manage</a>
+                </div>
+
+                @if (!nextMeetings.Any())
+                {
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-calendar-times fs-1 mb-3 opacity-25"></i>
+                        <p>No upcoming meetings scheduled.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex flex-column gap-2">
+                        @foreach (var m in nextMeetings)
+                        {
+                            <div class="list-item d-flex align-items-center gap-3">
+                                <div class="text-center bg-light rounded-3 p-2" style="min-width:60px;">
+                                    <div class="fw-bold text-primary" style="font-size:1.1rem;">@m.MeetingDate.Day</div>
+                                    <small class="text-uppercase text-muted" style="font-size:0.7rem;">@m.MeetingDate.ToString("MMM")</small>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold text-dark">@m.Student?.FullName</div>
+                                    <small class="text-muted"><i class="far fa-clock me-1"></i> @m.MeetingTime</small>
+                                </div>
+                                <span class="badge bg-soft-success text-success rounded-pill px-3 py-2" style="background: #dcfce7;">Approved</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+</div>

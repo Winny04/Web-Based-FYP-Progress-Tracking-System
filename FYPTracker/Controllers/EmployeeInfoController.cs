@@ -44,10 +44,35 @@ namespace FYPTracker.Controllers
         }
 
         [Authorize]
-        [ClaimRequirement("Type,Department","PM,HOD,SI")]
-        public IActionResult Index()
+        [ClaimRequirement("Type,Department","PM,HOD,SI,Admin,SuperAdmin")]
+        public async Task<IActionResult> Index()
         {
+            var user = await _context.EmployeeInfos.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+
+            // System-wide stats for Admin
+            ViewBag.TotalStudents    = await _context.EmployeeInfos.CountAsync(u => u.UserType == "Student");
+            ViewBag.TotalSupervisors = await _context.EmployeeInfos.CountAsync(u => u.UserType == "Supervisor");
+            ViewBag.TotalProjects    = await _context.FYPProjects.CountAsync();
+            ViewBag.PendingRequests  = await _context.SupervisorRequests.CountAsync(r => r.Status == "Pending");
+
             return View();
+        }
+
+        [Authorize]
+        [ClaimRequirement("Type,Department","PM,HOD,SI,Admin,SuperAdmin")]
+        public async Task<IActionResult> ManageProjects()
+        {
+            var user = await _context.EmployeeInfos.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+
+            var projects = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .OrderByDescending(p => p.CreatedDate)
+                .ToListAsync();
+
+            return View(projects);
         }
 
         [AllowAnonymous]
@@ -59,14 +84,14 @@ namespace FYPTracker.Controllers
         [HttpPost]
         public ActionResult SignUp(EmployeeInfoVM newEmployee)
         {
-            var pattern = @"^[a-z0-9](\.?[a-z0-9]){5,}@sophicautomation\.com$";
+            var pattern = @"^[a-z0-9](\.?[a-z0-9]){2,}@fyp\.edu\.my$";
             Regex r = new Regex(pattern, RegexOptions.IgnoreCase);
             Match m = r.Match(newEmployee.Email ?? "");
             var deptQuery = _context.Department.AsQueryable();
 
             if (!m.Success)
             {
-                ModelState.AddModelError("Email", "Please enter the correct email! (xxx@sophicautomation.com)");
+                ModelState.AddModelError("Email", "Please enter the correct email! (xxx@fyp.edu.my)");
             }
             if (ModelState.IsValid)
             {
@@ -85,8 +110,8 @@ namespace FYPTracker.Controllers
                         DateCreated = DateTime.Now,
                         DateJoin = DateTime.Now,
                         AddedBy = "sys",
-                        UserType = "Requestor",
-                        Image = "/assets/media/avatars/blank.png",
+                        UserType = "Student",
+                        Image = "/assets/media/avatars/student_avatar.png",
                         DepartmentId = deptQuery.FirstOrDefault(x => x.Name == newEmployee.Department).Id
                     };
                     _context.EmployeeInfos.Add(model);
@@ -120,30 +145,34 @@ namespace FYPTracker.Controllers
         [HttpPost]
         public ActionResult ForgotPassword(string username)
         {
-            var redirect = Url.Action("Login", "EmployeeInfo");
             var title = "Reset Password";
             if (username != null)
             {
                 var check = _context.EmployeeInfos.Where(d => d.UserName == username).FirstOrDefault();
                 var check1 = _context.EmployeeInfos.Where(d => d.Email == username).FirstOrDefault();
+                var user = check ?? check1;
 
-                if (check != null)
+                if (user != null)
                 {
-                    var newPassword = CreatePassword(8);
-                    check.PassCode = Encryption.GetHash(newPassword);
+                    var token = Guid.NewGuid().ToString();
+                    user.ResetToken = token;
+                    user.ResetTokenExpiry = DateTime.Now.AddMinutes(30);
+                    _context.SaveChanges();
 
-                    string message = $@"<p>Dear Users,</p><br />
-                                <p>Your password has been reset.</p>
-                                <p>Please use this password to login: {newPassword}</p>
+                    var resetLink = $"https://{HttpContext.Request.Host}/EmployeeInfo/ResetPassword?token={token}";
+
+                    string message = $@"<p>Dear {user.FullName},</p><br />
+                                <p>You have requested to reset your password for the FYP Tracking System.</p>
+                                <p>Please click the button below to reset your password. This link is valid for 30 minutes.</p>
 						        <div style=""padding-bottom: 40px; text-align:center;"">
-							        <a href='https://{HttpContext.Request.Host}{redirect}' style=""text-decoration:none;display:inline-block;text-align:center;padding:0.75575rem 1.3rem;font-size:0.925rem;line-height:1.5;border-radius:0.35rem;color:#ffffff;background-color:#009EF7;border:0px;margin-right:0.75rem!important;font-weight:600!important;outline:none!important;vertical-align:middle"">Click Here To Login</a>
+							        <a href='{resetLink}' style=""text-decoration:none;display:inline-block;text-align:center;padding:0.75575rem 1.3rem;font-size:0.925rem;line-height:1.5;border-radius:0.35rem;color:#ffffff;background-color:#0d9488;border:0px;margin-right:0.75rem!important;font-weight:600!important;outline:none!important;vertical-align:middle"">Reset Password</a>
 						        </div>";
                     string html = $@"<div style=""font-family:Arial,Helvetica,sans-serif; line-height: 1.5; font-weight: normal; font-size: 15px; color: #2F3044; min-height: 100%; margin:0; padding:0; width:100%; background-color:#edf2f7;padding-bottom:40px"">
 	                        <table align=""center"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""100%"" style=""border-collapse:collapse;margin:0 auto; padding:0; max-width:600px"">
 		                        <tbody>
 			                        <tr>
 				                        <td align=""center"" valign=""center"" style=""text-align:center;"">
-						                        <img alt=""Logo"" src=""https://mymagic-central.s3.amazonaws.com/uploads/organization/thumbnail/21d15c5bc1086d561af1936c53deefcbfdf72fb2.adaptiveResize.320x320.png"" />
+						                        <span style=""font-size: 24px; font-weight: bold; color: #0d9488;"">FYP Tracking System</span>
                                         </td>
 			                        </tr>
 			                        <tr>
@@ -162,51 +191,13 @@ namespace FYPTracker.Controllers
 	                        </table>
                         </div>";
 
-                    _context.SaveChanges();
-                    var email = check.Email;
-                    _emailService.Send(email, title, html);
-
-
-                } else if (check1 != null)
-                {
-                    var newPassword = CreatePassword(8);
-                    check1.PassCode = Encryption.GetHash(newPassword);
-
-                    string message = $@"<p>Dear Users,</p><br />
-                                <p>Your password has been reset.</p>
-                                <p>Please use this password to login: {newPassword}</p>
-						        <div style=""padding-bottom: 40px; text-align:center;"">
-							        <a href='https://{HttpContext.Request.Host}{redirect}' style=""text-decoration:none;display:inline-block;text-align:center;padding:0.75575rem 1.3rem;font-size:0.925rem;line-height:1.5;border-radius:0.35rem;color:#ffffff;background-color:#009EF7;border:0px;margin-right:0.75rem!important;font-weight:600!important;outline:none!important;vertical-align:middle"">Click Here To Login</a>
-						        </div>";
-                    string html = $@"<div style=""font-family:Arial,Helvetica,sans-serif; line-height: 1.5; font-weight: normal; font-size: 15px; color: #2F3044; min-height: 100%; margin:0; padding:0; width:100%; background-color:#edf2f7;padding-bottom:40px"">
-	                        <table align=""center"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""100%"" style=""border-collapse:collapse;margin:0 auto; padding:0; max-width:600px"">
-		                        <tbody>
-			                        <tr>
-				                        <td align=""center"" valign=""center"" style=""text-align:center;"">
-						                        <img alt=""Logo"" src=""https://mymagic-central.s3.amazonaws.com/uploads/organization/thumbnail/21d15c5bc1086d561af1936c53deefcbfdf72fb2.adaptiveResize.320x320.png"" />
-                                        </td>
-			                        </tr>
-			                        <tr>
-				                        <td align=""left"" valign=""center"">
-					                        <div style=""text-align:left; margin: 0 0px; padding: 40px; background-color:#ffffff; border-radius: 6px"">
-						                        <!--begin:Email content-->
-						                        <div style=""padding-bottom: 30px; font-size: 17px;"">
-							                        <h3 style=""text-align:center;"">{title}</h3>
-						                        </div>
-                                                {message}
-                                                </br>
-					                        </div>
-				                        </td>
-			                        </tr>
-		                        </tbody>
-	                        </table>
-                        </div>";
-
-                    _context.SaveChanges();
-                    var email = check1.Email;
-
+                    var email = user.Email;
                     if(!string.IsNullOrEmpty(email))
                         _emailService.Send(email, title, html);
+
+                    TempData["Success"] = "Password reset link has been sent to your email!";
+                    ViewBag.Success = "Reset link sent! Please check your email.";
+                    return View();
                 }
                 else
                 {
@@ -214,7 +205,60 @@ namespace FYPTracker.Controllers
                     return View();
                 }
             }
-            return RedirectToAction("Login", "EmployeeInfo");
+            return View();
+        }
+
+        [AllowAnonymous]
+        public ActionResult ResetPassword(string token)
+        {
+            if (string.IsNullOrEmpty(token))
+            {
+                ViewBag.Error = "Invalid reset token.";
+                return View();
+            }
+
+            var user = _context.EmployeeInfos.FirstOrDefault(u => u.ResetToken == token && u.ResetTokenExpiry > DateTime.Now);
+            if (user == null)
+            {
+                ViewBag.Error = "The password reset link is invalid or has expired.";
+                return View();
+            }
+
+            ViewBag.Token = token;
+            return View();
+        }
+
+        [HttpPost]
+        [AllowAnonymous]
+        public ActionResult ResetPassword(string token, string password, string confirmPassword)
+        {
+            if (string.IsNullOrEmpty(token))
+            {
+                ViewBag.Error = "Invalid reset token.";
+                return View();
+            }
+
+            var user = _context.EmployeeInfos.FirstOrDefault(u => u.ResetToken == token && u.ResetTokenExpiry > DateTime.Now);
+            if (user == null)
+            {
+                ViewBag.Error = "The password reset link is invalid or has expired.";
+                return View();
+            }
+
+            if (password != confirmPassword)
+            {
+                ViewBag.Error = "Passwords do not match.";
+                ViewBag.Token = token;
+                return View();
+            }
+
+            user.PassCode = Encryption.GetHash(password);
+            user.ResetToken = null;
+            user.ResetTokenExpiry = null;
+            _context.SaveChanges();
+
+            ViewBag.Success = "Password updated successfully! Redirecting to login page...";
+            return View();
         }
 
         public string CreatePassword(int length)
@@ -310,7 +354,7 @@ namespace FYPTracker.Controllers
             var model = _context.EmployeeInfos
                 .Include(x => x.EmpDepartment)
                 .Where(d => d.UserName == employeeInfo.UserName).FirstOrDefault();
-            var pattern = @"^[a-z0-9](\.?[a-z0-9]){5,}@sophicautomation\.com$";
+            var pattern = @"^[a-z0-9](\.?[a-z0-9]){2,}@fyp\.edu\.my$";
             Regex r = new Regex(pattern, RegexOptions.IgnoreCase);
             Match m = r.Match(employeeInfo.Email ?? "");
             var deptQuery = _context.Department.AsQueryable();
@@ -318,7 +362,7 @@ namespace FYPTracker.Controllers
 
             if (!m.Success)
             {
-                ModelState.AddModelError("Email", "Please enter the correct email! (xxx@sophicautomation.com)");
+                ModelState.AddModelError("Email", "Please enter the correct email! (xxx@fyp.edu.my)");
             }
 
             if (!ModelState.IsValid)
@@ -377,14 +421,14 @@ namespace FYPTracker.Controllers
         public ActionResult EditProfile(EmployeeEditVM employeeInfo, IFormFile? picture, string isImgChanged)
         {
             var model = _context.EmployeeInfos.Where(d => d.UserName == employeeInfo.UserName).FirstOrDefault();
-            var pattern = @"^[a-z0-9](\.?[a-z0-9]){5,}@sophicautomation\.com$";
+            var pattern = @"^[a-z0-9](\.?[a-z0-9]){2,}@fyp\.edu\.my$";
             Regex r = new Regex(pattern, RegexOptions.IgnoreCase);
             Match m = r.Match(employeeInfo.Email ?? "");
 
             var deptQuery = _context.Department.AsQueryable();
             if (!m.Success)
             {
-                ModelState.AddModelError("Email", "Please enter the correct email! (xxx@sophicautomation.com)");
+                ModelState.AddModelError("Email", "Please enter the correct email! (xxx@fyp.edu.my)");
                 EmployeeEditVM model1 = new EmployeeEditVM();
                 model1.Id = model.Id;
                 model1.UserName = employeeInfo.UserName;
@@ -460,7 +504,7 @@ namespace FYPTracker.Controllers
                             DateJoin = DateTime.Now,
                             AddedBy = "sys",
                             UserType = String.IsNullOrEmpty(newEmployee.UserType) ? "Requestor" : newEmployee.UserType,
-                            Image = "/assets/media/avatars/blank.png",
+                            Image = "/assets/media/avatars/student_avatar.png",
                             DepartmentId = deptQuery.Where(x => x.Name == newEmployee.Department).FirstOrDefault().Id
                     };
                         _context.EmployeeInfos.Add(model);
@@ -511,7 +555,7 @@ namespace FYPTracker.Controllers
         {
             if (!await _empService.ValidateEmployeeAsync(username, password))
             {
-                TempData["error"] = "Username or Password is invalid!";
+                TempData["error"] = "Invalid email or password. Please try again.";
                 return View();
             }
                 
@@ -521,7 +565,15 @@ namespace FYPTracker.Controllers
 
             if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
 
-            return RedirectToAction("Index","Home");
+            // Redirect based on role
+            if (emp.UserType == "Student")
+                return RedirectToAction("Index", "Student");
+            else if (emp.UserType == "Supervisor")
+                return RedirectToAction("Index", "Supervisor");
+            else if (emp.UserType == "SuperAdmin" || emp.UserType == "Admin")
+                return RedirectToAction("Index", "EmployeeInfo");
+
+            return RedirectToAction("Index", "Home");
         }
 
         [Authorize]
@@ -701,6 +753,31 @@ namespace FYPTracker.Controllers
             }
         }
 
+        [HttpPost]
+        [Authorize]
+        public async Task<IActionResult> ChangePassword(string currentPassword, string newPassword, string confirmPassword)
+        {
+            var user = await _context.EmployeeInfos.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            if (user == null) return Unauthorized();
+
+            if (user.PassCode != Encryption.GetHash(currentPassword))
+            {
+                TempData["Error"] = "Current password is incorrect.";
+                return RedirectToAction("Profile", new { name = user.UserName });
+            }
+
+            if (newPassword != confirmPassword)
+            {
+                TempData["Error"] = "New passwords do not match.";
+                return RedirectToAction("Profile", new { name = user.UserName });
+            }
+
+            user.PassCode = Encryption.GetHash(newPassword);
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Password updated successfully!";
+            return RedirectToAction("Profile", new { name = user.UserName });
+        }
     }
 
     public class EmployeeInfoVM

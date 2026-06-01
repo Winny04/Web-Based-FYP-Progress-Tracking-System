@@ -1,0 +1,65 @@
+/* ── Initials Avatar Component ────────────────────────────── */
+/* Usage: <div class="initials-avatar" data-name="John Doe">JD</div> */
+/* Sizes: .initials-avatar-sm (30px), default (48px), .initials-avatar-lg (140px) */
+
+.initials-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-weight: 700;
+    color: #ffffff;
+    text-transform: uppercase;
+    user-select: none;
+    flex-shrink: 0;
+    letter-spacing: 0.04em;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.initials-avatar:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+}
+
+/* ── Size variants ─────────────────────────────────────────── */
+
+/* Small: for topbar / table rows (30px) */
+.initials-avatar-sm {
+    width: 30px;
+    height: 30px;
+    font-size: 0.7rem;
+}
+
+/* Default: for taskbar avatars (48px) */
+.initials-avatar-md {
+    width: 48px;
+    height: 48px;
+    font-size: 1rem;
+}
+
+/* Large: for profile page (140px) */
+.initials-avatar-lg {
+    width: 140px;
+    height: 140px;
+    font-size: 2.8rem;
+    letter-spacing: 0.06em;
+}
+
+/* Extra large: for edit profile page (125px) */
+.initials-avatar-xl {
+    width: 125px;
+    height: 125px;
+    font-size: 2.4rem;
+}
+
+/* ── Color palette — assigned by first letter ──────────────── */
+.initials-avatar[data-color="1"] { background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%); box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3); }
+.initials-avatar[data-color="2"] { background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%); box-shadow: 0 4px 14px rgba(236, 72, 153, 0.3); }
+.initials-avatar[data-color="3"] { background: linear-gradient(135deg, #14b8a6 0%, #2dd4bf 100%); box-shadow: 0 4px 14px rgba(20, 184, 166, 0.3); }
+.initials-avatar[data-color="4"] { background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3); }
+.initials-avatar[data-color="5"] { background: linear-gradient(135deg, #ef4444 0%, #f87171 100%); box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3); }
+.initials-avatar[data-color="6"] { background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3); }
+.initials-avatar[data-color="7"] { background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%); box-shadow: 0 4px 14px rgba(139, 92, 246, 0.3); }
+.initials-avatar[data-color="8"] { background: linear-gradient(135deg, #10b981 0%, #34d399 100%); box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3); }

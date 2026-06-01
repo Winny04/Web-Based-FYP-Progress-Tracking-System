@@ -1,4 +1,4 @@
-﻿@using FYPTracker.Common
+@using FYPTracker.Common
 @model FYPTracker.Controllers.EmployeeInfoVM
 
 @{
@@ -25,7 +25,7 @@ License: For each use you must have a valid license purchased only from above li
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:type" content="article" />
-    <link rel="shortcut icon" href="assets/media/logos/Sophic5.png" />
+
     <!--begin::Fonts-->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Poppins:300,400,500,600,700" />
     <!--end::Fonts-->
@@ -46,7 +46,7 @@ License: For each use you must have a valid license purchased only from above li
             <div class="d-flex flex-center flex-column flex-column-fluid p-10 pb-lg-20">
                 <!--begin::Logo-->
                 <a href="/Home" class="mb-12">
-                    <img alt="Logo" src="assets/media/logos/Sophic3.png" style="width:300px;" />
+                    <span class="text-dark fw-bolder fs-1 text-uppercase">FYP Tracking System</span>
                 </a>
                 <!--end::Logo-->
                 <!--begin::Wrapper-->
@@ -193,7 +193,7 @@ License: For each use you must have a valid license purchased only from above li
                         });
                      return false;
                 }
-                else if(Email == null || Email.indexOf("sophicautomation.com") < 0){ //if not found
+                else if(Email == null || Email.indexOf("fyp.edu.my") < 0){ //if not found
                     Swal.fire({
                             text: "Inccorect email format. Please use company's email address.",
                             icon: "warning",

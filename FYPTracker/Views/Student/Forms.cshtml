@@ -1,309 +1,369 @@
 @using FYPTracker.Models
 @model FYPProject?
 @{
-    ViewData["Title"] = "Submission Forms";
+    ViewData["Title"] = "Digital Submission Forms";
     var currentUser = ViewBag.CurrentUser as EmployeeInfo;
     var milestones  = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
 }
 
 <style>
-    :root { --orange-grad: linear-gradient(135deg, #f97316 0%, #fbbf24 100%); }
-
+    :root {
+        --orange-grad: linear-gradient(135deg, #f97316 0%, #fbbf24 100%);
+        --primary-orange: #f97316;
+    }
+    
     .page-hero {
         background: var(--orange-grad);
         border-radius: 20px;
         padding: 28px 32px;
         color: white;
         margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(249,115,22,.28);
+        box-shadow: 0 8px 32px rgba(249, 115, 22, 0.25);
     }
-    .glass-card {
-        background: #fff;
+
+    .premium-card {
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(12px);
         border-radius: 16px;
-        border: 1px solid rgba(249,115,22,.1);
-        box-shadow: 0 4px 20px rgba(0,0,0,.06);
-        transition: transform .25s, box-shadow .25s;
+        border: 1px solid rgba(249, 115, 22, 0.1);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        transition: transform 0.2s, box-shadow 0.2s;
     }
-    .glass-card:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,.1); }
+    
+    .premium-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+    }
 
-    .upload-zone {
-        border: 2px dashed #e5e7eb;
-        border-radius: 14px;
-        padding: 32px;
-        text-align: center;
-        cursor: pointer;
-        transition: all .2s;
+    .form-control, .form-select {
+        border-radius: 10px;
+        border: 2px solid #e5e7eb;
+        font-size: 0.9rem;
+        padding: 9px 14px;
+        transition: border-color 0.2s;
     }
-    .upload-zone:hover, .upload-zone.drag-over {
-        border-color: #f97316;
-        background: #fff7ed;
-    }
-    .upload-zone input[type=file] { display:none; }
 
-    .btn-upload {
+    .form-control:focus, .form-select:focus {
+        border-color: var(--primary-orange);
+        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+    }
+
+    .nav-pills .nav-link {
+        border-radius: 12px;
+        font-weight: 700;
+        padding: 12px 24px;
+        color: #4b5563;
+        border: 1px solid #e5e7eb;
+        background-color: white;
+        transition: all 0.25s ease;
+    }
+    
+    .nav-pills .nav-link.active {
+        background: var(--orange-grad);
+        color: white;
+        border-color: transparent;
+        box-shadow: 0 4px 15px rgba(249, 115, 22, 0.3);
+    }
+
+    .btn-submit {
         background: var(--orange-grad);
         color: white;
         border: none;
         border-radius: 10px;
-        padding: 9px 24px;
+        padding: 10px 28px;
         font-weight: 700;
-        transition: opacity .2s;
+        transition: all 0.2s;
     }
-    .btn-upload:hover:not(:disabled) { opacity:.85; color:white; }
-    .btn-upload:disabled { opacity:.45; cursor:not-allowed; }
 
-    .status-pill {
-        font-size:.7rem; font-weight:700;
-        padding:3px 10px; border-radius:999px; text-transform:uppercase;
+    .btn-submit:hover {
+        opacity: 0.9;
+        transform: scale(1.03);
+        color: white;
     }
-    .pill-approved    { background:#d1fae5; color:#065f46; }
-    .pill-rejected    { background:#fee2e2; color:#991b1b; }
-    .pill-pending     { background:#fef9c3; color:#854d0e; }
-    .pill-submitted   { background:#dbeafe; color:#1e40af; }
-    .pill-underreview { background:#ede9fe; color:#5b21b6; }
-
-    .milestone-tab { cursor:pointer; border-radius:10px; border:2px solid #e5e7eb; padding:10px 16px; transition:all .18s; }
-    .milestone-tab:hover, .milestone-tab.active { border-color:#f97316; background:#fff7ed; }
-
-    .file-item { border-radius:10px; background:#f9fafb; border:1px solid #f3f4f6; padding:10px 14px; }
-    .file-icon { font-size:1.4rem; }
-
-    .form-control, .form-select {
-        border-radius: 10px; border:2px solid #e5e7eb;
-        font-size:.88rem; padding:9px 14px;
-        transition: border-color .2s;
+    
+    .btn-draft {
+        background-color: #f1f5f9;
+        color: #475569;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 10px 24px;
+        font-weight: 600;
+        transition: background-color 0.2s;
     }
-    .form-control:focus, .form-select:focus { border-color:#f97316; box-shadow:0 0 0 3px rgba(249,115,22,.12); }
+    
+    .btn-draft:hover {
+        background-color: #e2e8f0;
+    }
 
-    .table th { font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:#9ca3af; font-weight:700; }
-    .table td { font-size:.87rem; vertical-align:middle; }
+    .form-section-title {
+        font-weight: 800;
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        letter-spacing: 0.05em;
+        color: var(--primary-orange);
+        border-bottom: 2px solid #f1f5f9;
+        padding-bottom: 8px;
+        margin-bottom: 20px;
+    }
 </style>
 
 <div class="container-fluid py-4">
 
     @if (TempData["Success"] != null)
     {
-        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2">
-            <i class="fas fa-check-circle fs-4"></i> <span>@TempData["Success"]</span>
-        </div>
-    }
-    @if (TempData["Error"] != null)
-    {
-        <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2">
-            <i class="fas fa-exclamation-circle fs-4"></i> <span>@TempData["Error"]</span>
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-4 d-flex align-items-center gap-3">
+            <span class="fs-4 text-success"><i class="fas fa-check-circle"></i></span>
+            <div class="fw-bold">@TempData["Success"]</div>
         </div>
     }
 
-    @* ── Hero ─────────────────────────────────────────────── *@
+    @* ── Page Title & Hero ──────────────────────────────────── *@
     <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
-            <h2 class="fw-bold mb-1"><i class="fas fa-file-upload me-2"></i>Submission Forms</h2>
-            <p class="mb-0 opacity-80">Upload your FYP documents — Proposal, Progress Reports, and Final Submission.</p>
-        </div>
-        <div class="text-end">
-            <div class="badge bg-white fw-bold px-3 py-2 rounded-pill" style="color:#f97316;font-size:.88rem;">
-                <i class="fas fa-paperclip me-1"></i>
-                @milestones.Sum(m => m.SubmissionFiles?.Count ?? 0) Files Uploaded
-            </div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-file-invoice me-2"></i>Digital Submission Forms</h2>
+            <p class="mb-0 opacity-90">Fill and submit your academic milestones digitally. Status updates are pushed instantly to your supervisor.</p>
         </div>
     </div>
 
     @if (Model == null)
     {
-        <div class="text-center py-5">
-            <div class="glass-card p-5 d-inline-block">
-                <i class="fas fa-exclamation-triangle fs-1 text-warning opacity-60 mb-3 d-block"></i>
-                <h4 class="fw-bold text-muted">No Active Project</h4>
-                <p class="text-muted">You need an approved project before you can upload documents.</p>
-            </div>
+        <div class="premium-card p-5 text-center">
+            <i class="fas fa-exclamation-triangle text-warning fs-1 mb-4 d-block"></i>
+            <h4 class="fw-bold text-dark">No Active Project</h4>
+            <p class="text-muted mb-0">Please request a supervisor and secure an active project before submitting academic forms.</p>
         </div>
     }
     else
     {
         <div class="row g-4">
-
-            @* ── LEFT: Upload Form ─────────────────────────────── *@
-            <div class="col-lg-5">
-                <div class="glass-card p-4">
-                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-cloud-upload-alt me-2" style="color:#f97316;"></i>Upload Document</h5>
-
-                    <form asp-action="UploadSubmission" asp-controller="Student"
-                          method="post" enctype="multipart/form-data" id="uploadForm">
-                        @Html.AntiForgeryToken()
-
-                        @* Milestone Selector *@
-                        <div class="mb-4">
-                            <label class="form-label fw-semibold">Select Milestone / Chapter</label>
-                            @if (!milestones.Any())
-                            {
-                                <div class="alert alert-warning rounded-3 mb-0">No milestones defined for your project yet.</div>
-                            }
-                            else
-                            {
-                                <select name="milestoneId" class="form-select" required>
-                                    <option value="">— Choose a milestone —</option>
-                                    @foreach (var ms in milestones.OrderBy(m => m.DueDate))
-                                    {
-                                        <option value="@ms.Id">@ms.Title (@ms.Status)</option>
-                                    }
-                                </select>
-                            }
-                        </div>
-
-                        @* Drop Zone *@
-                        <div class="mb-4">
-                            <label class="form-label fw-semibold">Document File</label>
-                            <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-                                <input type="file" id="fileInput" name="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.zip" required
-                                       onchange="showFileName(this)" />
-                                <i class="fas fa-cloud-upload-alt fs-2 mb-2 d-block" style="color:#f97316;opacity:.7;"></i>
-                                <div id="dropLabel" class="fw-semibold text-muted">Click or drag & drop a file here</div>
-                                <small class="text-muted d-block mt-1">PDF, DOC, DOCX, PPT, PPTX, ZIP — Max 20 MB</small>
-                            </div>
-                        </div>
-
-                        <button type="submit" class="btn-upload btn w-100"
-                                @(milestones.Any() ? "" : "disabled")>
-                            <i class="fas fa-paper-plane me-2"></i> Upload & Submit
-                        </button>
-                    </form>
+            
+            @* ── FORM SELECTION TABS (Navigation) ────────────────── *@
+            <div class="col-lg-3">
+                <div class="d-flex flex-column gap-3 nav nav-pills" id="forms-tab" role="tablist">
+                    <button class="nav-link active text-start d-flex align-items-center gap-3 shadow-sm" id="proposal-form-tab" data-bs-toggle="pill" data-bs-target="#proposal-form-pane" type="button" role="tab">
+                        <i class="fas fa-feather-alt fs-4"></i>
+                        <span>A. Proposal Form</span>
+                    </button>
+                    <button class="nav-link text-start d-flex align-items-center gap-3 shadow-sm" id="progress-form-tab" data-bs-toggle="pill" data-bs-target="#progress-form-pane" type="button" role="tab">
+                        <i class="fas fa-tasks fs-4"></i>
+                        <span>B. Progress Report Form</span>
+                    </button>
+                    <button class="nav-link text-start d-flex align-items-center gap-3 shadow-sm" id="final-form-tab" data-bs-toggle="pill" data-bs-target="#final-form-pane" type="button" role="tab">
+                        <i class="fas fa-graduation-cap fs-4"></i>
+                        <span>C. Final Submission Form</span>
+                    </button>
                 </div>
 
-                @* Submission Types Guide *@
-                <div class="glass-card p-4 mt-4">
-                    <h6 class="fw-bold text-dark mb-3">📋 Submission Types</h6>
-                    <div class="d-flex flex-column gap-2" style="font-size:.85rem;">
-                        <div class="d-flex gap-2 align-items-start">
-                            <span class="status-pill pill-pending mt-1">Proposal</span>
-                            <span class="text-muted">Initial project proposal document and supporting files.</span>
-                        </div>
-                        <div class="d-flex gap-2 align-items-start">
-                            <span class="status-pill pill-submitted mt-1">Progress</span>
-                            <span class="text-muted">Chapter drafts and progress reports for each milestone.</span>
-                        </div>
-                        <div class="d-flex gap-2 align-items-start">
-                            <span class="status-pill pill-approved mt-1">Final</span>
-                            <span class="text-muted">Complete thesis and presentation slides for final submission.</span>
+                <div class="premium-card p-4 mt-4 bg-light">
+                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-info-circle text-orange me-2"></i>Eform Guidelines</h6>
+                    <ul class="text-muted small ps-3 mb-0" style="line-height: 1.6;">
+                        <li>Ensure all mandatory fields are fully populated before submission.</li>
+                        <li>PDF attachments are recommended for document uploads.</li>
+                        <li>Saved drafts are stored in your session. Clicking submit locks the document and alerts your supervisor.</li>
+                    </ul>
+                </div>
+            </div>
+
+            @* ── FORM DETAILED PANES ────────────────────────────── *@
+            <div class="col-lg-9">
+                <div class="tab-content" id="forms-tabContent">
+                    
+                    @* ── A. PROPOSAL FORM ──────────────────────────────── *@
+                    <div class="tab-pane fade show active" id="proposal-form-pane" role="tabpanel" tabindex="0">
+                        <div class="premium-card p-4">
+                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>A. Final Year Project Proposal</h4>
+                            
+                            <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
+                                <input type="hidden" name="formType" value="Proposal Form" />
+                                
+                                @* Select corresponding Milestone *@
+                                @{
+                                    var propMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Proposal") || m.Title.Contains("Introduction")) ?? milestones.FirstOrDefault();
+                                    int propMilestoneId = propMilestone?.Id ?? 0;
+                                }
+                                <input type="hidden" name="milestoneId" value="@propMilestoneId" />
+
+                                <div class="form-section-title">Part 1: Proposal Details</div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Project Title</label>
+                                    <input type="text" name="title" class="form-control" value="@Model.Title" required />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Problem Statement</label>
+                                    <textarea name="problemStatement" class="form-control" rows="3" required placeholder="Describe the problem being addressed..."></textarea>
+                                </div>
+
+                                <div class="form-section-title">Part 2: Objectives & Scope</div>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-12">
+                                        <label class="form-label fw-semibold">Objectives (Up to 3)</label>
+                                        <input type="text" name="objective1" class="form-control mb-2" placeholder="Objective 1" required />
+                                        <input type="text" name="objective2" class="form-control mb-2" placeholder="Objective 2 (Optional)" />
+                                        <input type="text" name="objective3" class="form-control" placeholder="Objective 3 (Optional)" />
+                                    </div>
+                                    <div class="col-md-12">
+                                        <label class="form-label fw-semibold">Scope of Work</label>
+                                        <textarea name="scope" class="form-control" rows="3" required placeholder="What parameters define the project limits..."></textarea>
+                                    </div>
+                                </div>
+
+                                <div class="form-section-title">Part 3: Expected Outcome & References</div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Expected Outcome</label>
+                                    <textarea name="outcome" class="form-control" rows="2" required placeholder="What are the tangible outcomes expected..."></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">References</label>
+                                    <textarea name="references" class="form-control" rows="2" required placeholder="List initial references..."></textarea>
+                                </div>
+
+                                <div class="form-section-title">Part 4: Document Attachment</div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold">Attach Proposal Document (PDF / DOCX)</label>
+                                    <input type="file" name="attachedFile" class="form-control" accept=".pdf,.doc,.docx" required />
+                                </div>
+
+                                <div class="d-flex gap-3 justify-content-end">
+                                    <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
+                                    <button type="submit" class="btn-submit">Submit Proposal</button>
+                                </div>
+                            </form>
                         </div>
                     </div>
+
+                    @* ── B. PROGRESS REPORT FORM ────────────────────────── *@
+                    <div class="tab-pane fade" id="progress-form-pane" role="tabpanel" tabindex="0">
+                        <div class="premium-card p-4">
+                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-chart-line text-orange me-2"></i>B. FYP Progress Report Form</h4>
+                            
+                            <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
+                                <input type="hidden" name="formType" value="Progress Report Form" />
+
+                                @* Select corresponding Milestone *@
+                                @{
+                                    var progMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Chapter 3") || m.Title.Contains("Methodology") || m.Title.Contains("Progress")) ?? milestones.FirstOrDefault();
+                                    int progMilestoneId = progMilestone?.Id ?? 0;
+                                }
+                                <input type="hidden" name="milestoneId" value="@progMilestoneId" />
+
+                                <div class="form-section-title">Part 1: Reporting Period</div>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Start Period</label>
+                                        <input type="date" name="startDate" class="form-control" required />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">End Period</label>
+                                        <input type="date" name="endDate" class="form-control" required />
+                                    </div>
+                                </div>
+
+                                <div class="form-section-title">Part 2: Progress Details</div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Work Completed So Far</label>
+                                    <textarea name="workDone" class="form-control" rows="3" required placeholder="Outline the main tasks completed..."></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Challenges / Issues Faced</label>
+                                    <textarea name="challenges" class="form-control" rows="3" required placeholder="Describe technical hurdles or resource delays..."></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Plan for Next Period</label>
+                                    <textarea name="nextPeriodPlan" class="form-control" rows="2" required placeholder="What tasks are prioritised next..."></textarea>
+                                </div>
+
+                                <div class="form-section-title">Part 3: Completion Metric</div>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Percentage Complete (%)</label>
+                                        <select name="title" class="form-select" required>
+                                            <option>10%</option>
+                                            <option>25%</option>
+                                            <option selected>50%</option>
+                                            <option>75%</option>
+                                            <option>90%</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Attach Supporting Files (Optional)</label>
+                                        <input type="file" name="attachedFile" class="form-control" />
+                                    </div>
+                                </div>
+
+                                <div class="d-flex gap-3 justify-content-end">
+                                    <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
+                                    <button type="submit" class="btn-submit">Submit Progress Report</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    @* ── C. FINAL SUBMISSION FORM ──────────────────────── *@
+                    <div class="tab-pane fade" id="final-form-pane" role="tabpanel" tabindex="0">
+                        <div class="premium-card p-4">
+                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-graduation-cap text-orange me-2"></i>C. Final FYP Report & Thesis Submission</h4>
+                            
+                            <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
+                                <input type="hidden" name="formType" value="Final Submission Form" />
+
+                                @* Select corresponding Milestone *@
+                                @{
+                                    var finalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Final") || m.Title.Contains("Thesis")) ?? milestones.LastOrDefault();
+                                    int finalMilestoneId = finalMilestone?.Id ?? 0;
+                                }
+                                <input type="hidden" name="milestoneId" value="@finalMilestoneId" />
+
+                                <div class="form-section-title">Part 1: Thesis Metadata</div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Final Project Title</label>
+                                    <input type="text" name="title" class="form-control" value="@Model.Title" required />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Abstract</label>
+                                    <textarea name="abstract" class="form-control" rows="4" required placeholder="Enter the project abstract..."></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">Acknowledgements</label>
+                                    <textarea name="acknowledgements" class="form-control" rows="2" placeholder="Acknowledge individuals and academic support..."></textarea>
+                                </div>
+
+                                <div class="form-section-title">Part 2: Project Repos & Viva</div>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Link to Source Code Repository (Optional)</label>
+                                        <input type="url" name="sourceCodeLink" class="form-control" placeholder="GitHub, GitLab, etc." />
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Viva Oral Examination Date (Assigned by faculty)</label>
+                                        <input type="text" class="form-control bg-light border-0" value="TBA — Awaiting Final review" readonly />
+                                    </div>
+                                </div>
+
+                                <div class="form-section-title">Part 3: Final File Upload</div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold">Upload Final Thesis (PDF, Max 20MB)</label>
+                                    <input type="file" name="attachedFile" class="form-control" accept=".pdf" required />
+                                </div>
+
+                                <div class="d-flex gap-3 justify-content-end">
+                                    <button type="submit" class="btn-submit bg-danger border-0" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
+                                        <i class="fas fa-file-pdf me-1"></i> Submit Final Report
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
                 </div>
             </div>
-
-            @* ── RIGHT: Submission History ─────────────────────── *@
-            <div class="col-lg-7">
-                <div class="glass-card p-4">
-                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-history me-2" style="color:#f97316;"></i>Submission History</h5>
-
-                    @{
-                        var allFiles = milestones
-                            .SelectMany(m => (m.SubmissionFiles ?? new List<FYPSubmissionFile>())
-                                .Select(f => new { Milestone = m, File = f }))
-                            .OrderByDescending(x => x.File.UploadedDate)
-                            .ToList();
-                    }
-
-                    @if (!allFiles.Any())
-                    {
-                        <div class="text-center py-5 text-muted">
-                            <i class="fas fa-inbox fs-1 d-block mb-2 opacity-30"></i>
-                            <p class="mb-0">No documents uploaded yet.</p>
-                            <small>Use the form on the left to upload your first document.</small>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="table-responsive">
-                            <table class="table align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>File</th>
-                                        <th>Milestone</th>
-                                        <th>Size</th>
-                                        <th>Uploaded</th>
-                                        <th>Status</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var entry in allFiles)
-                                    {
-                                        var ext = System.IO.Path.GetExtension(entry.File.FileName).ToLowerInvariant();
-                                        var icon = ext switch {
-                                            ".pdf"  => "fas fa-file-pdf text-danger",
-                                            ".doc"  => "fas fa-file-word text-primary",
-                                            ".docx" => "fas fa-file-word text-primary",
-                                            ".ppt"  => "fas fa-file-powerpoint text-warning",
-                                            ".pptx" => "fas fa-file-powerpoint text-warning",
-                                            ".zip"  => "fas fa-file-archive text-secondary",
-                                            _       => "fas fa-file text-muted"
-                                        };
-                                        var pillCls = entry.Milestone.Status switch {
-                                            "Approved"    => "pill-approved",
-                                            "Rejected"    => "pill-rejected",
-                                            "Submitted"   => "pill-submitted",
-                                            "UnderReview" => "pill-underreview",
-                                            _             => "pill-pending"
-                                        };
-                                        var sizeKb = entry.File.FileSize.HasValue
-                                            ? (entry.File.FileSize.Value / 1024.0).ToString("F0") + " KB"
-                                            : "—";
-
-                                        <tr>
-                                            <td>
-                                                <div class="d-flex align-items-center gap-2">
-                                                    <i class="@icon" style="font-size:1.3rem;"></i>
-                                                    <div>
-                                                        <div class="fw-semibold text-dark" style="font-size:.85rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                                                            @entry.File.FileName
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td><span class="text-muted" style="font-size:.82rem;">@entry.Milestone.Title</span></td>
-                                            <td><span class="text-muted" style="font-size:.82rem;">@sizeKb</span></td>
-                                            <td><span class="text-muted" style="font-size:.82rem;">@entry.File.UploadedDate.ToString("dd MMM yy")</span></td>
-                                            <td><span class="status-pill @pillCls">@entry.Milestone.Status</span></td>
-                                            <td>
-                                                <a href="@entry.File.FilePath" target="_blank"
-                                                   class="btn btn-sm btn-light rounded-3 text-muted">
-                                                    <i class="fas fa-download"></i>
-                                                </a>
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
-                </div>
-            </div>
+            
         </div>
     }
+
 </div>
 
-@section scripts {
 <script>
-    function showFileName(input) {
-        const label = document.getElementById('dropLabel');
-        if (input.files.length > 0) {
-            const f = input.files[0];
-            label.textContent = '📎 ' + f.name;
-            label.style.color = '#f97316';
-        }
-    }
-
-    // Drag & drop support
-    const zone = document.getElementById('dropZone');
-    if (zone) {
-        zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-        zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-        zone.addEventListener('drop', e => {
-            e.preventDefault();
-            zone.classList.remove('drag-over');
-            const fi = document.getElementById('fileInput');
-            fi.files = e.dataTransfer.files;
-            showFileName(fi);
-        });
+    function saveDraftAlert() {
+        alert("Draft saved successfully in the session! You can continue editing later.");
     }
 </script>
-}

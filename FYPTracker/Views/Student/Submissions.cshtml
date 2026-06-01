@@ -1,0 +1,140 @@
+@model FYPTracker.Models.FYPProject
+@{
+    ViewData["Title"] = "My Submissions";
+}
+
+<style>
+    :root { --green-grad: linear-gradient(135deg, #059669 0%, #10b981 100%); }
+
+    .page-hero {
+        background: var(--green-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(16, 185, 129, 0.25);
+    }
+
+    .milestone-card {
+        background: white;
+        border-radius: 16px;
+        border: 1px solid rgba(16, 185, 129, 0.1);
+        padding: 24px;
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    .milestone-card:hover { transform: translateY(-3px); }
+
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+    .status-pending { background: #f59e0b; }
+    .status-submitted { background: #3b82f6; }
+    .status-approved { background: #10b981; }
+    .status-rejected { background: #ef4444; }
+
+    .btn-upload {
+        background: #10b981;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 8px 20px;
+        font-weight: 600;
+        font-size: 0.88rem;
+    }
+    .btn-upload:hover { background: #059669; color: white; }
+</style>
+
+<div class="container-fluid py-4">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 shadow-sm rounded-3">@TempData["Success"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 shadow-sm rounded-3">@TempData["Error"]</div>
+    }
+
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-file-upload me-2"></i>Report Submissions</h2>
+            <p class="mb-0 opacity-80">Track your milestones and upload your reports for review.</p>
+        </div>
+        <div class="text-end">
+            <div class="fw-bold small opacity-75 text-uppercase">Current Supervisor</div>
+            <div class="fs-5 fw-bold">@Model.Supervisor?.FullName</div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-12">
+            <h5 class="fw-bold text-dark mb-4">Milestones & Reports</h5>
+            
+            @foreach (var m in Model.Milestones.OrderBy(x => x.DueDate))
+            {
+                <div class="milestone-card">
+                    <div class="row align-items-center">
+                        <div class="col-md-5">
+                            <h5 class="fw-bold text-dark mb-1">@m.Title</h5>
+                            <p class="text-muted small mb-0">Due Date: @(m.DueDate?.ToString("dd MMM yyyy") ?? "No Deadline")</p>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="d-flex align-items-center">
+                                <span class="status-dot status-@(m.Status.ToLower())"></span>
+                                <span class="fw-bold text-dark" style="font-size: .85rem;">@m.Status</span>
+                            </div>
+                            @if (m.SubmittedDate != null)
+                            {
+                                <small class="text-muted d-block">Submitted: @m.SubmittedDate?.ToString("dd MMM")</small>
+                            }
+                        </div>
+                        <div class="col-md-4 text-end">
+                            @if (m.Status == "Pending" || m.Status == "Rejected")
+                            {
+                                <button type="button" class="btn btn-upload" data-bs-toggle="modal" data-bs-target="#uploadModal_@m.Id">
+                                    <i class="fas fa-upload me-1"></i> Upload Report
+                                </button>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-success px-4 py-2 rounded-pill fw-bold">
+                                    <i class="fas fa-check-circle me-1"></i> @(m.Status == "Submitted" ? "Review Pending" : "Completed")
+                                </span>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- UPLOAD MODAL -->
+                    <div class="modal fade" id="uploadModal_@m.Id" tabindex="-1">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content border-0 shadow-lg rounded-4">
+                                <form asp-action="UploadSubmission" method="post" enctype="multipart/form-data">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="milestoneId" value="@m.Id" />
+                                    <div class="modal-header border-0">
+                                        <h5 class="fw-bold">Upload @m.Title</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-4 text-center">
+                                            <i class="fas fa-file-pdf fs-1 text-danger opacity-25 mb-3"></i>
+                                            <p class="text-muted">Please upload your report in **PDF** format if possible.</p>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Select File</label>
+                                            <input type="file" name="reportFile" class="form-control rounded-3" required />
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer border-0">
+                                        <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-success rounded-3 px-4">Submit Report</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>

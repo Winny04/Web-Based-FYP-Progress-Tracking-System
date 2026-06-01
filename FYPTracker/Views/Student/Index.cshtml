@@ -1,0 +1,460 @@
+@using FYPTracker.Models
+@model FYPProject?
+@{
+    ViewData["Title"] = "Student Home";
+    var currentUser = ViewBag.CurrentUser as EmployeeInfo;
+    var name = currentUser?.FullName ?? "Student";
+    var studentId = currentUser?.EmployeeId ?? "S12345678";
+    var supervisorName = Model?.Supervisor?.FullName ?? "Not Assigned";
+    var session = Model != null ? "2025/2026" : "—";
+    
+    var milestones = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
+    int total = milestones.Count;
+    int approved = milestones.Count(m => m.Status == "Approved");
+    int pending = milestones.Count(m => m.Status == "Submitted" || m.Status == "UnderReview" || m.Status == "Pending" && m.SubmittedDate.HasValue);
+    int revision = milestones.Count(m => m.Status == "Rejected" || m.Status == "Revision");
+    int notStarted = total - approved - pending - revision;
+    
+    int pct = total > 0 ? (int)((double)approved / total * 100) : 0;
+    
+    // Choose progress bar colour based on pct
+    string progressColor = "bg-danger"; // 0-30%
+    if (pct > 30 && pct <= 60) {
+        progressColor = "bg-warning"; // 31-60%
+    } else if (pct > 60) {
+        progressColor = "bg-success"; // 61-100%
+    }
+    
+    // Upcoming deadline check for the alert bar
+    FYPMilestone? upcomingUrgent = milestones
+        .Where(m => m.DueDate.HasValue && m.Status != "Approved")
+        .OrderBy(m => m.DueDate)
+        .FirstOrDefault();
+        
+    int? daysLeft = null;
+    string alertClass = "";
+    string alertText = "";
+    if (upcomingUrgent != null && upcomingUrgent.DueDate.HasValue) {
+        daysLeft = (int)(upcomingUrgent.DueDate.Value - DateTime.Today).TotalDays;
+        if (daysLeft < 0) {
+            alertClass = "alert-danger bg-danger text-white border-0 shadow-lg glow-alert";
+            alertText = $"⚠️ Overdue: {upcomingUrgent.Title} was due on {upcomingUrgent.DueDate.Value:dd/MM/yyyy} — Overdue by {Math.Abs(daysLeft.Value)} days!";
+        } else if (daysLeft <= 5) {
+            alertClass = "alert-warning bg-warning text-dark border-0 shadow-md";
+            alertText = $"⚠️ Upcoming: {upcomingUrgent.Title} is due in {daysLeft} days — {upcomingUrgent.DueDate.Value:dd/MM/yyyy}";
+        }
+    }
+    
+    var activities = ViewBag.Activities as List<FYPActivity> ?? new List<FYPActivity>();
+}
+
+<style>
+    :root {
+        --glass-bg: rgba(255, 255, 255, 0.85);
+        --glass-border: rgba(255, 255, 255, 0.25);
+        --primary-indigo: #4f46e5;
+        --accent-teal: #0d9488;
+    }
+
+    body {
+        background-color: #f3f4f6;
+        font-family: 'Outfit', 'Inter', sans-serif;
+    }
+
+    .premium-card {
+        background: var(--glass-bg);
+        backdrop-filter: blur(12px);
+        border: 1px solid var(--glass-border);
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .premium-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
+    }
+
+    .taskbar {
+        background: linear-gradient(135deg, #1e1b4b 0%, #311042 100%);
+        border-radius: 20px;
+        color: white;
+        padding: 24px 32px;
+        box-shadow: 0 8px 32px rgba(30, 27, 75, 0.2);
+    }
+
+    .badge-bell {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        font-size: 0.65rem;
+        padding: 4px 6px;
+        border-radius: 999px;
+    }
+
+    .progress-bar-container {
+        height: 18px;
+        background-color: #e5e7eb;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    
+    .glow-alert {
+        animation: pulseGlow 2s infinite alternate;
+    }
+
+    @@keyframes pulseGlow {
+        0% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+        100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.8); }
+    }
+
+    .stat-card-gradient-1 {
+        background: linear-gradient(135deg, #34d399 0%, #059669 100%);
+        color: white;
+    }
+    
+    .stat-card-gradient-2 {
+        background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
+        color: white;
+    }
+    
+    .stat-card-gradient-3 {
+        background: linear-gradient(135deg, #fca5a5 0%, #dc2626 100%);
+        color: white;
+    }
+
+    .timeline-element {
+        border-left: 2px solid #cbd5e1;
+        padding-left: 20px;
+        position: relative;
+        padding-bottom: 24px;
+    }
+
+    .timeline-element::before {
+        content: '';
+        position: absolute;
+        left: -7px;
+        top: 4px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: var(--primary-indigo);
+        box-shadow: 0 0 0 4px white;
+    }
+
+    .timeline-element:last-child {
+        padding-bottom: 0;
+    }
+
+    .table-responsive {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .table thead th {
+        background-color: #f8fafc;
+        border-bottom: 1px solid #e2e8f0;
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        color: #475569;
+    }
+
+    .status-badge {
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 4px 12px;
+        border-radius: 999px;
+        text-transform: uppercase;
+        display: inline-block;
+    }
+    
+    .status-approved { background-color: #d1fae5; color: #065f46; }
+    .status-pending { background-color: #fef3c7; color: #92400e; }
+    .status-revision { background-color: #fee2e2; color: #991b1b; }
+    .status-notstarted { background-color: #e2e8f0; color: #475569; }
+    .status-submitted { background-color: #dbeafe; color: #1e40af; }
+    
+    .action-btn {
+        font-size: 0.8rem;
+        font-weight: 600;
+        border-radius: 8px;
+        padding: 6px 14px;
+        transition: all 0.2s ease;
+    }
+    
+    .action-btn-primary {
+        background-color: var(--primary-indigo);
+        color: white;
+        border: none;
+    }
+    
+    .action-btn-primary:hover {
+        background-color: #4338ca;
+        transform: scale(1.05);
+    }
+
+    .action-btn-secondary {
+        background-color: #f1f5f9;
+        color: #334155;
+        border: 1px solid #cbd5e1;
+    }
+
+    .action-btn-secondary:hover {
+        background-color: #e2e8f0;
+    }
+</style>
+
+<div class="container-fluid py-4">
+
+    @* ── TOP TASKBAR ────────────────────────────────────────── *@
+    <div class="taskbar mb-4 d-flex justify-content-between align-items-center flex-wrap gap-4">
+        <div>
+            <h1 class="fw-bold mb-1" style="font-size: 1.75rem;">Welcome Back, @name</h1>
+            <div class="d-flex align-items-center gap-3 flex-wrap opacity-90" style="font-size: 0.9rem;">
+                <span><strong>Student ID:</strong> @studentId</span>
+                <span class="text-white-50">|</span>
+                <span><strong>Supervisor:</strong> @supervisorName</span>
+                <span class="text-white-50">|</span>
+                <span><strong>Session:</strong> @session</span>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <!-- Notification Bell Icon -->
+            <a href="/Student/Notifications" class="btn btn-icon btn-custom position-relative bg-white bg-opacity-10 text-white rounded-circle p-3" style="width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;">
+                <i class="fas fa-bell fs-4"></i>
+                @if (ViewBag.UnreadNotificationCount > 0)
+                {
+                    <span class="badge bg-danger badge-bell">@ViewBag.UnreadNotificationCount</span>
+                }
+            </a>
+            <!-- Profile Avatar Circular -->
+            <a href="/EmployeeInfo/Profile?name=@currentUser?.UserName" class="profile-avatar border border-2 border-white rounded-circle overflow-hidden shadow-sm" style="width: 48px; height: 48px; display: block;">
+                @if (!string.IsNullOrEmpty(currentUser?.Image))
+                {
+                    <img src="@currentUser.Image" alt="Avatar" style="width: 100%; height: 100%; object-fit: cover;" />
+                }
+                else
+                {
+                    <img src="/assets/media/avatars/student_avatar.png" alt="Avatar" style="width: 100%; height: 100%; object-fit: cover;" />
+                }
+            </a>
+        </div>
+    </div>
+
+    @* ── DEADLINES ALERT BAR ────────────────────────────────── *@
+    @if (!string.IsNullOrEmpty(alertText))
+    {
+        <div class="alert @alertClass d-flex align-items-center gap-3 p-4 mb-4 rounded-3 shadow-sm" role="alert">
+            <span class="fs-4"><i class="fas fa-exclamation-triangle"></i></span>
+            <div class="fw-bold flex-grow-1" style="font-size: 1.05rem;">@alertText</div>
+        </div>
+    }
+
+    <div class="row g-4">
+        
+        @* ── PROGRESS & STATS ──────────────────────────────────── *@
+        <div class="col-lg-8">
+            <!-- Progress Bar Card -->
+            <div class="premium-card p-4 mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold text-dark mb-0"><i class="fas fa-chart-line text-primary me-2"></i>Your FYP Progress</h5>
+                    <span class="badge bg-light text-dark fw-bold px-3 py-2 border">@pct% Completed</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated @progressColor" 
+                         role="progressbar" style="width: @pct%" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+            </div>
+
+            <!-- Statistics Cards (3 columns) -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="premium-card stat-card-gradient-1 p-4 text-center border-0">
+                        <span class="fs-1 d-block mb-1"><i class="fas fa-check-circle"></i></span>
+                        <h6 class="fw-bold opacity-80 uppercase mb-2">Approved / Done</h6>
+                        <h2 class="display-5 fw-bold mb-0">@approved</h2>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="premium-card stat-card-gradient-2 p-4 text-center border-0">
+                        <span class="fs-1 d-block mb-1"><i class="fas fa-hourglass-half"></i></span>
+                        <h6 class="fw-bold opacity-80 uppercase mb-2">Pending / Under Review</h6>
+                        <h2 class="display-5 fw-bold mb-0">@pending</h2>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="premium-card stat-card-gradient-3 p-4 text-center border-0">
+                        <span class="fs-1 d-block mb-1"><i class="fas fa-redo-alt"></i></span>
+                        <h6 class="fw-bold opacity-80 uppercase mb-2">Revision / Redo</h6>
+                        <h2 class="display-5 fw-bold mb-0">@revision</h2>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status Chapter Table -->
+            <div class="premium-card p-4">
+                <h5 class="fw-bold text-dark mb-4"><i class="fas fa-folder-open text-warning me-2"></i>Status Chapter Table</h5>
+                @if (Model == null)
+                {
+                    <div class="text-center py-5">
+                        <p class="text-muted">You do not have any project created yet. Please select a supervisor first!</p>
+                        <a href="/Student/SelectSupervisor" class="btn btn-primary rounded-3 px-4 mt-2">
+                            <i class="fas fa-user-plus me-1"></i> Choose Supervisor
+                        </a>
+                    </div>
+                }
+                else if (!milestones.Any())
+                {
+                    <div class="text-center py-5">
+                        <p class="text-muted">No milestones/chapters defined for your project.</p>
+                        <a href="/Student/Forms" class="btn btn-outline-primary rounded-3 px-4 mt-2">Submit Proposal</a>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">No</th>
+                                    <th>Chapter</th>
+                                    <th>Due Date</th>
+                                    <th>Status</th>
+                                    <th class="text-end pe-4">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{ int index = 1; }
+                                @foreach (var m in milestones.OrderBy(x => x.DueDate))
+                                {
+                                    var statClass = m.Status switch
+                                    {
+                                        "Approved" => "status-approved",
+                                        "Submitted" => "status-submitted",
+                                        "UnderReview" => "status-submitted",
+                                        "Rejected" => "status-revision",
+                                        "Revision" => "status-revision",
+                                        _ => "status-notstarted"
+                                    };
+
+                                    var statusText = m.Status;
+                                    if (string.IsNullOrEmpty(statusText) || statusText == "Pending" && !m.SubmittedDate.HasValue)
+                                    {
+                                        statusText = "Not Started";
+                                        statClass = "status-notstarted";
+                                    }
+
+                                    <tr>
+                                        <td class="ps-4 fw-semibold text-muted">@index</td>
+                                        <td class="fw-bold text-dark">@m.Title</td>
+                                        <td class="text-muted">@(m.DueDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                                        <td>
+                                            <span class="status-badge @statClass">@statusText</span>
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            @if (m.Status == "Approved")
+                                            {
+                                                <!-- View Feedback -->
+                                                <button class="action-btn action-btn-secondary" onclick="showFeedbackModal('@m.Title', '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(m.Remarks ?? "No feedback provided yet."))')">
+                                                    View Feedback
+                                                </button>
+                                            }
+                                            else if (m.Status == "Rejected" || m.Status == "Revision")
+                                            {
+                                                <!-- Edit & Submit or View Feedback / Resubmit -->
+                                                <div class="btn-group gap-2 justify-content-end">
+                                                    <button class="action-btn action-btn-secondary" onclick="showFeedbackModal('@m.Title', '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(m.Remarks ?? "Please revise according to guidelines."))')">
+                                                        Feedback
+                                                    </button>
+                                                    <a href="/Student/Submissions" class="action-btn action-btn-primary text-decoration-none">
+                                                        Resubmit
+                                                    </a>
+                                                </div>
+                                            }
+                                            else if (statusText == "Not Started")
+                                            {
+                                                <!-- Start / Submit -->
+                                                <a href="/Student/Submissions" class="action-btn action-btn-primary text-decoration-none">
+                                                    Start
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <!-- Pending review -->
+                                                <span class="text-muted fs-8 fw-semibold">—</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                    index++;
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ── RECENT ACTIVITIES (Right Sidebar) ─────────────────── *@
+        <div class="col-lg-4">
+            <div class="premium-card p-4 h-100 d-flex flex-column">
+                <h5 class="fw-bold text-dark mb-4"><i class="fas fa-history text-indigo me-2"></i>Recent Activities</h5>
+                <div class="flex-grow-1 overflow-auto pe-2" style="max-height: 450px;">
+                    @if (!activities.Any())
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <i class="fas fa-tasks d-block fs-1 opacity-20 mb-3"></i>
+                            No activity logged yet.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-flex flex-column">
+                            @foreach (var a in activities)
+                            {
+                                <div class="timeline-element">
+                                    <div class="fw-bold text-dark" style="font-size: 0.9rem;">@a.Title</div>
+                                    @if (!string.IsNullOrEmpty(a.Description))
+                                    {
+                                        <p class="text-muted mb-1" style="font-size: 0.82rem; line-height: 1.4;">@a.Description</p>
+                                    }
+                                    <small class="text-muted d-block" style="font-size: 0.75rem;"><i class="far fa-clock me-1"></i>@a.CreatedDate.ToString("dd/MM/yyyy hh:mm tt")</small>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- FEEDBACK BOOTSTRAP MODAL -->
+<div class="modal fade" id="feedbackModal" tabindex="-1" aria-labelledby="feedbackModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content premium-card border-0 p-3 shadow-lg">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="feedbackModalLabel">Feedback</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <p id="feedbackText" class="text-muted" style="line-height: 1.6; font-size: 0.95rem;"></p>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="action-btn action-btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function showFeedbackModal(title, text) {
+        document.getElementById('feedbackModalLabel').innerText = "Supervisor Feedback — " + title;
+        document.getElementById('feedbackText').innerText = text ? text : "No feedback remarks left by the supervisor.";
+        var myModal = new bootstrap.Modal(document.getElementById('feedbackModal'));
+        myModal.show();
+    }
+</script>

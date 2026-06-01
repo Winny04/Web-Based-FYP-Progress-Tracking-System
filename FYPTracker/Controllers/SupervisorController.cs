@@ -49,6 +49,44 @@ namespace FYPTracker.Controllers
             await _context.SaveChangesAsync();
         }
 
+        // ══════════════════════════════════════════════════════
+        //  DASHBOARD (INDEX)
+        // ══════════════════════════════════════════════════════
+        public async Task<IActionResult> Index()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "Authentication");
+            ViewBag.CurrentUser = user;
+
+            // Stats
+            ViewBag.TotalProjects     = await _context.FYPProjects.CountAsync(p => p.SupervisorId == user.Id);
+            ViewBag.PendingRequests   = await _context.SupervisorRequests.CountAsync(r => r.SupervisorId == user.Id && r.Status == "Pending");
+            ViewBag.PendingReviews    = await _context.FYPMilestones.CountAsync(m => m.Project.SupervisorId == user.Id && m.Status == "Submitted");
+            ViewBag.UpcomingMeetings  = await _context.MeetingBookings.CountAsync(m => m.SupervisorId == user.Id && m.MeetingDate >= DateTime.Today && m.Status == "Approved");
+
+            // Recent Requests (Top 5)
+            var recentRequests = await _context.SupervisorRequests
+                .Include(r => r.Student)
+                .Where(r => r.SupervisorId == user.Id && r.Status == "Pending")
+                .OrderByDescending(r => r.RequestedDate)
+                .Take(5)
+                .ToListAsync();
+
+            // Upcoming Meetings (Next 5)
+            var nextMeetings = await _context.MeetingBookings
+                .Include(m => m.Student)
+                .Where(m => m.SupervisorId == user.Id && m.MeetingDate >= DateTime.Today && m.Status == "Approved")
+                .OrderBy(m => m.MeetingDate)
+                .ThenBy(m => m.MeetingTime)
+                .Take(5)
+                .ToListAsync();
+
+            ViewBag.RecentRequests = recentRequests;
+            ViewBag.NextMeetings   = nextMeetings;
+
+            return View();
+        }
+
         // ────────────────────────────────────────────────────────
         // Student Requests
         // ────────────────────────────────────────────────────────
@@ -83,23 +121,47 @@ namespace FYPTracker.Controllers
                     var proj = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == req.StudentId);
                     if (proj == null)
                     {
-                        _context.FYPProjects.Add(new FYPProject
+                        proj = new FYPProject
                         {
-                            Title = "New FYP Project",
-                            Description = "Pending student updates.",
+                            Title = req.ProjectTopic ?? "New FYP Project",
+                            Description = req.RequestMessage ?? "Pending student updates.",
                             StudentId = req.StudentId,
                             SupervisorId = req.SupervisorId,
-                            Status = "Proposed",
+                            Status = "Approved",
                             StartDate = DateTime.Now,
                             CreatedDate = DateTime.Now
-                        });
+                        };
+                        _context.FYPProjects.Add(proj);
+                        await _context.SaveChangesAsync(); // Get ID
+
+                        // Create Default Milestones
+                        var milestones = new List<FYPMilestone>
+                        {
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Proposal", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Interim Report", DueDate = DateTime.Now.AddMonths(3), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 2: Final Dissertation", DueDate = DateTime.Now.AddMonths(6), Status = "Pending" }
+                        };
+                        _context.FYPMilestones.AddRange(milestones);
                     }
                     else
                     {
                         proj.SupervisorId = req.SupervisorId;
+                        proj.Status = "Approved";
                     }
 
-                    await AddNotificationAsync(req.StudentId, "SupervisorApproval", "Request Approved", $"Your request to {req.Supervisor?.FullName} was approved.");
+                    // --- NEW: Reject all other pending requests for this student ---
+                    var otherPending = await _context.SupervisorRequests
+                        .Where(r => r.StudentId == req.StudentId && r.Id != req.Id && r.Status == "Pending")
+                        .ToListAsync();
+                    
+                    foreach (var other in otherPending)
+                    {
+                        other.Status = "Rejected";
+                        other.RespondedDate = DateTime.Now;
+                        other.ResponseNote = "System: Student has been accepted by another supervisor.";
+                    }
+
+                    await AddNotificationAsync(req.StudentId, "SupervisorApproval", "Request Approved", $"Your request to {req.Supervisor?.FullName} was approved. Project and milestones initialized.");
                     await LogActivityAsync(req.StudentId, "SupervisorAssigned", "Supervisor Assigned", $"{req.Supervisor?.FullName} is your supervisor.");
                 }
                 else
@@ -180,6 +242,45 @@ namespace FYPTracker.Controllers
 
         // ────────────────────────────────────────────────────────
         // Manage Meetings
+        [HttpGet]
+        public async Task<IActionResult> GetBookedSlots(int supervisorId, string date)
+        {
+            if (!DateTime.TryParse(date, out var d)) return Json(new List<string>());
+
+            var bookedTimes = await _context.MeetingBookings
+                .Where(m => m.SupervisorId == supervisorId && m.MeetingDate.Date == d.Date && m.Status != "Rejected" && m.Status != "Cancelled")
+                .Select(m => m.MeetingTime)
+                .ToListAsync();
+
+            return Json(bookedTimes);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RescheduleMeeting(int meetingId, DateTime meetingDate, string meetingTime)
+        {
+            var user = await GetCurrentUserAsync();
+            var meeting = await _context.MeetingBookings.FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
+
+            if (meeting != null)
+            {
+                meeting.MeetingDate = meetingDate;
+                meeting.MeetingTime = meetingTime;
+                meeting.Status = "Pending"; // As requested: status oending
+                meeting.RespondedDate = DateTime.Now;
+                meeting.SupervisorNote = "Rescheduled by Supervisor.";
+
+                await _context.SaveChangesAsync();
+
+                await AddNotificationAsync(meeting.StudentId, "MeetingUpdate", "Meeting Rescheduled", $"Your meeting on {meetingDate:dd MMM} has been rescheduled to {meetingTime}.");
+                await LogActivityAsync(meeting.StudentId, "MeetingUpdated", "Meeting Rescheduled", $"Supervisor moved meeting to {meetingDate:dd MMM} at {meetingTime}");
+
+                TempData["Success"] = "Meeting rescheduled successfully and status set to Pending.";
+            }
+
+            return RedirectToAction(nameof(ManageMeetings));
+        }
+
         // ────────────────────────────────────────────────────────
         public async Task<IActionResult> ManageMeetings()
         {

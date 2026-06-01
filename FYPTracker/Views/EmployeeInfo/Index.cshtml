@@ -1,4 +1,4 @@
-﻿@using FYPTracker.Common
+@using FYPTracker.Common
 @using FYPTracker.Helpers
 @model FYPTracker.Controllers.EmployeeInfoVM
 
@@ -18,8 +18,78 @@
     }
 </style>
 
-<div class="card">
-    <h3 style="margin-left:30px; margin-top:20px;">Manage User</h3>
+<div class="container-fluid py-4">
+    <div class="row g-4 mb-4">
+        <!-- Students -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);">
+                <div class="card-body p-4 text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="opacity-75 fw-bold text-uppercase mb-1" style="font-size: 0.75rem; letter-spacing: 0.05em;">Total Students</h6>
+                            <h2 class="fw-bolder mb-0">@ViewBag.TotalStudents</h2>
+                        </div>
+                        <div class="bg-white bg-opacity-25 rounded-3 p-3">
+                            <i class="fas fa-user-graduate fs-2"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Supervisors -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                <div class="card-body p-4 text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="opacity-75 fw-bold text-uppercase mb-1" style="font-size: 0.75rem; letter-spacing: 0.05em;">Supervisors</h6>
+                            <h2 class="fw-bolder mb-0">@ViewBag.TotalSupervisors</h2>
+                        </div>
+                        <div class="bg-white bg-opacity-25 rounded-3 p-3">
+                            <i class="fas fa-chalkboard-teacher fs-2"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Projects -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                <div class="card-body p-4 text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="opacity-75 fw-bold text-uppercase mb-1" style="font-size: 0.75rem; letter-spacing: 0.05em;">Total Projects</h6>
+                            <h2 class="fw-bolder mb-0">@ViewBag.TotalProjects</h2>
+                        </div>
+                        <div class="bg-white bg-opacity-25 rounded-3 p-3">
+                            <i class="fas fa-project-diagram fs-2"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Pending Requests -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+                <div class="card-body p-4 text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="opacity-75 fw-bold text-uppercase mb-1" style="font-size: 0.75rem; letter-spacing: 0.05em;">Pending Requests</h6>
+                            <h2 class="fw-bolder mb-0">@ViewBag.PendingRequests</h2>
+                        </div>
+                        <div class="bg-white bg-opacity-25 rounded-3 p-3">
+                            <i class="fas fa-clock fs-2"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-header border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
+            <h4 class="fw-bolder text-dark mb-0"><i class="fas fa-users-cog text-primary me-2"></i>User Management</h4>
+
     <div class="card-header border-0">
 
         <div class="card-toolbar">
@@ -206,7 +276,7 @@
                 });
                 return false;
             }
-            else if (Email == null || (Email.indexOf("sophicautomation.com") < 0 && Email.indexOf("sophic.my") < 0)) { //if not found
+            else if (Email == null || (Email.indexOf("fyp.edu.my") < 0)) { //if not found
                 Swal.fire({
                     text: "Inccorect email format. Please use company's email address.",
                     icon: "warning",

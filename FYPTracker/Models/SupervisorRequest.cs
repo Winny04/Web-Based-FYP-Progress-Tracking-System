@@ -23,7 +23,18 @@ namespace FYPTracker.Models
         [StringLength(50)]
         public string Status { get; set; } = "Pending";
 
-        public string? RequestMessage { get; set; }
+        public int Priority { get; set; } = 1; // For Top 3 (1, 2, 3)
+
+        // --- Part A: Personal Info ---
+        public string? MatricNumber { get; set; }
+        public string? Program { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? SessionSemester { get; set; }
+        public string? YearOfStudy { get; set; }
+
+        // --- Part B: Project Info ---
+        public string? ProjectTopic { get; set; }
+        public string? RequestMessage { get; set; } // Serving as Description
 
         [Column(TypeName = "datetime")]
         public DateTime RequestedDate { get; set; } = DateTime.Now;

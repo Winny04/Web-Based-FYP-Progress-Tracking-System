@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.1.32210.238
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "eForm_dotnetCore", "eForm_dotnetCore\eForm_dotnetCore.csproj", "{DA349133-1200-414C-AF3C-73826B82AE38}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FYPTracker", "FYPTracker\FYPTracker.csproj", "{DA349133-1200-414C-AF3C-73826B82AE38}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

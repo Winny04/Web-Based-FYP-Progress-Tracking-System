@@ -1,0 +1,176 @@
+@using FYPTracker.Models
+@model FYPIAForm?
+@{
+    ViewData["Title"] = "IAF Form";
+    var user = ViewBag.CurrentUser as EmployeeInfo;
+}
+
+<style>
+    :root { --iaf-grad: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
+    .page-hero {
+        background: var(--iaf-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(15,23,42,.2);
+    }
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid rgba(15,23,42,.08);
+        box-shadow: 0 4px 20px rgba(0,0,0,.04);
+    }
+    .section-header {
+        font-size: .8rem; font-weight: 800; text-transform: uppercase; color: #334155; 
+        letter-spacing: .05em; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 20px;
+    }
+    .form-control, .form-select {
+        border-radius: 10px; border: 1.5px solid #e2e8f0;
+        padding: 10px 14px; font-size: .9rem; transition: all .2s;
+    }
+    .form-control:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+    
+    .status-banner {
+        border-radius: 12px; padding: 12px 20px; margin-bottom: 24px;
+        display: flex; align-items:center; gap: 12px; font-weight: 600;
+    }
+    .status-pending { background: #fef9c3; color: #854d0e; border: 1px solid #fef08a; }
+    .status-approved { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+    .status-rejected { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+</style>
+
+<div class="container-fluid py-4">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-4">@TempData["Success"]</div>
+    }
+
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-id-badge me-2"></i>Industrial Attachment Form (IAF)</h2>
+            <p class="mb-0 opacity-80">Digital eForm for internship placement and company verification.</p>
+        </div>
+        <div class="badge bg-white text-dark fw-bold px-3 py-2 rounded-pill shadow-sm">
+            eForm v1.0
+        </div>
+    </div>
+
+    @if (Model != null)
+    {
+        var statusCls = Model.Status switch {
+            "Approved" => "status-approved",
+            "Rejected" => "status-rejected",
+            _ => "status-pending"
+        };
+        var statusIcon = Model.Status switch {
+            "Approved" => "fa-check-circle",
+            "Rejected" => "fa-times-circle",
+            _ => "fa-clock"
+        };
+
+        <div class="status-banner @statusCls">
+            <i class="fas @statusIcon fs-4"></i>
+            <div>
+                Current Status: <strong>@Model.Status</strong>
+                @if (!string.IsNullOrEmpty(Model.AdminNote)) { <div class="small opacity-80">Note: @Model.AdminNote</div> }
+            </div>
+        </div>
+    }
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="glass-card p-5">
+                <form asp-action="SubmitIAF" method="post">
+                    <div class="section-header">Section 1: Company Information</div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold small">Company Name</label>
+                            <input type="text" name="CompanyName" class="form-control" placeholder="Full Registered Name" value="@Model?.CompanyName" required />
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold small">Company Address</label>
+                            <textarea name="CompanyAddress" class="form-control" rows="2" required>@Model?.CompanyAddress</textarea>
+                        </div>
+                    </div>
+
+                    <div class="section-header">Section 2: Company Supervisor Details</div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Supervisor Name</label>
+                            <input type="text" name="CompanySupervisorName" class="form-control" value="@Model?.CompanySupervisorName" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Supervisor Email</label>
+                            <input type="email" name="CompanySupervisorEmail" class="form-control" value="@Model?.CompanySupervisorEmail" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Supervisor Contact Number</label>
+                            <input type="text" name="CompanySupervisorPhone" class="form-control" value="@Model?.CompanySupervisorPhone" required />
+                        </div>
+                    </div>
+
+                    <div class="section-header">Section 3: Placement Details</div>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold small">Project Title / Main Tasks</label>
+                            <input type="text" name="ProjectTitle" class="form-control" value="@Model?.ProjectTitle" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Start Date</label>
+                            <input type="date" name="StartDate" class="form-control" value="@Model?.StartDate.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">End Date</label>
+                            <input type="date" name="EndDate" class="form-control" value="@Model?.EndDate.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">Monthly Allowance (RM)</label>
+                            <input type="number" step="0.01" name="MonthlyAllowance" class="form-control" value="@Model?.MonthlyAllowance" />
+                        </div>
+                    </div>
+
+                    <div class="mt-5 pt-3 border-top d-flex justify-content-between align-items-center">
+                        <p class="text-muted small mb-0"><i class="fas fa-info-circle me-1"></i> Submission will notify the Admin for verification.</p>
+                        <button type="submit" class="btn btn-primary px-5 rounded-pill shadow-sm fw-bold">
+                            @(Model == null ? "Submit eForm" : "Update Submission")
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="glass-card p-4 mb-4">
+                <h6 class="fw-bold mb-3"><i class="fas fa-user-circle me-2 text-primary"></i>Student Info</h6>
+                <div class="p-3 bg-light rounded-3">
+                    <div class="small text-muted mb-1">Full Name</div>
+                    <div class="fw-bold mb-2">@user?.FullName</div>
+                    <div class="small text-muted mb-1">Matric Number</div>
+                    <div class="fw-bold mb-2">@user?.EmployeeId</div>
+                    <div class="small text-muted mb-1">Program</div>
+                    <div class="fw-bold">@user?.EmpDepartment?.Name</div>
+                </div>
+            </div>
+
+            <div class="glass-card p-4">
+                <h6 class="fw-bold mb-3">Submission Checklist</h6>
+                <div class="d-flex flex-column gap-3 small">
+                    <div class="d-flex gap-2">
+                        <i class="fas fa-check-circle text-success mt-1"></i>
+                        <span>Section 1 & 2 Completed</span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <i class="fas fa-check-circle text-success mt-1"></i>
+                        <span>Placement Timeline Set</span>
+                    </div>
+                    <div class="d-flex gap-2 text-muted">
+                        <i class="fas fa-circle-notch mt-1"></i>
+                        <span>Pending Admin Verification</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

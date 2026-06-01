@@ -1,0 +1,186 @@
+@{
+    ViewData["Title"] = "Admin Dashboard";
+}
+
+<style>
+    :root { --admin-grad: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); }
+
+    .page-hero {
+        background: var(--admin-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(30, 58, 138, 0.25);
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 16px;
+        padding: 20px;
+        border: 1px solid rgba(0,0,0,0.05);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+        transition: transform 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-3px); }
+
+    .stat-icon {
+        width: 45px;
+        height: 45px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        margin-bottom: 12px;
+    }
+
+    .quick-action-btn {
+        width: 100%;
+        text-align: left;
+        padding: 14px 20px;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        background: white;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        transition: all 0.2s;
+        text-decoration: none;
+        color: #374151;
+        font-weight: 600;
+    }
+    .quick-action-btn:hover { background: #f9fafb; border-color: #3b82f6; color: #1d4ed8; }
+    .quick-action-btn i { font-size: 1.1rem; opacity: 0.8; }
+
+    .progress-radial {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        background: conic-gradient(#3b82f6 @(ViewBag.CompletionRate * 3.6)deg, #e5e7eb 0deg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+    .progress-radial::after {
+        content: "@ViewBag.CompletionRate%";
+        position: absolute;
+        width: 80px;
+        height: 80px;
+        background: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 1.2rem;
+        color: #1e3a8a;
+    }
+</style>
+
+<div class="container-fluid py-4">
+
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-shield-alt me-2"></i>Admin Command Center</h2>
+            <p class="mb-0 opacity-80">Global overview and system management portal.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a asp-action="ExportSummary" class="btn btn-white text-primary fw-bold px-4 rounded-pill bg-white shadow-sm">
+                <i class="fas fa-file-export me-2"></i>Export Summary Report
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-2">
+            <div class="stat-card">
+                <div class="stat-icon bg-light-primary text-primary"><i class="fas fa-users"></i></div>
+                <div class="text-muted small fw-bold">Total Users</div>
+                <h3 class="fw-bold mb-0">@ViewBag.TotalUsers</h3>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card">
+                <div class="stat-icon bg-light-info text-info"><i class="fas fa-user-tie"></i></div>
+                <div class="text-muted small fw-bold">Supervisors</div>
+                <h3 class="fw-bold mb-0">@ViewBag.TotalSupervisors</h3>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card">
+                <div class="stat-icon bg-light-success text-success"><i class="fas fa-user-graduate"></i></div>
+                <div class="text-muted small fw-bold">Students</div>
+                <h3 class="fw-bold mb-0">@ViewBag.TotalStudents</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon bg-light-warning text-warning"><i class="fas fa-project-diagram"></i></div>
+                <div class="text-muted small fw-bold">Active Projects</div>
+                <h3 class="fw-bold mb-0">@ViewBag.ActiveProjects</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon bg-light-danger text-danger"><i class="fas fa-clock"></i></div>
+                <div class="text-muted small fw-bold">Pending Approvals</div>
+                <h3 class="fw-bold mb-0">@ViewBag.PendingApprovals</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="stat-card h-100 p-4">
+                <div class="d-flex justify-content-between align-items-start mb-4">
+                    <div>
+                        <h5 class="fw-bold mb-1">Project Completion Rate</h5>
+                        <p class="text-muted small">Percentage of students who have completed all 3 milestones.</p>
+                    </div>
+                    <div class="progress-radial"></div>
+                </div>
+                
+                <hr class="opacity-10" />
+                
+                <h6 class="fw-bold mt-4 mb-3">System Health & Recent Activity</h6>
+                <div class="alert alert-light border-0 small text-muted">
+                    <i class="fas fa-info-circle me-2"></i> All systems are operational. Scheduled maintenance in 12 days.
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="stat-card h-100 p-4">
+                <h5 class="fw-bold mb-4">Quick Actions</h5>
+                
+                <a href="/EmployeeInfo" class="quick-action-btn">
+                    <div class="bg-light-primary text-primary p-2 rounded-3"><i class="fas fa-user-plus"></i></div>
+                    <span>Manage & Add Users</span>
+                </a>
+                
+                <a href="/EmployeeInfo?import=true" class="quick-action-btn">
+                    <div class="bg-light-success text-success p-2 rounded-3"><i class="fas fa-file-import"></i></div>
+                    <span>Import Student CSV</span>
+                </a>
+
+                <a href="#" class="quick-action-btn">
+                    <div class="bg-light-info text-info p-2 rounded-3"><i class="fas fa-paper-plane"></i></div>
+                    <span>Invite Students (Email)</span>
+                </a>
+
+                <a href="/Admin/AssignSupervisor" class="quick-action-btn">
+                    <div class="bg-light-warning text-warning p-2 rounded-3"><i class="fas fa-link"></i></div>
+                    <span>Assign Supervisor</span>
+                </a>
+
+                <a href="/Admin/ManageModules" class="quick-action-btn">
+                    <div class="bg-light-danger text-danger p-2 rounded-3"><i class="fas fa-tasks"></i></div>
+                    <span>Manage Modules</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

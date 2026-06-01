@@ -17,7 +17,96 @@ namespace FYPTracker.Controllers
             _env     = env;
         }
 
+        // ══════════════════════════════════════════════════════
+        //  STUDENT DASHBOARD / HOME PAGE
+        // ══════════════════════════════════════════════════════
+        public async Task<IActionResult> Index()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "EmployeeInfo");
+
+            ViewBag.CurrentUser = user;
+
+            // Fetch the student's project
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .Include(p => p.Milestones)
+                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+
+            // Fetch recent activities
+            var activities = await _context.FYPActivities
+                .Where(a => a.StudentId == user.Id)
+                .OrderByDescending(a => a.CreatedDate)
+                .Take(10)
+                .ToListAsync();
+
+            ViewBag.Activities = activities;
+
+            // Fetch unread notifications
+            var unreadNotifCount = await _context.FYPNotifications
+                .Where(n => n.RecipientId == user.Id && !n.IsRead)
+                .CountAsync();
+            ViewBag.UnreadNotificationCount = unreadNotifCount;
+
+            return View(project);
+        }
+
         // ──────────────────────────────────────────────────────
+        //  DIGITAL eFORMS
+        // ──────────────────────────────────────────────────────
+        public async Task<IActionResult> IAF()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "EmployeeInfo");
+
+            // Check if user already has an IAF submission
+            var existing = await _context.FYPIAForms.FirstOrDefaultAsync(f => f.StudentId == user.Id);
+            ViewBag.CurrentUser = user;
+            
+            return View(existing);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> SubmitIAF(FYPIAForm form)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return Unauthorized();
+
+            form.StudentId = user.Id;
+            form.SubmittedDate = DateTime.Now;
+            form.Status = "Pending";
+
+            var existing = await _context.FYPIAForms.FirstOrDefaultAsync(f => f.StudentId == user.Id);
+            if (existing != null)
+            {
+                // Update existing
+                existing.CompanyName = form.CompanyName;
+                existing.CompanyAddress = form.CompanyAddress;
+                existing.CompanySupervisorName = form.CompanySupervisorName;
+                existing.CompanySupervisorEmail = form.CompanySupervisorEmail;
+                existing.CompanySupervisorPhone = form.CompanySupervisorPhone;
+                existing.StartDate = form.StartDate;
+                existing.EndDate = form.EndDate;
+                existing.ProjectTitle = form.ProjectTitle;
+                existing.ProjectScope = form.ProjectScope;
+                existing.MonthlyAllowance = form.MonthlyAllowance;
+                existing.Status = "Pending";
+                existing.SubmittedDate = DateTime.Now;
+                _context.FYPIAForms.Update(existing);
+            }
+            else
+            {
+                _context.FYPIAForms.Add(form);
+            }
+
+            await _context.SaveChangesAsync();
+            await AddNotificationAsync(user.Id, "eForm", "IAF Submitted", "Your Industrial Attachment Form has been submitted for review.");
+            
+            TempData["Success"] = "IAF Form submitted successfully!";
+            return RedirectToAction("IAF");
+        }
+
         //  HELPER: current logged-in EmployeeInfo
         // ──────────────────────────────────────────────────────
         private async Task<EmployeeInfo?> GetCurrentUserAsync()
@@ -89,84 +178,266 @@ namespace FYPTracker.Controllers
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
 
-            ViewBag.CurrentUser = user;
-
-            // Auto-reject expired pending requests
-            var expiredRequests = await _context.SupervisorRequests
-                .Where(r => r.StudentId == user.Id && r.Status == "Pending" && r.ExpiryDate < DateTime.Now)
-                .ToListAsync();
-            foreach (var req in expiredRequests)
+            // If student already has a confirmed supervisor, redirect to dashboard
+            var hasApproved = await _context.SupervisorRequests
+                .AnyAsync(r => r.StudentId == user.Id && r.Status == "Approved");
+            if (hasApproved)
             {
-                req.Status       = "Rejected";
-                req.ResponseNote = "Auto-rejected: no response within 7 days.";
-                req.RespondedDate = DateTime.Now;
+                TempData["Info"] = "You already have a confirmed supervisor.";
+                return RedirectToAction("Index");
             }
-            if (expiredRequests.Any()) await _context.SaveChangesAsync();
 
-            // All active supervisors
+            // 1. Auto-Expiry (2 Days)
+            var expired = await _context.SupervisorRequests
+                .Where(r => r.Status == "Pending" && r.ExpiryDate < DateTime.Now)
+                .ToListAsync();
+            foreach (var e in expired)
+            {
+                e.Status = "Rejected";
+                e.ResponseNote = "Auto-rejected: No response within 2 days.";
+                e.RespondedDate = DateTime.Now;
+            }
+            if (expired.Any()) await _context.SaveChangesAsync();
+
+            // 2. Identify Rejectors
+            var rejectedIds = await _context.SupervisorRequests
+                .Where(r => r.StudentId == user.Id && r.Status == "Rejected")
+                .Select(r => r.SupervisorId)
+                .ToListAsync();
+
+            // 3. Get Filtered Supervisors
             var supervisors = await _context.EmployeeInfos
                 .Include(e => e.EmpDepartment)
-                .Where(e => e.UserType == "Supervisor" && e.IsResign == false)
+                .Where(e => e.UserType == "Supervisor" && !e.IsResign && !rejectedIds.Contains(e.Id))
                 .ToListAsync();
 
-            // Count how many students each supervisor has approved
-            var approvedCountMap = await _context.SupervisorRequests
-                .Where(r => r.Status == "Approved")
+            // 4. Calculate Applicant Counts (Pending + Approved)
+            var applicantCounts = await _context.SupervisorRequests
+                .Where(r => r.Status == "Pending" || r.Status == "Approved")
                 .GroupBy(r => r.SupervisorId)
                 .Select(g => new { SupervisorId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.SupervisorId, x => x.Count);
 
-            // Student's existing requests
+            // 5. Get Student's Requests
             var myRequests = await _context.SupervisorRequests
                 .Include(r => r.Supervisor)
                 .Where(r => r.StudentId == user.Id)
-                .OrderByDescending(r => r.RequestedDate)
+                .OrderBy(r => r.Priority)
                 .ToListAsync();
 
             ViewBag.Supervisors     = supervisors;
+            ViewBag.ApplicantCounts = applicantCounts;
             ViewBag.MyRequests      = myRequests;
-            ViewBag.ApprovedCounts  = approvedCountMap;
+            ViewBag.CurrentUser     = user;
 
             return View();
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> SubmitSupervisorRequest(int supervisorId, string? requestMessage)
+        public async Task<IActionResult> SubmitSupervisorRequest(int supervisorId, string matricNumber, string program, string phoneNumber, string sessionSemester, string yearOfStudy, string projectTopic, string? requestMessage)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
 
-            bool alreadyExists = await _context.SupervisorRequests
-                .AnyAsync(r => r.StudentId == user.Id
-                            && r.SupervisorId == supervisorId
-                            && (r.Status == "Pending" || r.Status == "Approved"));
-
-            if (alreadyExists)
+            var myRequests = await _context.SupervisorRequests.Where(r => r.StudentId == user.Id).ToListAsync();
+            
+            if (myRequests.Any(r => r.Status == "Approved"))
             {
-                TempData["Error"] = "You already have a pending or approved request for this supervisor.";
+                TempData["Error"] = "You already have an approved supervisor.";
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+
+            if (myRequests.Count(r => r.Status == "Pending") >= 3)
+            {
+                TempData["Error"] = "You can only have up to 3 pending requests at a time.";
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+
+            if (myRequests.Any(r => r.SupervisorId == supervisorId && r.Status == "Pending"))
+            {
+                TempData["Error"] = "You already have a pending request for this supervisor.";
                 return RedirectToAction(nameof(SelectSupervisor));
             }
 
             var request = new SupervisorRequest
             {
-                StudentId      = user.Id,
-                SupervisorId   = supervisorId,
-                RequestMessage = requestMessage,
-                RequestedDate  = DateTime.Now,
-                ExpiryDate     = DateTime.Now.AddDays(7),
-                Status         = "Pending"
+                StudentId       = user.Id,
+                SupervisorId    = supervisorId,
+                Status          = "Pending",
+                RequestedDate   = DateTime.Now,
+                ExpiryDate      = DateTime.Now.AddDays(2),
+                Priority        = myRequests.Count(r => r.Status == "Pending") + 1,
+                
+                MatricNumber    = matricNumber,
+                Program         = program,
+                PhoneNumber     = phoneNumber,
+                SessionSemester = sessionSemester,
+                YearOfStudy     = yearOfStudy,
+                ProjectTopic    = projectTopic,
+                RequestMessage  = requestMessage
             };
+
             _context.SupervisorRequests.Add(request);
             await _context.SaveChangesAsync();
 
-            await LogActivityAsync(user.Id, "General", "Supervisor Request Sent",
-                "You sent a supervision request.");
-            await AddNotificationAsync(user.Id, "General", "Supervisor Request Submitted",
-                "Your request has been sent. You will be notified within 7 days.");
+            await LogActivityAsync(user.Id, "General", "Supervisor Request Sent", $"Sent request to supervisor {supervisorId}");
+            await AddNotificationAsync(user.Id, "General", "Request Submitted", "Your supervision request has been sent.");
 
-            TempData["Success"] = "Supervisor request submitted! The supervisor has 7 days to respond.";
+            TempData["Success"] = "Supervision request sent successfully!";
             return RedirectToAction(nameof(SelectSupervisor));
+        }
+
+        // ────────────────────────────────────────────────────────
+        //  SUBMISSIONS (REPORT UPLOAD)
+        // ────────────────────────────────────────────────────────
+        public async Task<IActionResult> Submissions()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Milestones)
+                .Include(p => p.Supervisor)
+                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+
+            if (project == null)
+            {
+                TempData["Error"] = "You don't have an approved project yet. Please apply for a supervisor first.";
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+
+            return View(project);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UploadSubmission(int milestoneId, IFormFile reportFile)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            if (reportFile == null || reportFile.Length == 0)
+            {
+                TempData["Error"] = "Please select a file to upload.";
+                return RedirectToAction(nameof(Submissions));
+            }
+
+            // 1. Validate File type & Size
+            var allowedExt = new[] { ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".zip" };
+            var ext = Path.GetExtension(reportFile.FileName).ToLowerInvariant();
+            if (!allowedExt.Contains(ext))
+            {
+                TempData["Error"] = "Only PDF, DOC, PPT, and ZIP files are allowed.";
+                return RedirectToAction(nameof(Submissions));
+            }
+
+            if (reportFile.Length > 20 * 1024 * 1024) // 20 MB
+            {
+                TempData["Error"] = "File size must not exceed 20 MB.";
+                return RedirectToAction(nameof(Submissions));
+            }
+
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.StudentId == user.Id);
+
+            if (milestone == null) return NotFound();
+
+            // 2. Handle File Saving
+            var uniqueName = $"{Guid.NewGuid()}{ext}";
+            var uploadDir  = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads/submissions");
+            Directory.CreateDirectory(uploadDir);
+            
+            var path = Path.Combine(uploadDir, uniqueName);
+            using (var stream = new FileStream(path, FileMode.Create))
+            {
+                await reportFile.CopyToAsync(stream);
+            }
+
+            // 3. Save DB record
+            var submissionFile = new FYPSubmissionFile
+            {
+                MilestoneId  = milestoneId,
+                FileName     = reportFile.FileName,
+                FilePath     = "/uploads/submissions/" + uniqueName,
+                FileSize     = reportFile.Length,
+                UploadedBy   = user.Id,
+                UploadedDate = DateTime.Now
+            };
+            _context.FYPSubmissionFiles.Add(submissionFile);
+
+            milestone.Status = "Submitted";
+            milestone.SubmittedDate = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+
+            await LogActivityAsync(user.Id, "Submission", "File Uploaded", $"Uploaded {reportFile.FileName} for {milestone.Title}");
+            await AddNotificationAsync(milestone.Project.SupervisorId ?? 0, "Submission", "New Submission", $"Student {user.FullName} uploaded a report for {milestone.Title}");
+
+            TempData["Success"] = "Report uploaded successfully!";
+            return RedirectToAction(nameof(Submissions));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SubmitDigitalForm(
+            int milestoneId, string formType, string? title, string? detailsJson, IFormFile? attachedFile)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "EmployeeInfo");
+
+            string? filePath = null;
+            string? fileName = null;
+            long? fileSize = null;
+            if (attachedFile != null && attachedFile.Length > 0)
+            {
+                var ext = Path.GetExtension(attachedFile.FileName).ToLowerInvariant();
+                var uniqueName = $"{Guid.NewGuid()}{ext}";
+                var uploadDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads/submissions");
+                Directory.CreateDirectory(uploadDir);
+                var path = Path.Combine(uploadDir, uniqueName);
+                using (var stream = new FileStream(path, FileMode.Create))
+                {
+                    await attachedFile.CopyToAsync(stream);
+                }
+                filePath = "/uploads/submissions/" + uniqueName;
+                fileName = attachedFile.FileName;
+                fileSize = attachedFile.Length;
+            }
+
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.StudentId == user.Id);
+
+            if (milestone != null)
+            {
+                milestone.Status = "Submitted";
+                milestone.SubmittedDate = DateTime.Now;
+                milestone.Remarks = $"Form: {formType}. Details: {title}. JSON: {detailsJson}";
+                
+                if (filePath != null)
+                {
+                    var fileRec = new FYPSubmissionFile
+                    {
+                        MilestoneId = milestoneId,
+                        FileName = fileName ?? "AttachedFile",
+                        FilePath = filePath,
+                        FileSize = fileSize,
+                        UploadedBy = user.Id,
+                        UploadedDate = DateTime.Now
+                    };
+                    _context.FYPSubmissionFiles.Add(fileRec);
+                }
+                
+                await _context.SaveChangesAsync();
+                
+                await LogActivityAsync(user.Id, "Submission", "Form Submitted", $"Submitted {formType} for {milestone.Title}");
+                await AddNotificationAsync(milestone.Project.SupervisorId ?? 0, "Submission", "Form Submitted", $"Student {user.FullName} submitted {formType} for {milestone.Title}");
+            }
+
+            TempData["Success"] = "Your form has been submitted successfully!";
+            return RedirectToAction("Forms");
         }
 
         // ══════════════════════════════════════════════════════
@@ -185,63 +456,6 @@ namespace FYPTracker.Controllers
                 .FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
             return View(project);
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UploadSubmission(int milestoneId, IFormFile file)
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
-
-            if (file == null || file.Length == 0)
-            {
-                TempData["Error"] = "Please select a file to upload.";
-                return RedirectToAction(nameof(Forms));
-            }
-
-            // Validate allowed types
-            var allowedExt = new[] { ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".zip" };
-            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-            if (!allowedExt.Contains(ext))
-            {
-                TempData["Error"] = "Only PDF, DOC, DOCX, PPT, PPTX, ZIP files are allowed.";
-                return RedirectToAction(nameof(Forms));
-            }
-
-            // Max 20 MB
-            if (file.Length > 20 * 1024 * 1024)
-            {
-                TempData["Error"] = "File size must not exceed 20 MB.";
-                return RedirectToAction(nameof(Forms));
-            }
-
-            // Save file
-            var uploadDir = Path.Combine(_env.WebRootPath, "uploads", "submissions");
-            Directory.CreateDirectory(uploadDir);
-            var uniqueName = $"{Guid.NewGuid()}{ext}";
-            var filePath   = Path.Combine(uploadDir, uniqueName);
-            using (var stream = new FileStream(filePath, FileMode.Create))
-                await file.CopyToAsync(stream);
-
-            var submission = new FYPSubmissionFile
-            {
-                MilestoneId  = milestoneId,
-                FileName     = file.FileName,
-                FilePath     = $"/uploads/submissions/{uniqueName}",
-                FileSize     = file.Length,
-                UploadedBy   = user.Id,
-                UploadedDate = DateTime.Now
-            };
-            _context.FYPSubmissionFiles.Add(submission);
-            await _context.SaveChangesAsync();
-
-            await LogActivityAsync(user.Id, "DocumentUploaded", "Document Uploaded", $"{file.FileName} was uploaded.");
-            await AddNotificationAsync(user.Id, "General", "File Uploaded Successfully",
-                $"{file.FileName} was uploaded to your submission.");
-
-            TempData["Success"] = $"'{file.FileName}' uploaded successfully!";
-            return RedirectToAction(nameof(Forms));
         }
 
         // ══════════════════════════════════════════════════════
@@ -303,8 +517,26 @@ namespace FYPTracker.Controllers
             await AddNotificationAsync(user.Id, "MeetingUpdate", "Meeting Request Submitted",
                 $"Your meeting request for {parsedDate:dd MMM yyyy} at {meetingTime} is pending approval.");
 
-            TempData["Success"] = "Meeting request submitted! Awaiting supervisor approval.";
+            var supervisor = await _context.EmployeeInfos.FindAsync(supervisorId);
+            string supName = supervisor?.FullName ?? "your supervisor";
+            TempData["Success"] = $"Meeting request sent to {supName}!";
             return RedirectToAction(nameof(BookMeeting));
+        }
+
+        [HttpGet]
+        public async Task<JsonResult> GetBookedSlots(int supervisorId, string date)
+        {
+            if (!DateTime.TryParse(date, out var parsedDate))
+                return Json(new List<string>());
+
+            var bookedTimes = await _context.MeetingBookings
+                .Where(m => m.SupervisorId == supervisorId 
+                         && m.MeetingDate.Date == parsedDate.Date 
+                         && m.Status != "Rejected")
+                .Select(m => m.MeetingTime)
+                .ToListAsync();
+
+            return Json(bookedTimes);
         }
 
         [HttpPost]
@@ -330,6 +562,71 @@ namespace FYPTracker.Controllers
                 $"Meeting on {meeting.MeetingDate:dd MMM yyyy} was cancelled.");
 
             TempData["Success"] = "Meeting request cancelled.";
+            return RedirectToAction(nameof(BookMeeting));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AcceptPostponedMeeting(int meetingId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var meeting = await _context.MeetingBookings
+                .FirstOrDefaultAsync(m => m.Id == meetingId && m.StudentId == user.Id && m.Status == "Postponed");
+
+            if (meeting != null && meeting.ProposedNewDate.HasValue)
+            {
+                meeting.MeetingDate = meeting.ProposedNewDate.Value;
+                meeting.MeetingDay  = meeting.ProposedNewDate.Value.DayOfWeek.ToString();
+                meeting.Status      = "Approved";
+                meeting.ProposedNewDate = null;
+                meeting.RespondedDate = DateTime.Now;
+                
+                await _context.SaveChangesAsync();
+
+                await LogActivityAsync(user.Id, "MeetingUpdate", "Meeting Date Accepted", 
+                    $"You accepted the suggested date for the meeting on {meeting.MeetingDate:dd MMM}.");
+                
+                TempData["Success"] = "New meeting date accepted and confirmed!";
+            }
+
+            return RedirectToAction(nameof(BookMeeting));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RescheduleMeeting(int meetingId, string meetingDate, string meetingTime)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            if (!DateTime.TryParse(meetingDate, out var parsedDate))
+            {
+                TempData["Error"] = "Invalid date format.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            var meeting = await _context.MeetingBookings
+                .FirstOrDefaultAsync(m => m.Id == meetingId && m.StudentId == user.Id);
+
+            if (meeting != null)
+            {
+                meeting.MeetingDate = parsedDate;
+                meeting.MeetingDay  = parsedDate.DayOfWeek.ToString();
+                meeting.MeetingTime = meetingTime;
+                meeting.Status      = "Pending"; // Set to Pending so supervisor can re-approve
+                meeting.RespondedDate = null;
+                meeting.SupervisorNote = "Student rescheduled this meeting.";
+                
+                await _context.SaveChangesAsync();
+
+                await LogActivityAsync(user.Id, "MeetingUpdate", "Meeting Rescheduled", 
+                    $"Meeting moved to {parsedDate:dd MMM} at {meetingTime}.");
+                
+                TempData["Success"] = "Meeting rescheduled successfully! Awaiting supervisor re-approval.";
+            }
+
             return RedirectToAction(nameof(BookMeeting));
         }
 

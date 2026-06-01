@@ -4,103 +4,200 @@
     ViewData["Title"] = "Student Requests";
 }
 
-<div class="card mb-5 mb-xl-8">
-    <div class="card-header border-0 pt-5">
-        <h3 class="card-title align-items-start flex-column">
-            <span class="card-label fw-bolder fs-3 mb-1">Incoming Student Supervision Requests</span>
-            <span class="text-muted mt-1 fw-bold fs-7">@Model.Count(r => r.Status == "Pending") pending requests</span>
-        </h3>
-    </div>
-    <div class="card-body py-3">
-        @if (TempData["Success"] != null)
-        {
-            <div class="alert alert-success">@TempData["Success"]</div>
-        }
+<style>
+    :root { --orange-grad: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
 
+    .page-hero {
+        background: var(--orange-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(245, 158, 11, 0.25);
+    }
+
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid rgba(245, 158, 11, 0.1);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    }
+
+    .section-title { font-size: .8rem; font-weight: 800; text-transform: uppercase; color: #d97706; letter-spacing: .05em; border-bottom: 2px solid #f3f4f6; padding-bottom: 6px; margin-bottom: 12px; }
+    
+    .info-label { font-size: .75rem; color: #9ca3af; font-weight: 600; text-transform: uppercase; margin-bottom: 2px; }
+    .info-value { font-size: .95rem; color: #1f2937; font-weight: 700; margin-bottom: 12px; }
+</style>
+
+<div class="container-fluid py-4">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-3">@TempData["Success"]</div>
+    }
+
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-user-clock me-2"></i>Verification Requests</h2>
+            <p class="mb-0 opacity-80">Review Part A & Part B forms and approve or reject supervision invitations.</p>
+        </div>
+        <div class="text-end">
+            <span class="badge bg-white text-warning fw-bold px-3 py-2 rounded-pill" style="color:#d97706;">
+                @Model.Count(r => r.Status == "Pending") Pending Applications
+            </span>
+        </div>
+    </div>
+
+    <div class="glass-card p-4">
         <div class="table-responsive">
-            <table class="table align-middle gs-0 gy-4">
+            <table class="table table-hover align-middle">
                 <thead>
-                    <tr class="fw-bolder text-muted bg-light">
-                        <th class="ps-4 min-w-150px">Student</th>
-                        <th class="min-w-150px">Proposed Topic</th>
-                        <th class="min-w-120px">Date Requested</th>
-                        <th class="min-w-120px">Status</th>
-                        <th class="text-end min-w-200px pe-4">Actions</th>
+                    <tr class="text-muted small fw-bold text-uppercase">
+                        <th>Student</th>
+                        <th>Project Topic</th>
+                        <th>Requested Date</th>
+                        <th class="text-end">Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var req in Model)
                     {
                         <tr>
-                            <td class="ps-4">
-                                <span class="text-dark fw-bolder text-hover-primary mb-1 fs-6">@req.Student?.FullName</span>
-                                <span class="text-muted fw-bold text-muted d-block fs-7">@req.Student?.Email</span>
-                            </td>
-                            <td><span class="text-dark fw-bold d-block fs-6">@req.RequestMessage</span></td>
-                            <td><span class="text-dark fw-bold d-block fs-6">@req.RequestedDate.ToString("dd MMM yyyy")</span></td>
                             <td>
-                                @if (req.Status == "Pending")
-                                {
-                                    <span class="badge badge-light-warning">Pending</span>
-                                }
-                                else if (req.Status == "Approved")
-                                {
-                                    <span class="badge badge-light-success">Approved</span>
-                                }
-                                else
-                                {
-                                    <span class="badge badge-light-danger">Rejected</span>
-                                }
+                                <div class="fw-bold text-dark">@req.Student?.FullName</div>
+                                <div class="text-muted small">Matric: @req.MatricNumber</div>
                             </td>
-                            <td class="text-end pe-4">
+                            <td>
+                                <div class="fw-bold text-primary">@req.ProjectTopic</div>
+                                <div class="text-muted small">@(req.RequestMessage?.Length > 50 ? req.RequestMessage.Substring(0, 47) + "..." : req.RequestMessage)</div>
+                            </td>
+                            <td>@req.RequestedDate.ToString("dd MMM yyyy")</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-light-warning rounded-3 me-1" onclick="viewFullForm(@req.Id)">
+                                    <i class="fas fa-file-alt me-1"></i> View Form
+                                </button>
+                                
                                 @if (req.Status == "Pending")
                                 {
-                                    <form asp-action="RespondRequest" method="post" class="d-inline">
-                                        <input type="hidden" name="requestId" value="@req.Id" />
-                                        <input type="hidden" name="status" value="Approved" />
-                                        <button type="submit" class="btn btn-sm btn-light-success me-2" onclick="return confirm('Approve this request?')">Approve</button>
-                                    </form>
-                                    <form asp-action="RespondRequest" method="post" class="d-inline">
-                                        <input type="hidden" name="requestId" value="@req.Id" />
-                                        <input type="hidden" name="status" value="Rejected" />
-                                        <button type="button" class="btn btn-sm btn-light-danger" data-bs-toggle="modal" data-bs-target="#rejectModal_@req.Id">Reject</button>
-
-                                        <!-- Reject Modal -->
-                                        <div class="modal fade" id="rejectModal_@req.Id" tabindex="-1">
-                                            <div class="modal-dialog">
-                                                <div class="modal-content text-start">
-                                                    <div class="modal-header">
-                                                        <h5 class="modal-title">Reject Request</h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                    </div>
-                                                    <div class="modal-body">
-                                                        <div class="mb-3">
-                                                            <label class="form-label">Reason for Rejection</label>
-                                                            <textarea name="responseNote" class="form-control" rows="3" required></textarea>
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer">
-                                                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                                                        <button type="submit" class="btn btn-danger">Confirm Rejection</button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </form>
+                                    <div class="d-inline-flex gap-1">
+                                        <form asp-action="RespondRequest" method="post">
+                                            <input type="hidden" name="requestId" value="@req.Id" />
+                                            <input type="hidden" name="status" value="Approved" />
+                                            <button type="submit" class="btn btn-sm btn-success rounded-3 px-3" onclick="return confirm('Accept this student for supervision?')">Accept</button>
+                                        </form>
+                                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3" onclick="openRejectModal(@req.Id, '@req.Student?.FullName')">Reject</button>
+                                    </div>
                                 }
                                 else
                                 {
-                                    <span class="text-muted fw-bold">Responded: @req.RespondedDate?.ToString("dd MMM")</span>
+                                    <span class="badge bg-light text-muted rounded-pill px-3">@req.Status</span>
                                 }
                             </td>
                         </tr>
-                    }
-                    @if (!Model.Any())
-                    {
-                        <tr><td colspan="5" class="text-center py-4 text-muted">No student requests found.</td></tr>
+
+                        <!-- HIDDEN DATA FOR MODAL -->
+                        <div id="formData_@req.Id" style="display:none;" 
+                             data-name="@req.Student?.FullName" 
+                             data-matric="@req.MatricNumber" 
+                             data-program="@req.Program" 
+                             data-phone="@req.PhoneNumber" 
+                             data-session="@req.SessionSemester" 
+                             data-year="@req.YearOfStudy" 
+                             data-topic="@req.ProjectTopic" 
+                             data-desc="@req.RequestMessage">
+                        </div>
                     }
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+
+<!-- FULL FORM MODAL -->
+<div class="modal fade" id="formModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-warning text-white border-0">
+                <h5 class="fw-bold mb-0">Student Supervision Application</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-5">
+                <div class="section-title">Part A: Personal Information</div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="info-label">Full Name</div>
+                        <div id="modal_name" class="info-value"></div>
+                        <div class="info-label">Matric Number</div>
+                        <div id="modal_matric" class="info-value"></div>
+                        <div class="info-label">Program</div>
+                        <div id="modal_program" class="info-value"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-label">Phone Number</div>
+                        <div id="modal_phone" class="info-value"></div>
+                        <div class="info-label">Session / Semester</div>
+                        <div id="modal_session" class="info-value"></div>
+                        <div class="info-label">Year of Study</div>
+                        <div id="modal_year" class="info-value"></div>
+                    </div>
+                </div>
+
+                <div class="section-title mt-4">Part B: Project Information</div>
+                <div class="info-label">Project Topic</div>
+                <div id="modal_topic" class="info-value text-primary fs-5"></div>
+                <div class="info-label">Description / Notes</div>
+                <div id="modal_desc" class="info-value" style="white-space:pre-wrap; font-weight:400; line-height:1.6;"></div>
+            </div>
+            <div class="modal-footer border-0 p-4 pt-0">
+                <button type="button" class="btn btn-secondary rounded-3 px-4" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- REJECT MODAL -->
+<div class="modal fade" id="rejectModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <form asp-action="RespondRequest" method="post">
+                <input type="hidden" name="requestId" id="rejectRequestId" />
+                <input type="hidden" name="status" value="Rejected" />
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="fw-bold">Reject Application</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">Please provide a reason for rejecting <strong id="rejectStudentName"></strong>'s request.</p>
+                    <textarea name="responseNote" class="form-control rounded-3" rows="3" placeholder="e.g. Research topic not aligned, Supervisor full capacity..." required></textarea>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger rounded-3 px-4">Confirm Reject</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function viewFullForm(id) {
+        const data = document.getElementById('formData_' + id).dataset;
+        document.getElementById('modal_name').textContent = data.name;
+        document.getElementById('modal_matric').textContent = data.matric;
+        document.getElementById('modal_program').textContent = data.program;
+        document.getElementById('modal_phone').textContent = data.phone;
+        document.getElementById('modal_session').textContent = data.session;
+        document.getElementById('modal_year').textContent = data.year;
+        document.getElementById('modal_topic').textContent = data.topic;
+        document.getElementById('modal_desc').textContent = data.desc;
+        new bootstrap.Modal(document.getElementById('formModal')).show();
+    }
+
+    function openRejectModal(id, name) {
+        document.getElementById('rejectRequestId').value = id;
+        document.getElementById('rejectStudentName').textContent = name;
+        new bootstrap.Modal(document.getElementById('rejectModal')).show();
+    }
+</script>
+}
