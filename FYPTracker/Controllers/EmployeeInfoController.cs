@@ -192,11 +192,22 @@ namespace FYPTracker.Controllers
                         </div>";
 
                     var email = user.Email;
-                    if(!string.IsNullOrEmpty(email))
-                        _emailService.Send(email, title, html);
-
-                    TempData["Success"] = "Password reset link has been sent to your email!";
-                    ViewBag.Success = "Reset link sent! Please check your email.";
+                    if (!string.IsNullOrEmpty(email))
+                    {
+                        try
+                        {
+                            _emailService.Send(email, title, html);
+                            TempData["Success"] = "Password reset link has been sent to your email!";
+                        }
+                        catch (Exception)
+                        {
+                            TempData["error"] = "Failed to send reset link due to email server error. Please check configuration.";
+                        }
+                    }
+                    else
+                    {
+                        TempData["error"] = "No email address is associated with this user.";
+                    }
                     return View();
                 }
                 else
@@ -248,6 +259,21 @@ namespace FYPTracker.Controllers
             if (password != confirmPassword)
             {
                 ViewBag.Error = "Passwords do not match.";
+                ViewBag.Token = token;
+                return View();
+            }
+
+            var regex = new Regex(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,}$");
+            if (!regex.IsMatch(password))
+            {
+                ViewBag.Error = "Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one symbol.";
+                ViewBag.Token = token;
+                return View();
+            }
+
+            if (Encryption.GetHash(password) == user.PassCode)
+            {
+                ViewBag.Error = "New password cannot be the same as your old password.";
                 ViewBag.Token = token;
                 return View();
             }

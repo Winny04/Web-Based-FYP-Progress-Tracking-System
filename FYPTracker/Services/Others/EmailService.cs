@@ -1,4 +1,4 @@
-﻿using FYPTracker.Configuration;
+using FYPTracker.Configuration;
 using FYPTracker.Services.Others.Interfaces;
 using MailKit.Net.Smtp;
 using MailKit.Security;
@@ -66,9 +66,9 @@ namespace FYPTracker.Services.Others
                     smtp.Dispose();
                 }
             }
-            catch
+            catch (Exception)
             {
-
+                throw;
             }
         }
 
@@ -133,8 +133,9 @@ namespace FYPTracker.Services.Others
                    
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
+                throw;
             }
         }
     }

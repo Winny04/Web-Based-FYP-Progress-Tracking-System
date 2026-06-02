@@ -259,11 +259,12 @@
                     {
                         <p class="text-muted small">No applications submitted yet. Select a supervisor from the table.</p>
                     }
+                    @{ int reqCounter = 1; }
                     @foreach (var req in myRequests)
                     {
                         <div class="p-3 border rounded-3 mb-3 bg-light">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="badge bg-white text-dark rounded-pill border" style="font-size:10px;">#@req.Priority</span>
+                                <span class="badge bg-white text-dark rounded-pill border" style="font-size:10px;">#@(reqCounter++)</span>
                                 <span class="status-badge @(req.Status == "Approved" ? "badge-approved" : req.Status == "Rejected" ? "badge-rejected" : "badge-pending")" style="font-size:9px; padding:2px 8px;">@req.Status</span>
                             </div>
                             <div class="fw-bold text-dark" style="font-size:0.85rem;">@req.Supervisor?.FullName</div>
@@ -320,19 +321,19 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Matric Number</label>
-                                <input type="text" name="matricNumber" class="form-control" value="@currentUser?.EmployeeId" required />
+                                <input type="text" name="matricNumber" class="form-control bg-light border-0" value="@currentUser?.EmployeeId" readonly />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Program</label>
-                                <input type="text" name="program" class="form-control" value="Software Engineering" required />
+                                <input type="text" name="program" class="form-control bg-light border-0" value="@currentUser?.Department" readonly />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Phone Number</label>
-                                <input type="tel" name="phoneNumber" class="form-control" placeholder="+60..." required />
+                                <input type="tel" name="phoneNumber" class="form-control" placeholder="012-3456789 or +60123456789" pattern="^(\+?60|0)1[0-9][\-\s]?[0-9]{3,4}[\-\s]?[0-9]{4}$" required title="Please enter a valid Malaysia phone number (e.g. 012-3456789 or +60123456789)" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Session / Semester</label>
-                                <input type="text" name="sessionSemester" class="form-control" value="2025/2026 - Sem 1" required />
+                                <input type="text" name="sessionSemester" class="form-control" value="2025/2026 - Sem 1" minlength="5" maxlength="50" required title="Please enter your current academic session and semester" />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Year of Study</label>
@@ -350,11 +351,19 @@
                         <h6 class="fw-bold text-primary mb-3"><i class="fas fa-file-alt me-1"></i>Part B: Project Topic</h6>
                         <div class="mb-3">
                             <label class="form-label fw-semibold small">Project Topic / Proposed Title</label>
-                            <input type="text" name="projectTopic" class="form-control" placeholder="Enter your proposed project title" required />
+                            <input type="text" name="projectTopic" class="form-control" placeholder="Enter your proposed project title" minlength="5" maxlength="200" required />
                         </div>
                         <div class="mb-0">
                             <label class="form-label fw-semibold small">Brief Proposal / Message</label>
-                            <textarea name="requestMessage" class="form-control" rows="3" placeholder="Briefly describe your project scope..."></textarea>
+                            <textarea name="requestMessage" class="form-control" rows="4" placeholder="e.g. My project aims to solve [Problem] by building a [Solution] using [Tech Stack]..." minlength="10" maxlength="1000" required></textarea>
+                            <div class="form-text mt-2 text-muted" style="font-size: 0.8rem;">
+                                <strong class="text-primary"><i class="fas fa-lightbulb me-1"></i>Quick Guide:</strong> Please include:
+                                <ul class="mb-0 ps-3 mt-1">
+                                    <li><strong>Problem:</strong> What issue are you trying to solve?</li>
+                                    <li><strong>Solution:</strong> What system/app are you building?</li>
+                                    <li><strong>Tech Stack:</strong> E.g., .NET Core, React, SQL Server.</li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
 

@@ -2,6 +2,7 @@ using FYPTracker.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using FYPTracker.Services.Others.Interfaces;
 
 namespace FYPTracker.Controllers
 {
@@ -9,10 +10,12 @@ namespace FYPTracker.Controllers
     public class SupervisorController : Controller
     {
         private readonly FYPTrackerContext _context;
+        private readonly IEmailService _emailService;
 
-        public SupervisorController(FYPTrackerContext context)
+        public SupervisorController(FYPTrackerContext context, IEmailService emailService)
         {
             _context = context;
+            _emailService = emailService;
         }
 
         private async Task<EmployeeInfo?> GetCurrentUserAsync()
@@ -260,22 +263,32 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> RescheduleMeeting(int meetingId, DateTime meetingDate, string meetingTime)
         {
             var user = await GetCurrentUserAsync();
-            var meeting = await _context.MeetingBookings.FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
+            var meeting = await _context.MeetingBookings
+                .Include(m => m.Student)
+                .FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
 
             if (meeting != null)
             {
                 meeting.MeetingDate = meetingDate;
+                meeting.MeetingDay = meetingDate.DayOfWeek.ToString();
                 meeting.MeetingTime = meetingTime;
-                meeting.Status = "Pending"; // As requested: status oending
+                meeting.Status = "Approved"; // Implicitly approved by the supervisor
                 meeting.RespondedDate = DateTime.Now;
                 meeting.SupervisorNote = "Rescheduled by Supervisor.";
 
                 await _context.SaveChangesAsync();
 
-                await AddNotificationAsync(meeting.StudentId, "MeetingUpdate", "Meeting Rescheduled", $"Your meeting on {meetingDate:dd MMM} has been rescheduled to {meetingTime}.");
-                await LogActivityAsync(meeting.StudentId, "MeetingUpdated", "Meeting Rescheduled", $"Supervisor moved meeting to {meetingDate:dd MMM} at {meetingTime}");
+                await AddNotificationAsync(meeting.StudentId, "MeetingUpdate", "Meeting Rescheduled", $"Your meeting has been rescheduled to {meetingDate:dd MMM yyyy} at {meetingTime} and is automatically Approved.");
+                await LogActivityAsync(meeting.StudentId, "MeetingUpdated", "Meeting Rescheduled & Approved", $"Supervisor moved meeting to {meetingDate:dd MMM} at {meetingTime}");
 
-                TempData["Success"] = "Meeting rescheduled successfully and status set to Pending.";
+                if (!string.IsNullOrEmpty(meeting.Student?.Email))
+                {
+                    string subject = "FYP Meeting Rescheduled";
+                    string body = $"<p>Dear {meeting.Student.FullName},</p><p>Your meeting with your supervisor has been rescheduled to <b>{meetingDate:dd MMM yyyy} at {meetingTime}</b>.</p>";
+                    await _emailService.SendEmailAsync(meeting.Student.Email, subject, body);
+                }
+
+                TempData["Success"] = "Meeting rescheduled successfully and automatically set to Approved.";
             }
 
             return RedirectToAction(nameof(ManageMeetings));

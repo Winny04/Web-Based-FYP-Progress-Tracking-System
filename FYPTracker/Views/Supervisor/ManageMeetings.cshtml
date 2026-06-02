@@ -195,7 +195,7 @@
                     </div>
                 </div>
                 <div class="modal-footer border-0">
-                    <button type="button" class="btn btn-outline-primary px-4 rounded-3" onclick="toggleEditMode(true)">
+                    <button type="button" id="modalBtnReschedule" class="btn btn-outline-primary px-4 rounded-3 d-inline-block" onclick="toggleEditMode(true)">
                         <i class="fas fa-edit me-1"></i> Reschedule
                     </button>
                     <button type="button" class="btn btn-secondary px-4 rounded-3" data-bs-dismiss="modal">Close</button>
@@ -224,8 +224,9 @@
                     <div class="mb-3">
                         <label class="form-label fw-bold">Available Slots</label>
                         <div class="row g-2" id="editTimeSlots">
-                            @foreach (var slot in new[] {"09:00","10:00","11:00","14:00","15:00","16:00"})
+                            @for (int i = 8; i <= 17; i++)
                             {
+                                string slot = $"{i:00}:00";
                                 <div class="col-4">
                                     <div class="time-slot" data-time="@slot" onclick="selectTime(this, 'editTimeSlots')">@slot</div>
                                 </div>
@@ -293,6 +294,20 @@
         document.getElementById('editMeetingId').value = id;
         document.getElementById('editDateInput').value = date;
         document.getElementById('editTimeInput').value = time;
+
+        // Hide Reschedule button if Rejected or Date has passed
+        const now = new Date();
+        now.setHours(0,0,0,0);
+        const isPast = d < now;
+        const rescheduleBtn = document.getElementById('modalBtnReschedule');
+        
+        if (status === 'Rejected' || isPast) {
+            rescheduleBtn.classList.remove('d-inline-block');
+            rescheduleBtn.classList.add('d-none');
+        } else {
+            rescheduleBtn.classList.remove('d-none');
+            rescheduleBtn.classList.add('d-inline-block');
+        }
         
         const badge = document.getElementById('detStatusBadge');
         badge.textContent = status;

@@ -260,6 +260,30 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(SelectSupervisor));
             }
 
+            if (string.IsNullOrWhiteSpace(sessionSemester))
+            {
+                TempData["Error"] = "Session / Semester cannot be empty.";
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+
+            if (string.IsNullOrWhiteSpace(phoneNumber) || !System.Text.RegularExpressions.Regex.IsMatch(phoneNumber, @"^(\+?60|0)1[0-9][\-\s]?[0-9]{3,4}[\-\s]?[0-9]{4}$"))
+            {
+                TempData["Error"] = "Please provide a valid Malaysia Phone Number (e.g. 012-3456789).";
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+
+            if (string.IsNullOrWhiteSpace(projectTopic) || projectTopic.Length < 5)
+            {
+                TempData["Error"] = "Project Topic must be at least 5 characters long.";
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+
+            if (string.IsNullOrWhiteSpace(requestMessage) || requestMessage.Length < 10)
+            {
+                TempData["Error"] = "Brief Proposal / Message must be at least 10 characters long.";
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+
             var request = new SupervisorRequest
             {
                 StudentId       = user.Id,

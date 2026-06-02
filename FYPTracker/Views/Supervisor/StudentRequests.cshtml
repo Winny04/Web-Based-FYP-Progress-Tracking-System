@@ -73,17 +73,17 @@
                             </td>
                             <td>@req.RequestedDate.ToString("dd MMM yyyy")</td>
                             <td class="text-end">
-                                <button class="btn btn-sm btn-light-warning rounded-3 me-1" onclick="viewFullForm(@req.Id)">
-                                    <i class="fas fa-file-alt me-1"></i> View Form
+                                <button class="btn btn-sm btn-light-warning rounded-3 me-1" onclick="viewFullForm(@req.Id, @(req.Status == "Pending" ? "true" : "false"))">
+                                    <i class="fas fa-file-alt me-1"></i> Review
                                 </button>
                                 
                                 @if (req.Status == "Pending")
                                 {
                                     <div class="d-inline-flex gap-1">
-                                        <form asp-action="RespondRequest" method="post">
+                                        <form asp-action="RespondRequest" method="post" id="acceptForm_@req.Id">
                                             <input type="hidden" name="requestId" value="@req.Id" />
                                             <input type="hidden" name="status" value="Approved" />
-                                            <button type="submit" class="btn btn-sm btn-success rounded-3 px-3" onclick="return confirm('Accept this student for supervision?')">Accept</button>
+                                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3" onclick="confirmAccept(@req.Id, '@req.Student?.FullName')">Accept</button>
                                         </form>
                                         <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3" onclick="openRejectModal(@req.Id, '@req.Student?.FullName')">Reject</button>
                                     </div>
@@ -148,8 +148,12 @@
                 <div class="info-label">Description / Notes</div>
                 <div id="modal_desc" class="info-value" style="white-space:pre-wrap; font-weight:400; line-height:1.6;"></div>
             </div>
-            <div class="modal-footer border-0 p-4 pt-0">
+            <div class="modal-footer border-0 p-4 pt-0 d-flex justify-content-between align-items-center bg-light rounded-bottom-4">
                 <button type="button" class="btn btn-secondary rounded-3 px-4" data-bs-dismiss="modal">Close</button>
+                <div id="modalActionButtons" class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-danger rounded-3 px-4" id="modalBtnReject">Reject</button>
+                    <button type="button" class="btn btn-success rounded-3 px-4 fw-bold" id="modalBtnAccept">Approve & Accept</button>
+                </div>
             </div>
         </div>
     </div>
@@ -181,7 +185,7 @@
 
 @section Scripts {
 <script>
-    function viewFullForm(id) {
+    function viewFullForm(id, isPending) {
         const data = document.getElementById('formData_' + id).dataset;
         document.getElementById('modal_name').textContent = data.name;
         document.getElementById('modal_matric').textContent = data.matric;
@@ -191,7 +195,41 @@
         document.getElementById('modal_year').textContent = data.year;
         document.getElementById('modal_topic').textContent = data.topic;
         document.getElementById('modal_desc').textContent = data.desc;
+
+        var actionGroup = document.getElementById('modalActionButtons');
+        if (isPending) {
+            actionGroup.classList.remove('d-none');
+            actionGroup.classList.add('d-flex');
+            document.getElementById('modalBtnReject').onclick = function() {
+                bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();
+                openRejectModal(id, data.name);
+            };
+            document.getElementById('modalBtnAccept').onclick = function() {
+                bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();
+                confirmAccept(id, data.name);
+            };
+        } else {
+            actionGroup.classList.remove('d-flex');
+            actionGroup.classList.add('d-none');
+        }
+
         new bootstrap.Modal(document.getElementById('formModal')).show();
+    }
+
+    function confirmAccept(id, name) {
+        Swal.fire({
+            title: 'Accept Application?',
+            text: `Are you sure you want to accept ${name} as your FYP student?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, Accept!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById('acceptForm_' + id).submit();
+            }
+        });
     }
 
     function openRejectModal(id, name) {
