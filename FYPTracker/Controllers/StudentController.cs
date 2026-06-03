@@ -238,7 +238,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> SubmitSupervisorRequest(int supervisorId, string matricNumber, string program, string phoneNumber, string sessionSemester, string yearOfStudy, string projectTopic, string? requestMessage)
+        public async Task<IActionResult> SubmitSupervisorRequest(int supervisorId, string matricNumber, string program, string phoneNumber, string sessionSemester, string projectTopic, string? requestMessage)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
@@ -300,7 +300,6 @@ namespace FYPTracker.Controllers
                 Program         = program,
                 PhoneNumber     = phoneNumber,
                 SessionSemester = sessionSemester,
-                YearOfStudy     = yearOfStudy,
                 ProjectTopic    = projectTopic,
                 RequestMessage  = requestMessage
             };

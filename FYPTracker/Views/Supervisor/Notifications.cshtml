@@ -2,78 +2,254 @@
 @model IEnumerable<FYPNotification>
 @{
     ViewData["Title"] = "Notifications";
+    var currentUser = ViewBag.CurrentUser as ApplicationUser;
+    var unreadCount = (int)(ViewBag.UnreadCount ?? 0);
+    var notifications = Model?.ToList() ?? new List<FYPNotification>();
 }
 
-<div class="card mb-5 mb-xl-8">
-    <div class="card-header border-0 pt-5">
-        <h3 class="card-title align-items-start flex-column">
-            <span class="card-label fw-bolder fs-3 mb-1">System Notifications</span>
-            <span class="text-muted mt-1 fw-bold fs-7">@Model.Count(n => !n.IsRead) unread notifications</span>
-        </h3>
-        <div class="card-toolbar">
-            <button class="btn btn-sm btn-light-primary" onclick="markAllAsRead()">
-                <i class="fas fa-check-double"></i> Mark All as Read
-            </button>
+<style>
+    :root { --yellow-grad: linear-gradient(135deg, #eab308 0%, #f59e0b 100%); }
+
+    .page-hero {
+        background: var(--yellow-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(234,179,8,.3);
+    }
+
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid rgba(234,179,8,.12);
+        box-shadow: 0 4px 20px rgba(0,0,0,.06);
+    }
+
+    .notif-item {
+        border-radius: 12px;
+        padding: 16px 20px;
+        border: 2px solid #f3f4f6;
+        transition: all .2s;
+        position: relative;
+    }
+    .notif-item.unread {
+        border-color: #fef08a;
+        background: #fefce8;
+    }
+    .notif-item:hover { border-color: #eab308; }
+
+    .unread-dot {
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        background: #eab308;
+        flex-shrink: 0;
+        margin-top: 6px;
+    }
+
+    .notif-icon {
+        width: 40px; height: 40px;
+        border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+
+    .btn-read {
+        background: none;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 4px 12px;
+        font-size: .75rem;
+        font-weight: 600;
+        color: #6b7280;
+        transition: all .18s;
+    }
+    .btn-read:hover { border-color: #eab308; color: #854d0e; background: #fefce8; }
+
+    .btn-mark-all {
+        background: var(--yellow-grad);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 8px 20px;
+        font-weight: 700;
+        font-size: .85rem;
+        transition: opacity .2s;
+    }
+    .btn-mark-all:hover { opacity: .85; color: white; }
+
+    .filter-tab {
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 6px 16px;
+        cursor: pointer;
+        font-size: .82rem;
+        font-weight: 600;
+        color: #6b7280;
+        background: #fff;
+        transition: all .18s;
+    }
+    .filter-tab:hover, .filter-tab.active { border-color: #eab308; color: #854d0e; background: #fefce8; }
+</style>
+
+<div class="container-fluid py-4">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2">
+            <i class="fas fa-check-circle fs-4"></i> <span>@TempData["Success"]</span>
+        </div>
+    }
+
+    @* ── Hero ─────────────────────────────────────────────── *@
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-bell me-2"></i>Notifications</h2>
+            <p class="mb-0 opacity-80">Stay updated with student submissions, meeting updates, and system alerts.</p>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            @if (unreadCount > 0)
+            {
+                <span class="badge bg-white fw-bold px-3 py-2 rounded-pill" style="color:#854d0e;">
+                    @unreadCount Unread
+                </span>
+                <form asp-action="MarkAllRead" asp-controller="Supervisor" method="post">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn-mark-all btn">
+                        <i class="fas fa-check-double me-1"></i> Mark All Read
+                    </button>
+                </form>
+            }
+            else
+            {
+                <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-success">All caught up ✓</span>
+            }
         </div>
     </div>
-    <div class="card-body py-3">
-        <div class="timeline">
-            @foreach (var notif in Model)
-            {
-                var iconClass = notif.Type switch {
-                    "SubmissionFeedback" => "fa-file-signature text-success",
-                    "RevisionRequest" => "fa-exclamation-triangle text-danger",
-                    "SupervisorApproval" => "fa-user-check text-primary",
-                    "MeetingUpdate" => "fa-calendar-check text-warning",
-                    _ => "fa-bell text-info"
-                };
 
-                <div class="timeline-item mb-5" onclick="markAsRead(@notif.Id, this)" style="cursor: pointer;">
-                    <div class="timeline-line w-40px"></div>
-                    <div class="timeline-icon symbol symbol-circle symbol-40px">
-                        <div class="symbol-label bg-light">
-                            <i class="fas @iconClass fs-2"></i>
-                        </div>
-                    </div>
-                    <div class="timeline-content mt-n1">
-                        <div class="pe-3 mb-2">
-                            <div class="fs-5 fw-bold mb-1 @(notif.IsRead ? "text-gray-600" : "text-dark")">@notif.Title</div>
-                            <div class="d-flex align-items-center mt-1 fs-6">
-                                <div class="text-muted me-2 fs-7">@notif.CreatedDate.ToString("dd MMM yyyy, hh:mm tt")</div>
+    <div class="glass-card p-4">
+
+        @* ── Filter Tabs ──────────────────────────────────── *@
+        <div class="d-flex gap-2 flex-wrap mb-4">
+            <button class="filter-tab active" onclick="filterNotifs('all', this)">All (@notifications.Count)</button>
+            <button class="filter-tab" onclick="filterNotifs('unread', this)">Unread (@unreadCount)</button>
+            <button class="filter-tab" onclick="filterNotifs('SupervisionRequest', this)">Students</button>
+            <button class="filter-tab" onclick="filterNotifs('MeetingUpdate', this)">Meetings</button>
+            <button class="filter-tab" onclick="filterNotifs('Submission', this)">Submissions</button>
+        </div>
+
+        @* ── Notifications List ───────────────────────────── *@
+        @if (!notifications.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="fas fa-bell-slash fs-1 d-block mb-3 opacity-30"></i>
+                <p class="fw-semibold mb-0">No notifications yet.</p>
+                <small>Notifications will appear here when there are updates.</small>
+            </div>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-3" id="notifList">
+                @foreach (var n in notifications)
+                {
+                    var iconCls = n.Type switch {
+                        "SupervisionRequest" => "fas fa-user-plus",
+                        "MeetingUpdate"      => "fas fa-calendar-check",
+                        "Submission"         => "fas fa-file-upload",
+                        _                    => "fas fa-bell"
+                    };
+                    var bgColor = n.Type switch {
+                        "SupervisionRequest" => "#dcfce7",
+                        "MeetingUpdate"      => "#dbeafe",
+                        "Submission"         => "#ede9fe",
+                        _                    => "#f3f4f6"
+                    };
+                    var iconColor = n.Type switch {
+                        "SupervisionRequest" => "#16a34a",
+                        "MeetingUpdate"      => "#1d4ed8",
+                        "Submission"         => "#7c3aed",
+                        _                    => "#6b7280"
+                    };
+                    var timeAgo = GetTimeAgo(n.CreatedDate);
+
+                    <div class="notif-item @(n.IsRead ? "" : "unread")"
+                         data-type="@n.Type" data-read="@(n.IsRead ? "read" : "unread")">
+                        <div class="d-flex align-items-start gap-3">
+                            @if (!n.IsRead)
+                            {
+                                <div class="unread-dot"></div>
+                            }
+                            else
+                            {
+                                <div style="width:10px;flex-shrink:0;"></div>
+                            }
+                            <div class="notif-icon" style="background:@bgColor;color:@iconColor;">
+                                <i class="@iconCls"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                    <div class="fw-bold text-dark">@n.Title</div>
+                                    <small class="text-muted">@timeAgo</small>
+                                </div>
+                                @if (!string.IsNullOrEmpty(n.Message))
+                                {
+                                    <div class="text-muted mt-1" style="font-size:.85rem;">@n.Message</div>
+                                }
+                                <div class="mt-2">
+                                    <small class="text-muted me-3">@n.CreatedDate.ToString("dd MMM yyyy, h:mm tt")</small>
+                                    @if (!n.IsRead)
+                                    {
+                                        <form asp-action="MarkAsRead" asp-controller="Supervisor"
+                                              method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="notificationId" value="@n.Id" />
+                                            <button type="submit" class="btn-read">
+                                                <i class="fas fa-check me-1"></i> Mark Read
+                                            </button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <small class="text-success"><i class="fas fa-check me-1"></i>Read</small>
+                                    }
+                                </div>
                             </div>
                         </div>
-                        <div class="overflow-auto pb-5 @(notif.IsRead ? "text-muted" : "text-dark")">
-                            @notif.Message
-                        </div>
                     </div>
-                </div>
-            }
-            @if (!Model.Any())
-            {
-                <div class="text-center py-10 text-muted">No notifications yet.</div>
-            }
-        </div>
+                }
+            </div>
+        }
     </div>
 </div>
 
+@section scripts {
 <script>
-    function markAsRead(id, elem) {
-        if (!elem.querySelector('.text-dark')) return; // Already read
+    function filterNotifs(filter, btn) {
+        document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
 
-        fetch('/Supervisor/MarkAsRead/' + id, { method: 'POST' })
-        .then(response => {
-            if (response.ok) {
-                location.reload();
-            }
-        });
-    }
-
-    function markAllAsRead() {
-        fetch('/Supervisor/MarkAllRead', { method: 'POST' })
-        .then(response => {
-            if (response.ok) {
-                location.reload();
+        document.querySelectorAll('.notif-item').forEach(item => {
+            if (filter === 'all') {
+                item.style.display = '';
+            } else if (filter === 'unread') {
+                item.style.display = item.dataset.read === 'unread' ? '' : 'none';
+            } else {
+                item.style.display = item.dataset.type === filter ? '' : 'none';
             }
         });
     }
 </script>
+}
+
+@functions {
+    string GetTimeAgo(DateTime dt)
+    {
+        var diff = DateTime.Now - dt;
+        if (diff.TotalMinutes < 1)  return "Just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours   < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays    < 7)  return $"{(int)diff.TotalDays}d ago";
+        return dt.ToString("dd MMM yyyy");
+    }
+}

@@ -131,16 +131,15 @@
         <div class="table-responsive">
             <table id="mytable" class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
                 <thead>
-                    <tr class="fw-bolder text-muted text-center">
-                        <th class="w-25px" style="color:black">ID</th>
-                        <th class="min-w-200px" style="color:black;font-size:15px; border-right: 2px solid #D3D3D3;"><b>User</b></th>
-                        @*<th class="min-w-200px">Position</th>
-                        <th class="min-w-200px">Department</th>*@
-                        <th class="min-w-200px" style="color:black;font-size:15px; border-right: 2px solid #D3D3D3;"><b>User Type</b></th>
-                        <th class="min-w-200px" style="color:black;font-size:15px; border-right: 2px solid #D3D3D3;"><b>Supervisor</b></th>
-                        <th class="min-w-200px" style="color:black;font-size:15px; border-right: 2px solid #D3D3D3;"><b>Date Created</b></th>
-                        <th class="min-w-200px" style="color:black;font-size:15px; border-right: 2px solid #D3D3D3;"><b>Status</b></th>
-                        <th class="min-w-200px" style="color:black;font-size:15px;border-right: 2px solid #D3D3D3;"><b>Action</b></th>
+                    <tr class="text-start text-muted fw-bolder fs-7 text-uppercase gs-0">
+                        <th class="w-25px">ID</th>
+                        <th class="min-w-250px">User</th>
+                        <th class="min-w-100px">User Type</th>
+                        <th class="min-w-150px">Supervisor</th>
+                        <th class="min-w-150px">Assigned Students</th>
+                        <th class="min-w-150px">Date Created</th>
+                        <th class="min-w-100px">Status</th>
+                        <th class="min-w-100px text-end">Action</th>
                     </tr>
                 </thead>
             </table>
@@ -170,10 +169,7 @@
                         <input type="text" id="createFullName" class="form-control form-control-lg form-control-solid" placeholder="e.g. Ahmad bin Ali" />
                     </div>
 
-                    <div class="fv-row mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">Short Name <span class="text-danger">*</span></label>
-                        <input type="text" id="createShortName" class="form-control form-control-lg form-control-solid" placeholder="e.g. Ahmad" />
-                    </div>
+
 
                     <div class="fv-row mb-5">
                         <label class="form-label fw-bolder text-dark fs-6">Password <span class="text-danger">*</span></label>
@@ -215,10 +211,7 @@
                             <label class="form-label fw-bolder text-dark fs-6">Title</label>
                             <input type="text" id="createTitle" class="form-control form-control-lg form-control-solid" placeholder="e.g. Dr." />
                         </div>
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Office Room</label>
-                            <input type="text" id="createOfficeRoom" class="form-control form-control-lg form-control-solid" placeholder="e.g. A-201" />
-                        </div>
+
                         <div class="fv-row mb-5">
                             <label class="form-label fw-bolder text-dark fs-6">Phone</label>
                             <input type="text" id="createPhone" class="form-control form-control-lg form-control-solid" placeholder="e.g. 0123456789" />
@@ -263,20 +256,19 @@
         });
 
         $('#createAcc').on('hidden.bs.modal', function () {
-            $('#createFullName,#createShortName,#createPassCode,#createEmail,#createProgramme,#createAcademicSession,#createTitle,#createOfficeRoom,#createPhone').val('');
+            $('#createFullName,#createPassCode,#createEmail,#createProgramme,#createAcademicSession,#createTitle,#createPhone').val('');
             $('#createUserType,#createDepartment').val('');
             $('#studentFields,#supervisorFields').hide();
         });
 
         $('#kt_sign_up_submit').click(function () {
             var FullName = $('#createFullName').val().trim();
-            var ShortName = $('#createShortName').val().trim();
             var PassCode = $('#createPassCode').val().trim();
             var Email = $('#createEmail').val().trim();
             var UserType = $('#createUserType').val();
             var Department = $('#createDepartment').val();
 
-            if (!FullName || !ShortName || !PassCode || !Email || !UserType) {
+            if (!FullName || !PassCode || !Email || !UserType) {
                 Swal.fire({ text: "Please fill in all required fields.", icon: "warning", confirmButtonText: "Ok, got it!", buttonsStyling: false, customClass: { confirmButton: "btn btn-primary" } });
                 return;
             }
@@ -292,12 +284,11 @@
             $.ajax({
                 url: "/User/Create", method: "POST",
                 data: { newEmployee: {
-                    FullName: FullName, ShortName: ShortName, PassCode: PassCode, Email: Email, UserType: UserType,
+                    FullName: FullName, PassCode: PassCode, Email: Email, UserType: UserType,
                     Department: UserType === 'Supervisor' ? Department : '',
                     Programme: UserType === 'Student' ? $('#createProgramme').val().trim() : '',
                     AcademicSession: UserType === 'Student' ? $('#createAcademicSession').val().trim() : '',
                     Title: UserType === 'Supervisor' ? $('#createTitle').val().trim() : '',
-                    OfficeRoom: UserType === 'Supervisor' ? $('#createOfficeRoom').val().trim() : '',
                     Phone: $('#createPhone').val().trim()
                 }},
                 success: function (r) {
@@ -396,58 +387,27 @@
                         {
                             targets: 1,
                             createdCell: function (td) {
-                                $(td).css('color', 'black');
-                                $(td).css('font-size', '15px');
-                                $(td).css('border-right', '2px solid #D3D3D3');
-
+                                // Default styling
                             }
                         },
                         {
-                            targets: 2,
+                            targets: [2, 3, 4, 5, 6],
                             createdCell: function (td, cellData, rowData, row, col) {
-                                $(td).css('color', 'black');
-                                $(td).css('font-size', '15px');
-                                $(td).css('border-right', '2px solid #D3D3D3');
-                                $(td).css('text-align', 'center');
-
+                                // Default styling
                             }
                         },
                         {
-                            targets: 3,
+                            targets: 7,
                             createdCell: function (td, cellData, rowData, row, col) {
-                                $(td).css('color', 'black');
-                                $(td).css('font-size', '15px');
-                                $(td).css('border-right', '2px solid #D3D3D3');
-                                $(td).css('text-align', 'center');
-
+                                $(td).addClass('text-end');
                             }
                         },
                         {
-                            targets: 4,
-                            createdCell: function (td, cellData, rowData, row, col) {
-                                $(td).css('color', 'black');
-                                $(td).css('font-size', '15px');
-                                $(td).css('border-right', '2px solid #D3D3D3');
-                                $(td).css('text-align', 'center');
-
-                            }
-                        },
-                        {
-                            targets: 5,
-                            createdCell: function (td, cellData, rowData, row, col) {
-                                $(td).css('color', 'black');
-                                $(td).css('font-size', '15px');
-                                $(td).css('border-right', '2px solid #D3D3D3');
-                                $(td).css('text-align', 'center');
-
-                            }
-                        },
-                        {
-                            "targets": 3, "render": function (data, type, row, meta) {
-                                return moment(data.toString()).format('DD MMM YYYY HHmm');
+                            "targets": 5, "render": function (data, type, row, meta) {
+                                return data ? moment(data.toString()).format('DD MMM YYYY HHmm') : '-';
                             }
                         }],
-                    order: [[3, 'desc']],// order by date desc
+                    order: [[5, 'desc']],// order by date desc
                     aoColumns: [
                         { mData: "id", visible: false },
                         {
@@ -471,6 +431,14 @@
                             render: function (data, type, row, meta) {
                                 if(row.userType === 'Student') {
                                     return '<span class="text-dark fw-bold">' + (row.supervisorName || 'Not Assigned') + '</span>';
+                                }
+                                return '-';
+                            }
+                        },
+                        { 
+                            render: function (data, type, row, meta) {
+                                if(row.userType === 'Supervisor') {
+                                    return '<span class="text-dark fw-bold">' + (row.assignedStudents || 'No Students') + '</span>';
                                 }
                                 return '-';
                             }

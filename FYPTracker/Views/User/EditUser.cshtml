@@ -206,29 +206,7 @@
                         <!--end::Col-->
                 </div>
 
-                    <div class="row mb-6">
-                        <!--begin::Label-->
-                    @Html.LabelFor(model => model.ShortName, "Short Name", htmlAttributes: new { @class = "col-lg-4 col-form-label required fw-bold fs-6" })
-                        <!--end::Label-->
-                        <!--begin::Col-->
-                    <div class="col-lg-8">
-                            <!--begin::Row-->
-                        <div class="row">
-                                <!--begin::Col-->
-                            <div class="col-lg-6 fv-row">
-                                    @Html.EditorFor(model => model.ShortName, new { htmlAttributes = new { @class = "form-control form-control-lg form-control-solid mb-3 mb-lg-0", disabled = "disabled"} })
-                                </div>
-                                <!--end::Col-->
-                                <!--begin::Col-->
-                            <div class="col-lg-6 fv-row">
-                                    @Html.ValidationMessageFor(model => model.ShortName, "", new { @class = "text-danger" })
-                                </div>
-                                <!--end::Col-->
-                        </div>
-                            <!--end::Row-->
-                    </div>
-                        <!--end::Col-->
-                </div>
+
                     <!--end::Row-->
                     <!--begin::Input group-->
                 <div class="row mb-6">
@@ -353,16 +331,7 @@
                             </div>
                         </div>
 
-                        <div class="row mb-6">
-                            @Html.LabelFor(model => model.OfficeRoom, "Office Room (Supervisors)", htmlAttributes: new { @class = "col-lg-4 col-form-label fw-bold fs-6" })
-                            <div class="col-lg-8">
-                                <div class="row">
-                                    <div class="col-lg-6 fv-row">
-                                        @Html.EditorFor(model => model.OfficeRoom, new { htmlAttributes = new { @class = "form-control form-control-lg form-control-solid mb-3 mb-lg-0"} })
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+
 
                         <div class="row mb-6">
                             @Html.LabelFor(model => model.Department, "Department", htmlAttributes: new { @class = "col-lg-4 col-form-label fw-bold fs-6" })

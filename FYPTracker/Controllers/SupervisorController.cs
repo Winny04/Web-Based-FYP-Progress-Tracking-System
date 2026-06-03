@@ -87,6 +87,10 @@ namespace FYPTracker.Controllers
             ViewBag.RecentRequests = recentRequests;
             ViewBag.NextMeetings   = nextMeetings;
 
+            // Unread Notification Count (for bell icon)
+            ViewBag.UnreadNotificationCount = await _context.FYPNotifications
+                .CountAsync(n => n.RecipientId == user.Id && !n.IsRead);
+
             return View();
         }
 
@@ -458,7 +462,54 @@ namespace FYPTracker.Controllers
                 .OrderByDescending(n => n.CreatedDate)
                 .ToListAsync();
 
+            ViewBag.UnreadCount = notifications.Count(n => !n.IsRead);
+
             return View(notifications);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> MarkAsRead(int notificationId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var notification = await _context.FYPNotifications
+                .FirstOrDefaultAsync(n => n.Id == notificationId && n.RecipientId == user.Id);
+
+            if (notification != null)
+            {
+                notification.IsRead  = true;
+                notification.ReadDate = DateTime.Now;
+                await _context.SaveChangesAsync();
+            }
+            return RedirectToAction(nameof(Notifications));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> MarkAllRead()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var unread = await _context.FYPNotifications
+                .Where(n => n.RecipientId == user.Id && !n.IsRead)
+                .ToListAsync();
+
+            foreach (var n in unread)
+            {
+                n.IsRead = true;
+                n.ReadDate = DateTime.Now;
+            }
+
+            if (unread.Any())
+            {
+                await _context.SaveChangesAsync();
+            }
+
+            TempData["Success"] = "All notifications marked as read.";
+            return RedirectToAction(nameof(Notifications));
         }
     }
 }

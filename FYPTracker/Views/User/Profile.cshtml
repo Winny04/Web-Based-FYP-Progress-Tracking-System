@@ -118,7 +118,7 @@
                 <form asp-action="EditProfile" asp-controller="User" method="post" enctype="multipart/form-data">
                     <input type="hidden" name="Id" value="@Model.Id" />
                     <input type="hidden" name="UserName" value="@Model.UserName" />
-                    <input type="hidden" name="ShortName" value="@Model.ShortName" />
+
                     <input type="hidden" name="UserType" value="@Model.UserType" />
                     <input type="hidden" name="PassCode" value="@Model.PassCode" />
                     <input type="hidden" name="Department" value="@Model.Department" />
@@ -176,10 +176,7 @@
                                 <label class="form-label fw-semibold">Department</label>
                                 <input type="text" class="form-control bg-light border-0" value="@(Model.Department ?? "Not Assigned")" readonly />
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">Office Room</label>
-                                <input type="text" name="OfficeRoom" class="form-control" value="@Model.OfficeRoom" placeholder="e.g. A3-14" />
-                            </div>
+
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Current Student Slots</label>
                                 <input type="number" name="MaxStudentSlots" class="form-control" value="@Model.MaxStudentSlots" min="1" max="20" />

@@ -66,17 +66,125 @@ namespace FYPTracker.Controllers
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
             ViewBag.CurrentUser = user;
 
-            var projects = await _context.FYPProjects
-                .Include(p => p.Student)
-                .Include(p => p.Supervisor)
-                .OrderByDescending(p => p.CreatedDate)
+            var students = await _context.ApplicationUsers
+                .Where(u => u.UserType == "Student")
                 .ToListAsync();
 
-            return View(projects);
+            var projects = await _context.FYPProjects
+                .Include(p => p.Supervisor)
+                .ToListAsync();
+
+            var viewModels = students.Select(s => new FYPTracker.ViewModels.ManageProjectItemVM
+            {
+                Student = s,
+                Project = projects.FirstOrDefault(p => p.StudentId == s.Id)
+            })
+            .OrderByDescending(v => v.Project?.CreatedDate ?? DateTime.MinValue)
+            .ToList();
+
+            return View(viewModels);
+        }
+
+        [Authorize]
+        [ClaimRequirement("Type,Department","PM,HOD,SI,Admin,SuperAdmin")]
+        public async Task<IActionResult> ExportProjectsExcel()
+        {
+            var students = await _context.ApplicationUsers
+                .Where(u => u.UserType == "Student" && !u.IsResign)
+                .ToListAsync();
+
+            var projects = await _context.FYPProjects
+                .Include(p => p.Supervisor)
+                .ToListAsync();
+
+            var withSupervisor = new List<FYPTracker.ViewModels.ManageProjectItemVM>();
+            var withoutSupervisor = new List<FYPTracker.ViewModels.ManageProjectItemVM>();
+
+            foreach(var s in students)
+            {
+                var p = projects.FirstOrDefault(pr => pr.StudentId == s.Id);
+                if (p?.Supervisor != null)
+                {
+                    withSupervisor.Add(new FYPTracker.ViewModels.ManageProjectItemVM { Student = s, Project = p });
+                }
+                else
+                {
+                    withoutSupervisor.Add(new FYPTracker.ViewModels.ManageProjectItemVM { Student = s, Project = p });
+                }
+            }
+
+            using (var workbook = new ClosedXML.Excel.XLWorkbook())
+            {
+                var ws1 = workbook.Worksheets.Add("With Supervisor");
+                FormatExcelSheet(ws1, withSupervisor);
+
+                var ws2 = workbook.Worksheets.Add("Without Supervisor");
+                FormatExcelSheet(ws2, withoutSupervisor);
+
+                using (var stream = new System.IO.MemoryStream())
+                {
+                    workbook.SaveAs(stream);
+                    var content = stream.ToArray();
+                    return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "FYP_Projects_Report.xlsx");
+                }
+            }
+        }
+
+        private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.ViewModels.ManageProjectItemVM> data)
+        {
+            // Headers
+            ws.Cell(1, 1).Value = "Student Name";
+            ws.Cell(1, 2).Value = "Student ID";
+            ws.Cell(1, 3).Value = "Supervisor Name";
+            ws.Cell(1, 4).Value = "Project Title";
+            ws.Cell(1, 5).Value = "Status";
+            ws.Cell(1, 6).Value = "Started Date";
+
+            var headerRange = ws.Range("A1:F1");
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+            headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.DarkSlateBlue;
+            headerRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+
+            int row = 2;
+            foreach(var item in data)
+            {
+                ws.Cell(row, 1).Value = item.Student.FullName;
+                ws.Cell(row, 2).Value = item.Student.EmployeeId;
+                ws.Cell(row, 3).Value = item.Project?.Supervisor?.FullName ?? "Not Assigned";
+                ws.Cell(row, 4).Value = item.Project?.Title ?? "No Project";
+                
+                string status = item.Project != null ? item.Project.Status : "Not yet have supervisor";
+                ws.Cell(row, 5).Value = status;
+                ws.Cell(row, 6).Value = item.Project?.StartDate?.ToString("dd MMM yyyy") ?? "-";
+                
+                // Alternate row coloring
+                if (row % 2 == 0)
+                {
+                    ws.Range($"A{row}:F{row}").Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.AliceBlue;
+                }
+
+                // Status coloring
+                var statusCell = ws.Cell(row, 5);
+                statusCell.Style.Font.Bold = true;
+                if (status == "Active" || status == "Approved" || status == "Completed")
+                    statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.ForestGreen;
+                else if (status == "Not yet have supervisor")
+                    statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.DimGray;
+                else if (status == "Proposed")
+                    statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.DarkOrange;
+                
+                row++;
+            }
+
+            ws.Columns().AdjustToContents();
+            // Give columns a bit more breathing room
+            foreach (var col in ws.Columns()) col.Width += 2;
         }
 
         [AllowAnonymous]
         public ActionResult ForgotPassword()
+
         {
             return View();
         }
@@ -98,7 +206,7 @@ namespace FYPTracker.Controllers
                     user.ResetTokenExpiry = DateTime.Now.AddMinutes(30);
                     _context.SaveChanges();
 
-                    var resetLink = $"https://{HttpContext.Request.Host}/ApplicationUser/ResetPassword?token={token}";
+                    var resetLink = $"https://{HttpContext.Request.Host}/User/ResetPassword?token={token}";
 
                     string message = $@"<p>Dear {user.FullName},</p><br />
                                 <p>You have requested to reset your password for the FYP Tracking System.</p>
@@ -645,7 +753,7 @@ namespace FYPTracker.Controllers
         public ActionResult Data()
         {
             var users = _context.ApplicationUsers.Where(u => u.UserType != "Admin" && u.UserType != "SuperAdmin").ToList();
-            var projects = _context.FYPProjects.Include(p => p.Supervisor).ToList();
+            var projects = _context.FYPProjects.Include(p => p.Supervisor).Include(p => p.Student).ToList();
 
             var empList = users.Select(u => new {
                 id = u.Id,
@@ -658,6 +766,9 @@ namespace FYPTracker.Controllers
                 image = u.Image,
                 supervisorName = u.UserType == "Student" 
                     ? (projects.FirstOrDefault(p => p.StudentId == u.Id)?.Supervisor?.FullName ?? "Not Assigned")
+                    : "-",
+                assignedStudents = u.UserType == "Supervisor"
+                    ? string.Join(", ", projects.Where(p => p.SupervisorId == u.Id && p.Student != null).Select(p => p.Student.FullName).DefaultIfEmpty("No Students"))
                     : "-"
             }).ToList();
 
