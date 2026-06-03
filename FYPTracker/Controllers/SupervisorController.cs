@@ -22,7 +22,9 @@ namespace FYPTracker.Controllers
         {
             var username = HttpContext.User.Identity?.Name;
             if (string.IsNullOrEmpty(username)) return null;
-            return await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == username);
+            return await _context.ApplicationUsers
+                .Include(x => x.EmpDepartment)
+                .FirstOrDefaultAsync(u => u.UserName == username);
         }
 
         private async Task AddNotificationAsync(int recipientId, string type, string title, string? message = null)

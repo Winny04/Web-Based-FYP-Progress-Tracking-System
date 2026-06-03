@@ -304,6 +304,12 @@ namespace FYPTracker.Controllers
                 RequestMessage  = requestMessage
             };
 
+            // Update user profile with latest provided data
+            user.Phone = phoneNumber;
+            user.Programme = program;
+            user.AcademicSession = sessionSemester;
+            _context.ApplicationUsers.Update(user);
+
             _context.SupervisorRequests.Add(request);
             await _context.SaveChangesAsync();
 
@@ -428,7 +434,8 @@ namespace FYPTracker.Controllers
             await _context.SaveChangesAsync();
 
             await LogActivityAsync(user.Id, "Submission", "File Uploaded", $"Uploaded {reportFile.FileName} for {milestone.Title}");
-            await AddNotificationAsync(milestone.Project.SupervisorId ?? 0, "Submission", "New Submission", $"Student {user.FullName} uploaded a report for {milestone.Title}");
+            if (milestone.Project.SupervisorId.HasValue)
+                await AddNotificationAsync(milestone.Project.SupervisorId.Value, "Submission", "New Submission", $"Student {user.FullName} uploaded a report for {milestone.Title}");
 
             TempData["Success"] = "Report uploaded successfully!";
             return RedirectToAction(nameof(Submissions));
@@ -573,7 +580,8 @@ namespace FYPTracker.Controllers
                 await _context.SaveChangesAsync();
                 
                 await LogActivityAsync(user.Id, "Submission", "Form Submitted", $"Submitted {formType} for {milestone.Title}");
-                await AddNotificationAsync(milestone.Project.SupervisorId ?? 0, "Submission", "Form Submitted", $"Student {user.FullName} submitted {formType} for {milestone.Title}");
+                if (milestone.Project.SupervisorId.HasValue)
+                    await AddNotificationAsync(milestone.Project.SupervisorId.Value, "Submission", "Form Submitted", $"Student {user.FullName} submitted {formType} for {milestone.Title}");
             }
 
             TempData["Success"] = "Your form has been submitted successfully!";

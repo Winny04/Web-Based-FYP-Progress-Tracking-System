@@ -45,7 +45,7 @@ namespace FYPTracker.Services.Authentication
                 new Claim("Type",employee.UserType ?? String.Empty),
                 new Claim("DepartmentId",employee?.DepartmentId.ToString() ?? String.Empty),
                 new Claim("Department",employee.EmpDepartment?.Name ?? String.Empty),
-                new Claim("ShortName",employee.ShortName ?? String.Empty),
+                new Claim("FullName",employee.FullName ?? String.Empty),
                 new Claim("EmployeeId",employee.EmployeeId ?? String.Empty)
             };
 

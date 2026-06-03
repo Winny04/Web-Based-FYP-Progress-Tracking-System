@@ -9,7 +9,7 @@
     var project = DbContext.FYPProjects.Include(p => p.Supervisor).FirstOrDefault(p => p.StudentId == Model.Id);
     var supervisorName = project?.Supervisor?.FullName ?? "Not Assigned";
     var session = "2025/2026";
-    var programme = Model.Department ?? "Software Engineering";
+    var programme = Model.Programme ?? Model.EmpDepartment?.Name ?? "Not Set";
 }
 
 <style>
@@ -104,11 +104,11 @@
                     <div class="profile-photo-circle">
                         @if (!string.IsNullOrEmpty(Model.Image))
                         {
-                            <img id="avatarPreview" src="@Model.Image" alt="Profile Image" style="width: 100%; height: 100%; object-fit: cover;" />
+                            <img id="avatarPreview" src="@Model.Image" alt="Profile Image" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.src='/assets/media/avatars/blank.svg';" />
                         }
                         else
                         {
-                            <img id="avatarPreview" src="/assets/media/avatars/student_avatar.png" alt="Profile Image" style="width: 100%; height: 100%; object-fit: cover;" />
+                            <img id="avatarPreview" src="/assets/media/avatars/blank.svg" alt="Profile Image" style="width: 100%; height: 100%; object-fit: cover;" />
                         }
                     </div>
                     <h4 class="fw-bold text-dark mb-0">@(Model.UserType == "Supervisor" ? Model.Title + " " : "")@Model.FullName</h4>
@@ -121,9 +121,13 @@
 
                     <input type="hidden" name="UserType" value="@Model.UserType" />
                     <input type="hidden" name="PassCode" value="@Model.PassCode" />
-                    <input type="hidden" name="Department" value="@Model.Department" />
+                    <input type="hidden" name="Department" value="@Model.EmpDepartment?.Name" />
                     <input type="hidden" name="EmployeeId" value="@Model.EmployeeId" />
                     <input type="hidden" name="isImgChanged" id="isImgChanged" value="false" />
+                    @* Preserve readonly fields so they are not wiped on save *@
+                    <input type="hidden" name="Programme" value="@Model.Programme" />
+                    <input type="hidden" name="AcademicSession" value="@Model.AcademicSession" />
+                    <input type="hidden" name="Title" value="@Model.Title" />
 
                     <!-- Circular Photo Upload -->
                     <div class="mb-3">
@@ -135,7 +139,7 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Full Name</label>
-                            <input type="text" name="FullName" class="form-control" value="@Model.FullName" required />
+                            <input type="text" name="FullName" class="form-control bg-light border-0" value="@Model.FullName" readonly />
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Email Address</label>
@@ -174,13 +178,13 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Department</label>
-                                <input type="text" class="form-control bg-light border-0" value="@(Model.Department ?? "Not Assigned")" readonly />
+                                <input type="text" class="form-control bg-light border-0" value="@(Model.EmpDepartment?.Name ?? "Not Assigned")" readonly />
                             </div>
 
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Current Student Slots</label>
-                                <input type="number" name="MaxStudentSlots" class="form-control" value="@Model.MaxStudentSlots" min="1" max="20" />
-                                <small class="text-muted d-block mt-1">Currently @currentStudents slots are filled.</small>
+                                <input type="number" name="MaxStudentSlots" class="form-control" value="@(Model.MaxStudentSlots > 0 ? Model.MaxStudentSlots : 5)" min="1" max="10" />
+                                <small class="text-muted d-block mt-1">Currently @currentStudents slots are filled. (@Math.Max(0, (Model.MaxStudentSlots > 0 ? Model.MaxStudentSlots : 5) - (int)currentStudents)) available left)</small>
                             </div>
                         }
                     </div>

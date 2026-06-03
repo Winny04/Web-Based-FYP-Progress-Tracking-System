@@ -6,7 +6,7 @@
     @using Microsoft.AspNetCore.Mvc.Rendering;
     @using Microsoft.Data.SqlClient;
 
-    <div class="d-flex align-items-center me-n3 ms-1 ms-lg-3" id="kt_header_user_menu_toggle">
+    <div class="d-flex align-items-center me-n3 ms-1 ms-lg-3">
 
         <div class="form-check form-switch">
             <input class="form-check-input" checked="checked" type="checkbox" role="switch" id="toggleNotify">
@@ -21,9 +21,17 @@
                 var dbContext = Context.RequestServices.GetService(typeof(FYPTrackerContext)) as FYPTrackerContext;
                 var currentUserName = Context.User.Identity?.Name;
                 var currentUserObj = currentUserName != null ? dbContext?.ApplicationUsers.FirstOrDefault(u => u.UserName == currentUserName) : null;
-                var avatarImg = !string.IsNullOrEmpty(currentUserObj?.Image) ? currentUserObj.Image : "/assets/media/avatars/student_avatar.png";
+                var avatarImg = !string.IsNullOrEmpty(currentUserObj?.Image) ? currentUserObj.Image : "/assets/media/avatars/blank.svg";
+                var userType = currentUserObj?.UserType ?? "";
+                
+                string notifUrl = "/User/Notification";
+                if (userType == "Student") {
+                    notifUrl = "/Student/Notifications";
+                } else if (userType == "Supervisor") {
+                    notifUrl = "/Supervisor/Notifications";
+                }
             }
-            <img class="h-30px w-30px rounded-circle" style="object-fit: cover;" src="@avatarImg" alt="Profile Image" />
+            <img class="h-30px w-30px rounded-circle" style="object-fit: cover;" src="@avatarImg" alt="Profile Image" onerror="this.onerror=null; this.src='/assets/media/avatars/blank.svg';" />
         </div>
         <!--begin::User account menu-->
         <div class="menu menu-sub menu-sub-dropdown menu-column menu-rounded menu-gray-800 menu-state-bg menu-state-primary fw-bold py-4 fs-6 w-275px" data-kt-menu="true">
@@ -33,7 +41,7 @@
                     <!--begin::Username-->
                     <div class="d-flex flex-column">
                         <div class="fw-bolder d-flex align-items-center fs-5">
-                            @Context.User.Identity.Name
+                            @(Context.User.Identity?.Name ?? "")
                         </div>
                     </div>
                     <!--end::Username-->
@@ -45,17 +53,17 @@
             <!--end::Menu separator-->
             <!--begin::Menu item-->
             <div class="menu-item px-5">
-                <a href="/User/Profile?name=@Context.User.Identity.Name" class="menu-link px-5">My Profile</a>
+                <a href="/User/Profile?name=@Context.User.Identity.Name" class="menu-link px-5"><i class="fas fa-user me-2 text-muted"></i> My Profile</a>
             </div>
             <!--end::Menu item-->
             <!--begin::Menu separator-->
             <div class="separator my-2"></div>
              <div class="menu-item px-5">
-                <a href="@Url.Action("Notification","ApplicationUser")" class="menu-link px-5">Notification</a>
+                <a href="@notifUrl" class="menu-link px-5"><i class="fas fa-bell me-2 text-muted"></i> Notification</a>
             </div>
              <div class="separator my-2"></div>
             <div class="menu-item px-5">
-                <a href="/User/Logout" class="menu-link px-5">Sign Out</a>
+                <a href="/User/Logout" class="menu-link px-5"><i class="fas fa-sign-out-alt me-2 text-muted"></i> Sign Out</a>
             </div>
         </div>
     </div>

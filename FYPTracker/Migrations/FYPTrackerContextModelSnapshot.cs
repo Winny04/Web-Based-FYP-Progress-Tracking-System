@@ -43,9 +43,6 @@ namespace FYPTracker.Migrations
                     b.Property<DateTime?>("DateJoin")
                         .HasColumnType("datetime");
 
-                    b.Property<string>("Department")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<int?>("DepartmentId")
                         .HasColumnType("int");
 
@@ -70,9 +67,6 @@ namespace FYPTracker.Migrations
                     b.Property<int>("MaxStudentSlots")
                         .HasColumnType("int");
 
-                    b.Property<string>("OfficeRoom")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("PassCode")
                         .HasColumnType("nvarchar(max)");
 
@@ -87,9 +81,6 @@ namespace FYPTracker.Migrations
 
                     b.Property<DateTime?>("ResetTokenExpiry")
                         .HasColumnType("datetime2");
-
-                    b.Property<string>("ShortName")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Title")
                         .HasColumnType("nvarchar(max)");

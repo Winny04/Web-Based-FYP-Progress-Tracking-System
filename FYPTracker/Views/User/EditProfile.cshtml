@@ -1,10 +1,10 @@
 @using FYPTracker.Common
+@using FYPTracker.Models
 @model FYPTracker.Controllers.EmployeeEditVM
+@inject FYPTrackerContext DbContext
 @{
-    var departmentList = new List<SelectListItem>();
-    departmentList = Departments.DepartmentList();
-    var userTypeList = new List<SelectListItem>();
-    userTypeList = UserTypes.UserTypeList();
+    var departmentList = Departments.DepartmentListFromDb(DbContext);
+    var userTypeList = UserTypes.UserTypeList();
 }
 <div id="kt_content_container" class="d-flex flex-column-fluid align-items-start container-xxl">
     <!--begin::Post-->
@@ -82,11 +82,11 @@
         <!--end::Navbar-->
         <!--begin::details View-->
         <div class="card mb-5 mb-xl-10" id="kt_profile_details_view">
-            @using (Html.BeginForm("EditProfile", "ApplicationUser", FormMethod.Post, new { enctype = "multipart/form-data" }))
+            @using (Html.BeginForm("EditProfile", "User", FormMethod.Post, new { enctype = "multipart/form-data" }))
             {
                 @Html.HiddenFor(model => model.Id)
                 @Html.HiddenFor(model => model.UserName)
-                @Html.HiddenFor(model => model.ShortName)
+
                 <input value="false" id="isImgChanged" name="isImgChanged" type="hidden">
 
                 <div class="card-header cursor-pointer">
@@ -142,16 +142,7 @@
                         </div>
                     </div>
 
-                    <div class="row mb-6">
-                        @Html.LabelFor(model => model.ShortName, "Short Name", htmlAttributes: new { @class = "col-lg-4 col-form-label required fw-bold fs-6" })
-                        <div class="col-lg-8">
-                            <div class="row">
-                                <div class="col-lg-6 fv-row">
-                                    <input type="text" class="form-control form-control-lg form-control-solid mb-3 mb-lg-0" value="@Model.ShortName" disabled/>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+
                     <div class="row mb-6">
                         @Html.LabelFor(model => model.Email, htmlAttributes: new { @class = "col-lg-4 col-form-label required fw-bold fs-6" })
                         <div class="col-lg-8">

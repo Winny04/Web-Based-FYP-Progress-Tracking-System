@@ -154,7 +154,7 @@ namespace FYPTracker.Controllers
                 ws.Cell(row, 3).Value = item.Project?.Supervisor?.FullName ?? "Not Assigned";
                 ws.Cell(row, 4).Value = item.Project?.Title ?? "No Project";
                 
-                string status = item.Project != null ? item.Project.Status : "Not yet have supervisor";
+                string status = item.Student.IsResign ? "Inactive" : (item.Project != null ? item.Project.Status : "Inactive");
                 ws.Cell(row, 5).Value = status;
                 ws.Cell(row, 6).Value = item.Project?.StartDate?.ToString("dd MMM yyyy") ?? "-";
                 
@@ -169,7 +169,7 @@ namespace FYPTracker.Controllers
                 statusCell.Style.Font.Bold = true;
                 if (status == "Active" || status == "Approved" || status == "Completed")
                     statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.ForestGreen;
-                else if (status == "Not yet have supervisor")
+                else if (status == "Inactive")
                     statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.DimGray;
                 else if (status == "Proposed")
                     statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.DarkOrange;
@@ -349,7 +349,7 @@ namespace FYPTracker.Controllers
         [Authorize]
         public ActionResult Profile(string name)
         {
-            var model = _context.ApplicationUsers.Where(d => d.UserName == name).FirstOrDefault();
+            var model = _context.ApplicationUsers.Include(u => u.EmpDepartment).Where(d => d.UserName == name).FirstOrDefault();
             if (model != null) {
                 if (model.UserType == "SuperAdmin")
                 {
@@ -398,7 +398,7 @@ namespace FYPTracker.Controllers
                 model.UserName = check.UserName;
                 model.IsNotificationOn = check.IsNotificationOn;
                 model.FullName = check.FullName;
-                model.ShortName = check.ShortName;
+
                 model.PassCode = check.PassCode;
                 model.Email = check.Email;
                 model.Image = check.Image;
@@ -410,7 +410,7 @@ namespace FYPTracker.Controllers
                 model.Programme = check.Programme;
                 model.AcademicSession = check.AcademicSession;
                 model.Title = check.Title;
-                model.OfficeRoom = check.OfficeRoom;
+
                 
                 if (model.UserType == "SUPERVISOR")
                 {
@@ -439,7 +439,7 @@ namespace FYPTracker.Controllers
                 model.Id = check.Id;
                 model.UserName = check.UserName;
                 model.FullName = check.FullName;
-                model.ShortName = check.ShortName;
+
                 model.PassCode = check.PassCode;
                 model.Email = check.Email;
                 model.Image = check.Image;
@@ -452,7 +452,7 @@ namespace FYPTracker.Controllers
                 model.Programme = check.Programme;
                 model.AcademicSession = check.AcademicSession;
                 model.Title = check.Title;
-                model.OfficeRoom = check.OfficeRoom;
+
                 
                 if (model.UserType == "SUPERVISOR")
                 {
@@ -494,7 +494,7 @@ namespace FYPTracker.Controllers
                 model1.Image = ApplicationUser.Image;
                 model1.UserType = ApplicationUser.UserType;
                 model1.Image = model?.Image ?? ApplicationUser.Image;
-                model1.Department = model?.EmpDepartment?.Name ?? ApplicationUser.Department;
+                model1.Department = model?.EmpDepartment?.Name;
                 model1.EmployeeId = model?.EmployeeId ?? ApplicationUser.EmployeeId;
                 model1.IsResign = model?.IsResign.ToString();
                 
@@ -513,7 +513,7 @@ namespace FYPTracker.Controllers
                 {
                     model.FullName = ApplicationUser.FullName;
                     model.IsResign = ApplicationUser.IsResign == "on";
-                    model.ShortName = ApplicationUser.ShortName;
+
                     model.Email = ApplicationUser.Email;
                     if (model.PassCode != ApplicationUser.PassCode)
                     {
@@ -529,7 +529,7 @@ namespace FYPTracker.Controllers
                     model.Programme = ApplicationUser.Programme;
                     model.AcademicSession = ApplicationUser.AcademicSession;
                     model.Title = ApplicationUser.Title;
-                    model.OfficeRoom = ApplicationUser.OfficeRoom;
+
 
                     if (isImgChanged == "true")
                     {
@@ -542,6 +542,7 @@ namespace FYPTracker.Controllers
                     }
                     _context.ApplicationUsers.Update(model);
                     _context.SaveChanges();
+                    TempData["Success"] = "User updated successfully!";
                     return RedirectToAction("Index");
                 }
             }
@@ -575,7 +576,7 @@ namespace FYPTracker.Controllers
                 model1.Id = model.Id;
                 model1.UserName = ApplicationUser.UserName;
                 model1.FullName = ApplicationUser.FullName;
-                model1.ShortName = ApplicationUser.ShortName;
+
                 model1.PassCode = ApplicationUser.PassCode;
                 model.IsNotificationOn = ApplicationUser.IsNotificationOn;
                 model1.Email = ApplicationUser.Email;
@@ -583,14 +584,14 @@ namespace FYPTracker.Controllers
                 model1.UserType = ApplicationUser.UserType;
                 model1.Image = model.Image;
                 model1.EmployeeId = model.EmployeeId;
-                model1.Department = ApplicationUser.Department;
+
                 return View(model1);
             }
 
             if (model != null)
             {
                 model.FullName = ApplicationUser.FullName;
-                model.ShortName = ApplicationUser.ShortName;
+
                 model.Email = ApplicationUser.Email;
                 model.FullName = ApplicationUser.FullName;
                 model.DepartmentId = deptQuery.Where(x => x.Name == ApplicationUser.Department).FirstOrDefault()?.Id;
@@ -599,16 +600,20 @@ namespace FYPTracker.Controllers
                 {
                     model.PassCode = Encryption.GetHash(ApplicationUser.PassCode);
                 }
-                model.UserType = ApplicationUser.UserType;
+                // Preserve original UserType from DB — never let the form overwrite it
+                // (prevents a Student accidentally saving themselves as Admin etc.)
+                // model.UserType is unchanged (kept from DB)
                 model.EmployeeId = ApplicationUser.EmployeeId;
                 model.IsNotificationOn = ApplicationUser.IsNotificationOn;
                 
                 // New profile fields
                 model.Phone = ApplicationUser.Phone;
+                // Use null-guard: only overwrite if submitted value is non-empty
+                // This prevents readonly display fields from wiping existing data
                 if (model.UserType == "Supervisor")
                 {
-                    model.OfficeRoom = ApplicationUser.OfficeRoom;
-                    model.Title = ApplicationUser.Title;
+                    if (!string.IsNullOrEmpty(ApplicationUser.Title))
+                        model.Title = ApplicationUser.Title;
                     if (ApplicationUser.MaxStudentSlots > 0)
                     {
                         model.MaxStudentSlots = ApplicationUser.MaxStudentSlots;
@@ -616,8 +621,10 @@ namespace FYPTracker.Controllers
                 }
                 else if (model.UserType == "Student")
                 {
-                    model.Programme = ApplicationUser.Programme;
-                    model.AcademicSession = ApplicationUser.AcademicSession;
+                    if (!string.IsNullOrEmpty(ApplicationUser.Programme))
+                        model.Programme = ApplicationUser.Programme;
+                    if (!string.IsNullOrEmpty(ApplicationUser.AcademicSession))
+                        model.AcademicSession = ApplicationUser.AcademicSession;
                 }
 
                 if (isImgChanged == "true")
@@ -682,7 +689,7 @@ namespace FYPTracker.Controllers
                         {
                             UserName = newEmployee.UserName,
                             FullName = newEmployee.FullName,
-                            ShortName = newEmployee.ShortName,
+
                             Email = newEmployee.Email,
                             PassCode = Encryption.GetHash(newEmployee.PassCode),
                             EmployeeId = newEmployee.EmplooyeeInfoID,
@@ -690,19 +697,21 @@ namespace FYPTracker.Controllers
                             DateJoin = DateTime.Now,
                             AddedBy = "sys",
                             UserType = String.IsNullOrEmpty(newEmployee.UserType) ? "Requestor" : newEmployee.UserType,
-                            Image = "/assets/media/avatars/student_avatar.png",
+                            Image = "/assets/media/avatars/blank.svg",
                             DepartmentId = deptQuery.Where(x => x.Name == newEmployee.Department).FirstOrDefault()?.Id,
                             Phone = newEmployee.Phone,
                             Programme = newEmployee.Programme,
                             AcademicSession = newEmployee.AcademicSession,
-                            Title = newEmployee.Title,
-                            OfficeRoom = newEmployee.OfficeRoom
+                            Title = newEmployee.Title
                     };
                         _context.ApplicationUsers.Add(model);
                         _context.SaveChanges();
 
                         try
                         {
+                            var request = HttpContext.Request;
+                            var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+
                             string subject = "Welcome to FYP Tracking System - Your Login Credentials";
                             string htmlBody = $@"
                                 <h3>Welcome, {newEmployee.FullName}!</h3>
@@ -711,6 +720,9 @@ namespace FYPTracker.Controllers
                                     <li><strong>Username:</strong> {newEmployee.UserName}</li>
                                     <li><strong>Password:</strong> {newEmployee.PassCode}</li>
                                 </ul>
+                                <p style='margin: 20px 0;'>
+                                    <a href='{loginUrl}' style='display: inline-block; padding: 10px 20px; color: white; background-color: #009ef7; text-decoration: none; border-radius: 6px; font-weight: bold; font-family: sans-serif;'>Click Here to Login</a>
+                                </p>
                                 <p>Please log in and change your password as soon as possible.</p>
                                 <br/>
                                 <p>Best Regards,<br/>FYP Tracking System Admin</p>
@@ -1044,7 +1056,7 @@ namespace FYPTracker.Controllers
         public string? PassCode { get; set; }
 
         //[Required(ErrorMessage = "The Short Name is Required!")]
-        public string? ShortName { get; set; }
+
 
         [Required(ErrorMessage = "The email is Required!")]
         [EmailAddress(ErrorMessage = "Please enter correct email address!")]
@@ -1068,7 +1080,6 @@ namespace FYPTracker.Controllers
         public string? AcademicSession { get; set; }
         // Supervisor-specific
         public string? Title { get; set; }
-        public string? OfficeRoom { get; set; }
         public string? Phone { get; set; }
     }
 
@@ -1081,7 +1092,7 @@ namespace FYPTracker.Controllers
         public string? FullName { get; set; }
 
         //[Required(ErrorMessage = "The Short Name is Required!")]
-        public string? ShortName { get; set; }
+
         public string? UserName { get; set; }
 
         [Required(ErrorMessage = "The password is Required!")]
@@ -1106,7 +1117,6 @@ namespace FYPTracker.Controllers
         public string? Programme { get; set; }
         public string? AcademicSession { get; set; }
         public string? Title { get; set; }
-        public string? OfficeRoom { get; set; }
         public int MaxStudentSlots { get; set; }
     }
 }

@@ -12,7 +12,7 @@ namespace FYPTracker.Models
         public int Id { get; set; }
         public string? FullName { get; set; }
         public string? UserName { get; set; }
-        public string? ShortName { get; set; }
+
         public string? PassCode { get; set; }
         public string? Email { get; set; }
         public string? Phone { get; set; } // Shared field
@@ -29,8 +29,8 @@ namespace FYPTracker.Models
         public string? Image { get; set; }
         public string? UserType { get; set; } // "Student", "Supervisor", "Admin", etc.
         
-        public string? Department { get; set; } // Used for both Student/Supervisor
-        public string? EmployeeId { get; set; } // We keep this name for legacy data, but it acts as StudentId/StaffId
+
+        public string? EmployeeId { get; set; } // We keep this name for legacy data, but it acts as StudentId
         public int? DepartmentId { get; set; }
         public bool IsNotificationOn { get; set; }
         public bool IsResign { get; set; }
@@ -44,7 +44,7 @@ namespace FYPTracker.Models
 
         // Supervisor Specific
         public string? Title { get; set; } // e.g., Dr, Prof, Mr, Ms
-        public string? OfficeRoom { get; set; }
+
         public int MaxStudentSlots { get; set; } = 5;
 
         [ForeignKey(nameof(DepartmentId))]

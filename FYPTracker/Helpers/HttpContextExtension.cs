@@ -1,4 +1,4 @@
-﻿namespace FYPTracker.Helpers
+namespace FYPTracker.Helpers
 {
     public static class HttpContextExtension
     {
@@ -27,7 +27,7 @@
             if (httpContext.User == null)
                 return string.Empty;
 
-            return httpContext.User.Claims.Single(x => x.Type == "Department").Value;
+            return httpContext.User.Claims.FirstOrDefault(x => x.Type == "Department")?.Value ?? string.Empty;
         }
 
         public static string GetUserDeptId(this HttpContext httpContext)
@@ -35,17 +35,16 @@
             if (httpContext.User == null)
                 return string.Empty;
 
-            return httpContext.User.Claims.Single(x => x.Type == "DepartmentId").Value;
+            return httpContext.User.Claims.FirstOrDefault(x => x.Type == "DepartmentId")?.Value ?? string.Empty;
         }
 
-        public static string GetShortName(this HttpContext httpContext)
+        public static string GetFullName(this HttpContext httpContext)
         {
             if (httpContext.User == null)
                 return string.Empty;
 
-            var claim = httpContext.User.Claims.FirstOrDefault(x => x.Type == "ShortName");
+            var claim = httpContext.User.Claims.FirstOrDefault(x => x.Type == "FullName");
             return claim != null ? claim.Value : string.Empty;
-            //return httpContext.User.Claims.Single(x => x.Type == "ShortName").Value;
         }
 
         public static string GetUserEmpId(this HttpContext httpContext)
@@ -53,7 +52,7 @@
             if (httpContext.User == null)
                 return string.Empty;
 
-            return httpContext.User.Claims.Single(x => x.Type == "EmployeeId").Value;
+            return httpContext.User.Claims.FirstOrDefault(x => x.Type == "EmployeeId")?.Value ?? string.Empty;
         }
     }
 }

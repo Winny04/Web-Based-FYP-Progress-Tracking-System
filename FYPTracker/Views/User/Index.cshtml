@@ -1,12 +1,12 @@
 @using FYPTracker.Common
 @using FYPTracker.Helpers
+@using FYPTracker.Models
 @model FYPTracker.Controllers.ApplicationUserVM
-
+@inject FYPTrackerContext DbContext
 @{
     //ViewBag.Title = "Configuration>Users";
     ViewBag.Title = PageTitle.ManageUser;
-    var departmentList = new List<SelectListItem>();
-    departmentList = Departments.DepartmentList();
+    var departmentList = Departments.DepartmentListFromDb(DbContext);
     var userTypeList = new List<SelectListItem>();
     userTypeList = UserTypes.UserTypeFilterList();
     var createUserTypeList = new List<SelectListItem>
@@ -174,7 +174,7 @@
                     <div class="fv-row mb-5">
                         <label class="form-label fw-bolder text-dark fs-6">Password <span class="text-danger">*</span></label>
                         <div class="position-relative">
-                            <input type="password" id="createPassCode" class="form-control form-control-lg form-control-solid" />
+                            <input type="password" id="createPassCode" class="form-control form-control-lg form-control-solid" autocomplete="new-password" />
                             <span class="btn btn-sm btn-icon position-absolute translate-middle top-50 end-0 me-n2" onclick="toggleCreatePwd(this)">
                                 <i class="bi bi-eye-slash fs-2"></i>
                             </span>
@@ -202,7 +202,12 @@
                         </div>
                         <div class="fv-row mb-5">
                             <label class="form-label fw-bolder text-dark fs-6">Academic Session</label>
-                            <input type="text" id="createAcademicSession" class="form-control form-control-lg form-control-solid" placeholder="e.g. 2024/2025" />
+                            <select id="createAcademicSession" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Session --</option>
+                                <option value="2026 Jan">2026 Jan</option>
+                                <option value="2026 April">2026 April</option>
+                                <option value="2026 Aug">2026 Aug</option>
+                            </select>
                         </div>
                     </div>
 
@@ -238,6 +243,8 @@
     </div>
 </div>
 
+@section scripts{
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     function toggleCreatePwd(btn) {
         var inp = document.getElementById("createPassCode");
@@ -247,6 +254,29 @@
     }
 
     $(document).ready(function () {
+        @if (TempData["Success"] != null)
+        {
+            <text>
+            Swal.fire({
+                title: 'Success!',
+                text: '@Html.Raw(TempData["Success"].ToString().Replace("'", "\\'"))',
+                icon: 'success',
+                confirmButtonColor: '#3b82f6'
+            });
+            </text>
+        }
+
+        @if (TempData["Error"] != null)
+        {
+            <text>
+            Swal.fire({
+                title: 'Error!',
+                text: '@Html.Raw(TempData["Error"].ToString().Replace("'", "\\'"))',
+                icon: 'error',
+                confirmButtonColor: '#3b82f6'
+            });
+            </text>
+        }
         LoadTable();
 
         $('#createUserType').change(function () {
@@ -573,7 +603,7 @@
     }
 
 </script>
-
+}
 
 
 

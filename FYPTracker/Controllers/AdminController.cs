@@ -6,6 +6,7 @@ using System.Linq;
 
 namespace FYPTracker.Controllers
 {
+    [Microsoft.AspNetCore.Authorization.Authorize]
     public class AdminController : Controller
     {
         private readonly FYPTrackerContext _context;
@@ -56,7 +57,7 @@ namespace FYPTracker.Controllers
             foreach (var p in projects)
             {
                 int completedCount = p.Milestones.Count(m => m.Status == "Approved");
-                csv.AppendLine($"{p.Id},{p.Student?.FullName},{p.Student?.EmployeeId},{p.Supervisor?.FullName},{completedCount}/3,{p.Status}");
+                csv.AppendLine($"{p.Id},{p.Student?.FullName},{p.Student?.EmployeeId},{p.Supervisor?.FullName},{completedCount}/{p.Milestones.Count},{p.Status}");
             }
 
             byte[] buffer = Encoding.UTF8.GetBytes(csv.ToString());

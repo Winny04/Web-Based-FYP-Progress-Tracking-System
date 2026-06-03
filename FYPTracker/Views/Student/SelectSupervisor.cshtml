@@ -173,22 +173,7 @@
                             </thead>
                             <tbody>
                                 @{ int num = 1; }
-                                
-                                <!-- Static Ms. Nurul to perfectly match requirement mockup -->
-                                <tr class="sup-row" data-dept="Software Eng" data-name="Ms. Nurul" data-exp="Web Dev">
-                                    <td class="text-muted fw-bold">@(num++)</td>
-                                    <td>
-                                        <div class="fw-bold text-dark">Ms. Nurul</div>
-                                        <div class="text-muted small">nurul@fyp.edu.my</div>
-                                    </td>
-                                    <td>Software Eng</td>
-                                    <td>Web Dev</td>
-                                    <td><span class="text-danger fw-bold">Full</span></td>
-                                    <td><span class="status-badge badge-full">Full</span></td>
-                                    <td class="text-end">
-                                        <button class="btn-apply" disabled>Select</button>
-                                    </td>
-                                </tr>
+
 
                                 @foreach (var sup in supervisors)
                                 {
@@ -198,8 +183,8 @@
                                     // Dynamically read MaxStudentSlots from the DB
                                     int maxSlots = sup.MaxStudentSlots > 0 ? sup.MaxStudentSlots : 5;
                                     int slotsLeft = Math.Max(0, maxSlots - appCount);
-                                    string deptLabel = sup.DepartmentId == 1 || sup.UserName == "dr.lim" ? "Computing" : "Engineering";
-                                    string expertise = sup.UserName == "dr.lim" ? "AI / ML" : "Embedded Systems";
+                                    string deptLabel = sup.EmpDepartment?.Name ?? "General";
+                                    string expertise = !string.IsNullOrEmpty(sup.Programme) ? sup.Programme : "General";
                                     
                                     <tr class="sup-row" data-dept="@deptLabel" data-name="@sup.FullName" data-exp="@expertise">
                                         <td class="text-muted fw-bold">@(num++)</td>
@@ -212,7 +197,7 @@
                                         <td>
                                             @if (slotsLeft > 0)
                                             {
-                                                <span class="text-success fw-bold">@slotsLeft slots left</span>
+                                                <span class="text-success fw-bold">@slotsLeft / @maxSlots available left</span>
                                             }
                                             else
                                             {
@@ -329,11 +314,12 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Phone Number</label>
-                                <input type="tel" name="phoneNumber" class="form-control" placeholder="012-3456789 or +60123456789" pattern="^(\+?60|0)1[0-9][\-\s]?[0-9]{3,4}[\-\s]?[0-9]{4}$" required title="Please enter a valid Malaysia phone number (e.g. 012-3456789 or +60123456789)" />
+                                <input type="tel" name="phoneNumber" class="form-control" value="@currentUser?.Phone" pattern="^(\+?60|0)1[0-9][\-\s]?[0-9]{3,4}[\-\s]?[0-9]{4}$" required title="Please enter a valid Malaysia phone number (e.g. 012-3456789 or +60123456789)" oninput="this.classList.toggle('is-invalid', !this.checkValidity());" />
+                                <div class="invalid-feedback text-danger small mt-1">Please enter a valid Malaysia phone number (e.g., 012-3456789 or +60123456789).</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Session / Semester</label>
-                                <input type="text" name="sessionSemester" class="form-control" value="2025/2026 - Sem 1" minlength="5" maxlength="50" required title="Please enter your current academic session and semester" />
+                                <input type="text" name="sessionSemester" class="form-control bg-light border-0" value="@currentUser?.AcademicSession" readonly />
                             </div>
 
                         </div>
