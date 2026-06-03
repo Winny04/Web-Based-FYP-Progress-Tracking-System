@@ -1,8 +1,8 @@
 @using FYPTracker.Models
 @{
     ViewData["Title"] = "Select FYP Supervisor";
-    var currentUser     = ViewBag.CurrentUser as EmployeeInfo;
-    var supervisors     = ViewBag.Supervisors as List<EmployeeInfo> ?? new();
+    var currentUser     = ViewBag.CurrentUser as ApplicationUser;
+    var supervisors     = ViewBag.Supervisors as List<ApplicationUser> ?? new();
     var applicantCounts = ViewBag.ApplicantCounts as Dictionary<int, int> ?? new();
     var myRequests      = ViewBag.MyRequests  as List<SupervisorRequest> ?? new();
     var hasApproved     = myRequests.Any(r => r.Status == "Approved");
@@ -195,8 +195,8 @@
                                     var existing = myRequests.FirstOrDefault(r => r.SupervisorId == sup.Id);
                                     var appCount = applicantCounts.ContainsKey(sup.Id) ? applicantCounts[sup.Id] : 0;
                                     
-                                    // Custom visual slots
-                                    int maxSlots = sup.UserName == "dr.lim" ? 3 : 5;
+                                    // Dynamically read MaxStudentSlots from the DB
+                                    int maxSlots = sup.MaxStudentSlots > 0 ? sup.MaxStudentSlots : 5;
                                     int slotsLeft = Math.Max(0, maxSlots - appCount);
                                     string deptLabel = sup.DepartmentId == 1 || sup.UserName == "dr.lim" ? "Computing" : "Engineering";
                                     string expertise = sup.UserName == "dr.lim" ? "AI / ML" : "Embedded Systems";
@@ -438,3 +438,5 @@
     });
 </script>
 }
+
+

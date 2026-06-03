@@ -1,0 +1,1 @@
+﻿UPDATE FYPMilestone SET Remarks = 'Form: Proposal Form. Details: Proposal Submitted. JSON: {"Project Title":"Web-Based FYP Progress Tracking System","Problem Statement":"--","Scope of Work":"--","Expected Outcome":"--"}' WHERE Id = 1002;

@@ -2,6 +2,7 @@ using FYPTracker.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using FYPTracker.Services.Others.Interfaces;
 
 namespace FYPTracker.Controllers
 {
@@ -10,11 +11,13 @@ namespace FYPTracker.Controllers
     {
         private readonly FYPTrackerContext _context;
         private readonly IWebHostEnvironment _env;
+        private readonly IEmailService _emailService;
 
-        public StudentController(FYPTrackerContext context, IWebHostEnvironment env)
+        public StudentController(FYPTrackerContext context, IWebHostEnvironment env, IEmailService emailService)
         {
             _context = context;
             _env     = env;
+            _emailService = emailService;
         }
 
         // ══════════════════════════════════════════════════════
@@ -23,7 +26,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> Index()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "EmployeeInfo");
+            if (user == null) return RedirectToAction("Login", "User");
 
             ViewBag.CurrentUser = user;
 
@@ -58,7 +61,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> IAF()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "EmployeeInfo");
+            if (user == null) return RedirectToAction("Login", "User");
 
             // Check if user already has an IAF submission
             var existing = await _context.FYPIAForms.FirstOrDefaultAsync(f => f.StudentId == user.Id);
@@ -107,12 +110,12 @@ namespace FYPTracker.Controllers
             return RedirectToAction("IAF");
         }
 
-        //  HELPER: current logged-in EmployeeInfo
+        //  HELPER: current logged-in ApplicationUser
         // ──────────────────────────────────────────────────────
-        private async Task<EmployeeInfo?> GetCurrentUserAsync()
+        private async Task<ApplicationUser?> GetCurrentUserAsync()
         {
             var userName = HttpContext.User.Identity?.Name;
-            return await _context.EmployeeInfos
+            return await _context.ApplicationUsers
                 .Include(x => x.EmpDepartment)
                 .FirstOrDefaultAsync(x => x.UserName == userName);
         }
@@ -206,7 +209,7 @@ namespace FYPTracker.Controllers
                 .ToListAsync();
 
             // 3. Get Filtered Supervisors
-            var supervisors = await _context.EmployeeInfos
+            var supervisors = await _context.ApplicationUsers
                 .Include(e => e.EmpDepartment)
                 .Where(e => e.UserType == "Supervisor" && !e.IsResign && !rejectedIds.Contains(e.Id))
                 .ToListAsync();
@@ -308,6 +311,20 @@ namespace FYPTracker.Controllers
             await LogActivityAsync(user.Id, "General", "Supervisor Request Sent", $"Sent request to supervisor {supervisorId}");
             await AddNotificationAsync(user.Id, "General", "Request Submitted", "Your supervision request has been sent.");
 
+            // Notify Supervisor
+            var supervisor = await _context.ApplicationUsers.FindAsync(supervisorId);
+            if (supervisor != null)
+            {
+                await AddNotificationAsync(supervisor.Id, "SupervisionRequest", "New Student Request", $"{user.FullName} has requested you as their supervisor for: {projectTopic}.");
+                
+                if (!string.IsNullOrEmpty(supervisor.Email))
+                {
+                    string subject = "New FYP Supervision Request";
+                    string body = $"<p>Dear {supervisor.FullName},</p><p>You have received a new FYP supervision request from <b>{user.FullName}</b>.</p><p><b>Topic:</b> {projectTopic}</p><p>Please log in to the FYP Tracker portal to approve or reject this request.</p>";
+                    _emailService.Send(supervisor.Email, subject, body);
+                }
+            }
+
             TempData["Success"] = "Supervision request sent successfully!";
             return RedirectToAction(nameof(SelectSupervisor));
         }
@@ -368,7 +385,22 @@ namespace FYPTracker.Controllers
 
             if (milestone == null) return NotFound();
 
-            // 2. Handle File Saving
+            // 2. Remove existing files for this milestone to prevent confusion
+            var existingFiles = await _context.FYPSubmissionFiles.Where(f => f.MilestoneId == milestoneId).ToListAsync();
+            if (existingFiles.Any())
+            {
+                foreach (var f in existingFiles)
+                {
+                    var oldFilePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", f.FilePath.TrimStart('/'));
+                    if (System.IO.File.Exists(oldFilePath))
+                    {
+                        try { System.IO.File.Delete(oldFilePath); } catch { /* Ignore locked file errors */ }
+                    }
+                }
+                _context.FYPSubmissionFiles.RemoveRange(existingFiles);
+            }
+
+            // 3. Handle File Saving
             var uniqueName = $"{Guid.NewGuid()}{ext}";
             var uploadDir  = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads/submissions");
             Directory.CreateDirectory(uploadDir);
@@ -379,7 +411,7 @@ namespace FYPTracker.Controllers
                 await reportFile.CopyToAsync(stream);
             }
 
-            // 3. Save DB record
+            // 4. Save DB record
             var submissionFile = new FYPSubmissionFile
             {
                 MilestoneId  = milestoneId,
@@ -406,28 +438,76 @@ namespace FYPTracker.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SubmitDigitalForm(
-            int milestoneId, string formType, string? title, string? detailsJson, IFormFile? attachedFile)
+            int milestoneId, string formType, string? title, string? detailsJson, IFormFile? attachedFile, List<IFormFile>? attachedFiles,
+            string? problemStatement, string? objective1, string? objective2, string? objective3,
+            string? scope, string? outcome, string? references,
+            DateTime? startDate, DateTime? endDate, string? workDone, string? challenges, string? nextPeriodPlan, string? pctComplete)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "EmployeeInfo");
+            if (user == null) return RedirectToAction("Login", "User");
 
-            string? filePath = null;
-            string? fileName = null;
-            long? fileSize = null;
-            if (attachedFile != null && attachedFile.Length > 0)
+            var allFiles = new List<IFormFile>();
+            if (attachedFile != null && attachedFile.Length > 0) allFiles.Add(attachedFile);
+            if (attachedFiles != null && attachedFiles.Any()) allFiles.AddRange(attachedFiles.Where(f => f.Length > 0));
+
+            var savedFileRecords = new List<FYPSubmissionFile>();
+            if (allFiles.Any())
             {
-                var ext = Path.GetExtension(attachedFile.FileName).ToLowerInvariant();
-                var uniqueName = $"{Guid.NewGuid()}{ext}";
+                // Validate all files BEFORE proceeding
+                var allowedExt = new[] { ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".zip" };
+                foreach (var file in allFiles)
+                {
+                    var extCheck = Path.GetExtension(file.FileName).ToLowerInvariant();
+                    if (!allowedExt.Contains(extCheck))
+                    {
+                        TempData["Error"] = "Only PDF, DOC, PPT, and ZIP files are allowed.";
+                        return RedirectToAction("Forms");
+                    }
+                    if (file.Length > 20 * 1024 * 1024)
+                    {
+                        TempData["Error"] = "File size must not exceed 20 MB.";
+                        return RedirectToAction("Forms");
+                    }
+                }
+
+                // Remove existing files for this milestone to prevent confusion
+                var existingFiles = await _context.FYPSubmissionFiles.Where(f => f.MilestoneId == milestoneId).ToListAsync();
+                if (existingFiles.Any())
+                {
+                    foreach (var f in existingFiles)
+                    {
+                        var oldFilePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", f.FilePath.TrimStart('/'));
+                        if (System.IO.File.Exists(oldFilePath))
+                        {
+                            try { System.IO.File.Delete(oldFilePath); } catch { /* Ignore locked file errors */ }
+                        }
+                    }
+                    _context.FYPSubmissionFiles.RemoveRange(existingFiles);
+                }
+
                 var uploadDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads/submissions");
                 Directory.CreateDirectory(uploadDir);
-                var path = Path.Combine(uploadDir, uniqueName);
-                using (var stream = new FileStream(path, FileMode.Create))
+
+                foreach (var file in allFiles)
                 {
-                    await attachedFile.CopyToAsync(stream);
+                    var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                    var uniqueName = $"{Guid.NewGuid()}{ext}";
+                    var path = Path.Combine(uploadDir, uniqueName);
+                    using (var stream = new FileStream(path, FileMode.Create))
+                    {
+                        await file.CopyToAsync(stream);
+                    }
+
+                    savedFileRecords.Add(new FYPSubmissionFile
+                    {
+                        MilestoneId = milestoneId,
+                        FileName = file.FileName,
+                        FilePath = "/uploads/submissions/" + uniqueName,
+                        FileSize = file.Length,
+                        UploadedBy = user.Id,
+                        UploadedDate = DateTime.Now
+                    });
                 }
-                filePath = "/uploads/submissions/" + uniqueName;
-                fileName = attachedFile.FileName;
-                fileSize = attachedFile.Length;
             }
 
             var milestone = await _context.FYPMilestones
@@ -436,22 +516,59 @@ namespace FYPTracker.Controllers
 
             if (milestone != null)
             {
+                if (formType == "Progress Report Form")
+                {
+                    var dict = new System.Collections.Generic.Dictionary<string, string> {
+                        {"Start Period", startDate?.ToString("dd MMM yyyy") ?? ""},
+                        {"End Period", endDate?.ToString("dd MMM yyyy") ?? ""},
+                        {"Work Completed", workDone ?? ""},
+                        {"Challenges", challenges ?? ""},
+                        {"Next Plan", nextPeriodPlan ?? ""},
+                        {"Completion", pctComplete ?? ""}
+                    };
+                    detailsJson = System.Text.Json.JsonSerializer.Serialize(dict);
+                    title = $"Progress Report: {pctComplete} Complete";
+                }
+                else if (formType == "Proposal Form")
+                {
+                    var dict = new System.Collections.Generic.Dictionary<string, string> {
+                        {"Project Title", title ?? ""},
+                        {"Problem Statement", problemStatement ?? ""},
+                        {"Scope of Work", scope ?? ""},
+                        {"Expected Outcome", outcome ?? ""}
+                    };
+                    detailsJson = System.Text.Json.JsonSerializer.Serialize(dict);
+                }
+                else if (formType == "Final Submission Form")
+                {
+                    var dict = new System.Collections.Generic.Dictionary<string, string> {
+                        {"Project Title", title ?? ""},
+                        {"Abstract", Request.Form.TryGetValue("abstract", out var abs) ? abs.ToString() : ""},
+                        {"Acknowledgements", Request.Form.TryGetValue("acknowledgements", out var ack) ? ack.ToString() : ""}
+                    };
+                    detailsJson = System.Text.Json.JsonSerializer.Serialize(dict);
+                }
+
                 milestone.Status = "Submitted";
                 milestone.SubmittedDate = DateTime.Now;
                 milestone.Remarks = $"Form: {formType}. Details: {title}. JSON: {detailsJson}";
                 
-                if (filePath != null)
+                // Save specific proposal details directly to the Project record
+                if (formType == "Proposal Form")
                 {
-                    var fileRec = new FYPSubmissionFile
-                    {
-                        MilestoneId = milestoneId,
-                        FileName = fileName ?? "AttachedFile",
-                        FilePath = filePath,
-                        FileSize = fileSize,
-                        UploadedBy = user.Id,
-                        UploadedDate = DateTime.Now
-                    };
-                    _context.FYPSubmissionFiles.Add(fileRec);
+                    if (!string.IsNullOrEmpty(title)) milestone.Project.Title = title;
+                    milestone.Project.ProblemStatement = problemStatement;
+                    milestone.Project.Objective1 = objective1;
+                    milestone.Project.Objective2 = objective2;
+                    milestone.Project.Objective3 = objective3;
+                    milestone.Project.Scope = scope;
+                    milestone.Project.ExpectedOutcome = outcome;
+                    milestone.Project.References = references;
+                }
+                
+                if (savedFileRecords.Any())
+                {
+                    _context.FYPSubmissionFiles.AddRange(savedFileRecords);
                 }
                 
                 await _context.SaveChangesAsync();
@@ -541,7 +658,7 @@ namespace FYPTracker.Controllers
             await AddNotificationAsync(user.Id, "MeetingUpdate", "Meeting Request Submitted",
                 $"Your meeting request for {parsedDate:dd MMM yyyy} at {meetingTime} is pending approval.");
 
-            var supervisor = await _context.EmployeeInfos.FindAsync(supervisorId);
+            var supervisor = await _context.ApplicationUsers.FindAsync(supervisorId);
             string supName = supervisor?.FullName ?? "your supervisor";
             TempData["Success"] = $"Meeting request sent to {supName}!";
             return RedirectToAction(nameof(BookMeeting));
@@ -711,3 +828,5 @@ namespace FYPTracker.Controllers
         }
     }
 }
+
+

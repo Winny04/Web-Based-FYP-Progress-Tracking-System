@@ -21,13 +21,13 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> Index()
         {
             var currentUsername = HttpContext.User.Identity?.Name;
-            var getUser = await _context.EmployeeInfos
+            var getUser = await _context.ApplicationUsers
                 .Include(x => x.EmpDepartment)
                 .FirstOrDefaultAsync(x => x.UserName == currentUsername);
 
             if (getUser == null)
             {
-                return RedirectToAction("Login", "Authentication");
+                return RedirectToAction("Login", "User");
             }
 
             ViewBag.CurrentUser = getUser;
@@ -50,10 +50,18 @@ namespace FYPTracker.Controllers
             return View(projects);
         }
 
+        [AllowAnonymous]
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
         {
             return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
         }
+
+        [AllowAnonymous]
+        public IActionResult Error404()
+        {
+            return View("Error", new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+        }
     }
 }
+

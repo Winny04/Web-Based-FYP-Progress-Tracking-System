@@ -2,11 +2,11 @@
 @model FYPProject?
 @{
     ViewData["Title"] = "Student Home";
-    var currentUser = ViewBag.CurrentUser as EmployeeInfo;
+    var currentUser = ViewBag.CurrentUser as ApplicationUser;
     var name = currentUser?.FullName ?? "Student";
     var studentId = currentUser?.EmployeeId ?? "S12345678";
     var supervisorName = Model?.Supervisor?.FullName ?? "Not Assigned";
-    var session = Model != null ? "2025/2026" : "—";
+    var session = !string.IsNullOrEmpty(currentUser?.AcademicSession) ? currentUser.AcademicSession : "—";
     
     var milestones = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
     int total = milestones.Count;
@@ -230,7 +230,7 @@
                 }
             </a>
             <!-- Profile Avatar Circular -->
-            <a href="/EmployeeInfo/Profile?name=@currentUser?.UserName" class="profile-avatar border border-2 border-white rounded-circle overflow-hidden shadow-sm" style="width: 48px; height: 48px; display: block;">
+            <a href="/User/Profile?name=@currentUser?.UserName" class="profile-avatar border border-2 border-white rounded-circle overflow-hidden shadow-sm" style="width: 48px; height: 48px; display: block;">
                 @if (!string.IsNullOrEmpty(currentUser?.Image))
                 {
                     <img src="@currentUser.Image" alt="Avatar" style="width: 100%; height: 100%; object-fit: cover;" />
@@ -458,3 +458,6 @@
         myModal.show();
     }
 </script>
+
+
+

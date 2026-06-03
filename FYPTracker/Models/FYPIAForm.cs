@@ -11,7 +11,7 @@ namespace FYPTracker.Models
 
         public int StudentId { get; set; }
         [ForeignKey("StudentId")]
-        public virtual EmployeeInfo Student { get; set; }
+        public virtual ApplicationUser Student { get; set; }
 
         // --- Industrial Information ---
         [Required]
@@ -42,3 +42,5 @@ namespace FYPTracker.Models
         public DateTime? ProcessedDate { get; set; }
     }
 }
+
+

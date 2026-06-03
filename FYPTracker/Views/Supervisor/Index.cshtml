@@ -1,7 +1,7 @@
 @using FYPTracker.Models
 @{
     ViewData["Title"] = "Supervisor Dashboard";
-    var user           = ViewBag.CurrentUser as EmployeeInfo;
+    var user           = ViewBag.CurrentUser as ApplicationUser;
     var recentRequests = ViewBag.RecentRequests as List<SupervisorRequest> ?? new();
     var nextMeetings   = ViewBag.NextMeetings as List<MeetingBooking> ?? new();
 }
@@ -192,3 +192,5 @@
     </div>
 
 </div>
+
+

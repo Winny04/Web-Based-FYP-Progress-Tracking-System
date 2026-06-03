@@ -15,7 +15,7 @@ namespace FYPTracker.Models
         }
 
         // ── Shared / Auth ──────────────────────────────────────────
-        public virtual DbSet<EmployeeInfo>      EmployeeInfos      { get; set; } = null!;
+        public virtual DbSet<ApplicationUser>   ApplicationUsers   { get; set; } = null!;
         public virtual DbSet<Department>        Department         { get; set; } = null!;
         public virtual DbSet<AuditTrail>        AuditTrail         { get; set; } = null!;
         public virtual DbSet<AuditTag>          AuditTag           { get; set; } = null!;
@@ -116,11 +116,12 @@ namespace FYPTracker.Models
                       .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // EmployeeInfo → Department FK
-            modelBuilder.Entity<EmployeeInfo>(entity =>
+            // ApplicationUser → Department FK
+            modelBuilder.Entity<ApplicationUser>(entity =>
             {
+                entity.ToTable("ApplicationUser");
                 entity.HasOne(e => e.EmpDepartment)
-                      .WithMany(d => d.EmployeeInfo)
+                      .WithMany(d => d.ApplicationUsers)
                       .HasForeignKey(e => e.DepartmentId)
                       .OnDelete(DeleteBehavior.SetNull);
             });
@@ -198,3 +199,4 @@ namespace FYPTracker.Models
         partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
     }
 }
+

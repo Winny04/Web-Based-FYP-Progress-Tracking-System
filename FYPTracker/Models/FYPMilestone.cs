@@ -35,6 +35,8 @@ namespace FYPTracker.Models
 
         public string? Remarks { get; set; }
 
+        public string? SupervisorFeedback { get; set; }
+
         [Column(TypeName = "datetime")]
         public DateTime CreatedDate { get; set; } = DateTime.Now;
 

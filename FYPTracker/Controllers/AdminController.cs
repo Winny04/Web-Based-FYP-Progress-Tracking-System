@@ -18,7 +18,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> Index()
         {
             // 1. Calculate Stats
-            var users = await _context.EmployeeInfos.ToListAsync();
+            var users = await _context.ApplicationUsers.ToListAsync();
             ViewBag.TotalUsers = users.Count;
             ViewBag.TotalStudents = users.Count(u => u.UserType == "Student");
             ViewBag.TotalSupervisors = users.Count(u => u.UserType == "Supervisor");
@@ -64,3 +64,5 @@ namespace FYPTracker.Controllers
         }
     }
 }
+
+

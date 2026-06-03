@@ -2,7 +2,7 @@
 @model IEnumerable<MeetingBooking>
 @{
     ViewData["Title"] = "Manage Meetings";
-    var user = ViewBag.CurrentUser as EmployeeInfo;
+    var user = ViewBag.CurrentUser as ApplicationUser;
 }
 
 <style>
@@ -333,3 +333,5 @@
     }
 </script>
 }
+
+

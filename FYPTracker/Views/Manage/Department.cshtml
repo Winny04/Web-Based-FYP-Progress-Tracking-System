@@ -1,4 +1,4 @@
-﻿@using FYPTracker.Common
+@using FYPTracker.Common
 @using FYPTracker.Helpers
 @model IEnumerable<Department>
 
@@ -60,13 +60,13 @@
                                 @dept.Name
                             </td>
                             <td class="tableCellBorderLeft">
-                                @dept.EmployeeInfo.Count()
+                                @dept.ApplicationUsers.Count()
                             </td>
                              <td class="tableCellBorderLeft">
                                 @{
-                                    if(dept.EmployeeInfo.Any(x => x.UserType == "HOD"))
+                                    if(dept.ApplicationUsers.Any(x => x.UserType == "HOD"))
                                     {
-                                        var hods = dept.EmployeeInfo.Where(x => x.UserType == "HOD").Select(x => x.ShortName).ToList();
+                                        var hods = dept.ApplicationUsers.Where(x => x.UserType == "HOD").Select(x => x.ShortName).ToList();
                                         <p>@string.Join(",",hods)</p>
                                     }
                                 }
@@ -223,4 +223,7 @@
     }
 
 </script>
+
+
+
 

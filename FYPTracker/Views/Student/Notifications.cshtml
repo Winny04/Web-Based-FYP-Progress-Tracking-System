@@ -2,7 +2,7 @@
 @model IEnumerable<FYPNotification>
 @{
     ViewData["Title"] = "Notifications";
-    var currentUser = ViewBag.CurrentUser as EmployeeInfo;
+    var currentUser = ViewBag.CurrentUser as ApplicationUser;
     var unreadCount = (int)(ViewBag.UnreadCount ?? 0);
     var notifications = Model?.ToList() ?? new List<FYPNotification>();
 }
@@ -260,3 +260,5 @@
         return dt.ToString("dd MMM yyyy");
     }
 }
+
+

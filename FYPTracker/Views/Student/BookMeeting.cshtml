@@ -1,8 +1,8 @@
 @using FYPTracker.Models
 @{
     ViewData["Title"] = "Book Meeting";
-    var currentUser        = ViewBag.CurrentUser as EmployeeInfo;
-    var assignedSupervisor = ViewBag.AssignedSupervisor as EmployeeInfo;
+    var currentUser        = ViewBag.CurrentUser as ApplicationUser;
+    var assignedSupervisor = ViewBag.AssignedSupervisor as ApplicationUser;
     var meetings           = ViewBag.Meetings as List<MeetingBooking> ?? new();
 }
 
@@ -468,3 +468,5 @@
         }
     });
 </script>
+
+

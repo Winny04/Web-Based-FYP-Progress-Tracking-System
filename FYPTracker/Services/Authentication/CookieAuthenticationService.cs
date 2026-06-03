@@ -1,4 +1,4 @@
-﻿using FYPTracker.Configuration;
+using FYPTracker.Configuration;
 using FYPTracker.Models;
 using FYPTracker.Services.Employees;
 using Microsoft.AspNetCore.Authentication;
@@ -19,7 +19,7 @@ namespace FYPTracker.Services.Authentication
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IWebHostEnvironment _env;
 
-        private EmployeeInfo _cachedEmp;
+        private ApplicationUser _cachedEmp;
 
         #endregion
 
@@ -33,7 +33,7 @@ namespace FYPTracker.Services.Authentication
         #endregion
 
         #region Methods
-        public virtual async Task SignInAsync(EmployeeInfo employee, bool isPersistent)
+        public virtual async Task SignInAsync(ApplicationUser employee, bool isPersistent)
         {
             if (employee == null)
                 throw new ArgumentNullException(nameof(employee));
@@ -84,3 +84,5 @@ namespace FYPTracker.Services.Authentication
 
     }
 }
+
+

@@ -1,4 +1,4 @@
-﻿<!--begin::Toolbar wrapper-->
+<!--begin::Toolbar wrapper-->
 <div class="topbar d-flex align-items-stretch flex-shrink-0">
     @using Microsoft.AspNetCore.Mvc;
     @using FYPTracker.Models;
@@ -46,17 +46,17 @@
             <!--end::Menu separator-->
             <!--begin::Menu item-->
             <div class="menu-item px-5">
-                <a href="/EmployeeInfo/Profile?name=@Context.User.Identity.Name" class="menu-link px-5">My Profile</a>
+                <a href="/User/Profile?name=@Context.User.Identity.Name" class="menu-link px-5">My Profile</a>
             </div>
             <!--end::Menu item-->
             <!--begin::Menu separator-->
             <div class="separator my-2"></div>
              <div class="menu-item px-5">
-                <a href="@Url.Action("Notification","EmployeeInfo")" class="menu-link px-5">Notification</a>
+                <a href="@Url.Action("Notification","ApplicationUser")" class="menu-link px-5">Notification</a>
             </div>
              <div class="separator my-2"></div>
             <div class="menu-item px-5">
-                <a href="/EmployeeInfo/Logout" class="menu-link px-5">Sign Out</a>
+                <a href="/User/Logout" class="menu-link px-5">Sign Out</a>
             </div>
         </div>
     </div>
@@ -80,3 +80,5 @@
     display_c6()
     
     </script>
+
+

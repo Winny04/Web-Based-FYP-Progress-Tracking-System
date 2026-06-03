@@ -77,6 +77,55 @@
                                                 </div>
                                                 <div class="modal-body">
                                                     <input type="hidden" name="milestoneId" value="@ms.Id" />
+                                                    
+                                                    @{
+                                                        string raw = ms.Remarks ?? "";
+                                                        string parsedJson = "";
+                                                        string formInfo = "";
+                                                        if (raw.Contains("JSON: ")) {
+                                                            var parts = raw.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                                                            formInfo = parts[0].Trim();
+                                                            parsedJson = parts[1];
+                                                        }
+                                                    }
+                                                    
+                                                    @if (!string.IsNullOrEmpty(formInfo))
+                                                    {
+                                                        <div class="alert alert-primary bg-light-primary border-primary border-dashed d-flex align-items-center p-3 mb-4">
+                                                            <i class="fas fa-info-circle fs-3 text-primary me-3"></i>
+                                                            <div class="d-flex flex-column">
+                                                                <span class="fw-bold text-dark">Submission Information</span>
+                                                                <span class="text-muted" style="font-size: 0.9rem;">@formInfo</span>
+                                                            </div>
+                                                        </div>
+                                                    }
+
+                                                    @if (!string.IsNullOrEmpty(parsedJson))
+                                                    {
+                                                        <div class="mb-5 p-4 bg-light rounded-4 border border-secondary border-opacity-25 shadow-sm">
+                                                            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-file-alt me-2"></i>Form Details</h6>
+                                                            @{
+                                                                try {
+                                                                    var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parsedJson);
+                                                                    if (dict != null) {
+                                                                        <table class="table table-sm table-borderless m-0" style="font-size: 0.9rem;">
+                                                                        @foreach (var kvp in dict) {
+                                                                            if (!string.IsNullOrEmpty(kvp.Value)) {
+                                                                                <tr>
+                                                                                    <td class="fw-bold text-muted" style="width: 140px; vertical-align: top;">@kvp.Key:</td>
+                                                                                    <td class="text-dark fw-semibold" style="white-space: pre-wrap;">@kvp.Value</td>
+                                                                                </tr>
+                                                                            }
+                                                                        }
+                                                                        </table>
+                                                                    }
+                                                                } catch {
+                                                                    <div class="text-muted small" style="white-space: pre-wrap;">@parsedJson</div>
+                                                                }
+                                                            }
+                                                        </div>
+                                                    }
+
                                                     <div class="mb-5">
                                                         <label class="form-label fw-bold">Decision</label>
                                                         <select name="status" class="form-select form-select-solid" required>
@@ -88,7 +137,7 @@
                                                     </div>
                                                     <div class="mb-3">
                                                         <label class="form-label fw-bold">Feedback / Remarks</label>
-                                                        <textarea name="remarks" class="form-control form-control-solid" rows="4">@ms.Remarks</textarea>
+                                                        <textarea name="remarks" class="form-control form-control-solid" rows="4" placeholder="Write feedback for the student here...">@ms.SupervisorFeedback</textarea>
                                                     </div>
                                                 </div>
                                                 <div class="modal-footer">

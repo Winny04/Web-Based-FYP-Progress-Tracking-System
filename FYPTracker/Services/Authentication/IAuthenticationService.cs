@@ -1,4 +1,4 @@
-﻿using FYPTracker.Models;
+using FYPTracker.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,10 +15,10 @@ namespace FYPTracker.Services.Authentication
         /// <summary>
         /// Sign in
         /// </summary>
-        /// <param name="EmployeeInfo">employee</param>
+        /// <param name="ApplicationUser">employee</param>
         /// <param name="isPersistent">Whether the authentication session is persisted across multiple requests</param>
         /// <returns>A task that represents the asynchronous operation</returns>
-        Task SignInAsync(EmployeeInfo employee, bool isPersistent);
+        Task SignInAsync(ApplicationUser employee, bool isPersistent);
 
         /// <summary>
         /// Sign out
@@ -27,3 +27,5 @@ namespace FYPTracker.Services.Authentication
         Task SignOutAsync();
     }
 }
+
+

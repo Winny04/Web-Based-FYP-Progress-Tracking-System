@@ -1,4 +1,4 @@
-﻿using FYPTracker.Configuration;
+using FYPTracker.Configuration;
 using FYPTracker.Configuration.Auhtorization;
 using FYPTracker.Helpers;
 using FYPTracker.Models;
@@ -38,7 +38,7 @@ builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
 builder.Services.AddScoped<IAuditTrailService, AuditTrailService>();
 builder.Services.AddScoped<IWebHelper, WebHelper>();
 builder.Services.AddScoped<IAuthenticationService, CookieAuthenticationService>();
-builder.Services.AddScoped<IEmployeeService, EmployeeService>();
+builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddTransient<IFileWriter, FileWriter>();
 
@@ -107,6 +107,21 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+// === TEMP DEBUG: Log all unhandled exceptions to a file ===
+app.Use(async (context, next) =>
+{
+    try { await next(); }
+    catch (Exception ex)
+    {
+        var logPath = Path.Combine(AppContext.BaseDirectory, "crash.txt");
+        await File.WriteAllTextAsync(logPath,
+            $"TIME: {DateTime.Now}\nURL: {context.Request.Path}{context.Request.QueryString}\nERROR: {ex.GetType().Name}: {ex.Message}\n\nSTACK:\n{ex.StackTrace}\n\nINNER: {ex.InnerException?.Message}\n{ex.InnerException?.StackTrace}");
+        throw;
+    }
+});
+// === END TEMP DEBUG ===
+
+app.UseDeveloperExceptionPage();
 app.UseCookiePolicy();
 
 app.UseHttpsRedirection();
@@ -128,7 +143,7 @@ app.UseStatusCodePages(async context => {
 
     if (response.StatusCode == (int)HttpStatusCode.Unauthorized ||
             response.StatusCode == (int)HttpStatusCode.Forbidden)
-        response.Redirect("/EmployeeInfo/login");
+        response.Redirect("/User/login");
 
 });
 app.UseRouting();
@@ -141,7 +156,7 @@ app.UseEndpoints(builder =>
     builder.MapControllerRoute(
         name: "Login",
         pattern: "/login",
-        defaults: new { controller = "EmployeeInfo", action = "Login" }
+        defaults: new { controller = "User", action = "Login" }
         );
     builder.MapControllerRoute(
         name: "Homepage",
@@ -154,3 +169,6 @@ app.MapControllerRoute(
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();
+
+
+

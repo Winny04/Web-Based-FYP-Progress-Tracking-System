@@ -28,6 +28,8 @@ namespace FYPTracker.Models
         public virtual FYPMilestone? Milestone { get; set; }
 
         [ForeignKey(nameof(SupervisorId))]
-        public virtual EmployeeInfo? Supervisor { get; set; }
+        public virtual ApplicationUser? Supervisor { get; set; }
     }
 }
+
+

@@ -2,7 +2,7 @@
 
 @{
     ViewData["Title"] = "Dashboard";
-    var currentUser = ViewBag.CurrentUser as FYPTracker.Models.EmployeeInfo;
+    var currentUser = ViewBag.CurrentUser as FYPTracker.Models.ApplicationUser;
     var userType = currentUser?.UserType ?? "Student";
     
     // For demo purposes, we will pick the first project if it exists.
@@ -97,7 +97,7 @@ else if (userType == "Supervisor")
 }
 else
 {
-    <script>window.location.href = '/EmployeeInfo/Index';</script>
+    <script>window.location.href = '/User/Index';</script>
 }
 else
 {
@@ -109,3 +109,6 @@ else
         <button class="btn btn-danger btn-lg mt-3 shadow" style="background: var(--danger-gradient); border: none;">Refresh View</button>
     </div>
 }
+
+
+

@@ -29,6 +29,8 @@ namespace FYPTracker.Models
 
         // Navigation
         [ForeignKey(nameof(StudentId))]
-        public virtual EmployeeInfo? Student { get; set; }
+        public virtual ApplicationUser? Student { get; set; }
     }
 }
+
+

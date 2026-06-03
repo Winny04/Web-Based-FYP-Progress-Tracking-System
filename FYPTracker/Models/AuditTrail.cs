@@ -11,7 +11,7 @@ namespace FYPTracker.Models
         public string? IpAddress { get; set; }
         public int? EmpId { get; set; }
         [ForeignKey(nameof(EmpId))]
-        public virtual EmployeeInfo? Employee { get; set; }
+        public virtual ApplicationUser? Employee { get; set; }
         public int LogLevelId { get; set; }
         public string? FullMessage { get; set; }
         public string? ReferrerUrl { get; set; }
@@ -29,3 +29,5 @@ namespace FYPTracker.Models
         }
     }
 }
+
+

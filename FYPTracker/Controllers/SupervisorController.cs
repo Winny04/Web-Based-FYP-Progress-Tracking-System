@@ -18,11 +18,11 @@ namespace FYPTracker.Controllers
             _emailService = emailService;
         }
 
-        private async Task<EmployeeInfo?> GetCurrentUserAsync()
+        private async Task<ApplicationUser?> GetCurrentUserAsync()
         {
             var username = HttpContext.User.Identity?.Name;
             if (string.IsNullOrEmpty(username)) return null;
-            return await _context.EmployeeInfos.FirstOrDefaultAsync(u => u.UserName == username);
+            return await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == username);
         }
 
         private async Task AddNotificationAsync(int recipientId, string type, string title, string? message = null)
@@ -96,7 +96,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> StudentRequests()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "EmployeeInfo");
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var requests = await _context.SupervisorRequests
@@ -184,7 +184,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> MyProjects()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "EmployeeInfo");
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var projects = await _context.FYPProjects
@@ -197,19 +197,130 @@ namespace FYPTracker.Controllers
             return View(projects);
         }
 
+        public async Task<IActionResult> ProjectDetails(int id)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            ViewBag.CurrentUser = user;
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Milestones)
+                .FirstOrDefaultAsync(p => p.Id == id && p.SupervisorId == user.Id);
+
+            if (project == null) return NotFound();
+
+            return View(project);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddMilestone(int projectId, string title, string description, DateTime? dueDate)
+        {
+            var user = await GetCurrentUserAsync();
+            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user!.Id);
+            
+            if (project != null)
+            {
+                var milestone = new FYPMilestone
+                {
+                    FYPProjectId = projectId,
+                    Title = title,
+                    Description = description,
+                    DueDate = dueDate,
+                    Status = "Pending",
+                    CreatedDate = DateTime.Now
+                };
+                _context.FYPMilestones.Add(milestone);
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Milestone added successfully.";
+            }
+            return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditMilestone(int milestoneId, string title, string description, DateTime? dueDate)
+        {
+            var user = await GetCurrentUserAsync();
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.SupervisorId == user!.Id);
+
+            if (milestone != null)
+            {
+                if (milestone.Status == "Approved")
+                {
+                    TempData["Error"] = "Cannot edit an approved milestone.";
+                    return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
+                }
+
+                if (milestone.Status != "Pending")
+                {
+                    // For Submitted/UnderReview/Rejected, only allow editing the Due Date
+                    milestone.DueDate = dueDate;
+                    TempData["Success"] = "Milestone due date extended.";
+                }
+                else
+                {
+                    milestone.Title = title;
+                    milestone.Description = description;
+                    milestone.DueDate = dueDate;
+                    TempData["Success"] = "Milestone updated successfully.";
+                }
+
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
+            }
+            return RedirectToAction(nameof(MyProjects));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteMilestone(int milestoneId)
+        {
+            var user = await GetCurrentUserAsync();
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.SupervisorId == user!.Id);
+
+            if (milestone != null)
+            {
+                if (milestone.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase))
+                {
+                    TempData["Error"] = "Core system milestones (Proposal and Final Report) cannot be deleted.";
+                    return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
+                }
+
+                if (milestone.Status != "Pending")
+                {
+                    TempData["Error"] = "Cannot delete a milestone that has already been submitted by the student.";
+                    return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
+                }
+
+                int projectId = milestone.FYPProjectId;
+                _context.FYPMilestones.Remove(milestone);
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Milestone deleted successfully.";
+                return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+            }
+            return RedirectToAction(nameof(MyProjects));
+        }
+
         // ────────────────────────────────────────────────────────
         // Review Submissions
         // ────────────────────────────────────────────────────────
         public async Task<IActionResult> ReviewSubmissions()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "EmployeeInfo");
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var submissions = await _context.FYPMilestones
                 .Include(m => m.Project).ThenInclude(p => p.Student)
                 .Include(m => m.SubmissionFiles)
-                .Where(m => m.Project.SupervisorId == user.Id && m.SubmissionFiles.Any())
+                .Where(m => m.Project.SupervisorId == user.Id && 
+                           (m.SubmissionFiles.Any() || (m.Remarks != null && m.Remarks.Contains("Form:"))))
                 .OrderByDescending(m => m.SubmittedDate ?? m.CreatedDate)
                 .ToListAsync();
 
@@ -226,7 +337,7 @@ namespace FYPTracker.Controllers
             if (milestone != null && milestone.Project.SupervisorId == user?.Id)
             {
                 milestone.Status = status;
-                milestone.Remarks = remarks;
+                milestone.SupervisorFeedback = remarks;
                 await _context.SaveChangesAsync();
 
                 if (status == "Approved") {
@@ -285,7 +396,7 @@ namespace FYPTracker.Controllers
                 {
                     string subject = "FYP Meeting Rescheduled";
                     string body = $"<p>Dear {meeting.Student.FullName},</p><p>Your meeting with your supervisor has been rescheduled to <b>{meetingDate:dd MMM yyyy} at {meetingTime}</b>.</p>";
-                    await _emailService.SendEmailAsync(meeting.Student.Email, subject, body);
+                    _emailService.Send(meeting.Student.Email,    subject, body);
                 }
 
                 TempData["Success"] = "Meeting rescheduled successfully and automatically set to Approved.";
@@ -298,7 +409,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> ManageMeetings()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "EmployeeInfo");
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var meetings = await _context.MeetingBookings
@@ -339,7 +450,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> Notifications()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "EmployeeInfo");
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var notifications = await _context.FYPNotifications
@@ -351,3 +462,5 @@ namespace FYPTracker.Controllers
         }
     }
 }
+
+

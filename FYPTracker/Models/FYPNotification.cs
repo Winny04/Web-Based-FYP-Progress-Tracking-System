@@ -34,6 +34,8 @@ namespace FYPTracker.Models
 
         // Navigation
         [ForeignKey(nameof(RecipientId))]
-        public virtual EmployeeInfo? Recipient { get; set; }
+        public virtual ApplicationUser? Recipient { get; set; }
     }
 }
+
+

@@ -22,6 +22,14 @@ namespace FYPTracker.Models
 
         public string? Description { get; set; }
 
+        public string? ProblemStatement { get; set; }
+        public string? Objective1 { get; set; }
+        public string? Objective2 { get; set; }
+        public string? Objective3 { get; set; }
+        public string? Scope { get; set; }
+        public string? ExpectedOutcome { get; set; }
+        public string? References { get; set; }
+
         public int StudentId { get; set; }
 
         public int? SupervisorId { get; set; }
@@ -42,11 +50,13 @@ namespace FYPTracker.Models
 
         // Navigation
         [ForeignKey(nameof(StudentId))]
-        public virtual EmployeeInfo? Student { get; set; }
+        public virtual ApplicationUser? Student { get; set; }
 
         [ForeignKey(nameof(SupervisorId))]
-        public virtual EmployeeInfo? Supervisor { get; set; }
+        public virtual ApplicationUser? Supervisor { get; set; }
 
         public virtual ICollection<FYPMilestone> Milestones { get; set; }
     }
 }
+
+

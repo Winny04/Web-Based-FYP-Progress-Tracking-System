@@ -2,7 +2,7 @@
 @model FYPProject?
 @{
     ViewData["Title"] = "Project Details";
-    var currentUser = ViewBag.CurrentUser as EmployeeInfo;
+    var currentUser = ViewBag.CurrentUser as ApplicationUser;
     var milestones  = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
     int total       = milestones.Count;
     int approved    = milestones.Count(m => m.Status == "Approved");
@@ -266,15 +266,17 @@
                                             }
                                         </div>
                                         <div class="d-flex align-items-center gap-2">
+                                            @if (!string.IsNullOrEmpty(ms.Remarks) || !string.IsNullOrEmpty(ms.SupervisorFeedback))
+                                            {
+                                                <button type="button" class="btn btn-sm btn-light-info py-1 px-3" data-bs-toggle="modal" data-bs-target="#viewMs_@ms.Id">
+                                                    <i class="fas fa-eye fs-7"></i> View
+                                                </button>
+                                            }
                                             <span class="status-pill @pillCls">@ms.Status</span>
                                         </div>
                                     </div>
-                                    @if (!string.IsNullOrEmpty(ms.Remarks))
-                                    {
-                                        <div class="mt-2 p-2 rounded-2 bg-light text-muted" style="font-size:.8rem;">
-                                            <i class="fas fa-comment-alt me-1"></i> @ms.Remarks
-                                        </div>
-                                    }
+                                    
+
                                 </div>
                             }
                         </div>
@@ -350,3 +352,75 @@
         </div>
     }
 </div>
+
+@if (Model != null && Model.Milestones != null)
+{
+    foreach (var ms in Model.Milestones.Where(m => !string.IsNullOrEmpty(m.Remarks) || !string.IsNullOrEmpty(m.SupervisorFeedback)))
+    {
+        <!-- View Modal -->
+        <div class="modal fade" id="viewMs_@ms.Id" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content text-start border-0 shadow-lg">
+                    <div class="modal-header bg-light border-0">
+                        <h5 class="modal-title fw-bold text-dark"><i class="fas fa-file-alt text-primary me-2"></i>@ms.Title - Details</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        
+                        @{
+                            string raw = ms.Remarks ?? "";
+                            string parsedJson = "";
+                            if (raw.Contains("JSON: ")) {
+                                var parts = raw.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                                parsedJson = parts[1];
+                            }
+                        }
+                        
+                        @if (!string.IsNullOrEmpty(parsedJson))
+                        {
+                            <h6 class="fw-bold text-primary mb-3">Submission Information</h6>
+                            <div class="bg-light p-3 rounded-3 mb-4 border border-secondary border-opacity-25">
+                                @{
+                                    try {
+                                        var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parsedJson);
+                                        if (dict != null) {
+                                            <table class="table table-sm table-borderless m-0" style="font-size: 0.95rem;">
+                                            @foreach (var kvp in dict) {
+                                                if (!string.IsNullOrEmpty(kvp.Value)) {
+                                                    <tr>
+                                                        <td class="fw-bold text-muted" style="width: 150px; vertical-align: top;">@kvp.Key:</td>
+                                                        <td class="text-dark fw-semibold" style="white-space: pre-wrap;">@kvp.Value</td>
+                                                    </tr>
+                                                }
+                                            }
+                                            </table>
+                                        }
+                                    } catch {
+                                        <div class="text-muted small" style="white-space: pre-wrap;">@parsedJson</div>
+                                    }
+                                }
+                            </div>
+                        } else if (!string.IsNullOrEmpty(ms.Remarks)) {
+                            <div class="mb-4">
+                                <h6 class="fw-bold text-primary mb-2">Remarks</h6>
+                                <div class="bg-light p-3 rounded-3 border">
+                                    @ms.Remarks
+                                </div>
+                            </div>
+                        }
+                        
+                        @if (!string.IsNullOrEmpty(ms.SupervisorFeedback))
+                        {
+                            <h6 class="fw-bold text-success mb-2"><i class="fas fa-comment-dots me-2"></i>Supervisor Feedback</h6>
+                            <div class="p-3 rounded-3" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; font-weight: 500; white-space: pre-wrap;">
+                                @ms.SupervisorFeedback
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+

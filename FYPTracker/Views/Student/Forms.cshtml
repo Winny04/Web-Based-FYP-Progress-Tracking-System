@@ -2,7 +2,7 @@
 @model FYPProject?
 @{
     ViewData["Title"] = "Digital Submission Forms";
-    var currentUser = ViewBag.CurrentUser as EmployeeInfo;
+    var currentUser = ViewBag.CurrentUser as ApplicationUser;
     var milestones  = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
 }
 
@@ -109,13 +109,7 @@
 
 <div class="container-fluid py-4">
 
-    @if (TempData["Success"] != null)
-    {
-        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-4 d-flex align-items-center gap-3">
-            <span class="fs-4 text-success"><i class="fas fa-check-circle"></i></span>
-            <div class="fw-bold">@TempData["Success"]</div>
-        </div>
-    }
+
 
     @* ── Page Title & Hero ──────────────────────────────────── *@
     <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
@@ -173,20 +167,33 @@
                         <div class="premium-card p-4">
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>A. Final Year Project Proposal</h4>
                             
-                            <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
-                                <input type="hidden" name="formType" value="Proposal Form" />
-                                
                                 @* Select corresponding Milestone *@
                                 @{
-                                    var propMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Proposal") || m.Title.Contains("Introduction")) ?? milestones.FirstOrDefault();
+                                    var propMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase)) ?? milestones.FirstOrDefault();
                                     int propMilestoneId = propMilestone?.Id ?? 0;
+                                    bool isPropLocked = propMilestone != null && (propMilestone.Status == "Submitted" || propMilestone.Status == "UnderReview" || propMilestone.Status == "Approved");
                                 }
-                                <input type="hidden" name="milestoneId" value="@propMilestoneId" />
+                                
+                                @if (isPropLocked)
+                                {
+                                    <div class="alert alert-info d-flex align-items-center mt-3 border-info">
+                                        <i class="fas fa-lock fs-2 me-3 text-info"></i>
+                                        <div>
+                                            <h5 class="fw-bold text-dark mb-1">Proposal Form Locked</h5>
+                                            <p class="mb-0 text-muted">Your proposal has already been submitted. Current Status: <span class="badge bg-white text-dark ms-1 shadow-sm border">@propMilestone.Status</span></p>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
+                                    <input type="hidden" name="formType" value="Proposal Form" />
+                                    <input type="hidden" name="milestoneId" value="@propMilestoneId" />
 
                                 <div class="form-section-title">Part 1: Proposal Details</div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold">Project Title</label>
-                                    <input type="text" name="title" class="form-control" value="@Model.Title" required />
+                                    <input type="text" name="title" class="form-control bg-light" value="@Model.Title" readonly required />
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold">Problem Statement</label>
@@ -219,8 +226,16 @@
 
                                 <div class="form-section-title">Part 4: Document Attachment</div>
                                 <div class="mb-4">
-                                    <label class="form-label fw-semibold">Attach Proposal Document (PDF / DOCX)</label>
-                                    <input type="file" name="attachedFile" class="form-control" accept=".pdf,.doc,.docx" required />
+                                    <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="dropZone" onclick="document.getElementById('proposalDocument').click()">
+                                        <i class="fas fa-cloud-upload-alt fs-1 mb-3" style="color: var(--primary-orange) !important;"></i>
+                                        <h6 class="fw-bold mb-1">Drag & Drop your proposal here</h6>
+                                        <p class="text-muted small mb-0">or click to browse files (PDF / DOCX)</p>
+                                        <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
+                                        <input type="file" name="attachedFile" id="proposalDocument" class="d-none" accept=".pdf,.doc,.docx" required onchange="updateFileName(this)" />
+                                        <div id="fileNameDisplay" class="mt-3 fw-bold text-success" style="display:none;">
+                                            <i class="fas fa-file-pdf me-2"></i><span id="fName"></span>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="d-flex gap-3 justify-content-end">
@@ -228,6 +243,7 @@
                                     <button type="submit" class="btn-submit">Submit Proposal</button>
                                 </div>
                             </form>
+                            }
                         </div>
                     </div>
 
@@ -236,25 +252,51 @@
                         <div class="premium-card p-4">
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-chart-line text-orange me-2"></i>B. FYP Progress Report Form</h4>
                             
-                            <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
+                            @{
+                                var progressMilestones = milestones.Where(x => 
+                                    (x.Status == "Pending" || x.Status == "Rejected")
+                                    && !x.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) 
+                                    && !x.Title.Contains("Final", StringComparison.OrdinalIgnoreCase)).ToList();
+                            }
+                            
+                            @if (!progressMilestones.Any())
+                            {
+                                <div class="alert alert-info d-flex align-items-center mt-3 border-info">
+                                    <i class="fas fa-lock fs-2 me-3 text-info"></i>
+                                    <div>
+                                        <h5 class="fw-bold text-dark mb-1">Progress Report Form Locked</h5>
+                                        <p class="mb-0 text-muted">You have no pending progress report milestones to submit at this time.</p>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                            <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
                                 <input type="hidden" name="formType" value="Progress Report Form" />
 
-                                @* Select corresponding Milestone *@
-                                @{
-                                    var progMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Chapter 3") || m.Title.Contains("Methodology") || m.Title.Contains("Progress")) ?? milestones.FirstOrDefault();
-                                    int progMilestoneId = progMilestone?.Id ?? 0;
-                                }
-                                <input type="hidden" name="milestoneId" value="@progMilestoneId" />
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold text-dark" style="font-size: 0.95rem;">Select Milestone to Report On</label>
+                                    <select name="milestoneId" class="form-select" required>
+                                        <option value="">-- Choose a Milestone --</option>
+                                        @foreach (var m in progressMilestones)
+                                        {
+                                            <option value="@m.Id">@m.Title (@m.Status)</option>
+                                        }
+                                    </select>
+                                    <div class="invalid-feedback">Please select a milestone.</div>
+                                </div>
 
                                 <div class="form-section-title">Part 1: Reporting Period</div>
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-6">
                                         <label class="form-label fw-semibold">Start Period</label>
                                         <input type="date" name="startDate" class="form-control" required />
+                                        <div class="invalid-feedback">Start date is required.</div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label fw-semibold">End Period</label>
                                         <input type="date" name="endDate" class="form-control" required />
+                                        <div class="invalid-feedback">End date is required.</div>
                                     </div>
                                 </div>
 
@@ -262,31 +304,42 @@
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold">Work Completed So Far</label>
                                     <textarea name="workDone" class="form-control" rows="3" required placeholder="Outline the main tasks completed..."></textarea>
+                                    <div class="invalid-feedback">Please describe the work completed.</div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold">Challenges / Issues Faced</label>
                                     <textarea name="challenges" class="form-control" rows="3" required placeholder="Describe technical hurdles or resource delays..."></textarea>
+                                    <div class="invalid-feedback">Please describe any challenges faced.</div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold">Plan for Next Period</label>
                                     <textarea name="nextPeriodPlan" class="form-control" rows="2" required placeholder="What tasks are prioritised next..."></textarea>
+                                    <div class="invalid-feedback">Please outline the plan for the next period.</div>
                                 </div>
 
                                 <div class="form-section-title">Part 3: Completion Metric</div>
                                 <div class="row g-3 mb-4">
                                     <div class="col-md-6">
                                         <label class="form-label fw-semibold">Percentage Complete (%)</label>
-                                        <select name="title" class="form-select" required>
+                                        <select name="pctComplete" class="form-select" required>
                                             <option>10%</option>
                                             <option>25%</option>
                                             <option selected>50%</option>
                                             <option>75%</option>
                                             <option>90%</option>
+                                            <option>100%</option>
                                         </select>
                                     </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-semibold">Attach Supporting Files (Optional)</label>
-                                        <input type="file" name="attachedFile" class="form-control" />
+                                    <div class="col-md-12">
+                                        <label class="form-label fw-semibold mb-2">Attach Supporting Files (Optional)</label>
+                                        <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="progressDropZone" onclick="document.getElementById('progressFiles').click()">
+                                            <i class="fas fa-copy fs-1 mb-3" style="color: #3b82f6 !important;"></i>
+                                            <h6 class="fw-bold mb-1">Drag & Drop your files here</h6>
+                                            <p class="text-muted small mb-0">or click to browse (PDF / DOCX)</p>
+                                            <input type="file" name="attachedFiles" id="progressFiles" class="d-none" accept=".pdf,.doc,.docx" multiple onchange="updateMultiFileNames(this, 'progressFileList')" />
+                                            <div id="progressFileList" class="mt-3 text-start small fw-semibold text-primary" style="display:none; max-width: 300px; margin: auto;">
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -295,6 +348,7 @@
                                     <button type="submit" class="btn-submit">Submit Progress Report</button>
                                 </div>
                             </form>
+                            }
                         </div>
                     </div>
 
@@ -303,24 +357,38 @@
                         <div class="premium-card p-4">
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-graduation-cap text-orange me-2"></i>C. Final FYP Report & Thesis Submission</h4>
                             
-                            <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
-                                <input type="hidden" name="formType" value="Final Submission Form" />
-
                                 @* Select corresponding Milestone *@
                                 @{
                                     var finalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Final") || m.Title.Contains("Thesis")) ?? milestones.LastOrDefault();
                                     int finalMilestoneId = finalMilestone?.Id ?? 0;
+                                    bool isFinLocked = finalMilestone != null && (finalMilestone.Status == "Submitted" || finalMilestone.Status == "UnderReview" || finalMilestone.Status == "Approved");
                                 }
-                                <input type="hidden" name="milestoneId" value="@finalMilestoneId" />
+                                
+                                @if (isFinLocked)
+                                {
+                                    <div class="alert alert-info d-flex align-items-center mt-3 border-info">
+                                        <i class="fas fa-lock fs-2 me-3 text-info"></i>
+                                        <div>
+                                            <h5 class="fw-bold text-dark mb-1">Final Form Locked</h5>
+                                            <p class="mb-0 text-muted">Your final submission has been locked. Current Status: <span class="badge bg-white text-dark ms-1 shadow-sm border">@finalMilestone.Status</span></p>
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+                                    <input type="hidden" name="formType" value="Final Submission Form" />
+                                    <input type="hidden" name="milestoneId" value="@finalMilestoneId" />
 
                                 <div class="form-section-title">Part 1: Thesis Metadata</div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold">Final Project Title</label>
-                                    <input type="text" name="title" class="form-control" value="@Model.Title" required />
+                                    <input type="text" name="title" class="form-control bg-light" value="@Model.Title" readonly required />
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold">Abstract</label>
                                     <textarea name="abstract" class="form-control" rows="4" required placeholder="Enter the project abstract..."></textarea>
+                                    <div class="invalid-feedback">Please provide an abstract.</div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold">Acknowledgements</label>
@@ -341,8 +409,18 @@
 
                                 <div class="form-section-title">Part 3: Final File Upload</div>
                                 <div class="mb-4">
-                                    <label class="form-label fw-semibold">Upload Final Thesis (PDF, Max 20MB)</label>
-                                    <input type="file" name="attachedFile" class="form-control" accept=".pdf" required />
+                                    <label class="form-label fw-semibold mb-2">Upload Final Thesis (PDF, Max 20MB)</label>
+                                    <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="finalDropZone" onclick="document.getElementById('finalDocument').click()">
+                                        <i class="fas fa-cloud-upload-alt fs-1 mb-3" style="color: #ef4444 !important;"></i>
+                                        <h6 class="fw-bold mb-1">Drag & Drop your final thesis here</h6>
+                                        <p class="text-muted small mb-0">or click to browse files (PDF ONLY)</p>
+                                        <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
+                                        <input type="file" name="attachedFile" id="finalDocument" class="d-none" accept=".pdf" required onchange="updateFileNameForFinal(this)" />
+                                        <div id="finalFileNameDisplay" class="mt-3 fw-bold text-danger" style="display:none;">
+                                            <i class="fas fa-file-pdf me-2"></i><span id="fFinalName"></span>
+                                        </div>
+                                    </div>
+                                    <div class="invalid-feedback d-block" id="finalFileError" style="display:none;">Please upload your final thesis PDF.</div>
                                 </div>
 
                                 <div class="d-flex gap-3 justify-content-end">
@@ -351,6 +429,7 @@
                                     </button>
                                 </div>
                             </form>
+                                }
                         </div>
                     </div>
 
@@ -364,6 +443,187 @@
 
 <script>
     function saveDraftAlert() {
-        alert("Draft saved successfully in the session! You can continue editing later.");
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'info',
+                title: 'Draft Saved',
+                text: 'Draft saved successfully in the session! You can continue editing later.',
+                confirmButtonColor: '#3b82f6',
+                background: '#ffffff',
+                customClass: { popup: 'rounded-4 shadow-sm border-0' }
+            });
+        } else {
+            alert("Draft saved successfully in the session! You can continue editing later.");
+        }
     }
 </script>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        // Drag and Drop Logic
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('proposalDocument');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            if(dropZone) dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            if(dropZone) dropZone.addEventListener(eventName, () => dropZone.style.borderColor = 'var(--primary-orange)', false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            if(dropZone) dropZone.addEventListener(eventName, () => dropZone.style.borderColor = '#cbd5e1', false);
+        });
+        
+        if(dropZone) {
+            dropZone.addEventListener('drop', (e) => {
+                let dt = e.dataTransfer;
+                let files = dt.files;
+                fileInput.files = files;
+                updateFileName(fileInput);
+            }, false);
+        }
+
+        function updateFileName(input) {
+            const display = document.getElementById('fileNameDisplay');
+            const fName = document.getElementById('fName');
+            if (input.files && input.files.length > 0) {
+                fName.textContent = input.files[0].name;
+                display.style.display = 'block';
+            } else {
+                display.style.display = 'none';
+            }
+        }
+        
+        function updateFileNameForFinal(input) {
+            const display = document.getElementById('finalFileNameDisplay');
+            const fName = document.getElementById('fFinalName');
+            const errorLabel = document.getElementById('finalFileError');
+            if (input.files && input.files.length > 0) {
+                const file = input.files[0];
+                if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+                    errorLabel.textContent = "Only PDF files are allowed.";
+                    errorLabel.style.display = 'block';
+                    input.value = "";
+                    display.style.display = 'none';
+                    return;
+                }
+                if (file.size > 20 * 1024 * 1024) {
+                    errorLabel.textContent = "File size exceeds 20MB limit.";
+                    errorLabel.style.display = 'block';
+                    input.value = "";
+                    display.style.display = 'none';
+                    return;
+                }
+                
+                errorLabel.style.display = 'none';
+                fName.textContent = file.name;
+                display.style.display = 'block';
+            } else {
+                display.style.display = 'none';
+            }
+        }
+        
+        function updateMultiFileNames(input, listId) {
+            const display = document.getElementById(listId);
+            display.innerHTML = '';
+            if (input.files && input.files.length > 0) {
+                display.style.display = 'block';
+                Array.from(input.files).forEach(file => {
+                    const fileDiv = document.createElement('div');
+                    fileDiv.className = 'mb-1';
+                    fileDiv.innerHTML = '<i class="fas fa-file-alt me-2 text-primary"></i>' + file.name;
+                    display.appendChild(fileDiv);
+                });
+            } else {
+                display.style.display = 'none';
+            }
+        }
+        
+        // Setup Progress Drop Zone
+        const progDropZone = document.getElementById('progressDropZone');
+        const progFileInput = document.getElementById('progressFiles');
+        if (progDropZone && progFileInput) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                progDropZone.addEventListener(eventName, preventDefaults, false);
+            });
+            ['dragenter', 'dragover'].forEach(eventName => {
+                progDropZone.addEventListener(eventName, () => progDropZone.style.borderColor = '#3b82f6', false);
+            });
+            ['dragleave', 'drop'].forEach(eventName => {
+                progDropZone.addEventListener(eventName, () => progDropZone.style.borderColor = '#cbd5e1', false);
+            });
+            progDropZone.addEventListener('drop', (e) => {
+                progFileInput.files = e.dataTransfer.files;
+                updateMultiFileNames(progFileInput, 'progressFileList');
+            }, false);
+        }
+
+        // Setup Final Drop Zone
+        const finalDropZone = document.getElementById('finalDropZone');
+        const finalFileInput = document.getElementById('finalDocument');
+        if (finalDropZone && finalFileInput) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                finalDropZone.addEventListener(eventName, preventDefaults, false);
+            });
+            ['dragenter', 'dragover'].forEach(eventName => {
+                finalDropZone.addEventListener(eventName, () => finalDropZone.style.borderColor = '#ef4444', false);
+            });
+            ['dragleave', 'drop'].forEach(eventName => {
+                finalDropZone.addEventListener(eventName, () => finalDropZone.style.borderColor = '#cbd5e1', false);
+            });
+            finalDropZone.addEventListener('drop', (e) => {
+                finalFileInput.files = e.dataTransfer.files;
+                updateFileNameForFinal(finalFileInput);
+            }, false);
+        }
+        
+        (function() {
+            var successMsg = '@Html.Raw(TempData["Success"])';
+            var errorMsg = '@Html.Raw(TempData["Error"])';
+            
+            if (successMsg && successMsg.trim() !== '') {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Success!',
+                    text: successMsg,
+                    confirmButtonColor: '#f97316',
+                    background: '#ffffff',
+                    customClass: { popup: 'rounded-4 shadow-lg border-0' }
+                });
+            }
+            
+            if (errorMsg && errorMsg.trim() !== '') {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Submission Failed',
+                    text: errorMsg,
+                    confirmButtonColor: '#ef4444',
+                    background: '#ffffff',
+                    customClass: { popup: 'rounded-4 shadow-lg border-0' }
+                });
+            }
+
+            // Bootstrap Form Validation
+            var forms = document.querySelectorAll('.needs-validation');
+            Array.prototype.slice.call(forms).forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                }, false);
+            });
+        })();
+    </script>
+}
+
+

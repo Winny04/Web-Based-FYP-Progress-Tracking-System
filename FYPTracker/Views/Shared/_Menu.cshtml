@@ -3,8 +3,13 @@
 @using Microsoft.EntityFrameworkCore
 @inject IAuthorizationService AuthorizationService
 @inject FYPTrackerContext _context
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
 @{
-    var currentUser = ViewBag.CurrentUser as EmployeeInfo;
+    // Always look up the logged-in user directly — ViewBag is NOT passed to ViewComponents
+    var userName = HttpContextAccessor.HttpContext?.User?.Identity?.Name;
+    var currentUser = (userName != null)
+        ? await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == userName)
+        : null;
     var userType = currentUser?.UserType ?? "Student"; // Default to Student if not set
 
     // Check if this student already has a confirmed (Approved) supervisor
@@ -89,12 +94,12 @@
         else if (userType == "Admin" || userType == "SuperAdmin")
         {
             <div class="menu-item">
-                <a class="menu-link py-3" href="/EmployeeInfo/ManageProjects">
+                <a class="menu-link py-3" href="/User/ManageProjects">
                     <span class="menu-title">All Projects</span>
                 </a>
             </div>
             <div class="menu-item">
-                <a class="menu-link py-3" href="/EmployeeInfo">
+                <a class="menu-link py-3" href="/ApplicationUser">
                     <span class="menu-title">Users Management</span>
                 </a>
             </div>
@@ -104,3 +109,6 @@
     <!--end::Menu-->
 </div>
 <!--end::Menu wrapper-->
+
+
+

@@ -14,6 +14,7 @@ namespace FYPTracker.Models
         [Column("DepartmentCode")]
         public string? DepartmentCode { get; set; }
 
-        public List<EmployeeInfo> EmployeeInfo { get; set; } = new List<EmployeeInfo>();
+        public List<ApplicationUser> ApplicationUsers { get; set; } = new List<ApplicationUser>();
     }
 }
+

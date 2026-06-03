@@ -32,6 +32,8 @@ namespace FYPTracker.Models
         public virtual FYPMilestone? Milestone { get; set; }
 
         [ForeignKey(nameof(UploadedBy))]
-        public virtual EmployeeInfo? Uploader { get; set; }
+        public virtual ApplicationUser? Uploader { get; set; }
     }
 }
+
+
