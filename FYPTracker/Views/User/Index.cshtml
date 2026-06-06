@@ -171,14 +171,11 @@
 
 
 
+
+
                     <div class="fv-row mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">Password <span class="text-danger">*</span></label>
-                        <div class="position-relative">
-                            <input type="password" id="createPassCode" class="form-control form-control-lg form-control-solid" autocomplete="new-password" />
-                            <span class="btn btn-sm btn-icon position-absolute translate-middle top-50 end-0 me-n2" onclick="toggleCreatePwd(this)">
-                                <i class="bi bi-eye-slash fs-2"></i>
-                            </span>
-                        </div>
+                        <label class="form-label fw-bolder text-dark fs-6">Phone</label>
+                        <input type="text" id="createPhone" class="form-control form-control-lg form-control-solid" placeholder="e.g. 0123456789 or +60123456789" />
                     </div>
 
                     <div class="fv-row mb-5">
@@ -198,15 +195,23 @@
                     <div id="studentFields" style="display:none;">
                         <div class="fv-row mb-5">
                             <label class="form-label fw-bolder text-dark fs-6">Programme</label>
-                            <input type="text" id="createProgramme" class="form-control form-control-lg form-control-solid" placeholder="e.g. Bachelor of IT" />
+                            <select id="createProgramme" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Programme --</option>
+                                <option value="BCSCUNP (Bachelor of Computer Science)">BCSCUNP (Bachelor of Computer Science)</option>
+                                <option value="BIT (Bachelor of Information Technology)">BIT (Bachelor of Information Technology)</option>
+                                <option value="BSE (Bachelor of Software Engineering)">BSE (Bachelor of Software Engineering)</option>
+                                <option value="DIT (Diploma in Information Technology)">DIT (Diploma in Information Technology)</option>
+                                <option value="FIC (Foundation in Computing)">FIC (Foundation in Computing)</option>
+                                <option value="BCSC-CC (BSc Cloud Computing)">BCSC-CC (BSc Cloud Computing)</option>
+                                <option value="BCSC-MC (BSc Mobile Computing)">BCSC-MC (BSc Mobile Computing)</option>
+                                <option value="BCSC-BA (BSc Business Analytics)">BCSC-BA (BSc Business Analytics)</option>
+                                <option value="BCSC-CS (BSc Cyber Security)">BCSC-CS (BSc Cyber Security)</option>
+                            </select>
                         </div>
                         <div class="fv-row mb-5">
                             <label class="form-label fw-bolder text-dark fs-6">Academic Session</label>
                             <select id="createAcademicSession" class="form-select form-select-solid form-select-lg fw-bold">
                                 <option value="">-- Select Session --</option>
-                                <option value="2026 Jan">2026 Jan</option>
-                                <option value="2026 April">2026 April</option>
-                                <option value="2026 Aug">2026 Aug</option>
                             </select>
                         </div>
                     </div>
@@ -217,10 +222,7 @@
                             <input type="text" id="createTitle" class="form-control form-control-lg form-control-solid" placeholder="e.g. Dr." />
                         </div>
 
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Phone</label>
-                            <input type="text" id="createPhone" class="form-control form-control-lg form-control-solid" placeholder="e.g. 0123456789" />
-                        </div>
+
                         <div class="fv-row mb-5">
                             <label class="form-label fw-bolder text-dark fs-6">Department <span class="text-danger">*</span></label>
                             <select id="createDepartment" class="form-select form-select-solid form-select-lg fw-bold">
@@ -246,12 +248,7 @@
 @section scripts{
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    function toggleCreatePwd(btn) {
-        var inp = document.getElementById("createPassCode");
-        var icon = btn.querySelector("i");
-        if (inp.type === "password") { inp.type = "text"; icon.className = "bi bi-eye fs-2"; }
-        else { inp.type = "password"; icon.className = "bi bi-eye-slash fs-2"; }
-    }
+
 
     $(document).ready(function () {
         @if (TempData["Success"] != null)
@@ -277,6 +274,18 @@
             });
             </text>
         }
+
+        // Dynamically populate Academic Session dropdown
+        var currentYear = new Date().getFullYear();
+        var intakes = ['Jan', 'April', 'Aug'];
+        var sessionSelect = $('#createAcademicSession');
+        for (var y = currentYear - 1; y <= currentYear + 2; y++) {
+            intakes.forEach(function(intake) {
+                var sessionText = y + ' ' + intake;
+                sessionSelect.append(new Option(sessionText, sessionText));
+            });
+        }
+
         LoadTable();
 
         $('#createUserType').change(function () {
@@ -286,21 +295,30 @@
         });
 
         $('#createAcc').on('hidden.bs.modal', function () {
-            $('#createFullName,#createPassCode,#createEmail,#createProgramme,#createAcademicSession,#createTitle,#createPhone').val('');
+            $('#createFullName,#createEmail,#createProgramme,#createAcademicSession,#createTitle,#createPhone').val('');
             $('#createUserType,#createDepartment').val('');
             $('#studentFields,#supervisorFields').hide();
         });
 
         $('#kt_sign_up_submit').click(function () {
             var FullName = $('#createFullName').val().trim();
-            var PassCode = $('#createPassCode').val().trim();
             var Email = $('#createEmail').val().trim();
             var UserType = $('#createUserType').val();
             var Department = $('#createDepartment').val();
+            var Phone = $('#createPhone').val().trim();
 
-            if (!FullName || !PassCode || !Email || !UserType) {
+            if (!FullName || !Email || !UserType) {
                 Swal.fire({ text: "Please fill in all required fields.", icon: "warning", confirmButtonText: "Ok, got it!", buttonsStyling: false, customClass: { confirmButton: "btn btn-primary" } });
                 return;
+            }
+
+            if (Phone) {
+                var cleanPhone = Phone.replace(/[\s\-\(\)]/g, '');
+                var phoneRegex = /^(?:\+?6?0)[1-9]\d{7,9}$/;
+                if (!phoneRegex.test(cleanPhone)) {
+                    Swal.fire({ text: "Invalid Malaysia phone number format (e.g. +60123456789 or 0123456789).", icon: "warning", confirmButtonText: "Ok, got it!", buttonsStyling: false, customClass: { confirmButton: "btn btn-primary" } });
+                    return;
+                }
             }
             if (UserType === 'Supervisor' && !Department) {
                 Swal.fire({ text: "Please select a Department for Supervisors.", icon: "warning", confirmButtonText: "Ok, got it!", buttonsStyling: false, customClass: { confirmButton: "btn btn-primary" } });
@@ -314,7 +332,7 @@
             $.ajax({
                 url: "/User/Create", method: "POST",
                 data: { newEmployee: {
-                    FullName: FullName, PassCode: PassCode, Email: Email, UserType: UserType,
+                    FullName: FullName, PassCode: 'auto_generated', Email: Email, UserType: UserType,
                     Department: UserType === 'Supervisor' ? Department : '',
                     Programme: UserType === 'Student' ? $('#createProgramme').val().trim() : '',
                     AcademicSession: UserType === 'Student' ? $('#createAcademicSession').val().trim() : '',

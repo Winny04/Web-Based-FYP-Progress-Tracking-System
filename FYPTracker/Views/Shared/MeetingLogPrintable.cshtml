@@ -1,0 +1,127 @@
+@model FYPTracker.Models.MeetingLog
+@{
+    Layout = null;
+    var meeting = Model.MeetingBooking;
+    var student = meeting?.Student;
+    var supervisor = meeting?.Supervisor;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meeting Log - @student?.FullName</title>
+    <style>
+        .meeting-log-doc {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #fff;
+        }
+        .meeting-log-doc h2 {
+            text-align: center;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+        .meeting-log-doc .header-info {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        .meeting-log-doc .header-info .label {
+            font-weight: bold;
+        }
+        .meeting-log-doc .section-title {
+            font-weight: bold;
+            margin-top: 30px;
+            margin-bottom: 10px;
+            text-decoration: underline;
+        }
+        .meeting-log-doc .content-box {
+            padding: 10px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            min-height: 60px;
+            white-space: pre-wrap;
+        }
+        .meeting-log-doc .signature-section {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .meeting-log-doc .signature-box {
+            width: 45%;
+        }
+        .meeting-log-doc .print-btn {
+            display: block;
+            margin: 0 auto 30px auto;
+            padding: 10px 20px;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        @@media print {
+            .meeting-log-doc .print-btn { display: none; }
+            .meeting-log-doc { padding: 0; }
+            .meeting-log-doc .content-box { background: none; border-color: #000; }
+        }
+    </style>
+</head>
+<body>
+<div class="meeting-log-doc">
+
+    <button class="print-btn" onclick="window.print()">Print to PDF</button>
+
+    <h2>@ViewBag.ProjectName<br/><small style="font-size: 0.7em; color: #555;">Record of Supervisor Meeting</small></h2>
+
+    <div class="header-info">
+        <div class="label">Supervisor:</div>
+        <div>@supervisor?.FullName</div>
+
+        <div class="label">Student:</div>
+        <div>@student?.FullName</div>
+
+        <div class="label">Date of meeting:</div>
+        <div>@meeting?.MeetingDate.ToString("dd/MM/yyyy")</div>
+    </div>
+
+    <div class="section-title">Key topics Discussed:</div>
+    <div class="content-box">@Model.KeyTopicsDiscussed</div>
+
+    <div class="section-title">Individual action points for next meeting (no more than 3):</div>
+    <div class="content-box">@Model.ActionPointsForNextMeeting</div>
+
+    <div class="section-title">Record of individual actions completed + notes:</div>
+    <div class="content-box">@Model.CompletedActionsAndNotes</div>
+
+    <div style="margin-top: 30px;">
+        <span class="label" style="font-weight: bold;">Date of next meeting:</span> 
+        @(Model.NextMeetingDate?.ToString("dd/MM/yyyy") ?? "TBD")
+    </div>
+
+    <div class="signature-section">
+        <div class="signature-box">
+            <div style="font-weight: bold;">Supervisor Signature:</div>
+            <div style="margin-top: 20px; font-style: italic; color: #555;">(Digitally Signed - @supervisor?.FullName)</div>
+        </div>
+        <div class="signature-box">
+            <div style="font-weight: bold;">Supervisor Signature Date:</div>
+            <div style="margin-top: 20px;">@Model.SignatureDate?.ToString("dd/MM/yyyy")</div>
+        </div>
+    </div>
+
+    <div class="section-title">Supervisor Comments & Feedback:</div>
+    <div class="content-box">@Model.SupervisorComments</div>
+
+</div>
+</body>
+</html>

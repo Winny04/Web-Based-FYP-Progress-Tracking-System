@@ -36,6 +36,7 @@ namespace FYPTracker.Models
         public bool IsResign { get; set; }
         public string? ResetToken { get; set; }
         public DateTime? ResetTokenExpiry { get; set; }
+        public bool RequirePasswordChange { get; set; } = true;
 
         // --- NEW FIELDS ---
         // Student Specific

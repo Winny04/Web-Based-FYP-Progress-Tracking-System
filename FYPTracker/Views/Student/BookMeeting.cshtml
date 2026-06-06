@@ -124,30 +124,131 @@
         </div>
     </div>
 
-    <div class="row g-4">
-        
-        @* ── LEFT: Booking Form ────────────────────────────── *@
-        <div class="col-lg-4">
-            <div class="premium-card p-4">
-                <h5 class="fw-bold text-dark mb-4"><i class="fas fa-plus-circle text-danger me-2"></i>Schedule Meeting</h5>
-                
-                @if (assignedSupervisor == null)
-                {
-                    <div class="text-center py-5 text-muted">
-                        <i class="fas fa-user-times fs-1 mb-3 d-block opacity-30"></i>
-                        <p class="fw-semibold">No supervisor assigned yet.</p>
-                        <p class="mb-3" style="font-size:.85rem;">You need an approved supervisor before you can book a meeting.</p>
-                        <a href="/Student/SelectSupervisor" class="btn btn-outline-danger rounded-3 px-4">
-                            <i class="fas fa-search me-1"></i> Select a Supervisor
-                        </a>
-                    </div>
-                }
-                else
-                {
-                    <form asp-action="SubmitMeetingBooking" method="post" id="bookingForm">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="supervisorId" value="@assignedSupervisor.Id" />
+    <div class="premium-card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h5 class="fw-bold text-dark mb-0"><i class="fas fa-list-ul text-danger me-2"></i>Meeting List Table</h5>
+            @if (assignedSupervisor == null)
+            {
+                <a href="/Student/SelectSupervisor" class="btn btn-outline-danger rounded-3 px-4">
+                    <i class="fas fa-search me-1"></i> Select a Supervisor
+                </a>
+            }
+            else
+            {
+                <button type="button" class="btn btn-submit" data-bs-toggle="modal" data-bs-target="#scheduleMeetingModal">
+                    <i class="fas fa-plus-circle me-1"></i> Schedule Meeting
+                </button>
+            }
+        </div>
+        <div class="table-responsive">
+            <table class="table align-middle table-hover">
+                <thead>
+                    <tr>
+                        <th class="ps-3" style="width: 50px;">No</th>
+                        <th>Date</th>
+                        <th>Day</th>
+                        <th>Time</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                        <th class="text-end pe-3">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int number = 1; }
+                    
+                    <!-- Dynamic database meetings -->
+                    @foreach (var m in meetings)
+                    {
+                        var badgeCls = m.Status switch
+                        {
+                            "Approved" => "badge-approved",
+                            "Rejected" => "badge-rejected",
+                            "Postponed" => "badge-postponed",
+                            _ => "badge-pending"
+                        };
 
+                        string displayTime = m.MeetingTime;
+                        try {
+                            if(TimeSpan.TryParse(m.MeetingTime, out var ts)) {
+                                displayTime = DateTime.Today.Add(ts).ToString("h:mm tt");
+                            }
+                        } catch {}
+
+                        <tr>
+                            <td class="ps-3 fw-bold text-muted">@(number++)</td>
+                            <td>@m.MeetingDate.ToString("dd/MM/yyyy")</td>
+                            <td>@m.MeetingDay</td>
+                            <td>@displayTime</td>
+                            <td>@m.Reason</td>
+                            <td><span class="status-badge @badgeCls">@m.Status</span></td>
+                            <td class="text-end pe-3">
+                                @if (m.Status == "Pending")
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" onclick="openRescheduleModal(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")')">
+                                        Reschedule
+                                    </button>
+                                    <form asp-action="CancelMeeting" method="post" class="d-inline" id="cancelForm_@m.Id">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="meetingId" value="@m.Id" />
+                                        <button type="button" class="btn btn-sm btn-outline-danger border-0 fw-semibold" onclick="confirmCancel(@m.Id)">Cancel</button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    @if (m.Status == "Approved")
+                                    {
+                                        if (m.MeetingLog == null || m.MeetingLog.LogStatus == "Draft")
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" 
+                                                    data-id="@m.Id"
+                                                    data-topics="@(m.MeetingLog?.KeyTopicsDiscussed)"
+                                                    data-action="@(m.MeetingLog?.ActionPointsForNextMeeting)"
+                                                    data-completed="@(m.MeetingLog?.CompletedActionsAndNotes)"
+                                                    onclick="openStudentLogModal(this)">
+                                                <i class="fas fa-edit"></i> @(m.MeetingLog == null ? "Write Log" : "Edit Log")
+                                            </button>
+                                        }
+                                        else if (m.MeetingLog.LogStatus == "Signed")
+                                        {
+                                            <button type="button" class="btn btn-sm btn-outline-success border-0 fw-semibold me-1" onclick="viewFinalLog(@m.MeetingLog.Id)">
+                                                <i class="fas fa-file-contract"></i> View Log
+                                            </button>
+                                        }
+                                    }
+
+                                    <button type="button" class="btn btn-sm btn-outline-secondary border-0 fw-semibold" 
+                                            data-status="@m.Status" 
+                                            data-note="@(m.SupervisorNote ?? "None")"
+                                            onclick="viewMeetingDetails(this)">
+                                        Details
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@if (assignedSupervisor != null)
+{
+    <!-- Schedule Meeting Modal -->
+    <div class="modal fade" id="scheduleMeetingModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+                <form asp-action="SubmitMeetingBooking" method="post" id="bookingForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="supervisorId" value="@assignedSupervisor.Id" />
+                    
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="fw-bold text-dark"><i class="fas fa-plus-circle text-danger me-2"></i>Schedule Meeting</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    
+                    <div class="modal-body">
                         <!-- Supervisor Name (Auto-filled & Read-only) -->
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Supervisor</label>
@@ -187,93 +288,17 @@
                             <label class="form-label fw-semibold">Reason / Agenda</label>
                             <textarea name="reason" class="form-control" rows="3" required placeholder="Describe purpose of meeting..."></textarea>
                         </div>
-
-                        <button type="submit" class="btn-submit btn w-100">
-                            <i class="fas fa-calendar-check me-1"></i> Book Meeting — Submit
-                        </button>
-                    </form>
-                }
+                    </div>
+                    
+                    <div class="modal-footer border-0">
+                        <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-submit px-4 rounded-3">Submit Booking</button>
+                    </div>
+                </form>
             </div>
         </div>
-
-        @* ── RIGHT: Meetings List Table ─────────────────────── *@
-        <div class="col-lg-8">
-            <div class="premium-card p-4 h-100">
-                <h5 class="fw-bold text-dark mb-4"><i class="fas fa-list-ul text-danger me-2"></i>Meeting List Table</h5>
-                <div class="table-responsive">
-                    <table class="table align-middle table-hover">
-                        <thead>
-                            <tr>
-                                <th class="ps-3" style="width: 50px;">No</th>
-                                <th>Date</th>
-                                <th>Day</th>
-                                <th>Time</th>
-                                <th>Reason</th>
-                                <th>Status</th>
-                                <th class="text-end pe-3">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @{ int number = 1; }
-                            
-                            <!-- Dynamic database meetings -->
-                            @foreach (var m in meetings)
-                            {
-                                var badgeCls = m.Status switch
-                                {
-                                    "Approved" => "badge-approved",
-                                    "Rejected" => "badge-rejected",
-                                    "Postponed" => "badge-postponed",
-                                    _ => "badge-pending"
-                                };
-
-                                string displayTime = m.MeetingTime;
-                                try {
-                                    if(TimeSpan.TryParse(m.MeetingTime, out var ts)) {
-                                        displayTime = DateTime.Today.Add(ts).ToString("h:mm tt");
-                                    }
-                                } catch {}
-
-                                <tr>
-                                    <td class="ps-3 fw-bold text-muted">@(number++)</td>
-                                    <td>@m.MeetingDate.ToString("dd/MM/yyyy")</td>
-                                    <td>@m.MeetingDay</td>
-                                    <td>@displayTime</td>
-                                    <td>@m.Reason</td>
-                                    <td><span class="status-badge @badgeCls">@m.Status</span></td>
-                                    <td class="text-end pe-3">
-                                        @if (m.Status == "Pending")
-                                        {
-                                            <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" onclick="openRescheduleModal(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")')">
-                                                Reschedule
-                                            </button>
-                                            <form asp-action="CancelMeeting" method="post" class="d-inline" id="cancelForm_@m.Id">
-                                                @Html.AntiForgeryToken()
-                                                <input type="hidden" name="meetingId" value="@m.Id" />
-                                                <button type="button" class="btn btn-sm btn-outline-danger border-0 fw-semibold" onclick="confirmCancel(@m.Id)">Cancel</button>
-                                            </form>
-                                        }
-                                        else
-                                        {
-                                            <button type="button" class="btn btn-sm btn-outline-secondary border-0 fw-semibold" 
-                                                    data-status="@m.Status" 
-                                                    data-note="@(m.SupervisorNote ?? "None")"
-                                                    onclick="viewMeetingDetails(this)">
-                                                View
-                                            </button>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
     </div>
-
-</div>
+}
 
 <!-- Reschedule Modal -->
 <div class="modal fade" id="rescheduleModal" tabindex="-1">
@@ -314,6 +339,45 @@
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary px-4 rounded-3">Confirm Reschedule</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Student Log Draft Modal -->
+<div class="modal fade" id="studentLogModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+            <form asp-action="SubmitMeetingLogStudent" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="meetingId" id="logMeetingId" />
+                
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="fw-bold text-dark"><i class="fas fa-edit text-primary me-2"></i>Write Meeting Log</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-4">Please summarize your meeting below. This will be sent to your supervisor for review and signature.</p>
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Key topics Discussed</label>
+                        <textarea name="keyTopics" id="logKeyTopics" class="form-control rounded-3" rows="3" required placeholder="- Reviewed draft..."></textarea>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Individual action points for next meeting (no more than 3)</label>
+                        <textarea name="actionPoints" id="logActionPoints" class="form-control rounded-3" rows="3" required placeholder="- Revise Chapter 2..."></textarea>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Record of individual actions completed + notes</label>
+                        <textarea name="completedActions" id="logCompletedActions" class="form-control rounded-3" rows="3" required placeholder="- Chapter 2 draft review..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary px-4 rounded-3">Submit Log</button>
                 </div>
             </form>
         </div>
@@ -401,6 +465,16 @@
         if (status === 'Rejected') iconType = 'error';
         if (status === 'Postponed') iconType = 'warning';
 
+        let showCancel = false;
+        let confirmText = 'Close';
+        let cancelText = '';
+
+        if (status === 'Rejected') {
+            showCancel = true;
+            confirmText = 'Kindly book another slot meeting';
+            cancelText = 'Close';
+        }
+
         Swal.fire({
             title: 'Meeting Details',
             html: `
@@ -411,8 +485,15 @@
                 </div>
             `,
             icon: iconType,
-            confirmButtonColor: '#ef4444',
-            confirmButtonText: 'Close'
+            showCancelButton: showCancel,
+            confirmButtonText: confirmText,
+            cancelButtonText: cancelText,
+            confirmButtonColor: status === 'Rejected' ? '#3b82f6' : '#ef4444',
+            cancelButtonColor: '#ef4444'
+        }).then((result) => {
+            if (result.isConfirmed && status === 'Rejected') {
+                new bootstrap.Modal(document.getElementById('scheduleMeetingModal')).show();
+            }
         });
     }
 
@@ -467,6 +548,43 @@
             reschedTimeError.style.display = 'block';
         }
     });
+
+    function openStudentLogModal(btn) {
+        document.getElementById('logMeetingId').value = btn.getAttribute('data-id');
+        document.getElementById('logKeyTopics').value = btn.getAttribute('data-topics') || '';
+        document.getElementById('logActionPoints').value = btn.getAttribute('data-action') || '';
+        document.getElementById('logCompletedActions').value = btn.getAttribute('data-completed') || '';
+        new bootstrap.Modal(document.getElementById('studentLogModal')).show();
+    }
+
+    async function viewFinalLog(logId) {
+        if (typeof html2pdf === 'undefined') {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        const response = await fetch('/Student/ViewMeetingLog/' + logId);
+        let htmlText = await response.text();
+
+        // Remove the print button from the HTML string before generating PDF
+        htmlText = htmlText.replace(/<button class="print-btn"[^>]*>.*?<\/button>/i, '');
+
+        const opt = {
+            margin: 0.5,
+            filename: 'MeetingLog_' + logId + '.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+        };
+
+        // html2pdf can render directly from an HTML string using an isolated iframe
+        await html2pdf().set(opt).from(htmlText).save();
+    }
 </script>
 
 

@@ -1,4 +1,17 @@
 @using FYPTracker.Components
+<style>
+    /* Force header menu text to be dark for contrast against light background */
+    #kt_header .menu-link,
+    #kt_header .menu-title,
+    #kt_header .menu-link i {
+        color: #1e1e2d !important;
+        font-weight: 600;
+    }
+    #kt_header .menu-link:hover,
+    #kt_header .menu-link:hover i {
+        color: #f97316 !important; /* Orange hover */
+    }
+</style>
 <!--begin::Header-->
 <div id="kt_header" class="header align-items-stretch" data-kt-sticky="true" data-kt-sticky-name="header" data-kt-sticky-offset="{default: '200px', lg: '300px'}">
     <!--begin::Container-->
@@ -19,8 +32,8 @@
         <!--end::Heaeder menu toggle-->
         <!--begin::Header Logo-->
         <div class="header-logo flex-grow-1 flex-lg-grow-0">
-            <a href="/Home">
-                <img src="~/assets/media/logos/fyp-logo.png" alt="FYP Tracking System" style="height: 40px; margin-top: 5px;" />
+            <a href="/">
+                <img src="~/assets/media/logos/fyp-logo-whale.png" alt="FYP Tracking System" style="height: 55px; margin-top: 0px;" />
             </a>
         </div>
         <!--end::Header Logo-->

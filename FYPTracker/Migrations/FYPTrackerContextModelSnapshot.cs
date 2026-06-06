@@ -76,6 +76,9 @@ namespace FYPTracker.Migrations
                     b.Property<string>("Programme")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("RequirePasswordChange")
+                        .HasColumnType("bit");
+
                     b.Property<string>("ResetToken")
                         .HasColumnType("nvarchar(max)");
 
@@ -601,6 +604,54 @@ namespace FYPTracker.Migrations
                     b.ToTable("MeetingBooking", (string)null);
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.MeetingLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<string>("ActionPointsForNextMeeting")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CompletedActionsAndNotes")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("KeyTopicsDiscussed")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("LogStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("MeetingBookingId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("NextMeetingDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("SignatureDate")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("SupervisorComments")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MeetingBookingId")
+                        .IsUnique();
+
+                    b.ToTable("MeetingLog", (string)null);
+                });
+
             modelBuilder.Entity("FYPTracker.Models.SupervisorRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -821,6 +872,17 @@ namespace FYPTracker.Migrations
                     b.Navigation("Supervisor");
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.MeetingLog", b =>
+                {
+                    b.HasOne("FYPTracker.Models.MeetingBooking", "MeetingBooking")
+                        .WithOne("MeetingLog")
+                        .HasForeignKey("FYPTracker.Models.MeetingLog", "MeetingBookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MeetingBooking");
+                });
+
             modelBuilder.Entity("FYPTracker.Models.SupervisorRequest", b =>
                 {
                     b.HasOne("FYPTracker.Models.ApplicationUser", "Student")
@@ -855,6 +917,11 @@ namespace FYPTracker.Migrations
             modelBuilder.Entity("FYPTracker.Models.FYPProject", b =>
                 {
                     b.Navigation("Milestones");
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.MeetingBooking", b =>
+                {
+                    b.Navigation("MeetingLog");
                 });
 #pragma warning restore 612, 618
         }

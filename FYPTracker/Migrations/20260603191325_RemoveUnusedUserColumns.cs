@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -8,17 +8,6 @@ namespace FYPTracker.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "Department",
-                table: "ApplicationUser");
-
-            migrationBuilder.DropColumn(
-                name: "OfficeRoom",
-                table: "ApplicationUser");
-
-            migrationBuilder.DropColumn(
-                name: "ShortName",
-                table: "ApplicationUser");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)

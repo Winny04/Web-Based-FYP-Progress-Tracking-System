@@ -51,6 +51,8 @@ namespace FYPTracker.Models
 
         [ForeignKey(nameof(SupervisorId))]
         public virtual ApplicationUser? Supervisor { get; set; }
+
+        public virtual MeetingLog? MeetingLog { get; set; }
     }
 }
 

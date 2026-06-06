@@ -661,22 +661,33 @@ namespace FYPTracker.Controllers
             {
                 if (newEmployee != null)
                 {
-                    string prefix = newEmployee.UserType == "Student" ? "STU-" : "SUP-";
-                    var highestUser = _context.ApplicationUsers
-                        .Where(u => u.EmployeeId.StartsWith(prefix))
-                        .OrderByDescending(u => u.EmployeeId)
-                        .FirstOrDefault();
-                        
-                    int nextIdNum = 1;
-                    if (highestUser != null && !string.IsNullOrEmpty(highestUser.EmployeeId) && highestUser.EmployeeId.Length > 4)
+                    string newId;
+                    if (!string.IsNullOrEmpty(newEmployee.Email) && 
+                        (newEmployee.Email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) || 
+                         newEmployee.Email.EndsWith("@newinti.edu.my", StringComparison.OrdinalIgnoreCase)))
                     {
-                        if (int.TryParse(highestUser.EmployeeId.Substring(4), out int lastNum))
-                        {
-                            nextIdNum = lastNum + 1;
-                        }
+                        newId = newEmployee.Email.Split('@')[0];
                     }
-                    
-                    string newId = $"{prefix}{nextIdNum:D3}";
+                    else
+                    {
+                        string prefix = newEmployee.UserType == "Student" ? "STU-" : "SUP-";
+                        var highestUser = _context.ApplicationUsers
+                            .Where(u => u.EmployeeId != null && u.EmployeeId.StartsWith(prefix))
+                            .OrderByDescending(u => u.EmployeeId)
+                            .FirstOrDefault();
+                            
+                        int nextIdNum = 1;
+                        if (highestUser != null && !string.IsNullOrEmpty(highestUser.EmployeeId) && highestUser.EmployeeId.Length > 4)
+                        {
+                            if (int.TryParse(highestUser.EmployeeId.Substring(4), out int lastNum))
+                            {
+                                nextIdNum = lastNum + 1;
+                            }
+                        }
+                        
+                        newId = $"{prefix}{nextIdNum:D3}";
+                    }
+
                     newEmployee.EmplooyeeInfoID = newId;
                     newEmployee.UserName = newId;
 
@@ -685,13 +696,15 @@ namespace FYPTracker.Controllers
                     var deptQuery = _context.Department.AsQueryable();
                     if (check == null && check1 == null)
                     {
+                        string generatedPassword = Guid.NewGuid().ToString("N").Substring(0, 8);
+
                         var model = new ApplicationUser
                         {
                             UserName = newEmployee.UserName,
                             FullName = newEmployee.FullName,
 
                             Email = newEmployee.Email,
-                            PassCode = Encryption.GetHash(newEmployee.PassCode),
+                            PassCode = Encryption.GetHash(generatedPassword),
                             EmployeeId = newEmployee.EmplooyeeInfoID,
                             DateCreated = DateTime.Now,
                             DateJoin = DateTime.Now,
@@ -702,7 +715,8 @@ namespace FYPTracker.Controllers
                             Phone = newEmployee.Phone,
                             Programme = newEmployee.Programme,
                             AcademicSession = newEmployee.AcademicSession,
-                            Title = newEmployee.Title
+                            Title = newEmployee.Title,
+                            RequirePasswordChange = true
                     };
                         _context.ApplicationUsers.Add(model);
                         _context.SaveChanges();
@@ -718,7 +732,7 @@ namespace FYPTracker.Controllers
                                 <p>Your account has been successfully created. Below are your login credentials:</p>
                                 <ul>
                                     <li><strong>Username:</strong> {newEmployee.UserName}</li>
-                                    <li><strong>Password:</strong> {newEmployee.PassCode}</li>
+                                    <li><strong>Password:</strong> {generatedPassword}</li>
                                 </ul>
                                 <p style='margin: 20px 0;'>
                                     <a href='{loginUrl}' style='display: inline-block; padding: 10px 20px; color: white; background-color: #009ef7; text-decoration: none; border-radius: 6px; font-weight: bold; font-family: sans-serif;'>Click Here to Login</a>
@@ -805,6 +819,11 @@ namespace FYPTracker.Controllers
 
             await _userService.SignInEmployeeAsync(emp, rmbMe);
 
+            if (emp.RequirePasswordChange)
+            {
+                return RedirectToAction("ForceChangePassword", "User");
+            }
+
             if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
 
             // Redirect based on role
@@ -826,6 +845,47 @@ namespace FYPTracker.Controllers
             Response.Cookies.Delete(CookieDefaults.CookieImageKey);
 
             return RedirectToRoute("Login");
+        }
+
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> ForceChangePassword()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login");
+            if (!user.RequirePasswordChange) return RedirectToAction("Index", "Home");
+
+            return View();
+        }
+
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> ForceChangePassword(string newPassword, string confirmPassword)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login");
+            if (!user.RequirePasswordChange) return RedirectToAction("Index", "Home");
+
+            if (string.IsNullOrEmpty(newPassword) || newPassword != confirmPassword)
+            {
+                ViewBag.Error = "Passwords do not match or are empty.";
+                return View();
+            }
+
+            user.PassCode = Encryption.GetHash(newPassword);
+            user.RequirePasswordChange = false;
+            
+            _context.ApplicationUsers.Update(user);
+            await _context.SaveChangesAsync();
+
+            if (user.UserType == "Student")
+                return RedirectToAction("Index", "Student");
+            else if (user.UserType == "Supervisor")
+                return RedirectToAction("Index", "Supervisor");
+            else if (user.UserType == "SuperAdmin" || user.UserType == "Admin")
+                return RedirectToAction("Index", "User");
+
+            return RedirectToAction("Index", "Home");
         }
 
 

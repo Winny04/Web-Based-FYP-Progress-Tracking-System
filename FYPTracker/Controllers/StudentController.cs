@@ -624,6 +624,7 @@ namespace FYPTracker.Controllers
 
             var meetings = await _context.MeetingBookings
                 .Include(m => m.Supervisor)
+                .Include(m => m.MeetingLog)
                 .Where(m => m.StudentId == user.Id)
                 .OrderByDescending(m => m.CreatedDate)
                 .ToListAsync();
@@ -667,6 +668,21 @@ namespace FYPTracker.Controllers
 
             var supervisor = await _context.ApplicationUsers.FindAsync(supervisorId);
             string supName = supervisor?.FullName ?? "your supervisor";
+
+            if (supervisor != null && !string.IsNullOrEmpty(supervisor.Email))
+            {
+                string supSubject = "New FYP Meeting Booking Request";
+                string supBody = $"<p>Dear {supervisor.FullName},</p><p>You have a new meeting booking request from <strong>{user.FullName}</strong>.</p><ul><li><strong>Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>Time:</strong> {meetingTime}</li><li><strong>Reason:</strong> {reason}</li></ul><p>Please log in to the FYP Tracker system to approve or reject this request.</p>";
+                _emailService.Send(supervisor.Email, supSubject, supBody);
+            }
+
+            if (!string.IsNullOrEmpty(user.Email))
+            {
+                string stuSubject = "Meeting Booking Request Submitted";
+                string stuBody = $"<p>Dear {user.FullName},</p><p>Your meeting request with <strong>{supName}</strong> has been successfully submitted and is currently pending approval.</p><ul><li><strong>Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>Time:</strong> {meetingTime}</li><li><strong>Reason:</strong> {reason}</li></ul><p>You will be notified once the supervisor responds.</p>";
+                _emailService.Send(user.Email, stuSubject, stuBody);
+            }
+
             TempData["Success"] = $"Meeting request sent to {supName}!";
             return RedirectToAction(nameof(BookMeeting));
         }
@@ -772,10 +788,101 @@ namespace FYPTracker.Controllers
                 await LogActivityAsync(user.Id, "MeetingUpdate", "Meeting Rescheduled", 
                     $"Meeting moved to {parsedDate:dd MMM} at {meetingTime}.");
                 
+                var supervisor = await _context.ApplicationUsers.FindAsync(meeting.SupervisorId);
+                string supName = supervisor?.FullName ?? "your supervisor";
+
+                if (supervisor != null && !string.IsNullOrEmpty(supervisor.Email))
+                {
+                    string supSubject = "FYP Meeting Rescheduled by Student";
+                    string supBody = $"<p>Dear {supervisor.FullName},</p><p><strong>{user.FullName}</strong> has rescheduled a meeting.</p><ul><li><strong>New Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>New Time:</strong> {meetingTime}</li></ul><p>Please log in to the FYP Tracker system to re-approve this request.</p>";
+                    _emailService.Send(supervisor.Email, supSubject, supBody);
+                }
+
+                if (!string.IsNullOrEmpty(user.Email))
+                {
+                    string stuSubject = "Meeting Rescheduled Successfully";
+                    string stuBody = $"<p>Dear {user.FullName},</p><p>Your meeting with <strong>{supName}</strong> has been rescheduled to {parsedDate:dd MMM yyyy} at {meetingTime} and is pending approval.</p>";
+                    _emailService.Send(user.Email, stuSubject, stuBody);
+                }
+
                 TempData["Success"] = "Meeting rescheduled successfully! Awaiting supervisor re-approval.";
             }
 
             return RedirectToAction(nameof(BookMeeting));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SubmitMeetingLogStudent(
+            int meetingId, 
+            string keyTopics, 
+            string actionPoints, 
+            string completedActions)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var meeting = await _context.MeetingBookings
+                .Include(m => m.MeetingLog)
+                .FirstOrDefaultAsync(m => m.Id == meetingId && m.StudentId == user.Id && m.Status == "Approved");
+
+            if (meeting == null)
+            {
+                TempData["Error"] = "Meeting not found or not approved.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            if (meeting.MeetingLog != null && meeting.MeetingLog.LogStatus == "Signed")
+            {
+                TempData["Error"] = "Meeting log is already signed by the supervisor.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            if (meeting.MeetingLog == null)
+            {
+                meeting.MeetingLog = new MeetingLog
+                {
+                    MeetingBookingId = meeting.Id,
+                    KeyTopicsDiscussed = keyTopics,
+                    ActionPointsForNextMeeting = actionPoints,
+                    CompletedActionsAndNotes = completedActions,
+                    LogStatus = "Draft",
+                    CreatedDate = DateTime.Now
+                };
+            }
+            else
+            {
+                meeting.MeetingLog.KeyTopicsDiscussed = keyTopics;
+                meeting.MeetingLog.ActionPointsForNextMeeting = actionPoints;
+                meeting.MeetingLog.CompletedActionsAndNotes = completedActions;
+                meeting.MeetingLog.LogStatus = "Draft";
+            }
+
+            await _context.SaveChangesAsync();
+            await LogActivityAsync(user.Id, "MeetingLog", "Meeting Log Drafted", $"You submitted a meeting log draft for the meeting on {meeting.MeetingDate:dd MMM}.");
+
+            TempData["Success"] = "Meeting log successfully submitted to supervisor for review!";
+            return RedirectToAction(nameof(BookMeeting));
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ViewMeetingLog(int id)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var log = await _context.MeetingLogs
+                .Include(l => l.MeetingBooking)
+                .ThenInclude(mb => mb.Supervisor)
+                .Include(l => l.MeetingBooking.Student)
+                .FirstOrDefaultAsync(l => l.Id == id && l.MeetingBooking.StudentId == user.Id);
+
+            if (log == null || log.LogStatus != "Signed") return NotFound();
+            
+            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == log.MeetingBooking.StudentId);
+            ViewBag.ProjectName = project?.Title ?? "FYP Project";
+
+            return View("~/Views/Shared/MeetingLogPrintable.cshtml", log);
         }
 
         // ══════════════════════════════════════════════════════

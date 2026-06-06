@@ -420,6 +420,7 @@ namespace FYPTracker.Controllers
 
             var meetings = await _context.MeetingBookings
                 .Include(m => m.Student)
+                .Include(m => m.MeetingLog)
                 .Where(m => m.SupervisorId == user.Id)
                 .OrderByDescending(m => m.CreatedDate)
                 .ToListAsync();
@@ -448,6 +449,58 @@ namespace FYPTracker.Controllers
                 TempData["Success"] = $"Meeting {status.ToLower()}.";
             }
             return RedirectToAction(nameof(ManageMeetings));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ReviewMeetingLogSupervisor(
+            int meetingId, 
+            DateTime nextMeetingDate, 
+            string supervisorComments)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var meeting = await _context.MeetingBookings
+                .Include(m => m.MeetingLog)
+                .FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
+
+            if (meeting == null || meeting.MeetingLog == null)
+            {
+                TempData["Error"] = "Meeting log not found.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            meeting.MeetingLog.NextMeetingDate = nextMeetingDate;
+            meeting.MeetingLog.SupervisorComments = supervisorComments;
+            meeting.MeetingLog.LogStatus = "Signed";
+            meeting.MeetingLog.SignatureDate = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+            await AddNotificationAsync(meeting.StudentId, "MeetingLogSigned", "Meeting Log Signed", $"Your supervisor has signed the meeting log for the meeting on {meeting.MeetingDate:dd MMM yyyy}.");
+
+            TempData["Success"] = "Meeting log signed and approved successfully!";
+            return RedirectToAction(nameof(ManageMeetings));
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ViewMeetingLog(int id)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+
+            var log = await _context.MeetingLogs
+                .Include(l => l.MeetingBooking)
+                .ThenInclude(mb => mb.Student)
+                .Include(l => l.MeetingBooking.Supervisor)
+                .FirstOrDefaultAsync(l => l.Id == id && l.MeetingBooking.SupervisorId == user.Id);
+
+            if (log == null || log.LogStatus != "Signed") return NotFound();
+            
+            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == log.MeetingBooking.StudentId);
+            ViewBag.ProjectName = project?.Title ?? "FYP Project";
+
+            return View("~/Views/Shared/MeetingLogPrintable.cshtml", log);
         }
 
         // ────────────────────────────────────────────────────────

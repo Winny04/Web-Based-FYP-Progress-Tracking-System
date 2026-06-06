@@ -30,6 +30,7 @@ namespace FYPTracker.Models
         // ── Student Module ─────────────────────────────────────────
         public virtual DbSet<SupervisorRequest> SupervisorRequests { get; set; } = null!;
         public virtual DbSet<MeetingBooking>    MeetingBookings    { get; set; } = null!;
+        public virtual DbSet<MeetingLog>        MeetingLogs        { get; set; } = null!;
         public virtual DbSet<FYPNotification>   FYPNotifications   { get; set; } = null!;
         public virtual DbSet<FYPActivity>       FYPActivities      { get; set; } = null!;
         public virtual DbSet<FYPIAForm>         FYPIAForms         { get; set; } = null!;
@@ -158,6 +159,18 @@ namespace FYPTracker.Models
                       .WithMany()
                       .HasForeignKey(e => e.SupervisorId)
                       .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // MeetingLog
+            modelBuilder.Entity<MeetingLog>(entity =>
+            {
+                entity.ToTable("MeetingLog");
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.MeetingBooking)
+                      .WithOne(m => m.MeetingLog)
+                      .HasForeignKey<MeetingLog>(e => e.MeetingBookingId)
+                      .OnDelete(DeleteBehavior.Cascade);
             });
 
             // FYPNotification
