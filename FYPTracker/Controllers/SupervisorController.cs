@@ -146,6 +146,7 @@ namespace FYPTracker.Controllers
                         // Create Default Milestones
                         var milestones = new List<FYPMilestone>
                         {
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Initial Project Allocation Form (IAF)", DueDate = DateTime.Now.AddDays(14), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Proposal", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Interim Report", DueDate = DateTime.Now.AddMonths(3), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 2: Final Dissertation", DueDate = DateTime.Now.AddMonths(6), Status = "Pending" }
@@ -335,7 +336,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks)
+        public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks, string? supervisorSignature)
         {
             var user = await GetCurrentUserAsync();
             var milestone = await _context.FYPMilestones.Include(m => m.Project).FirstOrDefaultAsync(m => m.Id == milestoneId);
@@ -344,6 +345,29 @@ namespace FYPTracker.Controllers
             {
                 milestone.Status = status;
                 milestone.SupervisorFeedback = remarks;
+
+                if ((milestone.Title.Contains("Initial Project Allocation") || milestone.Title.Contains("IAF")) && !string.IsNullOrEmpty(supervisorSignature))
+                {
+                    string raw = milestone.Remarks ?? "";
+                    if (raw.Contains("JSON: "))
+                    {
+                        var parts = raw.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                        var formInfo = parts[0].Trim();
+                        var parsedJson = parts[1];
+                        try
+                        {
+                            var dict = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, string>>(parsedJson);
+                            if (dict != null)
+                            {
+                                dict["Supervisor Signature"] = supervisorSignature;
+                                var updatedJson = System.Text.Json.JsonSerializer.Serialize(dict);
+                                milestone.Remarks = $"{formInfo} JSON: {updatedJson}";
+                            }
+                        }
+                        catch {}
+                    }
+                }
+
                 await _context.SaveChangesAsync();
 
                 if (status == "Approved") {
@@ -351,6 +375,7 @@ namespace FYPTracker.Controllers
                     await LogActivityAsync(milestone.Project.StudentId, "MilestoneApproved", $"{milestone.Title} Approved");
                 } 
                 else if (status == "Rejected") {
+                    milestone.RejectionCount++;
                     await AddNotificationAsync(milestone.Project.StudentId, "RevisionRequest", $"{milestone.Title} Rejected", remarks);
                     await LogActivityAsync(milestone.Project.StudentId, "FeedbackReceived", $"Revision needed for {milestone.Title}");
                 }

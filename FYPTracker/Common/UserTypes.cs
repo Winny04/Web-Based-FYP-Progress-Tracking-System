@@ -23,8 +23,7 @@ namespace FYPTracker.Common
             var list = new List<SelectListItem> {
                 new SelectListItem { Text = "ALL", Value = "" },
                 new SelectListItem { Text = "Student", Value = "Student" },
-                new SelectListItem { Text = "Supervisor", Value = "Supervisor" },
-                new SelectListItem { Text = "Admin", Value = "Admin" }
+                new SelectListItem { Text = "Supervisor", Value = "Supervisor" }
             };
 
             return list;

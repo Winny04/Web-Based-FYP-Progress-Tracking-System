@@ -26,11 +26,14 @@
     <!--begin::Menu-->
     <div class="menu menu-lg-rounded menu-column menu-lg-row menu-state-bg menu-title-gray-700 menu-state-icon-primary menu-state-bullet-primary menu-arrow-gray-400 fw-bold my-5 my-lg-0 align-items-stretch" id="#kt_header_menu" data-kt-menu="true">
         
-        <div class="menu-item">
-            <a class="menu-link py-3" href="/Home">
-                <span class="menu-title">Dashboard</span>
-            </a>
-        </div>
+        @if (userType != "Admin" && userType != "SuperAdmin")
+        {
+            <div class="menu-item">
+                <a class="menu-link py-3" href="/Home">
+                    <span class="menu-title">Dashboard</span>
+                </a>
+            </div>
+        }
 
         @if (userType == "Student")
         {
@@ -86,10 +89,26 @@
         else if (userType == "Admin" || userType == "SuperAdmin")
         {
             <div class="menu-item">
-                <a class="menu-link py-3" href="/User/ManageProjects">
+                <a class="menu-link py-3" href="/Admin">
+                    <span class="menu-title">Dashboard</span>
+                </a>
+            </div>
+            <div class="menu-item">
+                <a class="menu-link py-3" href="/Admin/ManageUsers">
+                    <span class="menu-title">Manage Users</span>
+                </a>
+            </div>
+            <div class="menu-item">
+                <a class="menu-link py-3" href="/Admin/ManageProjects">
                     <span class="menu-title">All Projects</span>
                 </a>
             </div>
+            <div class="menu-item">
+                <a class="menu-link py-3" href="/Admin/Settings">
+                    <span class="menu-title">System Settings</span>
+                </a>
+            </div>
+
 
         }
 

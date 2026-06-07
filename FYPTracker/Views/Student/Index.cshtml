@@ -358,7 +358,7 @@
                                                     <button class="action-btn action-btn-secondary" onclick="showFeedbackModal('@m.Title', '@Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(m.Remarks ?? "Please revise according to guidelines."))')">
                                                         Feedback
                                                     </button>
-                                                    <a href="/Student/Submissions" class="action-btn action-btn-primary text-decoration-none">
+                                                    <a href="/Student/Forms" class="action-btn action-btn-primary text-decoration-none">
                                                         Resubmit
                                                     </a>
                                                 </div>
@@ -366,7 +366,7 @@
                                             else if (statusText == "Not Started")
                                             {
                                                 <!-- Start / Submit -->
-                                                <a href="/Student/Submissions" class="action-btn action-btn-primary text-decoration-none">
+                                                <a href="/Student/Forms" class="action-btn action-btn-primary text-decoration-none">
                                                     Start
                                                 </a>
                                             }

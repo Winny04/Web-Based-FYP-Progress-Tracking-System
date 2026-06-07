@@ -33,7 +33,6 @@ namespace FYPTracker.Models
         public virtual DbSet<MeetingLog>        MeetingLogs        { get; set; } = null!;
         public virtual DbSet<FYPNotification>   FYPNotifications   { get; set; } = null!;
         public virtual DbSet<FYPActivity>       FYPActivities      { get; set; } = null!;
-        public virtual DbSet<FYPIAForm>         FYPIAForms         { get; set; } = null!;
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -195,16 +194,6 @@ namespace FYPTracker.Models
                       .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // FYPIAForm
-            modelBuilder.Entity<FYPIAForm>(entity =>
-            {
-                entity.ToTable("FYPIAForm");
-                entity.HasKey(e => e.Id);
-                entity.HasOne(e => e.Student)
-                      .WithMany()
-                      .HasForeignKey(e => e.StudentId)
-                      .OnDelete(DeleteBehavior.Cascade);
-            });
 
             OnModelCreatingPartial(modelBuilder);
         }

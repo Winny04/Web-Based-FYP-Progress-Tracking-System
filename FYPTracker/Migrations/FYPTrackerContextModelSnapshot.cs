@@ -288,75 +288,6 @@ namespace FYPTracker.Migrations
                     b.ToTable("FYPFeedback", (string)null);
                 });
 
-            modelBuilder.Entity("FYPTracker.Models.FYPIAForm", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
-
-                    b.Property<string>("AdminNote")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CompanyAddress")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CompanyName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CompanySupervisorEmail")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CompanySupervisorName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CompanySupervisorPhone")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("EndDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<decimal?>("MonthlyAllowance")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime?>("ProcessedDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ProjectScope")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ProjectTitle")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("StartDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("StudentId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("SubmittedDate")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StudentId");
-
-                    b.ToTable("FYPIAForm", (string)null);
-                });
-
             modelBuilder.Entity("FYPTracker.Models.FYPMilestone", b =>
                 {
                     b.Property<int>("Id")
@@ -375,6 +306,9 @@ namespace FYPTracker.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<int>("FYPProjectId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RejectionCount")
                         .HasColumnType("int");
 
                     b.Property<string>("Remarks")
@@ -782,17 +716,6 @@ namespace FYPTracker.Migrations
                     b.Navigation("Milestone");
 
                     b.Navigation("Supervisor");
-                });
-
-            modelBuilder.Entity("FYPTracker.Models.FYPIAForm", b =>
-                {
-                    b.HasOne("FYPTracker.Models.ApplicationUser", "Student")
-                        .WithMany()
-                        .HasForeignKey("StudentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Student");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPMilestone", b =>

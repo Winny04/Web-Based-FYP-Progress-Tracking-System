@@ -55,60 +55,6 @@ namespace FYPTracker.Controllers
             return View(project);
         }
 
-        // ──────────────────────────────────────────────────────
-        //  DIGITAL eFORMS
-        // ──────────────────────────────────────────────────────
-        public async Task<IActionResult> IAF()
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "User");
-
-            // Check if user already has an IAF submission
-            var existing = await _context.FYPIAForms.FirstOrDefaultAsync(f => f.StudentId == user.Id);
-            ViewBag.CurrentUser = user;
-            
-            return View(existing);
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> SubmitIAF(FYPIAForm form)
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return Unauthorized();
-
-            form.StudentId = user.Id;
-            form.SubmittedDate = DateTime.Now;
-            form.Status = "Pending";
-
-            var existing = await _context.FYPIAForms.FirstOrDefaultAsync(f => f.StudentId == user.Id);
-            if (existing != null)
-            {
-                // Update existing
-                existing.CompanyName = form.CompanyName;
-                existing.CompanyAddress = form.CompanyAddress;
-                existing.CompanySupervisorName = form.CompanySupervisorName;
-                existing.CompanySupervisorEmail = form.CompanySupervisorEmail;
-                existing.CompanySupervisorPhone = form.CompanySupervisorPhone;
-                existing.StartDate = form.StartDate;
-                existing.EndDate = form.EndDate;
-                existing.ProjectTitle = form.ProjectTitle;
-                existing.ProjectScope = form.ProjectScope;
-                existing.MonthlyAllowance = form.MonthlyAllowance;
-                existing.Status = "Pending";
-                existing.SubmittedDate = DateTime.Now;
-                _context.FYPIAForms.Update(existing);
-            }
-            else
-            {
-                _context.FYPIAForms.Add(form);
-            }
-
-            await _context.SaveChangesAsync();
-            await AddNotificationAsync(user.Id, "eForm", "IAF Submitted", "Your Industrial Attachment Form has been submitted for review.");
-            
-            TempData["Success"] = "IAF Form submitted successfully!";
-            return RedirectToAction("IAF");
-        }
 
         //  HELPER: current logged-in ApplicationUser
         // ──────────────────────────────────────────────────────
@@ -334,112 +280,7 @@ namespace FYPTracker.Controllers
             return RedirectToAction(nameof(SelectSupervisor));
         }
 
-        // ────────────────────────────────────────────────────────
-        //  SUBMISSIONS (REPORT UPLOAD)
-        // ────────────────────────────────────────────────────────
-        public async Task<IActionResult> Submissions()
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
 
-            var project = await _context.FYPProjects
-                .Include(p => p.Milestones)
-                .Include(p => p.Supervisor)
-                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
-
-            if (project == null)
-            {
-                TempData["Error"] = "You don't have an approved project yet. Please apply for a supervisor first.";
-                return RedirectToAction(nameof(SelectSupervisor));
-            }
-
-            return View(project);
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UploadSubmission(int milestoneId, IFormFile reportFile)
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
-
-            if (reportFile == null || reportFile.Length == 0)
-            {
-                TempData["Error"] = "Please select a file to upload.";
-                return RedirectToAction(nameof(Submissions));
-            }
-
-            // 1. Validate File type & Size
-            var allowedExt = new[] { ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".zip" };
-            var ext = Path.GetExtension(reportFile.FileName).ToLowerInvariant();
-            if (!allowedExt.Contains(ext))
-            {
-                TempData["Error"] = "Only PDF, DOC, PPT, and ZIP files are allowed.";
-                return RedirectToAction(nameof(Submissions));
-            }
-
-            if (reportFile.Length > 20 * 1024 * 1024) // 20 MB
-            {
-                TempData["Error"] = "File size must not exceed 20 MB.";
-                return RedirectToAction(nameof(Submissions));
-            }
-
-            var milestone = await _context.FYPMilestones
-                .Include(m => m.Project)
-                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.StudentId == user.Id);
-
-            if (milestone == null) return NotFound();
-
-            // 2. Remove existing files for this milestone to prevent confusion
-            var existingFiles = await _context.FYPSubmissionFiles.Where(f => f.MilestoneId == milestoneId).ToListAsync();
-            if (existingFiles.Any())
-            {
-                foreach (var f in existingFiles)
-                {
-                    var oldFilePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", f.FilePath.TrimStart('/'));
-                    if (System.IO.File.Exists(oldFilePath))
-                    {
-                        try { System.IO.File.Delete(oldFilePath); } catch { /* Ignore locked file errors */ }
-                    }
-                }
-                _context.FYPSubmissionFiles.RemoveRange(existingFiles);
-            }
-
-            // 3. Handle File Saving
-            var uniqueName = $"{Guid.NewGuid()}{ext}";
-            var uploadDir  = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads/submissions");
-            Directory.CreateDirectory(uploadDir);
-            
-            var path = Path.Combine(uploadDir, uniqueName);
-            using (var stream = new FileStream(path, FileMode.Create))
-            {
-                await reportFile.CopyToAsync(stream);
-            }
-
-            // 4. Save DB record
-            var submissionFile = new FYPSubmissionFile
-            {
-                MilestoneId  = milestoneId,
-                FileName     = reportFile.FileName,
-                FilePath     = "/uploads/submissions/" + uniqueName,
-                FileSize     = reportFile.Length,
-                UploadedBy   = user.Id,
-                UploadedDate = DateTime.Now
-            };
-            _context.FYPSubmissionFiles.Add(submissionFile);
-
-            milestone.Status = "Submitted";
-            milestone.SubmittedDate = DateTime.Now;
-
-            await _context.SaveChangesAsync();
-
-            await LogActivityAsync(user.Id, "Submission", "File Uploaded", $"Uploaded {reportFile.FileName} for {milestone.Title}");
-            if (milestone.Project.SupervisorId.HasValue)
-                await AddNotificationAsync(milestone.Project.SupervisorId.Value, "Submission", "New Submission", $"Student {user.FullName} uploaded a report for {milestone.Title}");
-
-            TempData["Success"] = "Report uploaded successfully!";
-            return RedirectToAction(nameof(Submissions));
-        }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -522,6 +363,11 @@ namespace FYPTracker.Controllers
 
             if (milestone != null)
             {
+                if (milestone.RejectionCount >= 3 && (formType == "Initial Project Allocation Form (IAF)" || milestone.Title.Contains("IAF")))
+                {
+                    TempData["Error"] = "You have been placed on the Defense List because this form has been rejected 3 times. You cannot submit it again.";
+                    return RedirectToAction("Forms");
+                }
                 if (formType == "Progress Report Form")
                 {
                     var dict = new System.Collections.Generic.Dictionary<string, string> {
@@ -534,6 +380,26 @@ namespace FYPTracker.Controllers
                     };
                     detailsJson = System.Text.Json.JsonSerializer.Serialize(dict);
                     title = $"Progress Report: {pctComplete} Complete";
+                }
+                else if (formType == "Initial Project Allocation Form (IAF)")
+                {
+                    var dict = new System.Collections.Generic.Dictionary<string, string> {
+                        {"Scope of Project", scope ?? ""},
+                        {"Problem Statement", problemStatement ?? ""},
+                        {"Objective 1", objective1 ?? ""},
+                        {"Objective 2", objective2 ?? ""},
+                        {"Objective 3", objective3 ?? ""},
+                        {"Agreed Supervisor Name", Request.Form.TryGetValue("supervisorName", out var supName) ? supName.ToString() : ""}
+                    };
+                    detailsJson = System.Text.Json.JsonSerializer.Serialize(dict);
+                    title = "Initial Project Allocation Form (IAF)";
+
+                    // Also save these directly to the Project record
+                    milestone.Project.ProblemStatement = problemStatement;
+                    milestone.Project.Objective1 = objective1;
+                    milestone.Project.Objective2 = objective2;
+                    milestone.Project.Objective3 = objective3;
+                    milestone.Project.Scope = scope;
                 }
                 else if (formType == "Proposal Form")
                 {
@@ -598,10 +464,41 @@ namespace FYPTracker.Controllers
 
             ViewBag.CurrentUser = user;
 
+            // Fetch IAF Deadline config
+            var deadlineConfig = await _context.EmailTemplateConfig.FirstOrDefaultAsync(c => c.ConfigKey == "IAFDeadline");
+            ViewBag.IAFDeadline = deadlineConfig?.ConfigValue ?? "15th April 2026 before 11.59pm";
+
             var project = await _context.FYPProjects
                 .Include(p => p.Milestones)
                     .ThenInclude(m => m.SubmissionFiles)
                 .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+
+            if (project != null)
+            {
+                var hasIaf = project.Milestones.Any(m => (m.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) && !m.Title.Contains("Industrial", StringComparison.OrdinalIgnoreCase));
+                if (!hasIaf)
+                {
+                    bool shouldAutoApprove = project.Milestones.Any(m => m.Status == "Approved" || m.Status == "Submitted");
+                    var iaf = new FYPMilestone
+                    {
+                        FYPProjectId = project.Id,
+                        Title = "Initial Project Allocation Form (IAF)",
+                        Description = "Prerequisite Form for FYP Registration and allocation.",
+                        DueDate = DateTime.Now.AddDays(14),
+                        Status = shouldAutoApprove ? "Approved" : "Pending",
+                        Remarks = shouldAutoApprove ? "Auto-approved for existing active project" : null,
+                        CreatedDate = DateTime.Now
+                    };
+                    _context.FYPMilestones.Add(iaf);
+                    await _context.SaveChangesAsync();
+
+                    // Reload project with the new milestone
+                    project = await _context.FYPProjects
+                        .Include(p => p.Milestones)
+                            .ThenInclude(m => m.SubmissionFiles)
+                        .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+                }
+            }
 
             return View(project);
         }

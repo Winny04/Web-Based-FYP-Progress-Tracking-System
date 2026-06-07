@@ -33,30 +33,7 @@
 <body id="kt_body" style="background-color: #f8fafc;" class="page-loading-enabled page-loading header-fixed header-tablet-and-mobile-fixed toolbar-enabled">
     @await Component.InvokeAsync(typeof(LoaderViewComponent))
     @await Component.InvokeAsync(typeof(MasterViewComponent))
-    <div id="carouselExampleControls" class="carousel slide" data-ride="carousel" style="display:flex;">
-        <div class="carousel-inner text-center bg-primary border border-dark mx-5 my-2 shadow p-3">
-            <div class="carousel-item active">
-               <span>&#10069; Please protect you account by reset your password regulary.</span>
-            </div>
-            <div class="carousel-item">
-                <span>&#10069;Sometimes you will encounter the system cannot browse or pause. At that time, the system may be under maintenance, please try it again in 5 minutes.</span>
-            </div>
-           @* <div class="carousel-item">
-                <span>&#10071; 26/02/23 The hosting server have been collapsed which causing related documents lost, including quotation, invoice, and so on.Therefore, you may encounter the situation where document can't view.</span>
-            </div>*@
-            <div class="carousel-item">
-                <span>&#10069;Please take note that old documents has been recover, including quotation,drawing,po etc.</span>
-            </div>
-        </div>
-        <a class="carousel-control-prev" href="#carouselExampleControls" role="button" data-slide="prev">
-            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-            <span class="sr-only">Previous</span>
-        </a>
-        <a class="carousel-control-next" href="#carouselExampleControls" role="button" data-slide="next">
-            <span class="carousel-control-next-icon" aria-hidden="true"></span>
-            <span class="sr-only">Next</span>
-        </a>
-    </div>
+
     <!--begin::Javascript-->
     <script>var hostUrl = "~/assets/";</script>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>

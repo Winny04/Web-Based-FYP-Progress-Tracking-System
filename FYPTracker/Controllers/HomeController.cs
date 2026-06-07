@@ -34,9 +34,9 @@ namespace FYPTracker.Controllers
 
             // Fetch FYP projects based on user type
             List<FYPProject> projects;
-            if (getUser.UserType == "Admin")
+            if (getUser.UserType == "Admin" || getUser.UserType == "SuperAdmin")
             {
-                projects = await _context.FYPProjects.Include(p => p.Student).Include(p => p.Supervisor).ToListAsync();
+                return RedirectToAction("Index", "Admin");
             }
             else if (getUser.UserType == "Supervisor")
             {

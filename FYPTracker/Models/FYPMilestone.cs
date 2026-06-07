@@ -40,6 +40,8 @@ namespace FYPTracker.Models
         [Column(TypeName = "datetime")]
         public DateTime CreatedDate { get; set; } = DateTime.Now;
 
+        public int RejectionCount { get; set; } = 0;
+
         // Navigation
         [ForeignKey(nameof(FYPProjectId))]
         public virtual FYPProject? Project { get; set; }
