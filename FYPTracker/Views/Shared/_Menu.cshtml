@@ -19,6 +19,20 @@
         hasSupervisor = await _context.SupervisorRequests
             .AnyAsync(r => r.StudentId == currentUser.Id && r.Status == "Approved");
     }
+
+    var currentPath = HttpContextAccessor.HttpContext?.Request.Path.Value ?? "";
+    var pageTitle = ViewData["Title"]?.ToString() ?? "";
+
+    int pendingRequests = 0;
+    int pendingSubmissions = 0;
+    int pendingMeetings = 0;
+
+    if (userType == "Supervisor" && currentUser != null)
+    {
+        pendingRequests = await _context.SupervisorRequests.CountAsync(r => r.SupervisorId == currentUser.Id && r.Status == "Pending");
+        pendingSubmissions = await _context.FYPMilestones.CountAsync(m => m.Project.SupervisorId == currentUser.Id && m.Status == "Submitted");
+        pendingMeetings = await _context.MeetingBookings.CountAsync(m => m.SupervisorId == currentUser.Id && m.Status == "Pending");
+    }
 }
 
 <!--begin::Menu wrapper-->
@@ -64,24 +78,33 @@
         }
         else if (userType == "Supervisor")
         {
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Supervisor/StudentRequests">
-                    <span class="menu-title">Student Requests</span>
+            <div class="menu-item @(pageTitle == "Student Requests" ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle == "Student Requests" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/StudentRequests">
+                    <span class="menu-title d-flex align-items-center">
+                        Student Requests
+                        @if(pendingRequests > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@pendingRequests</span> }
+                    </span>
                 </a>
             </div>
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Supervisor/MyProjects">
-                    <span class="menu-title">My Projects</span>
+            <div class="menu-item @(pageTitle == "My Students" ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle == "My Students" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/MyProjects">
+                    <span class="menu-title">My Students</span>
                 </a>
             </div>
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Supervisor/ReviewSubmissions">
-                    <span class="menu-title">Review Submissions</span>
+            <div class="menu-item @(pageTitle == "Review Submissions" ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle == "Review Submissions" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ReviewSubmissions">
+                    <span class="menu-title d-flex align-items-center">
+                        Review Submissions
+                        @if(pendingSubmissions > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@pendingSubmissions</span> }
+                    </span>
                 </a>
             </div>
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Supervisor/ManageMeetings">
-                    <span class="menu-title">Manage Meetings</span>
+            <div class="menu-item @(pageTitle == "Manage Meetings" ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle == "Manage Meetings" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ManageMeetings">
+                    <span class="menu-title d-flex align-items-center">
+                        Manage Meetings
+                        @if(pendingMeetings > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@pendingMeetings</span> }
+                    </span>
                 </a>
             </div>
 

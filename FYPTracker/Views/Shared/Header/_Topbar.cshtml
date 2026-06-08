@@ -5,14 +5,7 @@
     @using System.Net;
     @using Microsoft.AspNetCore.Mvc.Rendering;
     @using Microsoft.Data.SqlClient;
-
     <div class="d-flex align-items-center me-n3 ms-1 ms-lg-3">
-
-        <div class="form-check form-switch">
-            <input class="form-check-input" checked="checked" type="checkbox" role="switch" id="toggleNotify">
-            <p style="color:black;" class="mx-1" id="ct6"></p>
-        </div>
-
     </div>
     <div class="d-flex align-items-center me-n3 ms-1 ms-lg-3" id="kt_header_user_menu_toggle">
         <!--begin::Menu wrapper-->
@@ -69,23 +62,5 @@
     </div>
 </div>
 
-<script>
- function display_ct6() {
-        var x = new Date()
-        hours = x.getHours();
-        var x2 = x.toLocaleString('default', { month: 'short' })
-        var x3 = x.toLocaleString('default', { weekday: 'short' })
-        var x1 = " " + x.getDate() + " " + x.getFullYear();
-        x1 = x3 + " " + x2 + x1 + "  " + hours + ":" + x.getMinutes() + ":" + x.getSeconds();
-        document.getElementById('ct6').innerHTML = x1;
-        display_c6();
-    }
-    function display_c6() {
-        var refresh = 1000; // Refresh rate in milli seconds
-        mytime = setTimeout('display_ct6()', refresh)
-    }
-    display_c6()
-    
-    </script>
 
 

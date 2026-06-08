@@ -247,6 +247,169 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        public async Task<IActionResult> BulkAddMilestone(List<int> projectIds, string title, string description, DateTime? dueDate)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            if (projectIds == null || !projectIds.Any())
+            {
+                TempData["Error"] = "No students selected.";
+                return RedirectToAction(nameof(MyProjects));
+            }
+
+            var projects = await _context.FYPProjects
+                .Where(p => projectIds.Contains(p.Id) && p.SupervisorId == user.Id)
+                .ToListAsync();
+
+            if (projects.Any())
+            {
+                var milestones = projects.Select(p => new FYPMilestone
+                {
+                    FYPProjectId = p.Id,
+                    Title = title,
+                    Description = description,
+                    DueDate = dueDate,
+                    Status = "Pending",
+                    CreatedDate = DateTime.Now
+                }).ToList();
+
+                _context.FYPMilestones.AddRange(milestones);
+                await _context.SaveChangesAsync();
+                
+                TempData["Success"] = $"Successfully assigned milestone to {projects.Count} student(s).";
+            }
+            else
+            {
+                TempData["Error"] = "No valid projects found.";
+            }
+
+            return RedirectToAction(nameof(MyProjects));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> BulkEditMilestone(List<int> projectIds, string targetTitle, string newTitle, string newDescription, DateTime? newDueDate)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            if (projectIds == null || !projectIds.Any() || string.IsNullOrEmpty(targetTitle))
+            {
+                TempData["Error"] = "Invalid request or no students selected.";
+                return RedirectToAction(nameof(MyProjects));
+            }
+
+            var milestones = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .Where(m => projectIds.Contains(m.FYPProjectId) && m.Project.SupervisorId == user.Id && m.Title == targetTitle)
+                .ToListAsync();
+
+            if (milestones.Any())
+            {
+                int successCount = 0;
+                int errorCount = 0;
+
+                foreach (var milestone in milestones)
+                {
+                    if (milestone.Status == "Approved")
+                    {
+                        errorCount++;
+                        continue; // Cannot edit approved milestones
+                    }
+
+                    if (milestone.Status != "Pending")
+                    {
+                        // For Submitted/UnderReview/Rejected, only allow editing the Due Date
+                        if (newDueDate.HasValue) milestone.DueDate = newDueDate.Value;
+                        successCount++;
+                    }
+                    else
+                    {
+                        // Full edit allowed for pending
+                        if (!string.IsNullOrWhiteSpace(newTitle)) milestone.Title = newTitle;
+                        if (!string.IsNullOrWhiteSpace(newDescription)) milestone.Description = newDescription;
+                        if (newDueDate.HasValue) milestone.DueDate = newDueDate.Value;
+                        successCount++;
+                    }
+                }
+                
+                if (successCount > 0)
+                {
+                    await _context.SaveChangesAsync();
+                }
+
+                if (errorCount > 0)
+                {
+                    TempData["Success"] = $"Updated '{targetTitle}' for {successCount} student(s). Skipped {errorCount} as they are already Approved.";
+                }
+                else
+                {
+                    TempData["Success"] = $"Successfully updated '{targetTitle}' for {successCount} student(s).";
+                }
+            }
+            else
+            {
+                TempData["Error"] = "No matching milestones found for the selected students.";
+            }
+
+            return RedirectToAction(nameof(MyProjects));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> BulkDeleteMilestone(List<int> projectIds, string targetTitle)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            if (projectIds == null || !projectIds.Any() || string.IsNullOrEmpty(targetTitle))
+            {
+                TempData["Error"] = "Invalid request or no students selected.";
+                return RedirectToAction(nameof(MyProjects));
+            }
+
+            var milestones = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .Where(m => projectIds.Contains(m.FYPProjectId) && m.Project.SupervisorId == user.Id && m.Title == targetTitle)
+                .ToListAsync();
+
+            if (milestones.Any())
+            {
+                if (targetTitle.Contains("Proposal", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("Final", StringComparison.OrdinalIgnoreCase))
+                {
+                    TempData["Error"] = "Core system milestones (Proposal and Final Report) cannot be deleted.";
+                    return RedirectToAction(nameof(MyProjects));
+                }
+
+                var toDelete = milestones.Where(m => m.Status == "Pending").ToList();
+                int skippedCount = milestones.Count - toDelete.Count;
+
+                if (toDelete.Any())
+                {
+                    _context.FYPMilestones.RemoveRange(toDelete);
+                    await _context.SaveChangesAsync();
+                }
+
+                if (skippedCount > 0)
+                {
+                    TempData["Success"] = $"Deleted '{targetTitle}' from {toDelete.Count} student(s). Skipped {skippedCount} because they were already submitted.";
+                }
+                else
+                {
+                    TempData["Success"] = $"Successfully deleted '{targetTitle}' from {toDelete.Count} student(s).";
+                }
+            }
+            else
+            {
+                TempData["Error"] = "No matching milestones found for the selected students.";
+            }
+
+            return RedirectToAction(nameof(MyProjects));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> EditMilestone(int milestoneId, string title, string description, DateTime? dueDate)
         {
             var user = await GetCurrentUserAsync();
@@ -326,8 +489,7 @@ namespace FYPTracker.Controllers
             var submissions = await _context.FYPMilestones
                 .Include(m => m.Project).ThenInclude(p => p.Student)
                 .Include(m => m.SubmissionFiles)
-                .Where(m => m.Project.SupervisorId == user.Id && 
-                           (m.SubmissionFiles.Any() || (m.Remarks != null && m.Remarks.Contains("Form:"))))
+                .Where(m => m.Project.SupervisorId == user.Id)
                 .OrderByDescending(m => m.SubmittedDate ?? m.CreatedDate)
                 .ToListAsync();
 

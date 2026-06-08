@@ -641,6 +641,126 @@ public ActionResult ManageUsersData()
 
             return RedirectToAction(nameof(DefenseList));
         }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> BulkInvite(string bulkEmails, string bulkUserType)
+        {
+            if (string.IsNullOrWhiteSpace(bulkEmails) || string.IsNullOrWhiteSpace(bulkUserType))
+            {
+                TempData["Error"] = "Please provide emails and select a user type.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            var emails = bulkEmails.Split(new[] { ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                                   .Select(e => e.Trim())
+                                   .Where(e => !string.IsNullOrEmpty(e) && new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$").IsMatch(e))
+                                   .Distinct()
+                                   .ToList();
+
+            if (!emails.Any())
+            {
+                TempData["Error"] = "No valid emails found.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            int successCount = 0;
+            int duplicateCount = 0;
+            
+            // Get highest ID suffix to increment properly
+            string prefix = bulkUserType == "Student" ? "STU-" : "SUP-";
+            var highestUser = await _context.ApplicationUsers
+                .Where(u => u.EmployeeId != null && u.EmployeeId.StartsWith(prefix))
+                .OrderByDescending(u => u.EmployeeId)
+                .FirstOrDefaultAsync();
+
+            int nextIdNum = 1;
+            if (highestUser != null && !string.IsNullOrEmpty(highestUser.EmployeeId) && highestUser.EmployeeId.Length > 4)
+            {
+                if (int.TryParse(highestUser.EmployeeId.Substring(4), out int lastNum))
+                {
+                    nextIdNum = lastNum + 1;
+                }
+            }
+
+            var request = HttpContext.Request;
+            var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+
+            foreach (var email in emails)
+            {
+                var exists = await _context.ApplicationUsers.AnyAsync(u => u.Email == email || u.UserName == email);
+                if (exists)
+                {
+                    duplicateCount++;
+                    continue;
+                }
+
+                string newId;
+                if (email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) || 
+                    email.EndsWith("@newinti.edu.my", StringComparison.OrdinalIgnoreCase))
+                {
+                    newId = email.Split('@')[0];
+                }
+                else
+                {
+                    newId = $"{prefix}{nextIdNum:D3}";
+                    nextIdNum++;
+                }
+
+                var newUser = new ApplicationUser
+                {
+                    UserName = newId,
+                    FullName = newId, // Placeholder until they set it
+                    Email = email,
+                    PassCode = FYPTracker.Common.Encryption.GetHash("defaultpassword"),
+                    EmployeeId = newId,
+                    DateCreated = DateTime.Now,
+                    DateJoin = DateTime.Now,
+                    AddedBy = "sys",
+                    UserType = bulkUserType,
+                    Image = "/assets/media/avatars/blank.svg",
+                    RequirePasswordChange = true // Forces onboarding flow
+                };
+
+                _context.ApplicationUsers.Add(newUser);
+                successCount++;
+
+                // Prepare Email
+                string subject = "Welcome to FYP Tracking System - Your Login Credentials";
+                string htmlBody = $@"
+                    <h3>Welcome!</h3>
+                    <p>Your account has been successfully created by the administrator. Below are your login credentials:</p>
+                    <ul>
+                        <li><strong>Username:</strong> {newId}</li>
+                        <li><strong>Email:</strong> {email}</li>
+                        <li><strong>Password:</strong> defaultpassword</li>
+                    </ul>
+                    <p style='margin: 20px 0;'>
+                        <a href='{loginUrl}' style='display: inline-block; padding: 10px 20px; color: white; background-color: #009ef7; text-decoration: none; border-radius: 6px; font-weight: bold; font-family: sans-serif;'>Click Here to Login</a>
+                    </p>
+                    <p>Upon your first login, you will be required to set up your profile and change your password.</p>
+                    <br/>
+                    <p>Best Regards,<br/>FYP Tracking System Admin</p>
+                ";
+                try
+                {
+                    _emailService.Send(email, subject, htmlBody);
+                }
+                catch { /* Ignore email failures during bulk insert */ }
+            }
+
+            if (successCount > 0)
+            {
+                await _context.SaveChangesAsync();
+                TempData["Success"] = $"Successfully invited {successCount} users. {duplicateCount} duplicates ignored.";
+            }
+            else
+            {
+                TempData["Info"] = $"No new users created. {duplicateCount} emails were already registered.";
+            }
+
+            return RedirectToAction(nameof(ManageUsers));
+        }
     }
 }
 

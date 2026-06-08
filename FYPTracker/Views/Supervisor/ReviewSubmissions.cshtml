@@ -4,67 +4,131 @@
     ViewData["Title"] = "Review Submissions";
 }
 
-<div class="card mb-5 mb-xl-8">
-    <div class="card-header border-0 pt-5">
-        <h3 class="card-title align-items-start flex-column">
-            <span class="card-label fw-bolder fs-3 mb-1">Student Submissions</span>
-            <span class="text-muted mt-1 fw-bold fs-7">Review and grade milestones</span>
-        </h3>
+<style>
+    :root { --purple-grad: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); }
+
+    .page-hero {
+        background: var(--purple-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(139, 92, 246, 0.25);
+    }
+</style>
+
+<div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2 class="fw-bold mb-1 text-white"><i class="fas fa-clipboard-check me-2"></i>Review Submissions</h2>
+        <p class="mb-0 text-white opacity-75">Review and grade milestones submitted by your students.</p>
     </div>
+    <div>
+        <div class="d-flex align-items-center position-relative my-1">
+            <i class="fas fa-filter position-absolute ms-3 text-muted"></i>
+            <select id="milestoneFilter" class="form-select border-0 shadow-sm ps-10 w-250px" style="border-radius: 10px;">
+                <option value="">All Milestones</option>
+                @foreach (var title in Model.Select(m => m.Title).Distinct().OrderBy(t => t))
+                {
+                    <option value="@title">@title</option>
+                }
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-5 mb-xl-8 border-0 shadow-sm" style="border-radius: 16px;">
     <div class="card-body py-3">
         @if (TempData["Success"] != null)
         {
-            <div class="alert alert-success">@TempData["Success"]</div>
+            <div class="alert alert-success mt-4">@TempData["Success"]</div>
         }
 
         <div class="table-responsive">
             <table class="table align-middle gs-0 gy-4">
                 <thead>
                     <tr class="fw-bolder text-muted bg-light">
-                        <th class="ps-4 min-w-150px">Project / Student</th>
-                        <th class="min-w-150px">Milestone</th>
+                        <th class="ps-4 min-w-200px">Milestone</th>
+                        <th class="min-w-120px">Due Date</th>
                         <th class="min-w-120px">Date Submitted</th>
-                        <th class="min-w-120px">Files</th>
+                        <th class="min-w-150px">Files</th>
                         <th class="min-w-120px">Status</th>
-                        <th class="text-end min-w-150px pe-4">Action</th>
+                        <th class="text-end min-w-120px pe-4">Action</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var ms in Model)
+                    @{
+                        var groupedMilestones = Model.GroupBy(m => m.Project).Where(g => g.Key != null).ToList();
+                    }
+                    @foreach (var group in groupedMilestones)
                     {
-                        <tr>
-                            <td class="ps-4">
-                                <span class="text-dark fw-bolder d-block fs-6">@ms.Project?.Title</span>
-                                <span class="text-muted fw-bold d-block fs-7">@ms.Project?.Student?.FullName</span>
+                        var project = group.Key;
+                        var student = project?.Student;
+
+                        <tr class="bg-light-primary student-group" data-project-id="@project?.Id">
+                            <td colspan="6" class="ps-4 py-3 border-bottom border-primary">
+                                <div class="d-flex align-items-center">
+                                    <div class="symbol symbol-40px me-3">
+                                        <span class="symbol-label bg-primary text-inverse-primary fw-bolder">@(student?.FullName?.FirstOrDefault() ?? '?')</span>
+                                    </div>
+                                    <div class="d-flex flex-column">
+                                        <span class="text-dark fw-bolder fs-5">@student?.FullName</span>
+                                        <span class="text-muted fw-bold fs-7">@project?.Title</span>
+                                    </div>
+                                </div>
                             </td>
-                            <td>
-                                <span class="text-dark fw-bolder d-block fs-6">@ms.Title</span>
-                            </td>
-                            <td>
-                                <span class="text-dark fw-bold d-block fs-6">@(ms.SubmittedDate?.ToString("dd MMM yyyy HH:mm") ?? "-")</span>
-                            </td>
-                            <td>
-                                @foreach(var f in ms.SubmissionFiles)
-                                {
-                                    <a href="@f.FilePath" target="_blank" class="badge badge-light-primary mb-1 d-inline-block"><i class="fas fa-file-download me-1 text-primary"></i> @f.FileName</a><br/>
-                                }
-                            </td>
-                            <td>
-                                @if (ms.Status == "Submitted" || ms.Status == "UnderReview")
-                                {
-                                    <span class="badge badge-light-warning">Under Review</span>
-                                }
-                                else if (ms.Status == "Approved")
-                                {
-                                    <span class="badge badge-light-success">Approved</span>
-                                }
-                                else
-                                {
-                                    <span class="badge badge-light-danger">Rejected / Revise</span>
-                                }
-                            </td>
-                            <td class="text-end pe-4">
-                                <button type="button" class="btn btn-sm btn-light-primary" data-bs-toggle="modal" data-bs-target="#reviewModal_@ms.Id">Grade</button>
+                        </tr>
+
+                        @foreach (var ms in group.OrderBy(m => m.DueDate ?? DateTime.MaxValue))
+                        {
+                            <tr class="milestone-item" data-project-id="@project?.Id" data-milestone-title="@ms.Title">
+                                <td class="ps-4">
+                                    <span class="text-dark fw-bolder d-block fs-6">@ms.Title</span>
+                                </td>
+                                <td>
+                                    <span class="text-dark fw-bold d-block fs-6">@(ms.DueDate?.ToString("dd MMM yyyy") ?? "-")</span>
+                                </td>
+                                <td>
+                                    <span class="text-dark fw-bold d-block fs-6">@(ms.SubmittedDate?.ToString("dd MMM yyyy HH:mm") ?? "-")</span>
+                                </td>
+                                <td>
+                                    @if (ms.SubmissionFiles != null && ms.SubmissionFiles.Any())
+                                    {
+                                        @foreach(var f in ms.SubmissionFiles)
+                                        {
+                                            <div class="d-inline-flex align-items-center mb-1">
+                                                <a href="@f.FilePath" download class="badge badge-light-primary"><i class="fas fa-file-download me-1 text-primary"></i> @f.FileName</a>
+                                                <a href="@f.FilePath" target="_blank" class="btn btn-icon btn-active-light-primary w-20px h-20px ms-1" title="Preview in new tab">
+                                                    <i class="fas fa-external-link-alt text-info" style="font-size: 0.85rem;"></i>
+                                                </a>
+                                            </div><br/>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted fs-7">-</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (ms.Status == "Submitted" || ms.Status == "UnderReview")
+                                    {
+                                        <span class="badge badge-light-warning">Under Review</span>
+                                    }
+                                    else if (ms.Status == "Approved")
+                                    {
+                                        <span class="badge badge-light-success">Approved</span>
+                                    }
+                                    else if (ms.Status == "Pending")
+                                    {
+                                        <span class="badge badge-light-secondary">Pending</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge badge-light-danger">Rejected / Revise</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <button type="button" class="btn btn-sm btn-light-primary" data-bs-toggle="modal" data-bs-target="#reviewModal_@ms.Id">Grade</button>
+
 
                                 <!-- Review Modal -->
                                 <div class="modal fade" id="reviewModal_@ms.Id" tabindex="-1">
@@ -150,8 +214,9 @@
                                 </div>
                             </td>
                         </tr>
+                        }
                     }
-                    @if (!Model.Any())
+                    @if (!groupedMilestones.Any())
                     {
                         <tr><td colspan="6" class="text-center py-4 text-muted">No student submissions found.</td></tr>
                     }
@@ -160,3 +225,37 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const filter = document.getElementById('milestoneFilter');
+            if (filter) {
+                filter.addEventListener('change', function() {
+                    const selected = this.value;
+                    const items = document.querySelectorAll('.milestone-item');
+                    const groups = document.querySelectorAll('.student-group');
+                    
+                    const visibleGroups = new Set();
+
+                    items.forEach(item => {
+                        if (!selected || item.getAttribute('data-milestone-title') === selected) {
+                            item.style.display = '';
+                            visibleGroups.add(item.getAttribute('data-project-id'));
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+
+                    groups.forEach(group => {
+                        if (visibleGroups.has(group.getAttribute('data-project-id'))) {
+                            group.style.display = '';
+                        } else {
+                            group.style.display = 'none';
+                        }
+                    });
+                });
+            }
+        });
+    </script>
+}

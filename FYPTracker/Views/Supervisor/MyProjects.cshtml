@@ -1,8 +1,40 @@
 @using FYPTracker.Models
 @model IEnumerable<FYPProject>
 @{
-    ViewData["Title"] = "My Supervised Projects";
+    ViewData["Title"] = "My Students";
+    var distinctMilestones = Model.SelectMany(p => p.Milestones).Select(m => m.Title).Distinct().OrderBy(t => t).ToList();
 }
+
+<style>
+    :root { --blue-grad: linear-gradient(135deg, #009ef7 0%, #007bc2 100%); }
+
+    .page-hero {
+        background: var(--blue-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(0, 158, 247, 0.25);
+    }
+</style>
+
+<div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2 class="fw-bold mb-1 text-white"><i class="fas fa-user-graduate me-2"></i>My Students</h2>
+        <p class="mb-0 text-white opacity-75">Manage your supervised students, track their progress, and update milestones.</p>
+    </div>
+    <div class="d-flex my-2 gap-2">
+        <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#bulkEditMilestoneModal">
+            <i class="fas fa-edit text-white"></i> Bulk Edit
+        </button>
+        <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#bulkDeleteMilestoneModal">
+            <i class="fas fa-trash text-white"></i> Bulk Delete
+        </button>
+        <button type="button" class="btn btn-sm btn-light text-primary fw-bolder shadow-sm" data-bs-toggle="modal" data-bs-target="#bulkAddMilestoneModal">
+            <i class="fas fa-plus text-primary"></i> Bulk Add Milestone
+        </button>
+    </div>
+</div>
 
 <div class="row g-5 g-xl-8">
     @foreach (var proj in Model)
@@ -31,6 +63,9 @@
                         <div class="h-8px bg-light rounded mb-3">
                             <div class="bg-primary rounded h-8px" role="progressbar" style="width: @progress%;"></div>
                         </div>
+                        <div class="mt-5 pt-3">
+                            <a href="/Supervisor/ProjectDetails/@proj.Id" class="btn btn-sm btn-light-primary w-100 fw-bolder">View More <i class="fas fa-arrow-right ms-2 fs-7"></i></a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -44,3 +79,293 @@
         </div>
     }
 </div>
+
+<!-- Bulk Add Milestone Modal -->
+<div class="modal fade" id="bulkAddMilestoneModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content">
+            <form asp-action="BulkAddMilestone" asp-controller="Supervisor" method="post" id="bulkAddForm">
+                <div class="modal-header">
+                    <h2 class="fw-bolder">Bulk Add Milestone</h2>
+                    <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
+                        <i class="fas fa-times fs-1"></i>
+                    </div>
+                </div>
+                <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
+                    <div class="d-flex flex-column mb-7 fv-row">
+                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
+                            <span class="required">Milestone Title</span>
+                        </label>
+                        <input type="text" class="form-control form-control-solid" placeholder="e.g. FYP 1: Final Report" name="title" required />
+                    </div>
+
+                    <div class="d-flex flex-column mb-7 fv-row">
+                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
+                            <span class="required">Due Date</span>
+                        </label>
+                        <input type="date" class="form-control form-control-solid" name="dueDate" required />
+                    </div>
+
+                    <div class="d-flex flex-column mb-7 fv-row">
+                        <label class="fs-6 fw-bold form-label mb-2">Description</label>
+                        <textarea class="form-control form-control-solid" rows="3" name="description" placeholder="Instructions for students..."></textarea>
+                    </div>
+
+                    <div class="mb-7 fv-row">
+                        <div class="d-flex flex-stack mb-3">
+                            <div class="fw-bolder fs-6 text-gray-800">Assign To Students</div>
+                            <div class="d-flex align-items-center mb-3">
+                                <div style="width: 30px;">
+                                    <input type="checkbox" id="selectAllStudents" style="width: 18px; height: 18px; cursor: pointer;" />
+                                </div>
+                                <label class="cursor-pointer text-muted fw-bold mb-0 ps-3" for="selectAllStudents">Select All</label>
+                            </div>
+                        </div>
+                        
+                        <div class="mh-300px scroll-y border rounded p-5 bg-light">
+                            @if (Model.Any())
+                            {
+                                foreach (var proj in Model)
+                                {
+                                    <div class="d-flex align-items-center mb-4 p-2 rounded bg-white border border-dashed">
+                                        <div style="width: 30px; display: flex; align-items: center;">
+                                            <input type="checkbox" class="student-checkbox" name="projectIds" value="@proj.Id" id="proj_@proj.Id" style="width: 20px; height: 20px; cursor: pointer;" />
+                                        </div>
+                                        <label class="text-dark fw-bold cursor-pointer mb-0 ps-3 w-100" for="proj_@proj.Id">
+                                            @proj.Student?.FullName <span class="text-muted fw-normal ms-2">(@proj.Title)</span>
+                                        </label>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-muted">No students available.</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer flex-center">
+                    <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <span class="indicator-label">Submit</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Edit Milestone Modal -->
+<div class="modal fade" id="bulkEditMilestoneModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content">
+            <form asp-action="BulkEditMilestone" asp-controller="Supervisor" method="post" id="bulkEditForm">
+                <div class="modal-header">
+                    <h2 class="fw-bolder">Bulk Edit Milestone</h2>
+                    <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
+                        <i class="fas fa-times fs-1"></i>
+                    </div>
+                </div>
+                <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
+                    <div class="d-flex flex-column mb-7 fv-row">
+                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
+                            <span class="required">Target Milestone to Edit</span>
+                        </label>
+                        <select name="targetTitle" class="form-select form-select-solid" required>
+                            <option value="">-- Select Milestone --</option>
+                            @foreach(var t in distinctMilestones)
+                            {
+                                <option value="@t">@t</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="d-flex flex-column mb-7 fv-row">
+                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
+                            <span>New Title (Optional)</span>
+                        </label>
+                        <input type="text" class="form-control form-control-solid" placeholder="Leave blank to keep same" name="newTitle" />
+                    </div>
+
+                    <div class="d-flex flex-column mb-7 fv-row">
+                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
+                            <span>New Due Date (Optional)</span>
+                        </label>
+                        <input type="date" class="form-control form-control-solid" name="newDueDate" />
+                    </div>
+
+                    <div class="d-flex flex-column mb-7 fv-row">
+                        <label class="fs-6 fw-bold form-label mb-2">New Description (Optional)</label>
+                        <textarea class="form-control form-control-solid" rows="3" name="newDescription" placeholder="Leave blank to keep same..."></textarea>
+                    </div>
+
+                    <div class="mb-7 fv-row">
+                        <div class="d-flex flex-stack mb-3">
+                            <div class="fw-bolder fs-6 text-gray-800">Apply Edit To Students</div>
+                            <div class="d-flex align-items-center mb-3">
+                                <div style="width: 30px;">
+                                    <input type="checkbox" id="selectAllEditStudents" style="width: 18px; height: 18px; cursor: pointer;" />
+                                </div>
+                                <label class="cursor-pointer text-muted fw-bold mb-0 ps-3" for="selectAllEditStudents">Select All</label>
+                            </div>
+                        </div>
+                        
+                        <div class="mh-300px scroll-y border rounded p-5 bg-light">
+                            @if (Model.Any())
+                            {
+                                foreach (var proj in Model)
+                                {
+                                    <div class="d-flex align-items-center mb-4 p-2 rounded bg-white border border-dashed student-row-edit" data-milestones="@string.Join("|", proj.Milestones.Select(m => m.Title))">
+                                        <div style="width: 30px; display: flex; align-items: center;">
+                                            <input type="checkbox" class="student-checkbox-edit" name="projectIds" value="@proj.Id" id="proj_edit_@proj.Id" style="width: 20px; height: 20px; cursor: pointer;" />
+                                        </div>
+                                        <label class="text-dark fw-bold cursor-pointer mb-0 ps-3 w-100" for="proj_edit_@proj.Id">
+                                            @proj.Student?.FullName <span class="text-muted fw-normal ms-2">(@proj.Title)</span>
+                                        </label>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer flex-center">
+                    <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Delete Milestone Modal -->
+<div class="modal fade" id="bulkDeleteMilestoneModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content">
+            <form asp-action="BulkDeleteMilestone" asp-controller="Supervisor" method="post" id="bulkDeleteForm">
+                <div class="modal-header">
+                    <h2 class="fw-bolder">Bulk Delete Milestone</h2>
+                    <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
+                        <i class="fas fa-times fs-1"></i>
+                    </div>
+                </div>
+                <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
+                    <div class="d-flex flex-column mb-7 fv-row">
+                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
+                            <span class="required text-danger">Target Milestone to Delete</span>
+                        </label>
+                        <select name="targetTitle" class="form-select form-select-solid" required>
+                            <option value="">-- Select Milestone --</option>
+                            @foreach(var t in distinctMilestones)
+                            {
+                                <option value="@t">@t</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-7 fv-row">
+                        <div class="d-flex flex-stack mb-3">
+                            <div class="fw-bolder fs-6 text-gray-800">Delete From Students</div>
+                            <div class="d-flex align-items-center mb-3">
+                                <div style="width: 30px;">
+                                    <input type="checkbox" id="selectAllDeleteStudents" style="width: 18px; height: 18px; cursor: pointer;" />
+                                </div>
+                                <label class="cursor-pointer text-muted fw-bold mb-0 ps-3" for="selectAllDeleteStudents">Select All</label>
+                            </div>
+                        </div>
+                        
+                        <div class="mh-300px scroll-y border rounded p-5 bg-light">
+                            @if (Model.Any())
+                            {
+                                foreach (var proj in Model)
+                                {
+                                    <div class="d-flex align-items-center mb-4 p-2 rounded bg-white border border-dashed student-row-delete" data-milestones="@string.Join("|", proj.Milestones.Select(m => m.Title))">
+                                        <div style="width: 30px; display: flex; align-items: center;">
+                                            <input type="checkbox" class="student-checkbox-delete" name="projectIds" value="@proj.Id" id="proj_delete_@proj.Id" style="width: 20px; height: 20px; cursor: pointer;" />
+                                        </div>
+                                        <label class="text-dark fw-bold cursor-pointer mb-0 ps-3 w-100" for="proj_delete_@proj.Id">
+                                            @proj.Student?.FullName <span class="text-muted fw-normal ms-2">(@proj.Title)</span>
+                                        </label>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer flex-center">
+                    <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Confirm Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            function setupSelectAll(selectAllId, checkboxClass) {
+                var selectAll = document.getElementById(selectAllId);
+                if(selectAll) {
+                    selectAll.addEventListener('change', function() {
+                        var checkboxes = document.querySelectorAll('.' + checkboxClass);
+                        checkboxes.forEach(function(cb) {
+                            cb.checked = selectAll.checked;
+                        });
+                    });
+                }
+            }
+
+            setupSelectAll('selectAllStudents', 'student-checkbox');
+            setupSelectAll('selectAllEditStudents', 'student-checkbox-edit');
+            setupSelectAll('selectAllDeleteStudents', 'student-checkbox-delete');
+
+            function setupFormValidation(formId, checkboxClass) {
+                var form = document.getElementById(formId);
+                if(form) {
+                    form.addEventListener('submit', function(e) {
+                        var checked = form.querySelectorAll('.' + checkboxClass + ':checked');
+                        if(checked.length === 0) {
+                            e.preventDefault();
+                            alert('Please select at least one student.');
+                        }
+                    });
+                }
+            }
+
+            setupFormValidation('bulkAddForm', 'student-checkbox');
+            setupFormValidation('bulkEditForm', 'student-checkbox-edit');
+            setupFormValidation('bulkDeleteForm', 'student-checkbox-delete');
+
+            function setupDynamicFiltering(formId, rowClass) {
+                var form = document.getElementById(formId);
+                if(form) {
+                    var selectElement = form.querySelector('select[name="targetTitle"]');
+                    if(selectElement) {
+                        selectElement.addEventListener('change', function() {
+                            var selectedTitle = this.value;
+                            var rows = form.querySelectorAll('.' + rowClass);
+                            rows.forEach(function(row) {
+                                var milestones = row.getAttribute('data-milestones');
+                                if(!selectedTitle) {
+                                    row.style.setProperty('display', 'flex', 'important');
+                                } else if(milestones && milestones.split('|').indexOf(selectedTitle) !== -1) {
+                                    row.style.setProperty('display', 'flex', 'important');
+                                } else {
+                                    row.style.setProperty('display', 'none', 'important');
+                                    var cb = row.querySelector('input[type="checkbox"]');
+                                    if(cb) cb.checked = false;
+                                }
+                            });
+                        });
+                        
+                        // Initialize state on load
+                        selectElement.dispatchEvent(new Event('change'));
+                    }
+                }
+            }
+
+            setupDynamicFiltering('bulkEditForm', 'student-row-edit');
+            setupDynamicFiltering('bulkDeleteForm', 'student-row-delete');
+        });
+    </script>
+}

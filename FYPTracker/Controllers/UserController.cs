@@ -452,16 +452,19 @@ namespace FYPTracker.Controllers
             if (user == null) return RedirectToAction("Login");
             if (!user.RequirePasswordChange) return RedirectToAction("Index", "Home");
 
+            ViewBag.User = user;
             return View();
         }
 
         [Authorize]
         [HttpPost]
-        public async Task<IActionResult> ForceChangePassword(string newPassword, string confirmPassword)
+        public async Task<IActionResult> ForceChangePassword(string newPassword, string confirmPassword, string fullName, string phone, string programme, string academicSession, string title)
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
             if (user == null) return RedirectToAction("Login");
             if (!user.RequirePasswordChange) return RedirectToAction("Index", "Home");
+
+            ViewBag.User = user;
 
             if (string.IsNullOrEmpty(newPassword) || newPassword != confirmPassword)
             {
@@ -469,8 +472,26 @@ namespace FYPTracker.Controllers
                 return View();
             }
 
+            if (string.IsNullOrEmpty(fullName))
+            {
+                ViewBag.Error = "Full Name is required.";
+                return View();
+            }
+
             user.PassCode = Encryption.GetHash(newPassword);
             user.RequirePasswordChange = false;
+            user.FullName = fullName;
+            user.Phone = phone;
+
+            if (user.UserType == "Student")
+            {
+                user.Programme = programme;
+                user.AcademicSession = academicSession;
+            }
+            else if (user.UserType == "Supervisor")
+            {
+                user.Title = title;
+            }
             
             _context.ApplicationUsers.Update(user);
             await _context.SaveChangesAsync();
