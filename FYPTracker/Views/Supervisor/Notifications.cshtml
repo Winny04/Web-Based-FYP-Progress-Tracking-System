@@ -135,7 +135,7 @@
             <button class="filter-tab active" onclick="filterNotifs('all', this)">All (@notifications.Count)</button>
             <button class="filter-tab" onclick="filterNotifs('unread', this)">Unread (@unreadCount)</button>
             <button class="filter-tab" onclick="filterNotifs('SupervisionRequest', this)">Students</button>
-            <button class="filter-tab" onclick="filterNotifs('MeetingUpdate', this)">Meetings</button>
+            <button class="filter-tab" onclick="filterNotifs('Meeting', this)">Meetings</button>
             <button class="filter-tab" onclick="filterNotifs('Submission', this)">Submissions</button>
         </div>
 
@@ -156,18 +156,21 @@
                     var iconCls = n.Type switch {
                         "SupervisionRequest" => "fas fa-user-plus",
                         "MeetingUpdate"      => "fas fa-calendar-check",
+                        "MeetingRequest"     => "fas fa-calendar-plus",
                         "Submission"         => "fas fa-file-upload",
                         _                    => "fas fa-bell"
                     };
                     var bgColor = n.Type switch {
                         "SupervisionRequest" => "#dcfce7",
                         "MeetingUpdate"      => "#dbeafe",
+                        "MeetingRequest"     => "#dbeafe",
                         "Submission"         => "#ede9fe",
                         _                    => "#f3f4f6"
                     };
                     var iconColor = n.Type switch {
                         "SupervisionRequest" => "#16a34a",
                         "MeetingUpdate"      => "#1d4ed8",
+                        "MeetingRequest"     => "#1d4ed8",
                         "Submission"         => "#7c3aed",
                         _                    => "#6b7280"
                     };
@@ -200,6 +203,30 @@
                                     <small class="text-muted me-3">@n.CreatedDate.ToString("dd MMM yyyy, h:mm tt")</small>
                                     @if (!n.IsRead)
                                     {
+                                        if (n.Type == "MeetingRequest" && n.RelatedRecordId != null)
+                                        {
+                                            <form asp-action="RespondMeetingFromNotification" asp-controller="Supervisor" method="post" class="mt-2 mb-2">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="meetingId" value="@n.RelatedRecordId" />
+                                                <input type="hidden" name="notificationId" value="@n.Id" />
+                                                <input type="text" name="note" class="form-control form-control-sm mb-2" placeholder="Message to student (optional)..." style="max-width: 300px;" />
+                                                <button type="submit" name="status" value="Approved" class="btn btn-sm btn-success fw-bold py-1 px-3 me-2" style="border-radius: 8px;">Approve</button>
+                                                <button type="submit" name="status" value="Rejected" class="btn btn-sm btn-danger fw-bold py-1 px-3 me-2" style="border-radius: 8px;">Reject</button>
+                                            </form>
+                                        }
+                                        else if (n.Type == "SupervisionRequest")
+                                        {
+                                            <div class="mt-2 mb-2">
+                                                <a href="/Supervisor/StudentRequests@(n.RelatedRecordId != null ? "?openRequestId=" + n.RelatedRecordId : "")" class="btn btn-sm btn-outline-primary fw-bold py-1 px-3" style="border-radius: 8px;">Review Request in Dashboard</a>
+                                            </div>
+                                        }
+                                        else if (n.Type == "Submission")
+                                        {
+                                            <div class="mt-2 mb-2">
+                                                <a href="/Supervisor/ReviewSubmissions@(n.RelatedRecordId != null ? "?openMilestoneId=" + n.RelatedRecordId : "")" class="btn btn-sm btn-outline-primary fw-bold py-1 px-3" style="border-radius: 8px;">Review Submission in Dashboard</a>
+                                            </div>
+                                        }
+
                                         <form asp-action="MarkAsRead" asp-controller="Supervisor"
                                               method="post" class="d-inline">
                                             @Html.AntiForgeryToken()
@@ -234,6 +261,8 @@
                 item.style.display = '';
             } else if (filter === 'unread') {
                 item.style.display = item.dataset.read === 'unread' ? '' : 'none';
+            } else if (filter === 'Meeting') {
+                item.style.display = item.dataset.type.includes('Meeting') ? '' : 'none';
             } else {
                 item.style.display = item.dataset.type === filter ? '' : 'none';
             }

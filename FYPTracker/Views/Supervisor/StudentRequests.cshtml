@@ -95,7 +95,6 @@
                             </td>
                         </tr>
 
-                        <!-- HIDDEN DATA FOR MODAL -->
                         <div id="formData_@req.Id" style="display:none;" 
                              data-name="@req.Student?.FullName" 
                              data-matric="@req.MatricNumber" 
@@ -103,7 +102,8 @@
                              data-phone="@req.PhoneNumber" 
                              data-session="@req.SessionSemester" 
                              data-topic="@req.ProjectTopic" 
-                             data-desc="@req.RequestMessage">
+                             data-desc="@req.RequestMessage"
+                             data-status="@req.Status">
                         </div>
                     }
                 </tbody>
@@ -233,5 +233,20 @@
         document.getElementById('rejectStudentName').textContent = name;
         new bootstrap.Modal(document.getElementById('rejectModal')).show();
     }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const openId = urlParams.get('openRequestId');
+        if (openId) {
+            const dataEl = document.getElementById('formData_' + openId);
+            if (dataEl) {
+                const isPending = dataEl.dataset.status === 'Pending';
+                viewFullForm(openId, isPending);
+                
+                // Clean up the URL so refreshing doesn't re-open it
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+    });
 </script>
 }

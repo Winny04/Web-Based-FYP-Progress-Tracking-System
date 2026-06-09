@@ -562,42 +562,6 @@ namespace FYPTracker.Controllers
             return Json(bookedTimes);
         }
 
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> RescheduleMeeting(int meetingId, DateTime meetingDate, string meetingTime)
-        {
-            var user = await GetCurrentUserAsync();
-            var meeting = await _context.MeetingBookings
-                .Include(m => m.Student)
-                .FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
-
-            if (meeting != null)
-            {
-                meeting.MeetingDate = meetingDate;
-                meeting.MeetingDay = meetingDate.DayOfWeek.ToString();
-                meeting.MeetingTime = meetingTime;
-                meeting.Status = "Approved"; // Implicitly approved by the supervisor
-                meeting.RespondedDate = DateTime.Now;
-                meeting.SupervisorNote = "Rescheduled by Supervisor.";
-
-                await _context.SaveChangesAsync();
-
-                await AddNotificationAsync(meeting.StudentId, "MeetingUpdate", "Meeting Rescheduled", $"Your meeting has been rescheduled to {meetingDate:dd MMM yyyy} at {meetingTime} and is automatically Approved.");
-                await LogActivityAsync(meeting.StudentId, "MeetingUpdated", "Meeting Rescheduled & Approved", $"Supervisor moved meeting to {meetingDate:dd MMM} at {meetingTime}");
-
-                if (!string.IsNullOrEmpty(meeting.Student?.Email))
-                {
-                    string subject = "FYP Meeting Rescheduled";
-                    string body = $"<p>Dear {meeting.Student.FullName},</p><p>Your meeting with your supervisor has been rescheduled to <b>{meetingDate:dd MMM yyyy} at {meetingTime}</b>.</p>";
-                    _emailService.Send(meeting.Student.Email,    subject, body);
-                }
-
-                TempData["Success"] = "Meeting rescheduled successfully and automatically set to Approved.";
-            }
-
-            return RedirectToAction(nameof(ManageMeetings));
-        }
-
         // ────────────────────────────────────────────────────────
         public async Task<IActionResult> ManageMeetings()
         {
@@ -636,6 +600,58 @@ namespace FYPTracker.Controllers
                 TempData["Success"] = $"Meeting {status.ToLower()}.";
             }
             return RedirectToAction(nameof(ManageMeetings));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RespondMeetingFromNotification(int meetingId, int notificationId, string status, string? note)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var meeting = await _context.MeetingBookings.FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
+            
+            if (meeting != null && meeting.Status == "Pending")
+            {
+                meeting.Status = status;
+                meeting.SupervisorNote = note;
+                meeting.RespondedDate = DateTime.Now;
+
+                // Mark notification as read
+                var notification = await _context.FYPNotifications.FirstOrDefaultAsync(n => n.Id == notificationId);
+                if (notification != null)
+                {
+                    notification.IsRead = true;
+                    notification.ReadDate = DateTime.Now;
+                }
+
+                await _context.SaveChangesAsync();
+
+                string notifMessage = $"Your meeting request for {meeting.MeetingDate:dd MMM yyyy} was {status.ToLower()}.";
+                if (!string.IsNullOrEmpty(note))
+                {
+                    notifMessage += $" Supervisor Note: {note}";
+                }
+
+                await AddNotificationAsync(meeting.StudentId, "MeetingUpdate", $"Meeting {status}", notifMessage);
+                await LogActivityAsync(meeting.StudentId, "MeetingBooked", $"Meeting {status}");
+
+                TempData["Success"] = $"Meeting {status.ToLower()}.";
+            }
+            else if (meeting != null && meeting.Status != "Pending")
+            {
+                TempData["Info"] = $"Meeting was already {meeting.Status.ToLower()}.";
+                
+                var notification = await _context.FYPNotifications.FirstOrDefaultAsync(n => n.Id == notificationId);
+                if (notification != null)
+                {
+                    notification.IsRead = true;
+                    notification.ReadDate = DateTime.Now;
+                    await _context.SaveChangesAsync();
+                }
+            }
+            
+            return RedirectToAction(nameof(Notifications));
         }
 
         [HttpPost]

@@ -256,6 +256,16 @@
                     });
                 });
             }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const openId = urlParams.get('openMilestoneId');
+            if (openId) {
+                const modalEl = document.getElementById('reviewModal_' + openId);
+                if (modalEl) {
+                    new bootstrap.Modal(modalEl).show();
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            }
         });
     </script>
 }

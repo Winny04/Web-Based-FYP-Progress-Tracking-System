@@ -85,7 +85,7 @@ namespace FYPTracker.Controllers
         // ──────────────────────────────────────────────────────
         //  HELPER: create a notification
         // ──────────────────────────────────────────────────────
-        private async Task AddNotificationAsync(int recipientId, string type, string title, string? message = null)
+        private async Task AddNotificationAsync(int recipientId, string type, string title, string? message = null, int? relatedRecordId = null)
         {
             _context.FYPNotifications.Add(new FYPNotification
             {
@@ -94,6 +94,7 @@ namespace FYPTracker.Controllers
                 Title       = title,
                 Message     = message,
                 IsRead      = false,
+                RelatedRecordId = relatedRecordId,
                 CreatedDate = DateTime.Now
             });
             await _context.SaveChangesAsync();
@@ -266,7 +267,7 @@ namespace FYPTracker.Controllers
             var supervisor = await _context.ApplicationUsers.FindAsync(supervisorId);
             if (supervisor != null)
             {
-                await AddNotificationAsync(supervisor.Id, "SupervisionRequest", "New Student Request", $"{user.FullName} has requested you as their supervisor for: {projectTopic}.");
+                await AddNotificationAsync(supervisor.Id, "SupervisionRequest", "New Student Request", $"{user.FullName} has requested you as their supervisor for: {projectTopic}.", request.Id);
                 
                 if (!string.IsNullOrEmpty(supervisor.Email))
                 {
@@ -447,7 +448,7 @@ namespace FYPTracker.Controllers
                 
                 await LogActivityAsync(user.Id, "Submission", "Form Submitted", $"Submitted {formType} for {milestone.Title}");
                 if (milestone.Project.SupervisorId.HasValue)
-                    await AddNotificationAsync(milestone.Project.SupervisorId.Value, "Submission", "Form Submitted", $"Student {user.FullName} submitted {formType} for {milestone.Title}");
+                    await AddNotificationAsync(milestone.Project.SupervisorId.Value, "Submission", "Form Submitted", $"Student {user.FullName} submitted {formType} for {milestone.Title}", milestoneId);
             }
 
             TempData["Success"] = "Your form has been submitted successfully!";
@@ -562,6 +563,16 @@ namespace FYPTracker.Controllers
                 $"Meeting on {parsedDate:dd MMM yyyy} at {meetingTime} requested.");
             await AddNotificationAsync(user.Id, "MeetingUpdate", "Meeting Request Submitted",
                 $"Your meeting request for {parsedDate:dd MMM yyyy} at {meetingTime} is pending approval.");
+
+            _context.FYPNotifications.Add(new FYPNotification
+            {
+                RecipientId = supervisorId,
+                Type = "MeetingRequest",
+                Title = "New Meeting Request",
+                Message = $"Student {user.FullName} requested a meeting on {parsedDate:dd MMM yyyy} at {meetingTime}. Reason: {(string.IsNullOrEmpty(reason) ? "None provided" : reason)}",
+                RelatedRecordId = booking.Id
+            });
+            await _context.SaveChangesAsync();
 
             var supervisor = await _context.ApplicationUsers.FindAsync(supervisorId);
             string supName = supervisor?.FullName ?? "your supervisor";
@@ -680,6 +691,26 @@ namespace FYPTracker.Controllers
                 meeting.RespondedDate = null;
                 meeting.SupervisorNote = "Student rescheduled this meeting.";
                 
+                // Mark any previous unread notifications for this meeting as read
+                var oldNotifs = await _context.FYPNotifications
+                    .Where(n => n.RelatedRecordId == meeting.Id && n.Type == "MeetingRequest" && !n.IsRead)
+                    .ToListAsync();
+                foreach (var oldNotif in oldNotifs)
+                {
+                    oldNotif.IsRead = true;
+                    oldNotif.ReadDate = DateTime.Now;
+                }
+
+                // Create a new notification for the supervisor with the new details
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = meeting.SupervisorId,
+                    Type = "MeetingRequest",
+                    Title = "Meeting Rescheduled",
+                    Message = $"Student {user.FullName} rescheduled their meeting request to {parsedDate:dd MMM yyyy} at {meetingTime}. Reason: {(string.IsNullOrEmpty(meeting.Reason) ? "None provided" : meeting.Reason)}",
+                    RelatedRecordId = meeting.Id
+                });
+
                 await _context.SaveChangesAsync();
 
                 await LogActivityAsync(user.Id, "MeetingUpdate", "Meeting Rescheduled", 

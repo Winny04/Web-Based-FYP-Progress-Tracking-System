@@ -24,6 +24,8 @@ namespace FYPTracker.Models
 
         public string? Message { get; set; }
 
+        public int? RelatedRecordId { get; set; }
+
         public bool IsRead { get; set; } = false;
 
         [Column(TypeName = "datetime")]

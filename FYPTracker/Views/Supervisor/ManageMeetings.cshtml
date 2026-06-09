@@ -217,51 +217,9 @@
                     </div>
                 </div>
                 <div class="modal-footer border-0">
-                    <button type="button" id="modalBtnReschedule" class="btn btn-outline-primary px-4 rounded-3 d-inline-block" onclick="toggleEditMode(true)">
-                        <i class="fas fa-edit me-1"></i> Reschedule
-                    </button>
                     <button type="button" class="btn btn-secondary px-4 rounded-3" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
-
-            <!-- EDIT MODE (Reschedule) -->
-            <form id="modalEditMode" asp-action="RescheduleMeeting" method="post" style="display:none;">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="meetingId" id="editMeetingId" />
-                <input type="hidden" name="meetingTime" id="editTimeInput" />
-                
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="fw-bold text-dark"><i class="fas fa-calendar-plus text-primary me-2"></i>Reschedule Meeting</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="text-muted small mb-4">Changing the time will reset the status to <span class="badge badge-light-warning text-warning">Pending</span> for student re-confirmation.</p>
-                    
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Pick New Date</label>
-                        <input type="date" name="meetingDate" id="editDateInput" class="form-control rounded-3" 
-                               min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" required onchange="updateAvailability('editDateInput', 'editTimeSlots')" />
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Available Slots</label>
-                        <div class="row g-2" id="editTimeSlots">
-                            @for (int i = 8; i <= 17; i++)
-                            {
-                                string slot = $"{i:00}:00";
-                                <div class="col-4">
-                                    <div class="time-slot" data-time="@slot" onclick="selectTime(this, 'editTimeSlots')">@slot</div>
-                                </div>
-                            }
-                        </div>
-                        <div id="editTimeError" class="text-danger mt-2 small" style="display:none;">Please select a time slot.</div>
-                    </div>
-                </div>
-                <div class="modal-footer border-0">
-                    <button type="button" class="btn btn-light px-4 rounded-3" onclick="toggleEditMode(false)">Back</button>
-                    <button type="submit" class="btn btn-primary px-4 rounded-3">Confirm Change</button>
-                </div>
-            </form>
 
         </div>
     </div>
@@ -373,45 +331,14 @@
         document.getElementById('detReason').textContent = reason;
         document.getElementById('detNotes').textContent = notes;
         
-        document.getElementById('editMeetingId').value = id;
-        document.getElementById('editDateInput').value = date;
-        document.getElementById('editTimeInput').value = time;
-
-        // Hide Reschedule button if Rejected or Date has passed
-        const now = new Date();
-        now.setHours(0,0,0,0);
-        const isPast = d < now;
-        const rescheduleBtn = document.getElementById('modalBtnReschedule');
-        
-        if (status === 'Rejected' || isPast) {
-            rescheduleBtn.classList.remove('d-inline-block');
-            rescheduleBtn.classList.add('d-none');
-        } else {
-            rescheduleBtn.classList.remove('d-none');
-            rescheduleBtn.classList.add('d-inline-block');
-        }
-        
         const badge = document.getElementById('detStatusBadge');
         badge.textContent = status;
         badge.className = 'status-badge ' + (status === 'Approved' ? 'badge-approved' : 
                                             status === 'Rejected' ? 'badge-rejected' : 
                                             status === 'Postponed' ? 'badge-postponed' : 'badge-pending');
 
-        toggleEditMode(false);
+        document.getElementById('modalViewMode').style.display = 'block';
         new bootstrap.Modal(document.getElementById('detailsModal')).show();
-    }
-
-    function toggleEditMode(isEdit) {
-        document.getElementById('modalViewMode').style.display = isEdit ? 'none' : 'block';
-        document.getElementById('modalEditMode').style.display = isEdit ? 'block' : 'none';
-        if (isEdit) updateAvailability('editDateInput', 'editTimeSlots');
-    }
-
-    const modalForm = document.getElementById('modalEditMode');
-    if (modalForm) {
-        modalForm.addEventListener('submit', (e) => {
-            if (!editTimeInput.value) { e.preventDefault(); editTimeError.style.display = 'block'; }
-        });
     }
 
     function openReviewLogModal(btn) {

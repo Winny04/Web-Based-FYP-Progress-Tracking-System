@@ -360,6 +360,9 @@ namespace FYPTracker.Migrations
                     b.Property<int>("RecipientId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("RelatedRecordId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
