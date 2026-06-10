@@ -69,11 +69,14 @@
 
         @if (userType == "Student")
         {
-            <div class="menu-item @(pageTitle == "Project Details" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "Project Details" ? "active border-bottom border-3 border-primary" : "")" href="/Student/ProjectDetails">
-                    <span class="menu-title">Project Details</span>
-                </a>
-            </div>
+            @if (hasSupervisor)
+            {
+                <div class="menu-item @(pageTitle == "Project Details" ? "here show" : "")">
+                    <a class="menu-link py-3 @(pageTitle == "Project Details" ? "active border-bottom border-3 border-primary" : "")" href="/Student/ProjectDetails">
+                        <span class="menu-title">Project Details</span>
+                    </a>
+                </div>
+            }
             @if (!hasSupervisor)
             {
             <div class="menu-item @(pageTitle == "Select Supervisor" ? "here show" : "")">
@@ -85,22 +88,25 @@
                 </a>
             </div>
             }
-            <div class="menu-item @(pageTitle == "Forms" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "Forms" ? "active border-bottom border-3 border-primary" : "")" href="/Student/Forms">
-                    <span class="menu-title d-flex align-items-center">
-                        Forms
-                        @if(studentPendingForms > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingForms</span> }
-                    </span>
-                </a>
-            </div>
-            <div class="menu-item @(pageTitle == "Book Meeting" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "Book Meeting" ? "active border-bottom border-3 border-primary" : "")" href="/Student/BookMeeting">
-                    <span class="menu-title d-flex align-items-center">
-                        Book Meeting
-                        @if(studentPendingMeetings > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingMeetings</span> }
-                    </span>
-                </a>
-            </div>
+            @if (hasSupervisor)
+            {
+                <div class="menu-item @(pageTitle == "Forms" ? "here show" : "")">
+                    <a class="menu-link py-3 @(pageTitle == "Forms" ? "active border-bottom border-3 border-primary" : "")" href="/Student/Forms">
+                        <span class="menu-title d-flex align-items-center">
+                            Forms
+                            @if(studentPendingForms > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingForms</span> }
+                        </span>
+                    </a>
+                </div>
+                <div class="menu-item @(pageTitle == "Book Meeting" ? "here show" : "")">
+                    <a class="menu-link py-3 @(pageTitle == "Book Meeting" ? "active border-bottom border-3 border-primary" : "")" href="/Student/BookMeeting">
+                        <span class="menu-title d-flex align-items-center">
+                            Book Meeting
+                            @if(studentPendingMeetings > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingMeetings</span> }
+                        </span>
+                    </a>
+                </div>
+            }
         }
         else if (userType == "Supervisor")
         {

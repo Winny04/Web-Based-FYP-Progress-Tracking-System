@@ -52,6 +52,20 @@ namespace FYPTracker.Controllers
                 .CountAsync();
             ViewBag.UnreadNotificationCount = unreadNotifCount;
 
+            // Fetch Upcoming Meeting
+            var upcomingMeeting = await _context.MeetingBookings
+                .Where(m => m.StudentId == user.Id && m.Status == "Approved" && m.MeetingDate.Date >= DateTime.Today)
+                .OrderBy(m => m.MeetingDate)
+                .ThenBy(m => m.MeetingTime)
+                .FirstOrDefaultAsync();
+            ViewBag.UpcomingMeeting = upcomingMeeting;
+
+            // Fetch Pending Meetings count
+            var pendingMeetingsCount = await _context.MeetingBookings
+                .Where(m => m.StudentId == user.Id && m.Status == "Pending")
+                .CountAsync();
+            ViewBag.PendingMeetingsCount = pendingMeetingsCount;
+
             return View(project);
         }
 

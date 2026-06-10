@@ -49,6 +49,9 @@
     
     // Check if the student has a scheduled defense
     var scheduledDefense = milestones.FirstOrDefault(m => m.RejectionCount >= 3 && m.DefenseDate.HasValue);
+
+    var upcomingMeeting = ViewBag.UpcomingMeeting as MeetingBooking;
+    var pendingMeetingsCount = ViewBag.PendingMeetingsCount != null ? (int)ViewBag.PendingMeetingsCount : 0;
 }
 
 <style>
@@ -237,11 +240,50 @@
     </div>
 
     @* ── DEADLINES ALERT BAR ────────────────────────────────── *@
-    @if (!string.IsNullOrEmpty(alertText))
+    @if (upcomingUrgent != null && upcomingUrgent.DueDate.HasValue && daysLeft.HasValue && daysLeft.Value <= 5)
     {
-        <div class="alert @alertClass d-flex align-items-center gap-3 p-4 mb-4 rounded-3 shadow-sm" role="alert">
-            <span class="fs-4"><i class="fas fa-exclamation-triangle"></i></span>
-            <div class="fw-bold flex-grow-1" style="font-size: 1.05rem;">@alertText</div>
+        var isOverdue = daysLeft < 0;
+        var urgencyColor = isOverdue ? "#ef4444" : "#f59e0b";
+        var absDays = Math.Abs(daysLeft.Value);
+        
+        <div class="premium-card p-4 mb-4 d-flex align-items-center flex-wrap gap-4 border-0" style="background-color: @(isOverdue ? "#fef2f2" : "#fffbeb"); border-left: 6px solid @urgencyColor !important;">
+            <div class="text-center bg-white shadow-sm rounded-3 p-3" style="min-width: 100px;">
+                <span class="d-block fs-1 fw-bold" style="color: @urgencyColor; line-height: 1;">@absDays</span>
+                <span class="d-block text-muted fw-bold text-uppercase mt-1" style="font-size: 0.75rem;">@(absDays == 1 ? "Day" : "Days") @(isOverdue ? "Overdue" : "Left")</span>
+            </div>
+            <div class="flex-grow-1">
+                <h4 class="fw-bold mb-1" style="color: #1f2937;"><i class="fas fa-clock me-2" style="color: @urgencyColor;"></i>Impending Deadline: @upcomingUrgent.Title</h4>
+                <p class="mb-0 text-muted fs-6" style="max-width: 600px;">Due Date: <strong class="text-dark">@upcomingUrgent.DueDate.Value.ToString("dd MMMM yyyy")</strong>. Ensure your documents are submitted promptly.</p>
+            </div>
+            <div>
+                <a href="/Student/Forms" class="btn fw-bold px-4 py-2 rounded-pill text-white shadow-sm action-btn" style="background-color: @urgencyColor;">Go to Forms</a>
+            </div>
+        </div>
+    }
+
+    @* ── PENDING REVIEW ALERT ── *@
+    @if (pending > 0 || pendingMeetingsCount > 0)
+    {
+        var pendingMilestones = milestones.Where(m => m.Status == "Submitted" || m.Status == "UnderReview" || m.Status == "Pending" && m.SubmittedDate.HasValue).Select(m => m.Title).ToList();
+        var pendingItemsText = new List<string>();
+        
+        if (pendingMilestones.Any()) {
+            pendingItemsText.Add($"<strong>{pendingMilestones.Count} form(s)</strong> ({string.Join(", ", pendingMilestones)})");
+        }
+        if (pendingMeetingsCount > 0) {
+            pendingItemsText.Add($"<strong>{pendingMeetingsCount} meeting request(s)</strong>");
+        }
+        
+        string specificPendingMsg = "You have items waiting for supervisor review. You'll be notified as soon as they respond.";
+        if (pendingItemsText.Any()) {
+            specificPendingMsg = $"You have {string.Join(" and ", pendingItemsText)} waiting for supervisor review. You'll be notified as soon as they respond.";
+        }
+
+        <div class="alert alert-info bg-info bg-opacity-10 text-dark border-0 shadow-sm d-flex align-items-center gap-3 p-3 mb-4 rounded-3" role="alert" style="border-left: 4px solid #0dcaf0 !important;">
+            <span class="fs-4 text-info"><i class="fas fa-hourglass-half"></i></span>
+            <div class="flex-grow-1" style="font-size: 0.95rem;">
+                <strong>Hang tight!</strong> @Html.Raw(specificPendingMsg)
+            </div>
         </div>
     }
 
@@ -264,46 +306,94 @@
         </div>
     }
 
+    @* ── NEXT STEPS CHECKLIST (For newly approved students) ── *@
+    @if (Model != null && pct == 0 && pending == 0)
+    {
+        <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="background-color: #f0f9ff; border-left: 6px solid #0ea5e9 !important;">
+            <h4 class="fw-bold mb-3" style="color: #0369a1;"><i class="fas fa-clipboard-check me-2"></i>Project Approved! What's Next?</h4>
+            <div class="d-flex flex-column gap-3 mt-4">
+                
+                <div class="d-flex align-items-center gap-3 bg-white p-3 rounded-3 shadow-sm border" style="border-color: #e0f2fe !important;">
+                    <i class="far fa-calendar-plus fs-2" style="color: #0ea5e9;"></i>
+                    <div class="flex-grow-1">
+                        <strong class="d-block fs-6" style="color: #0f172a;">1. Schedule an Initial Meeting</strong>
+                        <div class="text-muted small">Meet with @supervisorName to discuss your project direction and expectations.</div>
+                    </div>
+                    <a href="/Student/BookMeeting" class="btn btn-sm text-white fw-bold px-4 rounded-pill shadow-sm hover-elevate-up" style="background-color: #0ea5e9;">Book Meeting</a>
+                </div>
+                
+                <div class="d-flex align-items-center gap-3 bg-white p-3 rounded-3 shadow-sm border" style="border-color: #e0f2fe !important;">
+                    <i class="far fa-file-alt fs-2" style="color: #0ea5e9;"></i>
+                    <div class="flex-grow-1">
+                        <strong class="d-block fs-6" style="color: #0f172a;">2. Submit your IAF</strong>
+                        <div class="text-muted small">Once discussed, formally submit your Initial Assessment Form (IAF).</div>
+                    </div>
+                    <a href="/Student/Forms" class="btn btn-sm text-white fw-bold px-4 rounded-pill shadow-sm hover-elevate-up" style="background-color: #0ea5e9;">Go to Forms</a>
+                </div>
+
+            </div>
+        </div>
+    }
+
     <div class="row g-4">
         
         @* ── PROGRESS & STATS ──────────────────────────────────── *@
         <div class="col-lg-8">
-            <!-- Progress Bar Card -->
-            <div class="premium-card p-4 mb-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="fw-bold text-dark mb-0"><i class="fas fa-chart-line text-primary me-2"></i>Your FYP Progress</h5>
-                    <span class="badge bg-light text-dark fw-bold px-3 py-2 border">@pct% Completed</span>
+            @if (Model == null)
+            {
+                <!-- Empty State CTA -->
+                <div class="premium-card p-5 mb-4 text-center border-0 shadow-lg" style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: white;">
+                    <div class="mb-4 mt-2">
+                        <i class="fas fa-rocket fa-4x text-white opacity-75 drop-shadow"></i>
+                    </div>
+                    <h2 class="fw-bolder mb-3 text-white">Welcome to FYP Tracker!</h2>
+                    <p class="fs-5 mb-5 opacity-90 mx-auto" style="max-width: 500px;">
+                        Your very first step is to secure a supervisor and register your project topic. You won't be able to submit forms or book meetings until this is done!
+                    </p>
+                    <a href="/Student/SelectSupervisor" class="btn btn-light btn-lg fw-bold rounded-pill px-5 py-3 text-primary shadow-sm hover-elevate-up mb-2">
+                        Step 1: Select Supervisor <i class="fas fa-arrow-right ms-2"></i>
+                    </a>
                 </div>
-                <div class="progress-bar-container">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated @progressColor" 
-                         role="progressbar" style="width: @pct%" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+            }
+            else
+            {
+                <!-- Progress Bar Card -->
+                <div class="premium-card p-4 mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold text-dark mb-0"><i class="fas fa-chart-line text-primary me-2"></i>Your FYP Progress</h5>
+                        <span class="badge bg-light text-dark fw-bold px-3 py-2 border">@pct% Completed</span>
+                    </div>
+                    <div class="progress-bar-container progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated @progressColor" 
+                             role="progressbar" style="width: @pct%" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Statistics Cards (3 columns) -->
-            <div class="row g-3 mb-4">
-                <div class="col-md-4">
-                    <div class="premium-card stat-card-gradient-1 p-4 text-center border-0">
-                        <span class="fs-1 d-block mb-1"><i class="fas fa-check-circle"></i></span>
-                        <h6 class="fw-bold opacity-80 uppercase mb-2">Approved / Done</h6>
-                        <h2 class="display-5 fw-bold mb-0">@approved</h2>
+                <!-- Statistics Cards (3 columns) -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="premium-card stat-card-gradient-1 p-4 text-center border-0">
+                            <span class="fs-1 d-block mb-1"><i class="fas fa-check-circle"></i></span>
+                            <h6 class="fw-bold opacity-80 uppercase mb-2">Approved / Done</h6>
+                            <h2 class="display-5 fw-bold mb-0">@approved</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="premium-card stat-card-gradient-2 p-4 text-center border-0">
+                            <span class="fs-1 d-block mb-1"><i class="fas fa-hourglass-half"></i></span>
+                            <h6 class="fw-bold opacity-80 uppercase mb-2">Pending / Review</h6>
+                            <h2 class="display-5 fw-bold mb-0">@pending</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="premium-card stat-card-gradient-3 p-4 text-center border-0">
+                            <span class="fs-1 d-block mb-1"><i class="fas fa-redo-alt"></i></span>
+                            <h6 class="fw-bold opacity-80 uppercase mb-2">Revision / Redo</h6>
+                            <h2 class="display-5 fw-bold mb-0">@revision</h2>
+                        </div>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="premium-card stat-card-gradient-2 p-4 text-center border-0">
-                        <span class="fs-1 d-block mb-1"><i class="fas fa-hourglass-half"></i></span>
-                        <h6 class="fw-bold opacity-80 uppercase mb-2">Pending / Under Review</h6>
-                        <h2 class="display-5 fw-bold mb-0">@pending</h2>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="premium-card stat-card-gradient-3 p-4 text-center border-0">
-                        <span class="fs-1 d-block mb-1"><i class="fas fa-redo-alt"></i></span>
-                        <h6 class="fw-bold opacity-80 uppercase mb-2">Revision / Redo</h6>
-                        <h2 class="display-5 fw-bold mb-0">@revision</h2>
-                    </div>
-                </div>
-            </div>
+            }
 
             <!-- Status Chapter Table -->
             <div class="premium-card p-4">
@@ -408,8 +498,38 @@
             </div>
         </div>
 
-        @* ── RECENT ACTIVITIES (Right Sidebar) ─────────────────── *@
+        @* ── UPCOMING MEETING & ACTIVITIES (Right Sidebar) ── *@
         <div class="col-lg-4">
+
+            @if (upcomingMeeting != null)
+            {
+                <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);">
+                    <h5 class="fw-bold text-success mb-3"><i class="fas fa-calendar-check me-2"></i>Upcoming Meeting</h5>
+                    <div class="d-flex flex-column gap-2">
+                        <div class="d-flex align-items-center text-dark fw-bold">
+                            <i class="far fa-calendar-alt text-success me-3 fs-5"></i>
+                            @upcomingMeeting.MeetingDate.ToString("dd MMMM yyyy") (@upcomingMeeting.MeetingDay)
+                        </div>
+                        <div class="d-flex align-items-center text-dark fw-bold">
+                            <i class="far fa-clock text-success me-3 fs-5"></i>
+                            @{
+                                string dispTime = upcomingMeeting.MeetingTime;
+                                try {
+                                    if(TimeSpan.TryParse(upcomingMeeting.MeetingTime, out var ts)) {
+                                        dispTime = DateTime.Today.Add(ts).ToString("h:mm tt");
+                                    }
+                                } catch {}
+                            }
+                            @dispTime
+                        </div>
+                        <div class="d-flex align-items-start text-dark mt-2">
+                            <i class="fas fa-quote-left text-success me-3 mt-1 opacity-50"></i>
+                            <span class="small opacity-75 fw-semibold" style="line-height: 1.4;">@upcomingMeeting.Reason</span>
+                        </div>
+                    </div>
+                </div>
+            }
+
             <div class="premium-card p-4 h-100 d-flex flex-column">
                 <h5 class="fw-bold text-dark mb-4"><i class="fas fa-history text-indigo me-2"></i>Recent Activities</h5>
                 <div class="flex-grow-1 overflow-auto pe-2" style="max-height: 450px;">

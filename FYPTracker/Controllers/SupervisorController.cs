@@ -146,7 +146,7 @@ namespace FYPTracker.Controllers
                         // Create Default Milestones
                         var milestones = new List<FYPMilestone>
                         {
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Initial Project Allocation Form (IAF)", DueDate = DateTime.Now.AddDays(14), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Initial Assessment Form (IAF)", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Proposal", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Interim Report", DueDate = DateTime.Now.AddMonths(3), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 2: Final Dissertation", DueDate = DateTime.Now.AddMonths(6), Status = "Pending" }

@@ -48,22 +48,7 @@
         box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
     }
 
-    .nav-pills .nav-link {
-        border-radius: 12px;
-        font-weight: 700;
-        padding: 12px 24px;
-        color: #4b5563;
-        border: 1px solid #e5e7eb;
-        background-color: white;
-        transition: all 0.25s ease;
-    }
-    
-    .nav-pills .nav-link.active {
-        background: var(--orange-grad);
-        color: white;
-        border-color: transparent;
-        box-shadow: 0 4px 15px rgba(249, 115, 22, 0.3);
-    }
+
 
     .btn-submit {
         background: var(--orange-grad);
@@ -105,6 +90,75 @@
         padding-bottom: 8px;
         margin-bottom: 20px;
     }
+
+    /* Wizard Stepper Styles */
+    .wizard-stepper {
+        display: flex;
+        justify-content: space-between;
+        background: #fff;
+        border-radius: 16px;
+        padding: 20px 0;
+        box-shadow: 0 4px 20px rgba(0,0,0,.04);
+        margin-bottom: 24px;
+        position: relative;
+    }
+    .stepper-item {
+        flex: 1;
+        text-align: center;
+        position: relative;
+        z-index: 2;
+    }
+    .stepper-item:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        top: 24px;
+        left: 50%;
+        width: 100%;
+        height: 3px;
+        background: #e5e7eb;
+        z-index: -1;
+    }
+    .stepper-btn {
+        background: transparent !important;
+        border: none !important;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        color: #6b7280;
+        transition: all 0.3s;
+        padding: 0;
+    }
+    .stepper-btn:disabled {
+        pointer-events: none;
+        opacity: 0.6;
+    }
+    .stepper-btn.active .step-icon {
+        background: var(--orange-grad);
+        color: white;
+        border-color: transparent;
+        box-shadow: 0 4px 12px rgba(249,115,22,0.3);
+    }
+    .stepper-btn.active .step-text {
+        color: #f97316;
+        font-weight: 700;
+    }
+    .step-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: #fff;
+        border: 2px solid #e5e7eb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        margin-bottom: 8px;
+        transition: all 0.3s;
+        pointer-events: none;
+    }
+    .step-text { font-size: 0.85rem; font-weight: 600; margin-top: 4px; pointer-events: none; }
+    .stepper-btn:hover:not([disabled]) .step-icon { border-color: #f97316; color: #f97316; }
 </style>
 
 <div class="container-fluid py-4">
@@ -133,41 +187,72 @@
         bool isIafApproved = iafMilestone != null && iafMilestone.Status == "Approved";
         int iafMilestoneId = iafMilestone?.Id ?? 0;
         bool isIafLocked = iafMilestone != null && (iafMilestone.Status == "Submitted" || iafMilestone.Status == "UnderReview" || iafMilestone.Status == "Approved");
+
+        var proposalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
+        bool isProposalApproved = proposalMilestone != null && proposalMilestone.Status == "Approved";
+        
+        var allProgressMilestones = milestones.Where(m => m.Title.Contains("Progress", StringComparison.OrdinalIgnoreCase)).ToList();
+        bool isAllProgressApproved = allProgressMilestones.Any() && allProgressMilestones.All(m => m.Status == "Approved");
+
+        // Force logical cascade: if a later milestone is approved, logically treat the previous ones as approved
+        // so the UI doesn't break into multiple active tabs.
+        if (isAllProgressApproved) { isProposalApproved = true; }
+        if (isProposalApproved) { isIafApproved = true; }
+
+        string iafTooltip = isIafApproved ? "data-toggle=\"tooltip\" title=\"IAF Form has been approved and locked\"" : "";
+        
+        string proposalTooltip = "";
+        if (!isIafApproved) proposalTooltip = "data-toggle=\"tooltip\" title=\"Requires IAF Approval first\"";
+        else if (isProposalApproved) proposalTooltip = "data-toggle=\"tooltip\" title=\"Proposal Form has been approved and locked\"";
+
+        string progressTooltip = "";
+        if (!isProposalApproved) progressTooltip = "data-toggle=\"tooltip\" title=\"Requires Proposal Approval first\"";
+
+        string finalTooltip = "";
+        if (!isAllProgressApproved) finalTooltip = "data-toggle=\"tooltip\" title=\"Requires all Progress Reports to be Approved first\"";
+
         <div class="row g-4">
             
-            @* ── FORM SELECTION TABS (Navigation) ────────────────── *@
-            <div class="col-lg-3">
-                <div class="d-flex flex-column gap-3 nav nav-pills" id="forms-tab" role="tablist">
-                    <button class="nav-link @(isIafApproved ? "" : "active") text-start d-flex align-items-center gap-3 shadow-sm" id="iaf-form-tab" data-bs-toggle="pill" data-bs-target="#iaf-form-pane" type="button" role="tab">
-                        <i class="fas fa-clipboard-list fs-4"></i>
-                        <span>1. IAF Form</span>
-                    </button>
-                    <button class="nav-link @(isIafApproved ? "active" : "disabled") text-start d-flex align-items-center gap-3 shadow-sm" id="proposal-form-tab" data-bs-toggle="pill" data-bs-target="#proposal-form-pane" type="button" role="tab" @(isIafApproved ? "" : "disabled")>
-                        <i class="fas fa-feather-alt fs-4"></i>
-                        <span>A. Proposal Form</span>
-                    </button>
-                    <button class="nav-link @(isIafApproved ? "" : "disabled") text-start d-flex align-items-center gap-3 shadow-sm" id="progress-form-tab" data-bs-toggle="pill" data-bs-target="#progress-form-pane" type="button" role="tab" @(isIafApproved ? "" : "disabled")>
-                        <i class="fas fa-tasks fs-4"></i>
-                        <span>B. Progress Report Form</span>
-                    </button>
-                    <button class="nav-link @(isIafApproved ? "" : "disabled") text-start d-flex align-items-center gap-3 shadow-sm" id="final-form-tab" data-bs-toggle="pill" data-bs-target="#final-form-pane" type="button" role="tab" @(isIafApproved ? "" : "disabled")>
-                        <i class="fas fa-graduation-cap fs-4"></i>
-                        <span>C. Final Submission Form</span>
-                    </button>
-                </div>
+            @* ── WIZARD STEPPER (Navigation) ────────────────── *@
+            <div class="col-12">
+                <ul class="wizard-stepper nav nav-pills m-0 p-0" style="list-style: none;" id="forms-tab" role="tablist">
+                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(iafTooltip)>
+                        <button class="stepper-btn nav-link @(!isIafApproved && !isProposalApproved && !isAllProgressApproved ? "active" : "")" id="iaf-form-tab" data-toggle="pill" data-target="#iaf-form-pane" type="button" role="tab" @(isIafApproved ? "disabled" : "") style="@(isIafApproved ? "pointer-events: none;" : "")">
+                            <div class="step-icon"><i class="fas fa-clipboard-list"></i></div>
+                            <div class="step-text">1. IAF Form</div>
+                        </button>
+                    </li>
+                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(proposalTooltip)>
+                        <button class="stepper-btn nav-link @(isIafApproved && !isProposalApproved && !isAllProgressApproved ? "active" : "")" id="proposal-form-tab" data-toggle="pill" data-target="#proposal-form-pane" type="button" role="tab" @(!isIafApproved || isProposalApproved ? "disabled" : "") style="@(!isIafApproved || isProposalApproved ? "pointer-events: none;" : "")">
+                            <div class="step-icon"><i class="fas fa-feather-alt"></i></div>
+                            <div class="step-text">A. Proposal Form</div>
+                        </button>
+                    </li>
+                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(progressTooltip)>
+                        <button class="stepper-btn nav-link @(isProposalApproved && !isAllProgressApproved ? "active" : "")" id="progress-form-tab" data-toggle="pill" data-target="#progress-form-pane" type="button" role="tab" @(!isProposalApproved || isAllProgressApproved ? "disabled" : "") style="@(!isProposalApproved || isAllProgressApproved ? "pointer-events: none;" : "")">
+                            <div class="step-icon"><i class="fas fa-tasks"></i></div>
+                            <div class="step-text">B. Progress Report</div>
+                        </button>
+                    </li>
+                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(finalTooltip)>
+                        <button class="stepper-btn nav-link @(isAllProgressApproved ? "active" : "")" id="final-form-tab" data-toggle="pill" data-target="#final-form-pane" type="button" role="tab" @(!isAllProgressApproved ? "disabled" : "") style="@(!isAllProgressApproved ? "pointer-events: none;" : "")">
+                            <div class="step-icon"><i class="fas fa-graduation-cap"></i></div>
+                            <div class="step-text">C. Final Submission</div>
+                        </button>
+                    </li>
+                </ul>
 
-                <div class="premium-card p-4 mt-4 bg-light">
-                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-info-circle text-orange me-2"></i>Eform Guidelines</h6>
-                    <ul class="text-muted small ps-3 mb-0" style="line-height: 1.6;">
-                        <li>Ensure all mandatory fields are fully populated before submission.</li>
-                        <li>PDF attachments are recommended for document uploads.</li>
-                        <li>Saved drafts are stored in your session. Clicking submit locks the document and alerts your supervisor.</li>
-                    </ul>
+                <div class="premium-card p-3 mb-2 bg-light d-flex align-items-center gap-3">
+                    <i class="fas fa-info-circle text-orange fs-4" style="color:var(--primary-orange);"></i>
+                    <div class="small text-muted">
+                        <strong>Guidelines:</strong> Ensure all mandatory fields are fully populated before submission. 
+                        <span class="text-success fw-bold"><i class="fas fa-save ms-2 me-1"></i>Auto-Save is active.</span> Your progress is automatically stored locally in your browser.
+                    </div>
                 </div>
             </div>
 
             @* ── FORM DETAILED PANES ────────────────────────────── *@
-            <div class="col-lg-9">
+            <div class="col-12">
                 <div class="tab-content" id="forms-tabContent">
 
                     @* ── 1. INITIAL PROJECT ALLOCATION FORM (IAF) ──────── *@
@@ -302,8 +387,8 @@
                     </div>
 
                     
-                    @* ── A. PROPOSAL FORM ──────────────────────────────── *@
-                    <div class="tab-pane fade @(isIafApproved ? "show active" : "")" id="proposal-form-pane" role="tabpanel" tabindex="0">
+                    @* ── A. PROPOSAL FORM ────────────────────────────── *@
+                    <div class="tab-pane fade @(isIafApproved && !isProposalApproved ? "show active" : "")" id="proposal-form-pane" role="tabpanel" tabindex="0">
                         <div class="premium-card p-4">
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>A. Final Year Project Proposal</h4>
                             
@@ -314,17 +399,33 @@
                                     bool isPropLocked = propMilestone != null && (propMilestone.Status == "Submitted" || propMilestone.Status == "UnderReview" || propMilestone.Status == "Approved");
                                 }
                                 
-                                @if (isPropLocked)
+                                @if (propMilestone != null && propMilestone.Status == "Rejected")
                                 {
-                                    <div class="alert alert-info d-flex align-items-center mt-3 border-info">
+                                    <div class="alert alert-danger d-flex align-items-center mt-3 border-danger shadow-sm">
+                                        <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
+                                        <div>
+                                            <h5 class="fw-bold text-dark mb-1">Proposal Form Rejected (Needs Revision)</h5>
+                                            <p class="mb-0 text-muted"><strong>Feedback:</strong> @propMilestone.SupervisorFeedback</p>
+                                        </div>
+                                    </div>
+                                }
+                                else if (isPropLocked)
+                                {
+                                    <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
                                         <i class="fas fa-lock fs-2 me-3 text-info"></i>
                                         <div>
                                             <h5 class="fw-bold text-dark mb-1">Proposal Form Locked</h5>
                                             <p class="mb-0 text-muted">Your proposal has already been submitted. Current Status: <span class="badge bg-white text-dark ms-1 shadow-sm border">@propMilestone.Status</span></p>
+                                            @if (!string.IsNullOrEmpty(propMilestone?.SupervisorFeedback))
+                                            {
+                                                <hr class="my-2 border-info opacity-25">
+                                                <p class="mb-0 text-dark"><strong>Feedback:</strong> @propMilestone.SupervisorFeedback</p>
+                                            }
                                         </div>
                                     </div>
                                 }
-                                else
+
+                                @if (!isPropLocked)
                                 {
                                 <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
                                     <input type="hidden" name="formType" value="Proposal Form" />
@@ -387,8 +488,8 @@
                         </div>
                     </div>
 
-                    @* ── B. PROGRESS REPORT FORM ────────────────────────── *@
-                    <div class="tab-pane fade" id="progress-form-pane" role="tabpanel" tabindex="0">
+                    @* ── B. PROGRESS REPORT FORM ─────────────────────── *@
+                    <div class="tab-pane fade @(isProposalApproved && !isAllProgressApproved ? "show active" : "")" id="progress-form-pane" role="tabpanel" tabindex="0">
                         <div class="premium-card p-4">
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-chart-line text-orange me-2"></i>B. FYP Progress Report Form</h4>
                             
@@ -401,7 +502,7 @@
                             
                             @if (!progressMilestones.Any())
                             {
-                                <div class="alert alert-info d-flex align-items-center mt-3 border-info">
+                                <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
                                     <i class="fas fa-lock fs-2 me-3 text-info"></i>
                                     <div>
                                         <h5 class="fw-bold text-dark mb-1">Progress Report Form Locked</h5>
@@ -411,6 +512,16 @@
                             }
                             else
                             {
+                                @foreach (var rm in progressMilestones.Where(x => x.Status == "Rejected"))
+                                {
+                                    <div class="alert alert-danger d-flex align-items-center mt-3 border-danger shadow-sm">
+                                        <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
+                                        <div>
+                                            <h5 class="fw-bold text-dark mb-1">@rm.Title Rejected (Needs Revision)</h5>
+                                            <p class="mb-0 text-muted"><strong>Feedback:</strong> @rm.SupervisorFeedback</p>
+                                        </div>
+                                    </div>
+                                }
                             <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
                                 <input type="hidden" name="formType" value="Progress Report Form" />
 
@@ -492,8 +603,8 @@
                         </div>
                     </div>
 
-                    @* ── C. FINAL SUBMISSION FORM ──────────────────────── *@
-                    <div class="tab-pane fade" id="final-form-pane" role="tabpanel" tabindex="0">
+                    @* ── C. FINAL SUBMISSION FORM ────────────────────── *@
+                    <div class="tab-pane fade @(isAllProgressApproved ? "show active" : "")" id="final-form-pane" role="tabpanel" tabindex="0">
                         <div class="premium-card p-4">
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-graduation-cap text-orange me-2"></i>C. Final FYP Report & Thesis Submission</h4>
                             
@@ -504,17 +615,33 @@
                                     bool isFinLocked = finalMilestone != null && (finalMilestone.Status == "Submitted" || finalMilestone.Status == "UnderReview" || finalMilestone.Status == "Approved");
                                 }
                                 
-                                @if (isFinLocked)
+                                @if (finalMilestone != null && finalMilestone.Status == "Rejected")
                                 {
-                                    <div class="alert alert-info d-flex align-items-center mt-3 border-info">
-                                        <i class="fas fa-lock fs-2 me-3 text-info"></i>
+                                    <div class="alert alert-danger d-flex align-items-center mt-3 border-danger shadow-sm">
+                                        <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
                                         <div>
-                                            <h5 class="fw-bold text-dark mb-1">Final Form Locked</h5>
-                                            <p class="mb-0 text-muted">Your final submission has been locked. Current Status: <span class="badge bg-white text-dark ms-1 shadow-sm border">@finalMilestone.Status</span></p>
+                                            <h5 class="fw-bold text-dark mb-1">Final Submission Rejected (Needs Revision)</h5>
+                                            <p class="mb-0 text-muted"><strong>Feedback:</strong> @finalMilestone.SupervisorFeedback</p>
                                         </div>
                                     </div>
                                 }
-                                else
+                                else if (isFinLocked)
+                                {
+                                    <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
+                                        <i class="fas fa-lock fs-2 me-3 text-info"></i>
+                                        <div>
+                                            <h5 class="fw-bold text-dark mb-1">Final Submission Locked</h5>
+                                            <p class="mb-0 text-muted">Your final submission is currently: <span class="badge bg-white text-dark ms-1 shadow-sm border">@finalMilestone.Status</span></p>
+                                            @if (!string.IsNullOrEmpty(finalMilestone?.SupervisorFeedback))
+                                            {
+                                                <hr class="my-2 border-info opacity-25">
+                                                <p class="mb-0 text-dark"><strong>Feedback:</strong> @finalMilestone.SupervisorFeedback</p>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+
+                                @if (!isFinLocked)
                                 {
                                 <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
                                     <input type="hidden" name="formType" value="Final Submission Form" />
@@ -762,6 +889,59 @@
                     form.classList.add('was-validated');
                 }, false);
             });
+
+            // --- AUTO SAVE FEATURE ---
+            const formsToSave = document.querySelectorAll('form.needs-validation');
+            formsToSave.forEach(form => {
+                const formTypeInput = form.querySelector('input[name="formType"]');
+                if(!formTypeInput) return;
+                
+                const storageKey = 'fyp_draft_' + formTypeInput.value.replace(/\s+/g, '_');
+                
+                // 1. Restore from Draft
+                const savedDraft = localStorage.getItem(storageKey);
+                if (savedDraft) {
+                    try {
+                        const data = JSON.parse(savedDraft);
+                        for (const key in data) {
+                            const field = form.querySelector(`[name="${key}"]`);
+                            if (field && !field.readOnly && field.type !== 'file' && field.type !== 'hidden') {
+                                field.value = data[key];
+                            }
+                        }
+                    } catch(e) {}
+                }
+                
+                // 2. Save to Draft on Input (debounced)
+                let timeout;
+                form.addEventListener('input', function(e) {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => {
+                        const data = {};
+                        const formData = new FormData(form);
+                        for (let [key, value] of formData.entries()) {
+                            const field = form.querySelector(`[name="${key}"]`);
+                            if (field && !field.readOnly && field.type !== 'file' && field.type !== 'hidden') {
+                                data[key] = value;
+                            }
+                        }
+                        localStorage.setItem(storageKey, JSON.stringify(data));
+                    }, 1000);
+                });
+                
+                // 3. Clear Draft on Submit
+                form.addEventListener('submit', function(e) {
+                    if (form.checkValidity()) {
+                        localStorage.removeItem(storageKey);
+                    }
+                });
+            });
+            // Initialize Tooltips using jQuery (Bootstrap 4 compatibility)
+            try {
+                $('[data-toggle="tooltip"]').tooltip();
+                $('[data-bs-toggle="tooltip"]').tooltip();
+            } catch(e) {}
+            
         })();
     </script>
 }

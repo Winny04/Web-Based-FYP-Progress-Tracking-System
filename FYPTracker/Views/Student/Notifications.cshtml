@@ -38,6 +38,8 @@
         background: #fefce8;
     }
     .notif-item:hover { border-color: #eab308; }
+    
+    .hover-orange:hover { color: #d97706 !important; }
 
     .unread-dot {
         width: 10px; height: 10px;
@@ -180,6 +182,15 @@
                     };
                     var timeAgo = GetTimeAgo(n.CreatedDate);
 
+                    var targetUrl = n.Type switch {
+                        "SupervisorApproval" => "/Student/Index",
+                        "MeetingUpdate"      => "/Student/BookMeeting",
+                        "DeadlineReminder"   => "/Student/ProjectDetails",
+                        "SubmissionFeedback" => "/Student/Forms",
+                        "RevisionRequest"    => "/Student/Forms",
+                        _                    => "#"
+                    };
+
                     <div class="notif-item @(n.IsRead ? "" : "unread")"
                          data-type="@n.Type" data-read="@(n.IsRead ? "read" : "unread")">
                         <div class="d-flex align-items-start gap-3">
@@ -196,14 +207,14 @@
                             </div>
                             <div class="flex-grow-1">
                                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                                    <div class="fw-bold text-dark">@n.Title</div>
-                                    <small class="text-muted">@timeAgo</small>
+                                    <a href="@targetUrl" class="text-decoration-none fw-bold text-dark stretched-link hover-orange">@n.Title</a>
+                                    <small class="text-muted position-relative" style="z-index: 2;">@timeAgo</small>
                                 </div>
                                 @if (!string.IsNullOrEmpty(n.Message))
                                 {
                                     <div class="text-muted mt-1" style="font-size:.85rem;">@n.Message</div>
                                 }
-                                <div class="mt-2">
+                                <div class="mt-2 position-relative" style="z-index: 2;">
                                     <small class="text-muted me-3">@n.CreatedDate.ToString("dd MMM yyyy, h:mm tt")</small>
                                     @if (!n.IsRead)
                                     {

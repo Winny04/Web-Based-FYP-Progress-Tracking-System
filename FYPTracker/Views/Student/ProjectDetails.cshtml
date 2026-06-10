@@ -33,19 +33,33 @@
     .info-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; margin-bottom: 2px; }
     .info-value { font-size: .95rem; font-weight: 600; color: #111827; }
 
-    .milestone-row { border-left: 3px solid #e5e7eb; padding-left: 16px; position: relative; }
-    .milestone-row::before {
-        content: '';
-        position: absolute;
-        left: -7px; top: 12px;
-        width: 12px; height: 12px;
-        border-radius: 50%;
-        background: #0d9488;
+    .timeline-container { padding-left: 12px; }
+    .milestone-row { 
+        border-left: 3px dashed #e5e7eb; 
+        padding-left: 28px; 
+        padding-bottom: 28px;
+        position: relative; 
     }
-    .milestone-row.approved::before  { background: #10b981; }
-    .milestone-row.rejected::before  { background: #ef4444; }
-    .milestone-row.pending::before   { background: #f59e0b; }
-    .milestone-row.submitted::before { background: #3b82f6; }
+    .milestone-row:last-child { border-left-color: transparent; padding-bottom: 0; }
+    
+    .milestone-row::before {
+        content: '\f111'; /* FontAwesome circle */
+        font-family: 'Font Awesome 5 Free';
+        font-weight: 900;
+        position: absolute;
+        left: -11px; top: 0px;
+        width: 20px; height: 20px;
+        background: #fff;
+        color: #0d9488;
+        font-size: 14px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 50%;
+        box-shadow: 0 0 0 4px #fff;
+    }
+    .milestone-row.approved::before  { color: #10b981; content: '\f058'; } /* check-circle */
+    .milestone-row.rejected::before  { color: #ef4444; content: '\f057'; } /* times-circle */
+    .milestone-row.pending::before   { color: #f59e0b; content: '\f017'; } /* clock */
+    .milestone-row.submitted::before { color: #3b82f6; content: '\f144'; } /* play-circle */
 
     .status-pill {
         font-size: .72rem; font-weight: 700;
@@ -146,15 +160,25 @@
                 <div class="glass-card p-4 mb-4">
                     <h5 class="fw-bold text-dark mb-4"><i class="fas fa-route me-2" style="color:#0d9488;"></i>Project Stage Indicator</h5>
                     @{
-                        // Stages: Proposal (1) -> Chapter Submission (2) -> Mid-Term Review (3) -> Final Submission (4) -> Completed (5)
+                        // Syncing with actual milestone forms: IAF -> Proposal -> Progress -> Final -> Completed
                         int activeStage = 1;
-                        if (Model.Status == "Completed") {
+                        var iafMs = milestones.FirstOrDefault(m => (m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase)) && !m.Title.Contains("Industrial", StringComparison.OrdinalIgnoreCase));
+                        var propMs = milestones.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
+                        var progMs = milestones.Where(m => m.Title.Contains("Progress", StringComparison.OrdinalIgnoreCase)).ToList();
+                        var finalMs = milestones.FirstOrDefault(m => m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase));
+                        
+                        bool isIafApp = iafMs?.Status == "Approved";
+                        bool isPropApp = propMs?.Status == "Approved";
+                        bool isProgApp = progMs.Any() && progMs.All(m => m.Status == "Approved");
+                        bool isFinalApp = finalMs?.Status == "Approved";
+
+                        if (Model.Status == "Completed" || isFinalApp) {
                             activeStage = 5;
-                        } else if (approved >= 6) {
+                        } else if (isProgApp) {
                             activeStage = 4;
-                        } else if (approved >= 4) {
+                        } else if (isPropApp) {
                             activeStage = 3;
-                        } else if (approved >= 1) {
+                        } else if (isIafApp) {
                             activeStage = 2;
                         }
                     }
@@ -166,15 +190,15 @@
                         <!-- Steps -->
                         <div class="text-center position-relative" style="z-index: 3;">
                             <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto shadow-sm @(activeStage >= 1 ? "bg-success text-white" : "bg-white border text-muted")" style="width:36px; height:36px; font-weight:700; line-height: 36px; text-align: center;">1</div>
-                            <span class="d-block mt-2 fw-bold text-dark" style="font-size:0.75rem;">Proposal</span>
+                            <span class="d-block mt-2 fw-bold text-dark" style="font-size:0.75rem;">IAF</span>
                         </div>
                         <div class="text-center position-relative" style="z-index: 3;">
                             <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto shadow-sm @(activeStage >= 2 ? "bg-success text-white" : "bg-white border text-muted")" style="width:36px; height:36px; font-weight:700; line-height: 36px; text-align: center;">2</div>
-                            <span class="d-block mt-2 fw-bold text-dark" style="font-size:0.75rem;">Chapters</span>
+                            <span class="d-block mt-2 fw-bold text-dark" style="font-size:0.75rem;">Proposal</span>
                         </div>
                         <div class="text-center position-relative" style="z-index: 3;">
                             <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto shadow-sm @(activeStage >= 3 ? "bg-success text-white" : "bg-white border text-muted")" style="width:36px; height:36px; font-weight:700; line-height: 36px; text-align: center;">3</div>
-                            <span class="d-block mt-2 fw-bold text-dark" style="font-size:0.75rem;">Mid-Term</span>
+                            <span class="d-block mt-2 fw-bold text-dark" style="font-size:0.75rem;">Progress</span>
                         </div>
                         <div class="text-center position-relative" style="z-index: 3;">
                             <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto shadow-sm @(activeStage >= 4 ? "bg-success text-white" : "bg-white border text-muted")" style="width:36px; height:36px; font-weight:700; line-height: 36px; text-align: center;">4</div>
@@ -207,9 +231,9 @@
                     </div>
                 </div>
 
-                @* ── Milestones / Chapters ─────────────────────────── *@
+                @* ── Milestones / Chapters Timeline ─────────────────────────── *@
                 <div class="glass-card p-4">
-                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-list-check me-2" style="color:#0d9488;"></i>Milestones & Chapters</h5>
+                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-stream me-2" style="color:#0d9488;"></i>Milestone Timeline</h5>
 
                     @if (!milestones.Any())
                     {
@@ -220,7 +244,7 @@
                     }
                     else
                     {
-                        <div class="d-flex flex-column gap-3">
+                        <div class="timeline-container mt-2">
                             @foreach (var ms in milestones.OrderBy(m => m.DueDate))
                             {
                                 var rowCls = ms.Status.ToLower() switch {
@@ -242,41 +266,50 @@
                                     : null;
 
                                 <div class="milestone-row @rowCls">
-                                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 bg-light p-3 rounded-3 border">
                                         <div>
                                             <div class="fw-bold text-dark">@ms.Title</div>
                                             @if (!string.IsNullOrEmpty(ms.Description))
                                             {
-                                                <div class="text-muted" style="font-size:.82rem;">@ms.Description</div>
+                                                <div class="text-muted mt-1" style="font-size:.85rem;">@ms.Description</div>
                                             }
                                             @if (ms.DueDate.HasValue)
                                             {
-                                                <small class="text-muted">
-                                                    Due: @ms.DueDate.Value.ToString("dd MMM yyyy")
+                                                <div class="mt-2 text-muted small fw-semibold">
+                                                    <i class="far fa-calendar-alt me-1"></i> Due: @ms.DueDate.Value.ToString("dd MMM yyyy")
                                                     @if (daysLeft.HasValue && ms.Status != "Approved")
                                                     {
                                                         if (daysLeft < 0)
-                                                        { <span class="text-danger fw-semibold">&nbsp;(Overdue by @Math.Abs(daysLeft.Value) days)</span> }
+                                                        { <span class="text-danger ms-2"><i class="fas fa-exclamation-circle"></i> Overdue by @Math.Abs(daysLeft.Value) days</span> }
                                                         else if (daysLeft <= 3)
-                                                        { <span class="text-warning fw-semibold">&nbsp;(@daysLeft days left)</span> }
-                                                        else
-                                                        { <span class="text-muted">&nbsp;(@daysLeft days left)</span> }
+                                                        { <span class="text-warning ms-2"><i class="fas fa-exclamation-triangle"></i> @daysLeft days left</span> }
                                                     }
-                                                </small>
+                                                </div>
+                                            }
+                                            
+                                            @if (!string.IsNullOrEmpty(ms.SupervisorFeedback))
+                                            {
+                                                var isRejected = ms.Status == "Rejected";
+                                                var bgStyle = isRejected ? "background-color: #fef2f2; border-color: #f87171;" : "background-color: #f0f9ff; border-color: #7dd3fc;";
+                                                var textColor = isRejected ? "color: #991b1b;" : "color: #0c4a6e;";
+                                                var titleColor = isRejected ? "color: #b91c1c;" : "color: #0284c7;";
+                                                
+                                                <div class="mt-3 p-3 rounded-3 border" style="font-size: 0.85rem; max-width: 600px; @bgStyle">
+                                                    <strong class="d-block mb-1" style="@titleColor"><i class="fas fa-comment-dots me-1"></i>Supervisor Feedback:</strong>
+                                                    <span class="fw-semibold" style="white-space: pre-wrap; @textColor">@ms.SupervisorFeedback</span>
+                                                </div>
                                             }
                                         </div>
-                                        <div class="d-flex align-items-center gap-2">
+                                        <div class="d-flex flex-column align-items-end gap-2">
+                                            <span class="status-pill @pillCls shadow-sm">@ms.Status</span>
                                             @if (!string.IsNullOrEmpty(ms.Remarks) || !string.IsNullOrEmpty(ms.SupervisorFeedback))
                                             {
-                                                <button type="button" class="btn btn-sm btn-light-info py-1 px-3" data-bs-toggle="modal" data-bs-target="#viewMs_@ms.Id">
-                                                    <i class="fas fa-eye fs-7"></i> View
+                                                <button type="button" class="btn btn-sm btn-outline-secondary mt-1 py-1 px-3 fw-bold" data-bs-toggle="modal" data-bs-target="#viewMs_@ms.Id">
+                                                    <i class="fas fa-folder-open me-1"></i> Details
                                                 </button>
                                             }
-                                            <span class="status-pill @pillCls">@ms.Status</span>
                                         </div>
                                     </div>
-                                    
-
                                 </div>
                             }
                         </div>
@@ -284,8 +317,41 @@
                 </div>
             </div>
 
-            @* ── Right Sidebar: Supervisor + Deadlines ─────────── *@
+            @* ── Right Sidebar ─────────── *@
             <div class="col-lg-4">
+
+                @{
+                    var scheduledDefense = milestones.FirstOrDefault(m => m.RejectionCount >= 3 && m.DefenseDate.HasValue);
+                }
+                @if (scheduledDefense != null)
+                {
+                    <div class="glass-card p-4 mb-4" style="border: 2px solid #ef4444; background: #fef2f2;">
+                        <h6 class="fw-bold text-danger mb-3"><i class="fas fa-shield-alt me-2"></i>Defense Preparation</h6>
+                        <p class="small text-dark mb-3">You are scheduled for a mandatory Defense Presentation. Please prepare the following items:</p>
+                        <div class="d-flex flex-column gap-2 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input border-danger" type="checkbox" id="check1">
+                                <label class="form-check-label text-dark small fw-semibold" for="check1">Presentation Slides (PPT/PDF)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input border-danger" type="checkbox" id="check2">
+                                <label class="form-check-label text-dark small fw-semibold" for="check2">Printed Report Copies (x2)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input border-danger" type="checkbox" id="check3">
+                                <label class="form-check-label text-dark small fw-semibold" for="check3">Working Prototype Demo</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input border-danger" type="checkbox" id="check4">
+                                <label class="form-check-label text-dark small fw-semibold" for="check4">Formal Attire Required</label>
+                            </div>
+                        </div>
+                        <div class="bg-white p-3 rounded border border-danger border-opacity-25 shadow-sm text-center">
+                            <div class="text-danger fw-bold mb-1"><i class="far fa-calendar-alt me-1"></i>@scheduledDefense.DefenseDate!.Value.ToString("dd MMMM yyyy")</div>
+                            <div class="text-dark small fw-bold"><i class="far fa-clock me-1"></i>@scheduledDefense.DefenseTime | <i class="fas fa-map-marker-alt ms-1 me-1"></i>@scheduledDefense.DefenseVenue</div>
+                        </div>
+                    </div>
+                }
 
                 @* Supervisor Card *@
                 <div class="glass-card p-4 mb-4">
