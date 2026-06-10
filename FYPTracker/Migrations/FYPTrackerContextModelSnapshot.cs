@@ -101,82 +101,6 @@ namespace FYPTracker.Migrations
                     b.ToTable("ApplicationUser", (string)null);
                 });
 
-            modelBuilder.Entity("FYPTracker.Models.AuditTag", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("AuditId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreateAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("EmployeeId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsRead")
-                        .HasColumnType("bit");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AuditId");
-
-                    b.HasIndex("EmployeeId");
-
-                    b.ToTable("AuditTag");
-                });
-
-            modelBuilder.Entity("FYPTracker.Models.AuditTrail", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
-
-                    b.Property<DateTime>("CreatedOn")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("DataAfter")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("DataBefore")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("EmpId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("FullMessage")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("IpAddress")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("LogLevelId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PageUrl")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ReferrerUrl")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ShortMessage")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("TableChange")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EmpId");
-
-                    b.ToTable("AuditTrail");
-                });
-
             modelBuilder.Entity("FYPTracker.Models.Department", b =>
                 {
                     b.Property<int>("Id")
@@ -197,29 +121,6 @@ namespace FYPTracker.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Department");
-                });
-
-            modelBuilder.Entity("FYPTracker.Models.EmailTemplateConfig", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
-
-                    b.Property<string>("ConfigKey")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ConfigValue")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("RequireParams")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("EmailTemplateConfig");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPActivity", b =>
@@ -661,34 +562,6 @@ namespace FYPTracker.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("EmpDepartment");
-                });
-
-            modelBuilder.Entity("FYPTracker.Models.AuditTag", b =>
-                {
-                    b.HasOne("FYPTracker.Models.AuditTrail", "AuditTrail")
-                        .WithMany()
-                        .HasForeignKey("AuditId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("FYPTracker.Models.ApplicationUser", "ApplicationUser")
-                        .WithMany()
-                        .HasForeignKey("EmployeeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ApplicationUser");
-
-                    b.Navigation("AuditTrail");
-                });
-
-            modelBuilder.Entity("FYPTracker.Models.AuditTrail", b =>
-                {
-                    b.HasOne("FYPTracker.Models.ApplicationUser", "Employee")
-                        .WithMany()
-                        .HasForeignKey("EmpId");
-
-                    b.Navigation("Employee");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPActivity", b =>

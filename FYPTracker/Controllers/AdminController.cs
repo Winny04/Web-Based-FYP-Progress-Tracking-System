@@ -111,7 +111,7 @@ namespace FYPTracker.Controllers
             return File(buffer, "text/csv", $"FYP_Summary_Report_{DateTime.Now:yyyyMMdd}.csv");
         }
             [Authorize]
-        [ClaimRequirement("Type,Department","PM,HOD,SI,Admin,SuperAdmin")]
+        [ClaimRequirement("Type", "Admin")]
         public async Task<IActionResult> ManageUsers()
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
@@ -127,7 +127,7 @@ namespace FYPTracker.Controllers
         }
 
         [Authorize]
-        [ClaimRequirement("Type,Department","PM,HOD,SI,Admin,SuperAdmin")]
+        [ClaimRequirement("Type", "Admin")]
         public async Task<IActionResult> ManageProjects()
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
@@ -153,7 +153,7 @@ namespace FYPTracker.Controllers
         }
 
         [Authorize]
-        [ClaimRequirement("Type,Department","PM,HOD,SI,Admin,SuperAdmin")]
+        [ClaimRequirement("Type", "Admin")]
         public async Task<IActionResult> ExportProjectsExcel()
         {
             var students = await _context.ApplicationUsers
@@ -583,7 +583,7 @@ public ActionResult ManageUsersData()
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> NotifyDefenseList()
+        public async Task<IActionResult> NotifyDefenseList(DateTime defenseDate, TimeSpan startTime, string venue)
         {
             var defenseList = await _context.FYPMilestones
                 .Include(m => m.Project)
@@ -592,18 +592,34 @@ public ActionResult ManageUsersData()
                 .ToListAsync();
 
             int count = 0;
+            var currentTime = startTime;
+
             foreach (var milestone in defenseList)
             {
                 var student = milestone.Project?.Student;
                 if (student != null)
                 {
+                    // Format the scheduled datetime
+                    var formattedDate = defenseDate.ToString("dd MMM yyyy");
+                    var formattedTime = new DateTime(currentTime.Ticks).ToString("hh:mm tt");
+                    
+                    var notificationMessage = $"Your Initial Project Allocation Form has been rejected 3 times. You are required to attend a defense session.\n\nDate: {formattedDate}\nTime: {formattedTime}\nVenue: {venue}";
+                    var emailHtml = $@"
+                        <p>Your Initial Project Allocation Form has been rejected 3 times. You are required to attend a defense session.</p>
+                        <ul>
+                            <li><strong>Date:</strong> {formattedDate}</li>
+                            <li><strong>Time:</strong> {formattedTime}</li>
+                            <li><strong>Venue:</strong> {venue}</li>
+                        </ul>
+                        <p>Please be prepared for a 15-minute presentation.</p>";
+
                     // Add in-app notification
                     var notification = new FYPNotification
                     {
                         RecipientId = student.Id,
                         Type = "RevisionRequest",
-                        Title = "Defense Required",
-                        Message = "Your Initial Project Allocation Form has been rejected 3 times. You are required to attend a defense session.",
+                        Title = "Defense Scheduled",
+                        Message = notificationMessage,
                         IsRead = false,
                         CreatedDate = DateTime.Now
                     };
@@ -616,8 +632,8 @@ public ActionResult ManageUsersData()
                         {
                             _emailService.Send(
                                 to: student.Email,
-                                subject: "Defense Required for FYP",
-                                html: "<p>Your Initial Project Allocation Form has been rejected 3 times. You are required to attend a defense session.</p>"
+                                subject: "Defense Scheduled for FYP",
+                                html: emailHtml
                             );
                         }
                         catch (Exception ex)
@@ -625,6 +641,9 @@ public ActionResult ManageUsersData()
                             // Log email failure if needed, continue notifying others
                         }
                     }
+
+                    // Increment time by 15 minutes for the next student
+                    currentTime = currentTime.Add(TimeSpan.FromMinutes(15));
                     count++;
                 }
             }
@@ -632,11 +651,52 @@ public ActionResult ManageUsersData()
             if (count > 0)
             {
                 await _context.SaveChangesAsync();
-                TempData["Success"] = $"Successfully sent defense notifications to {count} student(s).";
+                TempData["Success"] = $"Successfully scheduled defense and sent notifications to {count} student(s).";
             }
             else
             {
                 TempData["Error"] = "No students found in the defense list to notify.";
+            }
+
+            return RedirectToAction(nameof(DefenseList));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AllowIafResubmission(int milestoneId)
+        {
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestone != null)
+            {
+                // Reset RejectionCount so they can submit again
+                milestone.RejectionCount = 0;
+                milestone.Status = "Pending";
+                milestone.Remarks = "Defense completed. Student is allowed to resubmit the IAF with a new title/proposal.";
+
+                var student = milestone.Project?.Student;
+                if (student != null)
+                {
+                    _context.FYPNotifications.Add(new FYPNotification
+                    {
+                        RecipientId = student.Id,
+                        Type = "General",
+                        Title = "IAF Resubmission Allowed",
+                        Message = "Following your defense, you are now permitted to propose a new title and resubmit your Initial Project Allocation Form.",
+                        IsRead = false,
+                        CreatedDate = DateTime.Now
+                    });
+                }
+
+                await _context.SaveChangesAsync();
+                TempData["Success"] = $"Successfully granted resubmission access to {student?.FullName}.";
+            }
+            else
+            {
+                TempData["Error"] = "Milestone not found.";
             }
 
             return RedirectToAction(nameof(DefenseList));

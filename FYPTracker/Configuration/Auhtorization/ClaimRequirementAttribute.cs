@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using System.Security.Claims;
@@ -31,7 +31,7 @@ namespace FYPTracker.Configuration.Auhtorization
             foreach(var requiredClaim in requiredClaims)
             {
                 var claimValues = context.HttpContext.User.Claims.Where(x => x.Type == requiredClaim).Select(x => x.Value).FirstOrDefault();
-                if (claimValues == "SuperAdmin" || claimValues == "SuperAdminAssistant")
+                if (claimValues == "SuperAdmin")
                     return;
 
                 if (context.HttpContext.User.Claims.Any(c => c.Type == requiredClaim) &&

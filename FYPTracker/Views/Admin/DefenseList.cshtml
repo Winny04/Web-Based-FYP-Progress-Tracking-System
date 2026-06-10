@@ -13,11 +13,9 @@
         <div>
             @if(Model.Any())
             {
-                <form asp-action="NotifyDefenseList" method="post" class="d-inline">
-                    <button type="submit" class="btn btn-danger fw-bold shadow-sm">
-                        <i class="fas fa-bell me-2"></i>Notify All Students
-                    </button>
-                </form>
+                <button type="button" class="btn btn-danger fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#scheduleDefenseModal">
+                    <i class="fas fa-calendar-alt me-2"></i>Schedule Defense
+                </button>
             }
         </div>
     </div>
@@ -39,14 +37,15 @@
                             <th class="fw-bold text-uppercase text-secondary small py-3">Student ID</th>
                             <th class="fw-bold text-uppercase text-secondary small py-3">Project Title</th>
                             <th class="fw-bold text-uppercase text-secondary small py-3">Supervisor</th>
-                            <th class="text-center fw-bold text-uppercase text-secondary small py-3 pe-4">Rejection Count</th>
+                            <th class="text-center fw-bold text-uppercase text-secondary small py-3">Rejection Count</th>
+                            <th class="text-end fw-bold text-uppercase text-secondary small py-3 pe-4">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         @if (!Model.Any())
                         {
                             <tr>
-                                <td colspan="5" class="text-center py-5 text-muted">
+                                <td colspan="6" class="text-center py-5 text-muted">
                                     <i class="fas fa-check-circle fs-2 text-success mb-3 d-block"></i>
                                     No students are currently on the Defense List.
                                 </td>
@@ -77,14 +76,57 @@
                                             <span class="fw-semibold text-gray-800">@(supervisor?.FullName ?? "Unassigned")</span>
                                         </div>
                                     </td>
-                                    <td class="text-center pe-4">
+                                    <td class="text-center">
                                         <span class="badge bg-danger rounded-pill px-3 py-2 fw-bold shadow-sm fs-6">@milestone.RejectionCount</span>
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <form asp-action="AllowIafResubmission" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to allow this student to resubmit their IAF form?');">
+                                            <input type="hidden" name="milestoneId" value="@milestone.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-success fw-bold">
+                                                <i class="fas fa-undo me-1"></i>Allow Resubmit
+                                            </button>
+                                        </form>
                                     </td>
                                 </tr>
                             }
                         }
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule Defense Modal -->
+    <div class="modal fade" id="scheduleDefenseModal" tabindex="-1" aria-labelledby="scheduleDefenseModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content border-0 shadow">
+                <form asp-action="NotifyDefenseList" method="post">
+                    <div class="modal-header bg-light">
+                        <h5 class="modal-title fw-bold" id="scheduleDefenseModalLabel"><i class="fas fa-calendar-check text-primary me-2"></i>Schedule Defense</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <div class="alert alert-info border-0 mb-4">
+                            <i class="fas fa-info-circle me-2"></i> Each student will be allocated a 15-minute slot sequentially starting from the time you specify below.
+                        </div>
+                        <div class="mb-3">
+                            <label for="defenseDate" class="form-label fw-bold">Defense Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="defenseDate" name="defenseDate" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="startTime" class="form-label fw-bold">Start Time <span class="text-danger">*</span></label>
+                            <input type="time" class="form-control" id="startTime" name="startTime" required>
+                        </div>
+                        <div class="mb-4">
+                            <label for="venue" class="form-label fw-bold">Venue / Link <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="venue" name="venue" placeholder="e.g. Room 101 or Teams Link" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary fw-bold"><i class="fas fa-paper-plane me-2"></i>Schedule & Notify</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

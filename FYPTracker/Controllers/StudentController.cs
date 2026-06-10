@@ -465,9 +465,7 @@ namespace FYPTracker.Controllers
 
             ViewBag.CurrentUser = user;
 
-            // Fetch IAF Deadline config
-            var deadlineConfig = await _context.EmailTemplateConfig.FirstOrDefaultAsync(c => c.ConfigKey == "IAFDeadline");
-            ViewBag.IAFDeadline = deadlineConfig?.ConfigValue ?? "15th April 2026 before 11.59pm";
+            ViewBag.IAFDeadline = "15th April 2026 before 11.59pm";
 
             var project = await _context.FYPProjects
                 .Include(p => p.Milestones)

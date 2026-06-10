@@ -224,10 +224,7 @@ namespace FYPTracker.Controllers
                 {
                     model.UserType = "SuperAdmin";
                 }
-                else if (model.UserType == "SuperAdminAssistant")
-                {
-                    model.UserType = "SuperAdminAssistant";
-                }
+
                 else
                 {
                     var userTypeItem = UserTypes.UserTypeList().FirstOrDefault(p => p.Value == model.UserType);
@@ -583,41 +580,6 @@ namespace FYPTracker.Controllers
 
 
         
-        [Authorize]
-        public async Task<IActionResult> Notification()
-        {
-            var empId = int.Parse(HttpContext.GetUserId());
-            DateTime lastMonth = DateTime.Now.AddMonths(-1);
-
-            var viewData = new AuditTrailsViewModel<AuditTag>();
-
-            var query = _context.AuditTag
-                .Include(x => x.AuditTrail)
-                .Include(x => x.AuditTrail)
-                .ThenInclude(x => x.Employee)
-                .Where(x => x.EmployeeId == empId && 
-            x.CreateAt >= lastMonth)
-                .OrderByDescending(x => x.CreateAt)
-                .ToList();
-
-            var q1 = query.Where(x => x.CreateAt.Day.Equals(DateTime.Today.Day)).ToList();
-            viewData.Today.AddRange(q1);
-
-            //week
-            var startDate = DateTime.Now.StartOfWeek(DayOfWeek.Monday);
-            var endDate = startDate.AddDays(6);
-
-            var q2 = query.Where(x => x.CreateAt >= startDate && x.CreateAt <= endDate).ToList();
-            viewData.Week.AddRange(q2);
-
-            //month
-            var q3 = query.Where(x => x.CreateAt.Year == DateTime.Now.Year && x.CreateAt.Month == DateTime.Now.Month).ToList();
-            viewData.Month.AddRange(q3);
-
-            return View(viewData);
-        }
-
-
         public ApplicationUser UploadImageToDir(IFormFile? picture)
         {
             var newEmployee = new ApplicationUser();

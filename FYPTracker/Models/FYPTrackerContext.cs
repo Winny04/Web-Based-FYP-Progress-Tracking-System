@@ -17,9 +17,8 @@ namespace FYPTracker.Models
         // ── Shared / Auth ──────────────────────────────────────────
         public virtual DbSet<ApplicationUser>   ApplicationUsers   { get; set; } = null!;
         public virtual DbSet<Department>        Department         { get; set; } = null!;
-        public virtual DbSet<AuditTrail>        AuditTrail         { get; set; } = null!;
-        public virtual DbSet<AuditTag>          AuditTag           { get; set; } = null!;
-        public virtual DbSet<EmailTemplateConfig> EmailTemplateConfig { get; set; } = null!;
+
+
 
         // ── FYP Core ───────────────────────────────────────────────
         public virtual DbSet<FYPProject>        FYPProjects        { get; set; } = null!;

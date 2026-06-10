@@ -2,7 +2,7 @@ using FYPTracker.Configuration;
 using FYPTracker.Configuration.Auhtorization;
 using FYPTracker.Helpers;
 using FYPTracker.Models;
-using FYPTracker.Services.AuditTrails;
+
 using FYPTracker.Services.Authentication;
 using FYPTracker.Services.Employees;
 using FYPTracker.Services.Others;
@@ -35,7 +35,7 @@ builder.Services.AddHttpContextAccessor();
 #region register services
 
 builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
-builder.Services.AddScoped<IAuditTrailService, AuditTrailService>();
+
 builder.Services.AddScoped<IWebHelper, WebHelper>();
 builder.Services.AddScoped<IAuthenticationService, CookieAuthenticationService>();
 builder.Services.AddScoped<IUserService, UserService>();
@@ -66,20 +66,7 @@ builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
 using (var scope = builder.Services.BuildServiceProvider().CreateScope())
 {
     var _ctx = scope.ServiceProvider.GetRequiredService<FYPTrackerContext>();
-    foreach (KeyValuePair<string, (string,List<string>)> kvp in EmailTemplateConfiguration.GetEmailTemplates)
-    {
-        if(!_ctx.EmailTemplateConfig.Any(x => x.ConfigKey== kvp.Key))
-        {
-            _ctx.EmailTemplateConfig.Add(new EmailTemplateConfig
-            {
-                ConfigKey = kvp.Key,
-                ConfigValue = kvp.Value.Item1,
-                RequireParams = string.Join(",", kvp.Value.Item2)
-            });
-
-            _ctx.SaveChanges();
-        }
-    }
+    // Context initialization logic here if needed...
 }
 
 builder.Services.Configure<CookiePolicyOptions>(options =>
@@ -101,8 +88,7 @@ builder.Services.AddAuthentication(AuthenticationDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("PMOnly", policy => policy.Requirements.Add(new PMOnlyRequirement()));
-    options.AddPolicy("ManagementLevelOnly", policy => policy.Requirements.Add(new ManagementLevelOnlyRequirement()));
+
 });
 
 var app = builder.Build();
