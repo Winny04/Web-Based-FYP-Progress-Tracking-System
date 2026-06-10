@@ -200,6 +200,17 @@ namespace FYPTracker.Migrations
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("datetime");
 
+                    b.Property<DateTime?>("DefenseDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("DefenseTime")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("DefenseVenue")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
 

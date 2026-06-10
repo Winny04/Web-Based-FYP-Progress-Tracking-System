@@ -38,6 +38,7 @@
                             <th class="fw-bold text-uppercase text-secondary small py-3">Project Title</th>
                             <th class="fw-bold text-uppercase text-secondary small py-3">Supervisor</th>
                             <th class="text-center fw-bold text-uppercase text-secondary small py-3">Rejection Count</th>
+                            <th class="fw-bold text-uppercase text-secondary small py-3">Defense Schedule</th>
                             <th class="text-end fw-bold text-uppercase text-secondary small py-3 pe-4">Actions</th>
                         </tr>
                     </thead>
@@ -78,6 +79,20 @@
                                     </td>
                                     <td class="text-center">
                                         <span class="badge bg-danger rounded-pill px-3 py-2 fw-bold shadow-sm fs-6">@milestone.RejectionCount</span>
+                                    </td>
+                                    <td>
+                                        @if (milestone.DefenseDate.HasValue)
+                                        {
+                                            <div class="d-flex flex-column">
+                                                <span class="fw-bold text-dark"><i class="fas fa-calendar-day text-primary me-1"></i>@(milestone.DefenseDate.Value.ToString("dd MMM yyyy"))</span>
+                                                <span class="text-muted small"><i class="fas fa-clock text-warning me-1"></i>@milestone.DefenseTime</span>
+                                                <span class="text-muted small"><i class="fas fa-map-marker-alt text-success me-1"></i>@milestone.DefenseVenue</span>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-muted border">Not Scheduled</span>
+                                        }
                                     </td>
                                     <td class="text-end pe-4">
                                         <form asp-action="AllowIafResubmission" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to allow this student to resubmit their IAF form?');">

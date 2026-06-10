@@ -642,6 +642,11 @@ public ActionResult ManageUsersData()
                         }
                     }
 
+                    // Save schedule to database
+                    milestone.DefenseDate = defenseDate;
+                    milestone.DefenseTime = formattedTime;
+                    milestone.DefenseVenue = venue;
+
                     // Increment time by 15 minutes for the next student
                     currentTime = currentTime.Add(TimeSpan.FromMinutes(15));
                     count++;
@@ -674,6 +679,9 @@ public ActionResult ManageUsersData()
             {
                 // Reset RejectionCount so they can submit again
                 milestone.RejectionCount = 0;
+                milestone.DefenseDate = null;
+                milestone.DefenseTime = null;
+                milestone.DefenseVenue = null;
                 milestone.Status = "Pending";
                 milestone.Remarks = "Defense completed. Student is allowed to resubmit the IAF with a new title/proposal.";
 

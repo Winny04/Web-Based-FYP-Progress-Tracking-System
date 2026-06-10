@@ -26,12 +26,30 @@
     int pendingRequests = 0;
     int pendingSubmissions = 0;
     int pendingMeetings = 0;
+    
+    // Admin counts
+    int adminPendingRequests = 0;
+    
+    // Student counts
+    int studentPendingSupervisorReqs = 0;
+    int studentPendingForms = 0;
+    int studentPendingMeetings = 0;
 
     if (userType == "Supervisor" && currentUser != null)
     {
         pendingRequests = await _context.SupervisorRequests.CountAsync(r => r.SupervisorId == currentUser.Id && r.Status == "Pending");
         pendingSubmissions = await _context.FYPMilestones.CountAsync(m => m.Project.SupervisorId == currentUser.Id && m.Status == "Submitted");
         pendingMeetings = await _context.MeetingBookings.CountAsync(m => m.SupervisorId == currentUser.Id && m.Status == "Pending");
+    }
+    else if ((userType == "Admin" || userType == "SuperAdmin") && currentUser != null)
+    {
+        adminPendingRequests = await _context.SupervisorRequests.CountAsync(r => r.Status == "Pending");
+    }
+    else if (userType == "Student" && currentUser != null)
+    {
+        studentPendingSupervisorReqs = await _context.SupervisorRequests.CountAsync(r => r.StudentId == currentUser.Id && r.Status == "Pending");
+        studentPendingForms = await _context.FYPMilestones.CountAsync(m => m.Project.StudentId == currentUser.Id && (m.Status == "Rejected" || m.Status == "Revision"));
+        studentPendingMeetings = await _context.MeetingBookings.CountAsync(m => m.StudentId == currentUser.Id && m.Status == "Postponed");
     }
 }
 
@@ -51,30 +69,38 @@
 
         @if (userType == "Student")
         {
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Student/ProjectDetails">
+            <div class="menu-item @(pageTitle == "Project Details" ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle == "Project Details" ? "active border-bottom border-3 border-primary" : "")" href="/Student/ProjectDetails">
                     <span class="menu-title">Project Details</span>
                 </a>
             </div>
             @if (!hasSupervisor)
             {
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Student/SelectSupervisor">
-                    <span class="menu-title">Select Supervisor</span>
+            <div class="menu-item @(pageTitle == "Select Supervisor" ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle == "Select Supervisor" ? "active border-bottom border-3 border-primary" : "")" href="/Student/SelectSupervisor">
+                    <span class="menu-title d-flex align-items-center">
+                        Select Supervisor
+                        @if(studentPendingSupervisorReqs > 0) { <span class="badge badge-sm badge-circle badge-warning ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingSupervisorReqs</span> }
+                    </span>
                 </a>
             </div>
             }
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Student/Forms">
-                    <span class="menu-title">Forms</span>
+            <div class="menu-item @(pageTitle == "Forms" ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle == "Forms" ? "active border-bottom border-3 border-primary" : "")" href="/Student/Forms">
+                    <span class="menu-title d-flex align-items-center">
+                        Forms
+                        @if(studentPendingForms > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingForms</span> }
+                    </span>
                 </a>
             </div>
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Student/BookMeeting">
-                    <span class="menu-title">Book Meeting</span>
+            <div class="menu-item @(pageTitle == "Book Meeting" ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle == "Book Meeting" ? "active border-bottom border-3 border-primary" : "")" href="/Student/BookMeeting">
+                    <span class="menu-title d-flex align-items-center">
+                        Book Meeting
+                        @if(studentPendingMeetings > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingMeetings</span> }
+                    </span>
                 </a>
             </div>
-
         }
         else if (userType == "Supervisor")
         {
@@ -113,7 +139,10 @@
         {
             <div class="menu-item">
                 <a class="menu-link py-3" href="/Admin">
-                    <span class="menu-title">Dashboard</span>
+                    <span class="menu-title d-flex align-items-center">
+                        Dashboard
+                        @if(adminPendingRequests > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@adminPendingRequests</span> }
+                    </span>
                 </a>
             </div>
             <div class="menu-item">

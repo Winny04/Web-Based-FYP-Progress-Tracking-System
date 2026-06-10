@@ -42,6 +42,15 @@ namespace FYPTracker.Models
 
         public int RejectionCount { get; set; } = 0;
 
+        [Column(TypeName = "date")]
+        public DateTime? DefenseDate { get; set; }
+
+        [StringLength(20)]
+        public string? DefenseTime { get; set; }
+
+        [StringLength(255)]
+        public string? DefenseVenue { get; set; }
+
         // Navigation
         [ForeignKey(nameof(FYPProjectId))]
         public virtual FYPProject? Project { get; set; }
