@@ -10,21 +10,21 @@
 }
 
 <style>
-    :root { --teal-grad: linear-gradient(135deg, #0d9488 0%, #06b6d4 100%); }
+    :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
 
     .page-hero {
-        background: var(--teal-grad);
+        background: var(--hero-grad);
         border-radius: 20px;
         padding: 28px 32px;
         color: white;
         margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(13, 148, 136, 0.28);
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
     }
 
     .glass-card {
         background: #fff;
         border-radius: 16px;
-        border: 1px solid rgba(13, 148, 136, 0.1);
+        border: 1px solid #f1f5f9;
         box-shadow: 0 4px 20px rgba(0,0,0,0.06);
         transition: transform 0.25s, box-shadow 0.25s;
     }
@@ -94,7 +94,7 @@
                 <i class="fas fa-folder-open fs-1 text-muted opacity-40 mb-3 d-block"></i>
                 <h4 class="fw-bold text-muted">No Project Found</h4>
                 <p class="text-muted mb-4">You have not submitted a project proposal yet.</p>
-                <a href="/Student/Forms" class="btn btn-primary rounded-3 px-4" style="background:var(--teal-grad);border:none;">
+                <a href="/Student/Forms" class="btn btn-primary rounded-3 px-4" style="background:var(--hero-grad);border:none;">
                     <i class="fas fa-plus me-1"></i> Submit Proposal
                 </a>
             </div>
@@ -115,11 +115,11 @@
                         </div>
                         <div class="col-md-6">
                             <div class="info-label">Category / Field</div>
-                            <div class="info-value">Software Engineering</div>
+                            <div class="info-value">@(Model.Student?.Programme ?? "—")</div>
                         </div>
                         <div class="col-md-6">
                             <div class="info-label">Academic Year / Session</div>
-                            <div class="info-value">2025/2026</div>
+                            <div class="info-value">@(Model.Student?.AcademicSession ?? "—")</div>
                         </div>
                         <div class="col-md-6">
                             <div class="info-label">Status</div>
@@ -220,7 +220,7 @@
                     </div>
                     <div class="progress mb-2" style="height:14px;border-radius:7px;">
                         <div class="progress-bar" role="progressbar"
-                             style="width:@pct%;background:var(--teal-grad);"
+                             style="width:@pct%;background:var(--hero-grad);"
                              aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
                     </div>
                     <div class="d-flex gap-4 mt-3" style="font-size:.8rem;">
@@ -320,38 +320,7 @@
             @* ── Right Sidebar ─────────── *@
             <div class="col-lg-4">
 
-                @{
-                    var scheduledDefense = milestones.FirstOrDefault(m => m.RejectionCount >= 3 && m.DefenseDate.HasValue);
-                }
-                @if (scheduledDefense != null)
-                {
-                    <div class="glass-card p-4 mb-4" style="border: 2px solid #ef4444; background: #fef2f2;">
-                        <h6 class="fw-bold text-danger mb-3"><i class="fas fa-shield-alt me-2"></i>Defense Preparation</h6>
-                        <p class="small text-dark mb-3">You are scheduled for a mandatory Defense Presentation. Please prepare the following items:</p>
-                        <div class="d-flex flex-column gap-2 mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input border-danger" type="checkbox" id="check1">
-                                <label class="form-check-label text-dark small fw-semibold" for="check1">Presentation Slides (PPT/PDF)</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input border-danger" type="checkbox" id="check2">
-                                <label class="form-check-label text-dark small fw-semibold" for="check2">Printed Report Copies (x2)</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input border-danger" type="checkbox" id="check3">
-                                <label class="form-check-label text-dark small fw-semibold" for="check3">Working Prototype Demo</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input border-danger" type="checkbox" id="check4">
-                                <label class="form-check-label text-dark small fw-semibold" for="check4">Formal Attire Required</label>
-                            </div>
-                        </div>
-                        <div class="bg-white p-3 rounded border border-danger border-opacity-25 shadow-sm text-center">
-                            <div class="text-danger fw-bold mb-1"><i class="far fa-calendar-alt me-1"></i>@scheduledDefense.DefenseDate!.Value.ToString("dd MMMM yyyy")</div>
-                            <div class="text-dark small fw-bold"><i class="far fa-clock me-1"></i>@scheduledDefense.DefenseTime | <i class="fas fa-map-marker-alt ms-1 me-1"></i>@scheduledDefense.DefenseVenue</div>
-                        </div>
-                    </div>
-                }
+
 
                 @* Supervisor Card *@
                 <div class="glass-card p-4 mb-4">
@@ -361,7 +330,7 @@
                         var sup = Model.Supervisor;
                         var ini = string.Join("", (sup.FullName ?? "S").Split(' ').Take(2).Select(w => w[0]));
                         <div class="d-flex align-items-center gap-3">
-                            <div style="width:50px;height:50px;border-radius:50%;background:var(--teal-grad);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:18px;flex-shrink:0;">
+                            <div style="width:50px;height:50px;border-radius:50%;background:var(--hero-grad);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:18px;flex-shrink:0;">
                                 @ini
                             </div>
                             <div>
@@ -480,6 +449,15 @@
                             <h6 class="fw-bold text-success mb-2"><i class="fas fa-comment-dots me-2"></i>Supervisor Feedback</h6>
                             <div class="p-3 rounded-3" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; font-weight: 500; white-space: pre-wrap;">
                                 @ms.SupervisorFeedback
+                            </div>
+                        }
+
+                        @if (ms.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Progress", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Final Submission", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <div class="mt-4 pt-3 border-top text-end">
+                                <a href="@Url.Action("Forms", "Student")" class="btn btn-primary fw-bold px-4">
+                                    Go to Digital Forms <i class="fas fa-arrow-right ms-2"></i>
+                                </a>
                             </div>
                         }
                     </div>

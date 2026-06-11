@@ -8,17 +8,16 @@
 
 <style>
     :root {
-        --orange-grad: linear-gradient(135deg, #f97316 0%, #fbbf24 100%);
-        --primary-orange: #f97316;
+        --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%);
     }
     
     .page-hero {
-        background: var(--orange-grad);
+        background: var(--hero-grad);
         border-radius: 20px;
         padding: 28px 32px;
         color: white;
         margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(249, 115, 22, 0.25);
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
     }
 
     .premium-card {
@@ -44,14 +43,14 @@
     }
 
     .form-control:focus, .form-select:focus {
-        border-color: var(--primary-orange);
-        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+        border-color: #334155;
+        box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.15);
     }
 
 
 
     .btn-submit {
-        background: var(--orange-grad);
+        background: #1e293b;
         color: white;
         border: none;
         border-radius: 10px;
@@ -134,13 +133,13 @@
         opacity: 0.6;
     }
     .stepper-btn.active .step-icon {
-        background: var(--orange-grad);
+        background: var(--hero-grad);
         color: white;
         border-color: transparent;
-        box-shadow: 0 4px 12px rgba(249,115,22,0.3);
+        box-shadow: 0 4px 12px rgba(30,41,59,0.3);
     }
     .stepper-btn.active .step-text {
-        color: #f97316;
+        color: #1e293b;
         font-weight: 700;
     }
     .step-icon {
@@ -217,19 +216,19 @@
             <div class="col-12">
                 <ul class="wizard-stepper nav nav-pills m-0 p-0" style="list-style: none;" id="forms-tab" role="tablist">
                     <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(iafTooltip)>
-                        <button class="stepper-btn nav-link @(!isIafApproved && !isProposalApproved && !isAllProgressApproved ? "active" : "")" id="iaf-form-tab" data-toggle="pill" data-target="#iaf-form-pane" type="button" role="tab" @(isIafApproved ? "disabled" : "") style="@(isIafApproved ? "pointer-events: none;" : "")">
+                        <button class="stepper-btn nav-link @(!isIafApproved && !isProposalApproved && !isAllProgressApproved ? "active" : "")" id="iaf-form-tab" data-toggle="pill" data-target="#iaf-form-pane" type="button" role="tab">
                             <div class="step-icon"><i class="fas fa-clipboard-list"></i></div>
                             <div class="step-text">1. IAF Form</div>
                         </button>
                     </li>
                     <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(proposalTooltip)>
-                        <button class="stepper-btn nav-link @(isIafApproved && !isProposalApproved && !isAllProgressApproved ? "active" : "")" id="proposal-form-tab" data-toggle="pill" data-target="#proposal-form-pane" type="button" role="tab" @(!isIafApproved || isProposalApproved ? "disabled" : "") style="@(!isIafApproved || isProposalApproved ? "pointer-events: none;" : "")">
+                        <button class="stepper-btn nav-link @(isIafApproved && !isProposalApproved && !isAllProgressApproved ? "active" : "")" id="proposal-form-tab" data-toggle="pill" data-target="#proposal-form-pane" type="button" role="tab" @(!isIafApproved ? "disabled" : "") style="@(!isIafApproved ? "pointer-events: none;" : "")">
                             <div class="step-icon"><i class="fas fa-feather-alt"></i></div>
                             <div class="step-text">A. Proposal Form</div>
                         </button>
                     </li>
                     <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(progressTooltip)>
-                        <button class="stepper-btn nav-link @(isProposalApproved && !isAllProgressApproved ? "active" : "")" id="progress-form-tab" data-toggle="pill" data-target="#progress-form-pane" type="button" role="tab" @(!isProposalApproved || isAllProgressApproved ? "disabled" : "") style="@(!isProposalApproved || isAllProgressApproved ? "pointer-events: none;" : "")">
+                        <button class="stepper-btn nav-link @(isProposalApproved && !isAllProgressApproved ? "active" : "")" id="progress-form-tab" data-toggle="pill" data-target="#progress-form-pane" type="button" role="tab" @(!isProposalApproved ? "disabled" : "") style="@(!isProposalApproved ? "pointer-events: none;" : "")">
                             <div class="step-icon"><i class="fas fa-tasks"></i></div>
                             <div class="step-text">B. Progress Report</div>
                         </button>
@@ -285,7 +284,7 @@
                                 }
                             }
                                 
-                                <form asp-action="SubmitDigitalForm" method="post" class="needs-validation" novalidate>
+                                <form id="iafFormElement" asp-action="SubmitDigitalForm" method="post" class="needs-validation" novalidate>
                                     <input type="hidden" name="formType" value="Initial Project Allocation Form (IAF)" />
                                     <input type="hidden" name="milestoneId" value="@iafMilestoneId" />
 
@@ -347,29 +346,32 @@
                                             <label class="form-label fw-semibold">Supervisor's Name</label>
                                             <input type="text" name="supervisorName" class="form-control bg-light" placeholder="Supervisor Name" value="@Model.Supervisor?.FullName" readonly />
                                         </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label fw-semibold">Supervisor's Signature</label>
-                                            @{
-                                                string sigName = "";
-                                                if (iafMilestone != null && !string.IsNullOrEmpty(iafMilestone.Remarks) && iafMilestone.Remarks.Contains("JSON: ")) {
-                                                    try {
-                                                        var parts = iafMilestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
-                                                        var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parts[1]);
-                                                        if (dict != null && dict.TryGetValue("Supervisor Signature", out var sig)) {
-                                                            sigName = sig;
-                                                        }
-                                                    } catch {}
+                                        @if (iafMilestone == null || iafMilestone.Status != "Rejected")
+                                        {
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Supervisor's Signature</label>
+                                                @{
+                                                    string sigName = "";
+                                                    if (iafMilestone != null && !string.IsNullOrEmpty(iafMilestone.Remarks) && iafMilestone.Remarks.Contains("JSON: ")) {
+                                                        try {
+                                                            var parts = iafMilestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                                                            var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parts[1]);
+                                                            if (dict != null && dict.TryGetValue("Supervisor Signature", out var sig)) {
+                                                                sigName = sig;
+                                                            }
+                                                        } catch {}
+                                                    }
                                                 }
-                                            }
-                                            <input type="text" class="form-control bg-light @(string.IsNullOrEmpty(sigName) ? "text-danger" : "text-success fw-bold")" value="@(string.IsNullOrEmpty(sigName) ? "Awaiting Signature" : sigName)" readonly />
-                                            <span class="text-muted small">* Note: the supervisor has to sign the form in order to acknowledge that they are the supervisor.</span>
-                                        </div>
+                                                <input type="text" class="form-control bg-light @(string.IsNullOrEmpty(sigName) ? "text-danger" : "text-success fw-bold")" value="@(string.IsNullOrEmpty(sigName) ? "Awaiting Signature" : sigName)" readonly />
+                                                <span class="text-muted small">* Note: the supervisor has to sign the form in order to acknowledge that they are the supervisor.</span>
+                                            </div>
+                                        }
                                     </div>
 
-                                    @if (iafMilestone != null && (!string.IsNullOrEmpty(iafMilestone.SupervisorFeedback) || iafMilestone.Status == "Rejected" || iafMilestone.Status == "Approved"))
+                                    @if (iafMilestone != null && !string.IsNullOrEmpty(iafMilestone.SupervisorFeedback) && iafMilestone.Status == "Approved")
                                     {
                                         <div class="form-section-title">Comment/Feedback</div>
-                                        <div class="mb-4 p-3 bg-light rounded border">
+                                        <div class="mb-4 p-3 bg-light rounded border border-success">
                                             <p class="mb-0 text-dark fw-semibold">@iafMilestone.SupervisorFeedback</p>
                                         </div>
                                     }
@@ -691,7 +693,7 @@
                                 </div>
 
                                 <div class="d-flex gap-3 justify-content-end">
-                                    <button type="submit" class="btn-submit bg-danger border-0" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
+                                    <button type="submit" class="btn-submit bg-dark border-0">
                                         <i class="fas fa-file-pdf me-1"></i> Submit Final Report
                                     </button>
                                 </div>
@@ -943,6 +945,8 @@
             } catch(e) {}
             
         })();
+
+
     </script>
 }
 

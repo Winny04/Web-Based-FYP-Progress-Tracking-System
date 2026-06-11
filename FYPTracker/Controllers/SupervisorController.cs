@@ -72,7 +72,7 @@ namespace FYPTracker.Controllers
             // Recent Requests (Top 5)
             var recentRequests = await _context.SupervisorRequests
                 .Include(r => r.Student)
-                .Where(r => r.SupervisorId == user.Id && r.Status == "Pending")
+                .Where(r => r.SupervisorId == user.Id && r.Status == "Pending" && !r.Student.IsResign)
                 .OrderByDescending(r => r.RequestedDate)
                 .Take(5)
                 .ToListAsync();
@@ -80,7 +80,7 @@ namespace FYPTracker.Controllers
             // Upcoming Meetings (Next 5)
             var nextMeetings = await _context.MeetingBookings
                 .Include(m => m.Student)
-                .Where(m => m.SupervisorId == user.Id && m.MeetingDate >= DateTime.Today && m.Status == "Approved")
+                .Where(m => m.SupervisorId == user.Id && m.MeetingDate >= DateTime.Today && m.Status == "Approved" && !m.Student.IsResign)
                 .OrderBy(m => m.MeetingDate)
                 .ThenBy(m => m.MeetingTime)
                 .Take(5)
@@ -107,7 +107,7 @@ namespace FYPTracker.Controllers
 
             var requests = await _context.SupervisorRequests
                 .Include(r => r.Student)
-                .Where(r => r.SupervisorId == user.Id)
+                .Where(r => r.SupervisorId == user.Id && !r.Student.IsResign)
                 .OrderByDescending(r => r.RequestedDate)
                 .ToListAsync();
 
@@ -197,7 +197,7 @@ namespace FYPTracker.Controllers
             var projects = await _context.FYPProjects
                 .Include(p => p.Student)
                 .Include(p => p.Milestones)
-                .Where(p => p.SupervisorId == user.Id)
+                .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign)
                 .OrderByDescending(p => p.CreatedDate)
                 .ToListAsync();
 
@@ -480,6 +480,31 @@ namespace FYPTracker.Controllers
         // ────────────────────────────────────────────────────────
         // Review Submissions
         // ────────────────────────────────────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> ViewFile(int fileId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+
+            var file = await _context.FYPSubmissionFiles.FindAsync(fileId);
+            if (file == null || string.IsNullOrEmpty(file.FilePath)) return NotFound();
+
+            var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
+            string mimeType = "application/octet-stream";
+            
+            if (ext == ".pdf") mimeType = "application/pdf";
+            else if (ext == ".docx") mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            else if (ext == ".doc") mimeType = "application/msword";
+            else if (ext == ".png") mimeType = "image/png";
+            else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+
+            var physicalPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", file.FilePath.TrimStart('/', '\\'));
+            if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+
+            Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}\"");
+            return PhysicalFile(physicalPath, mimeType);
+        }
+
         public async Task<IActionResult> ReviewSubmissions()
         {
             var user = await GetCurrentUserAsync();
@@ -489,11 +514,32 @@ namespace FYPTracker.Controllers
             var submissions = await _context.FYPMilestones
                 .Include(m => m.Project).ThenInclude(p => p.Student)
                 .Include(m => m.SubmissionFiles)
-                .Where(m => m.Project.SupervisorId == user.Id)
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign)
                 .OrderByDescending(m => m.SubmittedDate ?? m.CreatedDate)
                 .ToListAsync();
 
             return View(submissions);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GradeSubmission(int id)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            ViewBag.CurrentUser = user;
+
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project).ThenInclude(p => p.Student)
+                .Include(m => m.SubmissionFiles)
+                .FirstOrDefaultAsync(m => m.Id == id && m.Project.SupervisorId == user.Id);
+
+            if (milestone == null)
+            {
+                TempData["Error"] = "Submission not found or unauthorized.";
+                return RedirectToAction(nameof(ReviewSubmissions));
+            }
+
+            return View(milestone);
         }
 
         [HttpPost]
@@ -568,11 +614,13 @@ namespace FYPTracker.Controllers
             var user = await GetCurrentUserAsync();
             if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
+            ViewBag.StartHour = 8;
+            ViewBag.EndHour = 17;
 
             var meetings = await _context.MeetingBookings
                 .Include(m => m.Student)
                 .Include(m => m.MeetingLog)
-                .Where(m => m.SupervisorId == user.Id)
+                .Where(m => m.SupervisorId == user.Id && !m.Student.IsResign)
                 .OrderByDescending(m => m.CreatedDate)
                 .ToListAsync();
 
@@ -581,7 +629,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> RespondMeeting(int meetingId, string status, string? note, DateTime? proposedDate)
+        public async Task<IActionResult> RespondMeeting(int meetingId, string status, string? note, DateTime? proposedDate, string? newMeetingTime)
         {
             var user = await GetCurrentUserAsync();
             var meeting = await _context.MeetingBookings.FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
@@ -591,6 +639,10 @@ namespace FYPTracker.Controllers
                 meeting.Status = status;
                 meeting.SupervisorNote = note;
                 meeting.ProposedNewDate = proposedDate;
+                if (!string.IsNullOrEmpty(newMeetingTime))
+                {
+                    meeting.MeetingTime = newMeetingTime;
+                }
                 meeting.RespondedDate = DateTime.Now;
                 await _context.SaveChangesAsync();
 
@@ -658,7 +710,6 @@ namespace FYPTracker.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ReviewMeetingLogSupervisor(
             int meetingId, 
-            DateTime nextMeetingDate, 
             string supervisorComments)
         {
             var user = await GetCurrentUserAsync();
@@ -670,19 +721,18 @@ namespace FYPTracker.Controllers
 
             if (meeting == null || meeting.MeetingLog == null)
             {
-                TempData["Error"] = "Meeting log not found.";
+                TempData["Error"] = "Progress logbook not found.";
                 return RedirectToAction(nameof(ManageMeetings));
             }
 
-            meeting.MeetingLog.NextMeetingDate = nextMeetingDate;
             meeting.MeetingLog.SupervisorComments = supervisorComments;
             meeting.MeetingLog.LogStatus = "Signed";
             meeting.MeetingLog.SignatureDate = DateTime.Now;
 
             await _context.SaveChangesAsync();
-            await AddNotificationAsync(meeting.StudentId, "MeetingLogSigned", "Meeting Log Signed", $"Your supervisor has signed the meeting log for the meeting on {meeting.MeetingDate:dd MMM yyyy}.");
-
-            TempData["Success"] = "Meeting log signed and approved successfully!";
+            await AddNotificationAsync(meeting.StudentId, "MeetingLogSigned", "Progress Logbook Signed", $"Your supervisor has signed the progress logbook for the meeting on {meeting.MeetingDate:dd MMM yyyy}.");
+            
+            TempData["Success"] = "Progress logbook signed and approved successfully!";
             return RedirectToAction(nameof(ManageMeetings));
         }
 

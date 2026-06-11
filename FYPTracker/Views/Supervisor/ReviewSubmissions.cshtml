@@ -5,15 +5,15 @@
 }
 
 <style>
-    :root { --purple-grad: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); }
+    :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
 
     .page-hero {
-        background: var(--purple-grad);
+        background: var(--hero-grad);
         border-radius: 20px;
         padding: 28px 32px;
         color: white;
         margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(139, 92, 246, 0.25);
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
     }
 </style>
 
@@ -96,8 +96,8 @@
                                         @foreach(var f in ms.SubmissionFiles)
                                         {
                                             <div class="d-inline-flex align-items-center mb-1">
-                                                <a href="@f.FilePath" download class="badge badge-light-primary"><i class="fas fa-file-download me-1 text-primary"></i> @f.FileName</a>
-                                                <a href="@f.FilePath" target="_blank" class="btn btn-icon btn-active-light-primary w-20px h-20px ms-1" title="Preview in new tab">
+                                                <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = f.Id })" target="_blank" class="badge badge-light-primary"><i class="fas fa-file-download me-1 text-primary"></i> @f.FileName</a>
+                                                <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = f.Id })" target="_blank" class="btn btn-icon btn-active-light-primary w-20px h-20px ms-1" title="Preview in new tab">
                                                     <i class="fas fa-external-link-alt text-info" style="font-size: 0.85rem;"></i>
                                                 </a>
                                             </div><br/>
@@ -127,91 +127,7 @@
                                     }
                                 </td>
                                 <td class="text-end pe-4">
-                                    <button type="button" class="btn btn-sm btn-light-primary" data-bs-toggle="modal" data-bs-target="#reviewModal_@ms.Id">Grade</button>
-
-
-                                <!-- Review Modal -->
-                                <div class="modal fade" id="reviewModal_@ms.Id" tabindex="-1">
-                                    <div class="modal-dialog">
-                                        <div class="modal-content text-start">
-                                            <form asp-action="ReviewSubmission" method="post">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title">Grade Submission: @ms.Title</h5>
-                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    <input type="hidden" name="milestoneId" value="@ms.Id" />
-                                                    
-                                                    @{
-                                                        string raw = ms.Remarks ?? "";
-                                                        string parsedJson = "";
-                                                        string formInfo = "";
-                                                        if (raw.Contains("JSON: ")) {
-                                                            var parts = raw.Split(new[] { "JSON: " }, StringSplitOptions.None);
-                                                            formInfo = parts[0].Trim();
-                                                            parsedJson = parts[1];
-                                                        }
-                                                    }
-                                                    
-                                                    @if (!string.IsNullOrEmpty(formInfo))
-                                                    {
-                                                        <div class="alert alert-primary bg-light-primary border-primary border-dashed d-flex align-items-center p-3 mb-4">
-                                                            <i class="fas fa-info-circle fs-3 text-primary me-3"></i>
-                                                            <div class="d-flex flex-column">
-                                                                <span class="fw-bold text-dark">Submission Information</span>
-                                                                <span class="text-muted" style="font-size: 0.9rem;">@formInfo</span>
-                                                            </div>
-                                                        </div>
-                                                    }
-
-                                                    @if (!string.IsNullOrEmpty(parsedJson))
-                                                    {
-                                                        <div class="mb-5 p-4 bg-light rounded-4 border border-secondary border-opacity-25 shadow-sm">
-                                                            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-file-alt me-2"></i>Form Details</h6>
-                                                            @{
-                                                                try {
-                                                                    var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parsedJson);
-                                                                    if (dict != null) {
-                                                                        <table class="table table-sm table-borderless m-0" style="font-size: 0.9rem;">
-                                                                        @foreach (var kvp in dict) {
-                                                                            if (!string.IsNullOrEmpty(kvp.Value)) {
-                                                                                <tr>
-                                                                                    <td class="fw-bold text-muted" style="width: 140px; vertical-align: top;">@kvp.Key:</td>
-                                                                                    <td class="text-dark fw-semibold" style="white-space: pre-wrap;">@kvp.Value</td>
-                                                                                </tr>
-                                                                            }
-                                                                        }
-                                                                        </table>
-                                                                    }
-                                                                } catch {
-                                                                    <div class="text-muted small" style="white-space: pre-wrap;">@parsedJson</div>
-                                                                }
-                                                            }
-                                                        </div>
-                                                    }
-
-                                                    <div class="mb-5">
-                                                        <label class="form-label fw-bold">Decision</label>
-                                                        <select name="status" class="form-select form-select-solid" required>
-                                                            <option value="">- Select -</option>
-                                                            <option value="Approved" selected="@(ms.Status == "Approved")">Approve (Passed)</option>
-                                                            <option value="Rejected" selected="@(ms.Status == "Rejected")">Reject (Needs Revision)</option>
-                                                            <option value="UnderReview" selected="@(ms.Status == "UnderReview")">Mark as Under Review</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="mb-3">
-                                                        <label class="form-label fw-bold">Feedback / Remarks</label>
-                                                        <textarea name="remarks" class="form-control form-control-solid" rows="4" placeholder="Write feedback for the student here...">@ms.SupervisorFeedback</textarea>
-                                                    </div>
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                                                    <button type="submit" class="btn btn-primary">Save Review</button>
-                                                </div>
-                                            </form>
-                                        </div>
-                                    </div>
-                                </div>
+                                    <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-primary">Grade</a>
                             </td>
                         </tr>
                         }
@@ -257,15 +173,6 @@
                 });
             }
 
-            const urlParams = new URLSearchParams(window.location.search);
-            const openId = urlParams.get('openMilestoneId');
-            if (openId) {
-                const modalEl = document.getElementById('reviewModal_' + openId);
-                if (modalEl) {
-                    new bootstrap.Modal(modalEl).show();
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                }
-            }
         });
     </script>
 }

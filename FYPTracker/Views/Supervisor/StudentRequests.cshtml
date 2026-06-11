@@ -5,25 +5,25 @@
 }
 
 <style>
-    :root { --orange-grad: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+    :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
 
     .page-hero {
-        background: var(--orange-grad);
+        background: var(--hero-grad);
         border-radius: 20px;
         padding: 28px 32px;
         color: white;
         margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(245, 158, 11, 0.25);
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
     }
 
     .glass-card {
         background: #fff;
         border-radius: 16px;
-        border: 1px solid rgba(245, 158, 11, 0.1);
+        border: 1px solid #f1f5f9;
         box-shadow: 0 4px 20px rgba(0,0,0,0.06);
     }
 
-    .section-title { font-size: .8rem; font-weight: 800; text-transform: uppercase; color: #d97706; letter-spacing: .05em; border-bottom: 2px solid #f3f4f6; padding-bottom: 6px; margin-bottom: 12px; }
+    .section-title { font-size: .8rem; font-weight: 800; text-transform: uppercase; color: #475569; letter-spacing: .05em; border-bottom: 2px solid #f3f4f6; padding-bottom: 6px; margin-bottom: 12px; }
     
     .info-label { font-size: .75rem; color: #9ca3af; font-weight: 600; text-transform: uppercase; margin-bottom: 2px; }
     .info-value { font-size: .95rem; color: #1f2937; font-weight: 700; margin-bottom: 12px; }
@@ -42,7 +42,7 @@
             <p class="mb-0 opacity-80">Review student applications and approve or reject requests to supervise their projects.</p>
         </div>
         <div class="text-end">
-            <span class="badge bg-white text-warning fw-bold px-3 py-2 rounded-pill" style="color:#d97706;">
+            <span class="badge bg-white text-dark fw-bold px-3 py-2 rounded-pill">
                 @Model.Count(r => r.Status == "Pending") Pending Applications
             </span>
         </div>
@@ -116,7 +116,7 @@
 <div class="modal fade" id="formModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            <div class="modal-header bg-warning text-white border-0">
+            <div class="modal-header bg-dark text-white border-0">
                 <h5 class="fw-bold mb-0">Student Supervision Application</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>

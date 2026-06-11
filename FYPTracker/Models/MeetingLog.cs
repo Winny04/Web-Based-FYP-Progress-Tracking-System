@@ -23,7 +23,7 @@ namespace FYPTracker.Models
 
         public string? SupervisorComments { get; set; }
 
-        [Column(TypeName = "date")]
+        [Column(TypeName = "datetime")]
         public DateTime? NextMeetingDate { get; set; }
 
         [Column(TypeName = "datetime")]

@@ -6,15 +6,15 @@
 }
 
 <style>
-    :root { --teal-grad: linear-gradient(135deg, #0d9488 0%, #0f766e 100%); }
+    :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
 
     .page-hero {
-        background: var(--teal-grad);
+        background: var(--hero-grad);
         border-radius: 20px;
         padding: 28px 32px;
         color: white;
         margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(13, 148, 136, 0.28);
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
     }
 
     .glass-card {
@@ -46,12 +46,12 @@
         font-weight: 700;
         text-align: center;
         transition: all .2s;
-        background: #f0fdf4;
-        color: #166534;
-        border-color: #bbf7d0;
+        background: #f8fafc;
+        color: #374151;
+        border-color: #e2e8f0;
     }
-    .time-slot:hover { border-color: #22c55e; background: #dcfce7; }
-    .time-slot.selected { border-color: #15803d; background: #16a34a; color: white; }
+    .time-slot:hover { border-color: #64748b; background: #f1f5f9; }
+    .time-slot.selected { border-color: #1e293b; background: #1e293b; color: white; }
     .time-slot.booked { background: #f3f4f6 !important; color: #9ca3af !important; border-color: #e5e7eb !important; cursor: not-allowed; opacity: 0.7; text-decoration: line-through; }
 
     .table th { font-size: .73rem; text-transform: uppercase; letter-spacing: .05em; color: #9ca3af; font-weight: 700; }
@@ -73,8 +73,8 @@
             <p class="mb-0 text-white opacity-75">Oversee and respond to meeting requests from your students.</p>
         </div>
         <div class="d-flex gap-2">
-            <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-warning" style="color: #d97706 !important;">@Model.Count(m => m.Status == "Pending") Pending</span>
-            <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-success" style="color: #16a34a !important;">@Model.Count(m => m.Status == "Approved") Approved</span>
+            <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-dark">@Model.Count(m => m.Status == "Pending") Pending</span>
+            <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-dark">@Model.Count(m => m.Status == "Approved") Approved</span>
         </div>
     </div>
 
@@ -137,6 +137,10 @@
                                                             </select>
                                                         </div>
                                                         <div class="mb-3">
+                                                            <label class="form-label fw-bold">Meeting Time (Edit if needed)</label>
+                                                            <input type="time" name="newMeetingTime" class="form-control rounded-3" value="@m.MeetingTime" />
+                                                        </div>
+                                                        <div class="mb-3">
                                                             <label class="form-label fw-bold">Message to Student</label>
                                                             <textarea name="note" class="form-control rounded-3" rows="3" placeholder="Add instructions or feedback..."></textarea>
                                                         </div>
@@ -161,6 +165,7 @@
                                                 data-topics="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.KeyTopicsDiscussed)"
                                                 data-action="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.ActionPointsForNextMeeting)"
                                                 data-completed="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.CompletedActionsAndNotes)"
+                                                data-next-date="@(m.MeetingLog.NextMeetingDate?.ToString("yyyy-MM-ddTHH:mm"))"
                                                 onclick="openReviewLogModal(this)">
                                             Review Log
                                         </button>
@@ -234,11 +239,11 @@
                 <input type="hidden" name="meetingId" id="revMeetingId" />
                 
                 <div class="modal-header border-0 pb-0">
-                    <h5 class="fw-bold text-dark"><i class="fas fa-file-signature text-warning me-2"></i>Review & Sign Meeting Log</h5>
+                    <h5 class="fw-bold text-dark"><i class="fas fa-file-signature text-warning me-2"></i>Review & Sign Progress Logbook</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small mb-4">Review the student's draft. Add your comments and sign to approve.</p>
+                    <p class="text-muted small mb-4">Review the student's weekly progress logbook. Add your comments and sign to approve.</p>
                     
                     <div class="row mb-3">
                         <div class="col-6"><strong>Student:</strong> <span id="revStudentName"></span></div>
@@ -248,24 +253,22 @@
                     <!-- Readonly fields filled by student -->
                     <div class="p-3 bg-light rounded-3 mb-4">
                         <div class="mb-3">
-                            <label class="text-muted small fw-bold text-uppercase d-block">Key Topics Discussed</label>
+                            <label class="text-muted small fw-bold text-uppercase d-block">Progress Made / Tasks Completed</label>
                             <div id="revKeyTopics" class="text-dark" style="white-space: pre-wrap; font-size: 0.9rem;"></div>
                         </div>
                         <div class="mb-3">
-                            <label class="text-muted small fw-bold text-uppercase d-block">Action Points</label>
+                            <label class="text-muted small fw-bold text-uppercase d-block">Plan for Next Week</label>
                             <div id="revActionPoints" class="text-dark" style="white-space: pre-wrap; font-size: 0.9rem;"></div>
                         </div>
                         <div>
-                            <label class="text-muted small fw-bold text-uppercase d-block">Completed Actions</label>
+                            <label class="text-muted small fw-bold text-uppercase d-block">Issues / Challenges</label>
                             <div id="revCompleted" class="text-dark" style="white-space: pre-wrap; font-size: 0.9rem;"></div>
                         </div>
                     </div>
 
                     <!-- Supervisor inputs -->
-                    <div class="mb-4">
-                        <label class="form-label fw-bold text-primary">Date of next meeting</label>
-                        <input type="date" name="nextMeetingDate" class="form-control rounded-3 border-primary" required />
-                    </div>
+                        <label class="form-label fw-bold text-primary">Proposed Date & Time for Next Meeting</label>
+                        <div id="revNextMeetingDate" class="text-dark fw-bold" style="font-size: 0.95rem;"></div>
 
                     <div class="mb-4">
                         <label class="form-label fw-bold text-primary">Supervisor Comments & Feedback</label>
@@ -349,6 +352,14 @@
         document.getElementById('revKeyTopics').textContent = btn.getAttribute('data-topics');
         document.getElementById('revActionPoints').textContent = btn.getAttribute('data-action');
         document.getElementById('revCompleted').textContent = btn.getAttribute('data-completed');
+        
+        let nextDate = btn.getAttribute('data-next-date');
+        if (nextDate) {
+            const d = new Date(nextDate);
+            document.getElementById('revNextMeetingDate').textContent = d.toLocaleString('en-US', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+        } else {
+            document.getElementById('revNextMeetingDate').textContent = "Not proposed";
+        }
         
         new bootstrap.Modal(document.getElementById('reviewLogModal')).show();
     }

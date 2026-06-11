@@ -8,21 +8,21 @@
 }
 
 <style>
-    :root { --yellow-grad: linear-gradient(135deg, #eab308 0%, #f59e0b 100%); }
+    :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
 
     .page-hero {
-        background: var(--yellow-grad);
+        background: var(--hero-grad);
         border-radius: 20px;
         padding: 28px 32px;
         color: white;
         margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(234,179,8,.3);
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
     }
 
     .glass-card {
         background: #fff;
         border-radius: 16px;
-        border: 1px solid rgba(234,179,8,.12);
+        border: 1px solid #f1f5f9;
         box-shadow: 0 4px 20px rgba(0,0,0,.06);
     }
 
@@ -34,17 +34,17 @@
         position: relative;
     }
     .notif-item.unread {
-        border-color: #fef08a;
-        background: #fefce8;
+        border-color: #e2e8f0;
+        background: #f8fafc;
     }
-    .notif-item:hover { border-color: #eab308; }
+    .notif-item:hover { border-color: #94a3b8; }
     
     .hover-orange:hover { color: #d97706 !important; }
 
     .unread-dot {
         width: 10px; height: 10px;
         border-radius: 50%;
-        background: #eab308;
+        background: #475569;
         flex-shrink: 0;
         margin-top: 6px;
     }
@@ -67,19 +67,19 @@
         color: #6b7280;
         transition: all .18s;
     }
-    .btn-read:hover { border-color: #eab308; color: #854d0e; background: #fefce8; }
+    .btn-read:hover { border-color: #475569; color: #1e293b; background: #f1f5f9; }
 
     .btn-mark-all {
-        background: var(--yellow-grad);
-        color: white;
-        border: none;
+        background: #fff;
+        color: #1e293b;
+        border: 1.5px solid rgba(255,255,255,0.5);
         border-radius: 10px;
         padding: 8px 20px;
         font-weight: 700;
         font-size: .85rem;
         transition: opacity .2s;
     }
-    .btn-mark-all:hover { opacity: .85; color: white; }
+    .btn-mark-all:hover { background: rgba(255,255,255,0.9); }
 
     .filter-tab {
         border: 2px solid #e5e7eb;
@@ -92,7 +92,7 @@
         background: #fff;
         transition: all .18s;
     }
-    .filter-tab:hover, .filter-tab.active { border-color: #eab308; color: #854d0e; background: #fefce8; }
+    .filter-tab:hover, .filter-tab.active { border-color: #334155; color: #1e293b; background: #f1f5f9; }
 </style>
 
 <div class="container-fluid py-4">
@@ -113,7 +113,7 @@
         <div class="d-flex align-items-center gap-3">
             @if (unreadCount > 0)
             {
-                <span class="badge bg-white fw-bold px-3 py-2 rounded-pill" style="color:#854d0e;">
+                <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-dark">
                     @unreadCount Unread
                 </span>
                 <form asp-action="MarkAllRead" asp-controller="Student" method="post">

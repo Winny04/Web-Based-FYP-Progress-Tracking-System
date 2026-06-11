@@ -60,8 +60,8 @@
         
         @if (userType != "Admin" && userType != "SuperAdmin")
         {
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Home">
+            <div class="menu-item @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "active border-bottom border-3 border-primary" : "")" href="/Home">
                     <span class="menu-title">Dashboard</span>
                 </a>
             </div>
@@ -90,8 +90,8 @@
             }
             @if (hasSupervisor)
             {
-                <div class="menu-item @(pageTitle == "Forms" ? "here show" : "")">
-                    <a class="menu-link py-3 @(pageTitle == "Forms" ? "active border-bottom border-3 border-primary" : "")" href="/Student/Forms">
+                <div class="menu-item @(pageTitle.Contains("Forms") ? "here show" : "")">
+                    <a class="menu-link py-3 @(pageTitle.Contains("Forms") ? "active border-bottom border-3 border-primary" : "")" href="/Student/Forms">
                         <span class="menu-title d-flex align-items-center">
                             Forms
                             @if(studentPendingForms > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingForms</span> }
@@ -104,6 +104,11 @@
                             Book Meeting
                             @if(studentPendingMeetings > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingMeetings</span> }
                         </span>
+                    </a>
+                </div>
+                <div class="menu-item @(pageTitle == "Messages" ? "here show" : "")">
+                    <a class="menu-link py-3 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" href="/Chat">
+                        <span class="menu-title">Messages</span>
                     </a>
                 </div>
             }
@@ -137,6 +142,11 @@
                         Manage Meetings
                         @if(pendingMeetings > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@pendingMeetings</span> }
                     </span>
+                </a>
+            </div>
+            <div class="menu-item @(pageTitle == "Messages" ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" href="/Chat">
+                    <span class="menu-title">Messages</span>
                 </a>
             </div>
 

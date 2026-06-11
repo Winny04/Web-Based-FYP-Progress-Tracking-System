@@ -8,30 +8,27 @@
     // Fetch project and supervisor dynamically
     var project = DbContext.FYPProjects.Include(p => p.Supervisor).FirstOrDefault(p => p.StudentId == Model.Id);
     var supervisorName = project?.Supervisor?.FullName ?? "Not Assigned";
-    var session = "2025/2026";
-    var programme = Model.Programme ?? Model.EmpDepartment?.Name ?? "Not Set";
 }
 
 <style>
     :root {
-        --blue-grad: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-        --primary-blue: #3b82f6;
+        --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%);
     }
     
     .page-hero {
-        background: var(--blue-grad);
+        background: var(--hero-grad);
         border-radius: 20px;
         padding: 28px 32px;
         color: white;
         margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(59, 130, 246, 0.25);
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
     }
 
     .premium-card {
         background: rgba(255, 255, 255, 0.9);
         backdrop-filter: blur(12px);
         border-radius: 16px;
-        border: 1px solid rgba(59, 130, 246, 0.1);
+        border: 1px solid #f1f5f9;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
         transition: transform 0.2s, box-shadow 0.2s;
     }
@@ -50,12 +47,12 @@
     }
 
     .form-control:focus {
-        border-color: var(--primary-blue);
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        border-color: #334155;
+        box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.15);
     }
 
     .btn-submit {
-        background: var(--blue-grad);
+        background: #1e293b;
         color: white;
         border: none;
         border-radius: 10px;
@@ -183,8 +180,8 @@
 
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Current Student Slots</label>
-                                <input type="number" name="MaxStudentSlots" class="form-control" value="@(Model.MaxStudentSlots > 0 ? Model.MaxStudentSlots : 5)" min="1" max="10" />
-                                <small class="text-muted d-block mt-1">Currently @currentStudents slots are filled. (@Math.Max(0, (Model.MaxStudentSlots > 0 ? Model.MaxStudentSlots : 5) - (int)currentStudents)) available left)</small>
+                                <input type="number" name="MaxStudentSlots" class="form-control" value="@Model.MaxStudentSlots" min="1" max="10" />
+                                <small class="text-muted d-block mt-1">Currently @currentStudents slots are filled. (@Math.Max(0, Model.MaxStudentSlots - (int)currentStudents)) available left)</small>
                             </div>
                         }
                     </div>

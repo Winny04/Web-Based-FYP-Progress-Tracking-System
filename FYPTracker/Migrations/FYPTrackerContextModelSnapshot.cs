@@ -101,6 +101,39 @@ namespace FYPTracker.Migrations
                     b.ToTable("ApplicationUser", (string)null);
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.ChatMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MessageText")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("ReceiverId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SenderId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReceiverId");
+
+                    b.HasIndex("SenderId");
+
+                    b.ToTable("ChatMessage", (string)null);
+                });
+
             modelBuilder.Entity("FYPTracker.Models.Department", b =>
                 {
                     b.Property<int>("Id")
@@ -485,7 +518,7 @@ namespace FYPTracker.Migrations
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("NextMeetingDate")
-                        .HasColumnType("date");
+                        .HasColumnType("datetime");
 
                     b.Property<DateTime?>("SignatureDate")
                         .HasColumnType("datetime");
@@ -573,6 +606,25 @@ namespace FYPTracker.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("EmpDepartment");
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.ChatMessage", b =>
+                {
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "Receiver")
+                        .WithMany()
+                        .HasForeignKey("ReceiverId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "Sender")
+                        .WithMany()
+                        .HasForeignKey("SenderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Receiver");
+
+                    b.Navigation("Sender");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPActivity", b =>

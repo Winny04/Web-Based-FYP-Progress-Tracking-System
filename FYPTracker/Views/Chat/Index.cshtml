@@ -1,0 +1,254 @@
+@using FYPTracker.Models
+@{
+    ViewData["Title"] = "Messages";
+    var isStudent = ViewBag.IsStudent != null && (bool)ViewBag.IsStudent;
+    var partnerId = ViewBag.DefaultPartnerId as int?;
+    var partnerName = ViewBag.PartnerName as string ?? "Your Supervisor";
+    var noSupervisor = ViewBag.NoSupervisor != null && (bool)ViewBag.NoSupervisor;
+}
+
+<div class="container-fluid py-4">
+    <div class="row g-0" style="height: 78vh; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.07);">
+
+        @if (!isStudent)
+        {
+            <!-- Supervisor Sidebar: List of Students -->
+            <div class="col-lg-3 border-end d-flex flex-column bg-white h-100">
+                <!-- Sidebar Header -->
+                <div class="p-4 border-bottom">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="fw-bold text-dark mb-0">Chats</h4>
+                    </div>
+                    <!-- Search Bar -->
+                    <div class="position-relative">
+                        <i class="fas fa-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style="z-index:1;"></i>
+                        <input type="text" id="chat-search" class="form-control bg-light border-0 rounded-pill ps-5" placeholder="Search students..." onkeyup="filterStudents()">
+                    </div>
+                    <!-- Filter Chips -->
+                    <div class="d-flex gap-2 mt-3 overflow-auto" style="white-space: nowrap;">
+                        <span class="badge rounded-pill bg-dark text-white px-3 py-2 fw-normal">All</span>
+                    </div>
+                </div>
+
+                <!-- Student List -->
+                <div class="overflow-auto flex-grow-1">
+                    @if (ViewBag.AssignedStudents != null)
+                    {
+                        var studentList = (List<ChatStudentItem>)ViewBag.AssignedStudents;
+                        <ul class="list-group list-group-flush">
+                            @foreach (var student in studentList)
+                            {
+                                var isActive = partnerId.HasValue && partnerId.Value == student.Id;
+                                var activeBg = isActive ? "background: linear-gradient(135deg, #2563eb, #0ea5e9);" : "";
+                                var textCls = isActive ? "text-white" : "text-dark";
+                                var subCls = isActive ? "text-white-50" : "text-muted";
+                                var initBg = isActive ? "background: rgba(255,255,255,0.25);" : "background:#f1f5f9;";
+                                var initColor = isActive ? "color:white;" : "color:#1e293b;";
+
+                                <a href="@Url.Action("Index", "Chat", new { partnerId = student.Id })"
+                                   class="student-chat-item list-group-item list-group-item-action border-0 py-3 px-4"
+                                   style="transition: background 0.15s; @activeBg">
+                                    <div class="d-flex align-items-center">
+                                        <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold me-3 shadow-sm flex-shrink-0"
+                                             style="width:44px;height:44px;font-size:1rem;@initBg @initColor">
+                                            @(student.Name?.Substring(0, 1) ?? "?")
+                                        </div>
+                                        <div class="overflow-hidden">
+                                            <h6 class="mb-0 fw-bold @textCls text-truncate">@student.Name</h6>
+                                            <small class="@subCls text-truncate d-block">@student.Programme</small>
+                                        </div>
+                                    </div>
+                                </a>
+                            }
+                        </ul>
+                        @if (!studentList.Any())
+                        {
+                            <div class="text-center text-muted py-5 px-3">
+                                <i class="fas fa-user-slash fs-2 mb-3 opacity-50"></i>
+                                <p class="small">No active students assigned yet.</p>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Chat Window -->
+        <div class="col-lg-@(isStudent ? "12" : "9") d-flex flex-column bg-white h-100">
+
+            @if (noSupervisor)
+            {
+                <!-- No supervisor assigned yet -->
+                <div class="d-flex flex-column align-items-center justify-content-center h-100 py-5">
+                    <div class="bg-light rounded-circle d-flex align-items-center justify-content-center mb-4" style="width:90px;height:90px;">
+                        <i class="fas fa-user-tie fs-2 text-primary opacity-50"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark">No Supervisor Assigned</h5>
+                    <p class="text-muted text-center px-4">You don't have an assigned supervisor yet. Please submit a supervisor request first to start messaging.</p>
+                    <a href="/Student/SelectSupervisor" class="btn btn-primary rounded-pill px-4 mt-2">Find a Supervisor</a>
+                </div>
+            }
+            else if (partnerId.HasValue)
+            {
+                <!-- Chat Header -->
+                <div class="p-4 border-bottom d-flex align-items-center" style="background: rgba(248,250,252,0.8);">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold shadow-sm me-3 flex-shrink-0"
+                         style="width:48px;height:48px;font-size:1.1rem;background:linear-gradient(135deg,#2563eb,#0ea5e9);color:white;">
+                        @partnerName.Substring(0, 1)
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-dark mb-0">@partnerName</h5>
+                        <span class="text-success small fw-semibold">
+                            <i class="fas fa-circle me-1" style="font-size:0.45rem;"></i>Active
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Messages Area -->
+                <div id="chat-messages" class="p-4" style="flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 20px 20px; scroll-behavior: smooth;">
+                    <div class="text-center text-muted small mb-3">
+                        <i class="fas fa-lock me-1"></i> Conversation is private
+                    </div>
+                    <!-- Messages injected by JS -->
+                </div>
+
+                <!-- Input Area -->
+                <div class="p-3 border-top bg-white">
+                    <form id="chat-form" class="d-flex align-items-center gap-2" onsubmit="sendMessage(event)">
+                        <input type="text" id="chat-input"
+                               class="form-control form-control-lg border-0 shadow-none bg-light rounded-pill px-4"
+                               placeholder="Type your message..."
+                               autocomplete="off" required />
+                        <button type="submit"
+                                class="btn btn-primary rounded-circle d-flex align-items-center justify-content-center shadow flex-shrink-0"
+                                style="width:50px;height:50px;transition:transform 0.2s;"
+                                onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </form>
+                </div>
+            }
+            else
+            {
+                <!-- Supervisor: no student selected yet -->
+                <div class="d-flex flex-column align-items-center justify-content-center h-100 py-5 text-muted">
+                    <div class="bg-light rounded-circle d-flex align-items-center justify-content-center mb-4" style="width:90px;height:90px;">
+                        <i class="far fa-comments fs-2 text-primary opacity-50"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark">Select a Student</h5>
+                    <p class="small">Choose a student from the sidebar to view the conversation.</p>
+                </div>
+            }
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const partnerId = @(partnerId.HasValue ? partnerId.Value.ToString() : "0");
+        const messagesContainer = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        let lastMessageCount = 0;
+
+        // Filter sidebar students
+        function filterStudents() {
+            const input = document.getElementById('chat-search');
+            if (!input) return;
+            const filter = input.value.toLowerCase();
+            document.querySelectorAll('.student-chat-item').forEach(item => {
+                const name = item.querySelector('h6')?.innerText?.toLowerCase() ?? '';
+                item.style.display = name.includes(filter) ? '' : 'none';
+            });
+        }
+
+        // Auto scroll to bottom
+        function scrollToBottom() {
+            if (messagesContainer) {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        }
+
+        // Render a message bubble
+        function appendMessage(msg) {
+            if (!messagesContainer) return;
+            const isMine = msg.isMine === true;
+            const alignClass = isMine ? 'justify-content-end' : 'justify-content-start';
+            const bubbleStyle = isMine
+                ? 'background: linear-gradient(135deg,#2563eb,#0ea5e9); color:white; border:none;'
+                : 'background: linear-gradient(135deg,#ffffff,#f8fafc); color:#0f172a; border:1px solid #e2e8f0;';
+            const radius = isMine ? 'border-radius:20px 20px 0 20px;' : 'border-radius:20px 20px 20px 0;';
+            const timeAlign = isMine ? 'text-end' : '';
+            const safeText = msg.messageText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+
+            const div = document.createElement('div');
+            div.className = `d-flex mb-2 ${alignClass}`;
+            div.innerHTML = `
+                <div style="max-width:75%;">
+                    <div style="${bubbleStyle}${radius}padding:10px 16px;font-size:0.95rem;line-height:1.4;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,0.08);">${safeText}</div>
+                    <div class="mt-1 text-muted ${timeAlign}" style="font-size:0.7rem;font-weight:500;">${msg.sentAtStr}</div>
+                </div>`;
+            messagesContainer.appendChild(div);
+            scrollToBottom();
+        }
+
+        // Fetch full history (poll every 3s)
+        async function fetchHistory() {
+            if (!partnerId || partnerId <= 0) return;
+            try {
+                const res = await fetch(`/Chat/GetHistory?partnerId=${partnerId}`);
+                if (!res.ok) return;
+                const messages = await res.json();
+                if (messages.length !== lastMessageCount) {
+                    lastMessageCount = messages.length;
+                    messagesContainer.innerHTML = '<div class="text-center text-muted small mb-3"><i class="fas fa-lock me-1"></i> Conversation is private</div>';
+                    messages.forEach(m => appendMessage(m));
+                }
+            } catch (err) {
+                console.error('Failed to load messages', err);
+            }
+        }
+
+        // Send a message
+        async function sendMessage(e) {
+            e.preventDefault();
+            if (!partnerId || partnerId <= 0) return;
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            chatInput.value = '';
+            chatInput.focus();
+
+            const formData = new FormData();
+            formData.append('receiverId', partnerId);
+            formData.append('messageText', text);
+
+            try {
+                const res = await fetch('/Chat/SendMessage', { method: 'POST', body: formData });
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.success) {
+                        appendMessage(result.message);
+                        lastMessageCount++;
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to send message', err);
+            }
+        }
+
+        // Enter key sends message (Shift+Enter for newline)
+        document.getElementById('chat-input')?.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // Init
+        if (partnerId && partnerId > 0) {
+            fetchHistory();
+            setInterval(fetchHistory, 3000);
+        }
+    </script>
+}

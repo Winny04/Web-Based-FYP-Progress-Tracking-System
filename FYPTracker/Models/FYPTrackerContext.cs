@@ -32,6 +32,7 @@ namespace FYPTracker.Models
         public virtual DbSet<MeetingLog>        MeetingLogs        { get; set; } = null!;
         public virtual DbSet<FYPNotification>   FYPNotifications   { get; set; } = null!;
         public virtual DbSet<FYPActivity>       FYPActivities      { get; set; } = null!;
+        public virtual DbSet<ChatMessage>       ChatMessages       { get; set; } = null!;
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -193,6 +194,23 @@ namespace FYPTracker.Models
                       .OnDelete(DeleteBehavior.Cascade);
             });
 
+
+            // ChatMessage
+            modelBuilder.Entity<ChatMessage>(entity =>
+            {
+                entity.ToTable("ChatMessage");
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Sender)
+                      .WithMany()
+                      .HasForeignKey(e => e.SenderId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Receiver)
+                      .WithMany()
+                      .HasForeignKey(e => e.ReceiverId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
 
             OnModelCreatingPartial(modelBuilder);
         }

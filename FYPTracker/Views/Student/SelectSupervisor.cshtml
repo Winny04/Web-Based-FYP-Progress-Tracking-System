@@ -11,24 +11,24 @@
 
 <style>
     :root {
-        --purple-grad: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+        --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%);
         --card-bg: rgba(255, 255, 255, 0.9);
     }
     
     .page-hero {
-        background: var(--purple-grad);
+        background: var(--hero-grad);
         border-radius: 20px;
         padding: 28px 32px;
         color: white;
         margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(99, 102, 241, 0.25);
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
     }
 
     .premium-card {
         background: var(--card-bg);
         backdrop-filter: blur(12px);
         border-radius: 16px;
-        border: 1px solid rgba(99, 102, 241, 0.1);
+        border: 1px solid #f1f5f9;
         box-shadow: 0 4px 20px rgba(0,0,0,0.05);
         transition: transform 0.2s, box-shadow 0.2s;
     }
@@ -54,7 +54,7 @@
     .badge-full { background: #e2e8f0; color: #475569; }
 
     .btn-apply {
-        background: var(--purple-grad);
+        background: #1e293b;
         color: white;
         border: none;
         border-radius: 8px;
@@ -149,10 +149,16 @@
                     <input type="text" id="supSearch" class="form-control search-input" placeholder="Search by name or expertise..." onkeyup="filterSupervisors()" />
                     <select id="deptFilter" class="form-select filter-select" onchange="filterSupervisors()">
                         <option value="">All Departments</option>
-                        <option value="Computing">Computing</option>
-                        <option value="Software Eng">Software Eng</option>
-                        <option value="Data Science">Data Science</option>
-                        <option value="Engineering">Engineering</option>
+                        @{
+                            var departments = ViewBag.Departments as List<string> ?? new List<string>();
+                            foreach (var dept in departments)
+                            {
+                                if (!string.IsNullOrEmpty(dept))
+                                {
+                                    <option value="@dept">@dept</option>
+                                }
+                            }
+                        }
                     </select>
                 </div>
 
@@ -181,7 +187,7 @@
                                     var appCount = applicantCounts.ContainsKey(sup.Id) ? applicantCounts[sup.Id] : 0;
                                     
                                     // Dynamically read MaxStudentSlots from the DB
-                                    int maxSlots = sup.MaxStudentSlots > 0 ? sup.MaxStudentSlots : 5;
+                                    int maxSlots = sup.MaxStudentSlots;
                                     int slotsLeft = Math.Max(0, maxSlots - appCount);
                                     string deptLabel = sup.EmpDepartment?.Name ?? "General";
                                     string expertise = !string.IsNullOrEmpty(sup.Programme) ? sup.Programme : "General";
@@ -274,7 +280,7 @@
             <i class="fas fa-check-circle text-success fs-1 mb-4 d-block"></i>
             <h3 class="fw-bold text-dark">Supervision Confirmed</h3>
             <p class="text-muted mb-4 fs-5">Your supervision request has been accepted. You can now start submitting chapters and view milestones!</p>
-            <a href="/Student/Index" class="btn btn-primary btn-lg rounded-pill px-5" style="background:var(--purple-grad); border:none;">Go To Dashboard</a>
+            <a href="/Student/Index" class="btn btn-primary btn-lg rounded-pill px-5">Go To Dashboard</a>
         </div>
     }
 </div>

@@ -8,24 +8,23 @@
 
 <style>
     :root {
-        --red-grad: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
-        --primary-red: #ef4444;
+        --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%);
     }
     
     .page-hero {
-        background: var(--red-grad);
+        background: var(--hero-grad);
         border-radius: 20px;
         padding: 28px 32px;
         color: white;
         margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(239, 68, 68, 0.25);
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
     }
 
     .premium-card {
         background: rgba(255, 255, 255, 0.9);
         backdrop-filter: blur(12px);
         border-radius: 16px;
-        border: 1px solid rgba(239, 68, 68, 0.1);
+        border: 1px solid #f1f5f9;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
         transition: transform 0.2s, box-shadow 0.2s;
     }
@@ -44,12 +43,12 @@
     }
 
     .form-control:focus, .form-select:focus {
-        border-color: var(--primary-red);
-        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+        border-color: #475569;
+        box-shadow: 0 0 0 3px rgba(71, 85, 105, 0.12);
     }
 
     .btn-submit {
-        background: var(--red-grad);
+        background: #1e293b;
         color: white;
         border: none;
         border-radius: 10px;
@@ -97,12 +96,12 @@
         font-weight: 700;
         text-align: center;
         transition: all .2s;
-        background: #f0fdf4;
-        color: #166534;
-        border-color: #bbf7d0;
+        background: #f8fafc;
+        color: #374151;
+        border-color: #e2e8f0;
     }
-    .time-slot:hover { border-color: #22c55e; background: #dcfce7; }
-    .time-slot.selected { border-color: #15803d; background: #16a34a; color: white; }
+    .time-slot:hover { border-color: #64748b; background: #f1f5f9; }
+    .time-slot.selected { border-color: #1e293b; background: #1e293b; color: white; }
     .time-slot.booked { background: #f3f4f6 !important; color: #9ca3af !important; border-color: #e5e7eb !important; cursor: not-allowed; opacity: 0.7; text-decoration: line-through; }
 </style>
 
@@ -205,7 +204,7 @@
                                                     data-action="@(m.MeetingLog?.ActionPointsForNextMeeting)"
                                                     data-completed="@(m.MeetingLog?.CompletedActionsAndNotes)"
                                                     onclick="openStudentLogModal(this)">
-                                                <i class="fas fa-edit"></i> @(m.MeetingLog == null ? "Write Log" : "Edit Log")
+                                                <i class="fas fa-edit"></i> @(m.MeetingLog == null ? "Weekly Logbook" : "Edit Logbook")
                                             </button>
                                         }
                                         else if (m.MeetingLog.LogStatus == "Signed")
@@ -270,17 +269,37 @@
                         <!-- Available Slots Grid -->
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Available Slots</label>
-                            <input type="hidden" name="meetingTime" id="meetingTimeInput" required />
-                            <div class="row g-2" id="timeSlotsContainer">
-                                @for (int i = 8; i <= 17; i++)
-                                {
-                                    string slot = $"{i:00}:00";
-                                    <div class="col-4">
-                                        <div class="time-slot" data-time="@slot" onclick="selectTime(this)">@slot</div>
-                                    </div>
-                                }
-                            </div>
-                            <div id="timeError" class="text-danger mt-2 small" style="display:none;">Please pick an available time slot.</div>
+                            @if (ViewBag.FixedTime != null)
+                            {
+                                <input type="hidden" name="meetingTime" value="@ViewBag.FixedTime" required />
+                                <input type="text" class="form-control bg-light border-0 text-success fw-bold" value="@ViewBag.FixedTime" readonly title="Your meeting time is fixed." />
+                                <div class="text-muted small mt-1"><i class="fas fa-lock"></i> Your weekly meeting time is locked to your first meeting time.</div>
+                            }
+                            else
+                            {
+                                <input type="hidden" name="meetingTime" id="meetingTimeInput" required />
+                                <div class="row g-2" id="timeSlotsContainer">
+                                    @{
+                                        int startHr = ViewBag.StartHour ?? 8;
+                                        int endHr = ViewBag.EndHour ?? 17;
+                                    }
+                                    @for (int i = startHr; i <= endHr; i++)
+                                    {
+                                        string slot1 = $"{i:00}:00";
+                                        <div class="col-4">
+                                            <div class="time-slot" data-time="@slot1" onclick="selectTime(this, 'timeSlotsContainer', 'meetingTimeInput', 'timeError')">@slot1</div>
+                                        </div>
+                                        if (i != endHr)
+                                        {
+                                            string slot2 = $"{i:00}:30";
+                                            <div class="col-4">
+                                                <div class="time-slot" data-time="@slot2" onclick="selectTime(this, 'timeSlotsContainer', 'meetingTimeInput', 'timeError')">@slot2</div>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                                <div id="timeError" class="text-danger mt-2 small" style="display:none;">Please pick an available time slot.</div>
+                            }
                         </div>
 
                         <!-- Reason -->
@@ -324,16 +343,35 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-bold">Available Slots</label>
-                        <div class="row g-2" id="reschedTimeSlots">
-                            @for (int i = 8; i <= 17; i++)
-                            {
-                                string slot = $"{i:00}:00";
-                                <div class="col-4">
-                                    <div class="time-slot" data-time="@slot" onclick="selectReschedTime(this)">@slot</div>
-                                </div>
-                            }
-                        </div>
-                        <div id="reschedTimeError" class="text-danger mt-2 small" style="display:none;">Please select a time slot.</div>
+                        @if (ViewBag.FixedTime != null)
+                        {
+                            <input type="text" class="form-control bg-light border-0 text-success fw-bold" value="@ViewBag.FixedTime" readonly title="Your meeting time is fixed." />
+                            <div class="text-muted small mt-1"><i class="fas fa-lock"></i> Your weekly meeting time is locked to your first meeting time.</div>
+                        }
+                        else
+                        {
+                            <div class="row g-2" id="reschedTimeSlots">
+                                @{
+                                    int rStartHr = ViewBag.StartHour ?? 8;
+                                    int rEndHr = ViewBag.EndHour ?? 17;
+                                }
+                                @for (int i = rStartHr; i <= rEndHr; i++)
+                                {
+                                    string slot1 = $"{i:00}:00";
+                                    <div class="col-4">
+                                        <div class="time-slot" data-time="@slot1" onclick="selectTime(this, 'reschedTimeSlots', 'reschedTimeInput', 'reschedTimeError')">@slot1</div>
+                                    </div>
+                                    if (i != rEndHr)
+                                    {
+                                        string slot2 = $"{i:00}:30";
+                                        <div class="col-4">
+                                            <div class="time-slot" data-time="@slot2" onclick="selectTime(this, 'reschedTimeSlots', 'reschedTimeInput', 'reschedTimeError')">@slot2</div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                            <div id="reschedTimeError" class="text-danger mt-2 small" style="display:none;">Please select a time slot.</div>
+                        }
                     </div>
                 </div>
                 <div class="modal-footer border-0">
@@ -354,30 +392,35 @@
                 <input type="hidden" name="meetingId" id="logMeetingId" />
                 
                 <div class="modal-header border-0 pb-0">
-                    <h5 class="fw-bold text-dark"><i class="fas fa-edit text-primary me-2"></i>Write Meeting Log</h5>
+                    <h5 class="fw-bold text-dark"><i class="fas fa-edit text-primary me-2"></i>Weekly Progress Logbook</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small mb-4">Please summarize your meeting below. This will be sent to your supervisor for review and signature.</p>
+                    <p class="text-muted small mb-4">Please log your weekly progress below. Your supervisor will review and sign this log.</p>
                     
                     <div class="mb-4">
-                        <label class="form-label fw-bold">Key topics Discussed</label>
-                        <textarea name="keyTopics" id="logKeyTopics" class="form-control rounded-3" rows="3" required placeholder="- Reviewed draft..."></textarea>
+                        <label class="form-label fw-bold">Progress Made / Tasks Completed</label>
+                        <textarea name="keyTopics" id="logKeyTopics" class="form-control rounded-3" rows="3" required></textarea>
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label fw-bold">Individual action points for next meeting (no more than 3)</label>
-                        <textarea name="actionPoints" id="logActionPoints" class="form-control rounded-3" rows="3" required placeholder="- Revise Chapter 2..."></textarea>
+                        <label class="form-label fw-bold">Plan for Next Week / Next Steps</label>
+                        <textarea name="actionPoints" id="logActionPoints" class="form-control rounded-3" rows="3" required></textarea>
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label fw-bold">Record of individual actions completed + notes</label>
-                        <textarea name="completedActions" id="logCompletedActions" class="form-control rounded-3" rows="3" required placeholder="- Chapter 2 draft review..."></textarea>
+                        <label class="form-label fw-bold">Issues / Challenges Faced</label>
+                        <textarea name="completedActions" id="logCompletedActions" class="form-control rounded-3" rows="3" required></textarea>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-primary">Proposed Date for Next Meeting</label>
+                        <input type="date" name="nextMeetingDate" id="logNextMeetingDate" class="form-control rounded-3 border-primary" required />
                     </div>
                 </div>
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary px-4 rounded-3">Submit Log</button>
+                    <button type="submit" class="btn btn-primary px-4 rounded-3">Submit Logbook</button>
                 </div>
             </form>
         </div>
@@ -425,12 +468,12 @@
         } catch (err) { console.error(err); }
     }
 
-    function selectTime(el) {
+    function selectTime(el, containerId, inputId, errorId) {
         if (el.classList.contains('booked')) return;
-        document.getElementById('timeSlotsContainer').querySelectorAll('.time-slot').forEach(s => s.classList.remove('selected'));
+        document.getElementById(containerId).querySelectorAll('.time-slot').forEach(s => s.classList.remove('selected'));
         el.classList.add('selected');
-        timeInput.value = el.dataset.time;
-        timeError.style.display = 'none';
+        document.getElementById(inputId).value = el.dataset.time;
+        document.getElementById(errorId).style.display = 'none';
     }
 
     document.getElementById('bookingForm')?.addEventListener('submit', function(e) {
@@ -534,13 +577,7 @@
         } catch (err) { console.error(err); }
     }
 
-    function selectReschedTime(el) {
-        if (el.classList.contains('booked')) return;
-        document.getElementById('reschedTimeSlots').querySelectorAll('.time-slot').forEach(s => s.classList.remove('selected'));
-        el.classList.add('selected');
-        reschedTimeInput.value = el.dataset.time;
-        reschedTimeError.style.display = 'none';
-    }
+
 
     document.getElementById('studentRescheduleForm')?.addEventListener('submit', function(e) {
         if (!reschedTimeInput.value) {

@@ -189,10 +189,13 @@ namespace FYPTracker.Controllers
                 .OrderBy(r => r.Priority)
                 .ToListAsync();
 
+            var departments = await _context.Department.Select(d => d.Name).Distinct().ToListAsync();
+
             ViewBag.Supervisors     = supervisors;
             ViewBag.ApplicantCounts = applicantCounts;
             ViewBag.MyRequests      = myRequests;
             ViewBag.CurrentUser     = user;
+            ViewBag.Departments     = departments;
 
             return View();
         }
@@ -380,7 +383,7 @@ namespace FYPTracker.Controllers
             {
                 if (milestone.RejectionCount >= 3 && (formType == "Initial Project Allocation Form (IAF)" || milestone.Title.Contains("IAF")))
                 {
-                    TempData["Error"] = "You have been placed on the Defense List because this form has been rejected 3 times. You cannot submit it again.";
+                    TempData["Error"] = "This form has been rejected 3 times and is now locked. Kindly arrange a meeting with your supervisor to discuss the necessary revisions.";
                     return RedirectToAction("Forms");
                 }
                 if (formType == "Progress Report Form")
@@ -482,6 +485,7 @@ namespace FYPTracker.Controllers
             ViewBag.IAFDeadline = "15th April 2026 before 11.59pm";
 
             var project = await _context.FYPProjects
+                .Include(p => p.Supervisor)
                 .Include(p => p.Milestones)
                     .ThenInclude(m => m.SubmissionFiles)
                 .FirstOrDefaultAsync(p => p.StudentId == user.Id);
@@ -531,6 +535,15 @@ namespace FYPTracker.Controllers
                 .FirstOrDefaultAsync(r => r.StudentId == user.Id && r.Status == "Approved");
 
             ViewBag.AssignedSupervisor = approvedRequest?.Supervisor;
+            ViewBag.StartHour = 8;
+            ViewBag.EndHour = 17;
+
+            var firstMeeting = await _context.MeetingBookings
+                .Where(m => m.StudentId == user.Id && m.Status != "Rejected" && m.Status != "Postponed")
+                .OrderBy(m => m.CreatedDate)
+                .FirstOrDefaultAsync();
+                
+            ViewBag.FixedTime = firstMeeting?.MeetingTime;
 
             var meetings = await _context.MeetingBookings
                 .Include(m => m.Supervisor)
@@ -555,6 +568,27 @@ namespace FYPTracker.Controllers
             {
                 TempData["Error"] = "Invalid date format.";
                 return RedirectToAction(nameof(BookMeeting));
+            }
+
+            var startOfWeek = parsedDate.Date.AddDays(-(int)parsedDate.DayOfWeek);
+            var endOfWeek = startOfWeek.AddDays(7);
+            var existingThisWeek = await _context.MeetingBookings
+                .AnyAsync(m => m.StudentId == user.Id && m.Status != "Rejected" && m.Status != "Postponed" && m.MeetingDate >= startOfWeek && m.MeetingDate < endOfWeek);
+
+            if (existingThisWeek)
+            {
+                TempData["Error"] = "You can only book one meeting per week.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            var firstMeeting = await _context.MeetingBookings
+                .Where(m => m.StudentId == user.Id && m.Status != "Rejected" && m.Status != "Postponed")
+                .OrderBy(m => m.CreatedDate)
+                .FirstOrDefaultAsync();
+
+            if (firstMeeting != null && !string.IsNullOrEmpty(firstMeeting.MeetingTime))
+            {
+                meetingTime = firstMeeting.MeetingTime;
             }
 
             var booking = new MeetingBooking
@@ -691,6 +725,16 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
+            var firstMeeting = await _context.MeetingBookings
+                .Where(m => m.StudentId == user.Id && m.Status != "Rejected" && m.Status != "Postponed")
+                .OrderBy(m => m.CreatedDate)
+                .FirstOrDefaultAsync();
+
+            if (firstMeeting != null && !string.IsNullOrEmpty(firstMeeting.MeetingTime))
+            {
+                meetingTime = firstMeeting.MeetingTime;
+            }
+
             var meeting = await _context.MeetingBookings
                 .FirstOrDefaultAsync(m => m.Id == meetingId && m.StudentId == user.Id);
 
@@ -757,7 +801,8 @@ namespace FYPTracker.Controllers
             int meetingId, 
             string keyTopics, 
             string actionPoints, 
-            string completedActions)
+            string completedActions,
+            DateTime? nextMeetingDate)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
@@ -774,8 +819,21 @@ namespace FYPTracker.Controllers
 
             if (meeting.MeetingLog != null && meeting.MeetingLog.LogStatus == "Signed")
             {
-                TempData["Error"] = "Meeting log is already signed by the supervisor.";
+                TempData["Error"] = "Progress logbook is already signed by the supervisor.";
                 return RedirectToAction(nameof(BookMeeting));
+            }
+
+            if (nextMeetingDate.HasValue)
+            {
+                var firstMeeting = await _context.MeetingBookings
+                    .Where(m => m.StudentId == user.Id && m.Status != "Rejected" && m.Status != "Postponed")
+                    .OrderBy(m => m.CreatedDate)
+                    .FirstOrDefaultAsync();
+
+                if (firstMeeting != null && !string.IsNullOrEmpty(firstMeeting.MeetingTime) && TimeSpan.TryParse(firstMeeting.MeetingTime, out var ts))
+                {
+                    nextMeetingDate = nextMeetingDate.Value.Date.Add(ts);
+                }
             }
 
             if (meeting.MeetingLog == null)
@@ -786,6 +844,7 @@ namespace FYPTracker.Controllers
                     KeyTopicsDiscussed = keyTopics,
                     ActionPointsForNextMeeting = actionPoints,
                     CompletedActionsAndNotes = completedActions,
+                    NextMeetingDate = nextMeetingDate,
                     LogStatus = "Draft",
                     CreatedDate = DateTime.Now
                 };
@@ -795,13 +854,14 @@ namespace FYPTracker.Controllers
                 meeting.MeetingLog.KeyTopicsDiscussed = keyTopics;
                 meeting.MeetingLog.ActionPointsForNextMeeting = actionPoints;
                 meeting.MeetingLog.CompletedActionsAndNotes = completedActions;
+                meeting.MeetingLog.NextMeetingDate = nextMeetingDate;
                 meeting.MeetingLog.LogStatus = "Draft";
             }
 
             await _context.SaveChangesAsync();
-            await LogActivityAsync(user.Id, "MeetingLog", "Meeting Log Drafted", $"You submitted a meeting log draft for the meeting on {meeting.MeetingDate:dd MMM}.");
-
-            TempData["Success"] = "Meeting log successfully submitted to supervisor for review!";
+            await LogActivityAsync(user.Id, "MeetingLog", "Progress Logbook Drafted", $"You submitted a progress logbook draft for the meeting on {meeting.MeetingDate:dd MMM}.");
+            
+            TempData["Success"] = "Progress logbook successfully submitted to supervisor for review!";
             return RedirectToAction(nameof(BookMeeting));
         }
 
@@ -879,6 +939,35 @@ namespace FYPTracker.Controllers
 
             TempData["Success"] = "All notifications marked as read.";
             return RedirectToAction(nameof(Notifications));
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DownloadFile(int fileId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var file = await _context.FYPSubmissionFiles.FindAsync(fileId);
+            if (file == null || string.IsNullOrEmpty(file.FilePath)) return NotFound();
+
+            // Security check: ensure the file belongs to this student's project
+            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == user.Id);
+            if (project == null) return Unauthorized();
+            
+            var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
+            string mimeType = "application/octet-stream";
+            
+            if (ext == ".pdf") mimeType = "application/pdf";
+            else if (ext == ".docx") mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            else if (ext == ".doc") mimeType = "application/msword";
+            else if (ext == ".png") mimeType = "image/png";
+            else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+
+            var physicalPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", file.FilePath.TrimStart('/', '\\'));
+            if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+
+            Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}\"");
+            return PhysicalFile(physicalPath, mimeType);
         }
     }
 }
