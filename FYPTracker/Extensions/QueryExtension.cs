@@ -5,7 +5,7 @@ namespace FYPTracker.Extensions
     public static class QueryExtension
     {
         /// <summary>
-        /// Filters FYP milestones by status — replaces the old BOM-specific extension.
+        /// Filters FYP milestones by status.
         /// </summary>
         public static IQueryable<FYPMilestone> WhereStatus(this IQueryable<FYPMilestone> source, string status)
         {

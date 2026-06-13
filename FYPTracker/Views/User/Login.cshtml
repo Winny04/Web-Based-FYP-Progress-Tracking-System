@@ -24,6 +24,15 @@ License: For each use you must have a valid license purchased only from above li
 	max-width:100px;
 	max-height:100px;
 }
+	body#kt_body {
+		background-image: none !important;
+		background-color: #eef2f7;
+	}
+	.login-bg-wrapper {
+		background-image: none !important;
+		background: linear-gradient(135deg, #1a3a5c 0%, #2d6a9f 50%, #1e4d7b 100%) !important;
+		min-height: 100vh;
+	}
 </style>
 <html lang="en">
 <!--begin::Head-->
@@ -51,7 +60,7 @@ License: For each use you must have a valid license purchased only from above li
 </head>
 <!--end::Head-->
 <!--begin::Body-->
-<body id="kt_body" class="bg-body" style="background-image: url(/assets/media/patterns/header-bg.jpg)">
+<body id="kt_body" class="bg-body">
 	<!--begin::Main-->
 	<!--begin::Root-->
 	<div class="content">	<a href="" class="logo">
@@ -60,7 +69,7 @@ License: For each use you must have a valid license purchased only from above li
 
 	<div class="d-flex flex-column flex-root">
 		<!--begin::Authentication - Sign-in -->
-		<div class="d-flex flex-column flex-column-fluid bgi-position-y-bottom position-x-center bgi-no-repeat bgi-size-contain bgi-attachment-fixed" style="background-image: url(assets/media/illustrations/sigma-1/14.png);height:1000px;">
+		<div class="d-flex flex-column flex-column-fluid login-bg-wrapper">
 			<!--begin::Content-->
 			<div class="d-flex flex-center flex-column flex-column-fluid p-10 pb-lg-20">
 				<!--begin::Logo-->
