@@ -86,8 +86,27 @@ namespace FYPTracker.Controllers
                 .Take(5)
                 .ToListAsync();
 
+            // Pending Milestones (Top 5 awaiting review)
+            var pendingMilestones = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .ThenInclude(p => p.Student)
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (m.Status == "Submitted" || (m.Status == "Pending" && m.SubmittedDate.HasValue)))
+                .OrderBy(m => m.SubmittedDate ?? DateTime.MaxValue)
+                .Take(5)
+                .ToListAsync();
+
+            // Pending Meetings to Approve (Top 5)
+            var pendingMeetingsList = await _context.MeetingBookings
+                .Include(m => m.Student)
+                .Where(m => m.SupervisorId == user.Id && m.Status == "Pending" && !m.Student.IsResign)
+                .OrderBy(m => m.MeetingDate)
+                .Take(5)
+                .ToListAsync();
+
             ViewBag.RecentRequests = recentRequests;
             ViewBag.NextMeetings   = nextMeetings;
+            ViewBag.PendingMilestones = pendingMilestones;
+            ViewBag.PendingMeetingsList = pendingMeetingsList;
 
             // Unread Notification Count (for bell icon)
             ViewBag.UnreadNotificationCount = await _context.FYPNotifications
@@ -247,19 +266,46 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkAddMilestone(List<int> projectIds, string title, string description, DateTime? dueDate)
+        public async Task<IActionResult> BulkAddMilestone(string title, string description, DateTime? dueDate)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
 
-            if (projectIds == null || !projectIds.Any())
+            if (string.IsNullOrWhiteSpace(title))
             {
-                TempData["Error"] = "No students selected.";
+                TempData["Error"] = "Milestone title cannot be empty.";
                 return RedirectToAction(nameof(MyProjects));
             }
 
+            // Check for duplicate milestone titles across this supervisor's projects
+            bool isDuplicate = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .AnyAsync(m => m.Project.SupervisorId == user.Id && m.Title.ToLower() == title.ToLower());
+
+            if (isDuplicate)
+            {
+                TempData["AddModalError"] = $"A milestone with the title '{title}' already exists for your students. Please choose a different name or edit the existing one.";
+                return Redirect($"/Supervisor/MyProjects?action=bulk-add");
+            }
+
+            if (dueDate.HasValue)
+            {
+                var firstProject = await _context.FYPProjects.FirstOrDefaultAsync(p => p.SupervisorId == user.Id && !p.Student.IsResign);
+                if (firstProject != null)
+                {
+                    var existingMilestones = await _context.FYPMilestones.Where(m => m.FYPProjectId == firstProject.Id).ToListAsync();
+                    string validationError = ValidateChronology(existingMilestones, title, dueDate);
+                    if (validationError != null)
+                    {
+                        TempData["AddModalError"] = validationError;
+                        return Redirect($"/Supervisor/MyProjects?action=bulk-add");
+                    }
+                }
+            }
+
             var projects = await _context.FYPProjects
-                .Where(p => projectIds.Contains(p.Id) && p.SupervisorId == user.Id)
+                .Include(p => p.Student)
+                .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign)
                 .ToListAsync();
 
             if (projects.Any())
@@ -277,11 +323,11 @@ namespace FYPTracker.Controllers
                 _context.FYPMilestones.AddRange(milestones);
                 await _context.SaveChangesAsync();
                 
-                TempData["Success"] = $"Successfully assigned milestone to {projects.Count} student(s).";
+                TempData["Success"] = $"Successfully assigned milestone to all {projects.Count} active student(s).";
             }
             else
             {
-                TempData["Error"] = "No valid projects found.";
+                TempData["Error"] = "No active projects found under your supervision.";
             }
 
             return RedirectToAction(nameof(MyProjects));
@@ -289,20 +335,50 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkEditMilestone(List<int> projectIds, string targetTitle, string newTitle, string newDescription, DateTime? newDueDate)
+        public async Task<IActionResult> BulkEditMilestone(string targetTitle, string newTitle, string newDescription, DateTime? newDueDate)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
 
-            if (projectIds == null || !projectIds.Any() || string.IsNullOrEmpty(targetTitle))
+            if (string.IsNullOrEmpty(targetTitle))
             {
-                TempData["Error"] = "Invalid request or no students selected.";
+                TempData["Error"] = "Invalid request.";
                 return RedirectToAction(nameof(MyProjects));
+            }
+
+            if (!string.IsNullOrWhiteSpace(newTitle) && newTitle.ToLower() != targetTitle.ToLower())
+            {
+                bool isDuplicate = await _context.FYPMilestones
+                    .Include(m => m.Project)
+                    .AnyAsync(m => m.Project.SupervisorId == user.Id && m.Title.ToLower() == newTitle.ToLower());
+
+                if (isDuplicate)
+                {
+                    TempData["EditModalError"] = $"Cannot rename to '{newTitle}' because a milestone with that name already exists.";
+                    return Redirect($"/Supervisor/MyProjects?action=bulk-edit&target={Uri.EscapeDataString(targetTitle)}");
+                }
+            }
+
+            if (newDueDate.HasValue)
+            {
+                var firstProject = await _context.FYPProjects.FirstOrDefaultAsync(p => p.SupervisorId == user.Id && !p.Student.IsResign);
+                if (firstProject != null)
+                {
+                    var existingMilestones = await _context.FYPMilestones.Where(m => m.FYPProjectId == firstProject.Id).ToListAsync();
+                    string effectiveTitle = string.IsNullOrWhiteSpace(newTitle) ? targetTitle : newTitle;
+                    string validationError = ValidateChronology(existingMilestones, effectiveTitle, newDueDate, targetTitle);
+                    if (validationError != null)
+                    {
+                        TempData["EditModalError"] = validationError;
+                        return Redirect($"/Supervisor/MyProjects?action=bulk-edit&target={Uri.EscapeDataString(targetTitle)}");
+                    }
+                }
             }
 
             var milestones = await _context.FYPMilestones
                 .Include(m => m.Project)
-                .Where(m => projectIds.Contains(m.FYPProjectId) && m.Project.SupervisorId == user.Id && m.Title == targetTitle)
+                .ThenInclude(p => p.Student)
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && m.Title == targetTitle)
                 .ToListAsync();
 
             if (milestones.Any())
@@ -312,24 +388,34 @@ namespace FYPTracker.Controllers
 
                 foreach (var milestone in milestones)
                 {
-                    if (milestone.Status == "Approved")
+                    bool isIaf = milestone.Title.Contains("IAF") || milestone.Title.Contains("Initial Project Allocation");
+                    bool isSystemMilestone = isIaf || milestone.Title.Contains("Proposal") || milestone.Title.Contains("Progress") || milestone.Title.Contains("Final");
+
+                    if (isIaf && newDueDate.HasValue)
                     {
-                        errorCount++;
-                        continue; // Cannot edit approved milestones
+                        // Do not allow updating IAF due date via bulk
+                    }
+                    else if (newDueDate.HasValue) 
+                    {
+                        milestone.DueDate = newDueDate.Value;
                     }
 
                     if (milestone.Status != "Pending")
                     {
-                        // For Submitted/UnderReview/Rejected, only allow editing the Due Date
-                        if (newDueDate.HasValue) milestone.DueDate = newDueDate.Value;
+                        // For Submitted/UnderReview/Rejected, only allow editing the Due Date (handled above)
                         successCount++;
                     }
                     else
                     {
                         // Full edit allowed for pending
-                        if (!string.IsNullOrWhiteSpace(newTitle)) milestone.Title = newTitle;
-                        if (!string.IsNullOrWhiteSpace(newDescription)) milestone.Description = newDescription;
-                        if (newDueDate.HasValue) milestone.DueDate = newDueDate.Value;
+                        if (!string.IsNullOrWhiteSpace(newTitle) && !isSystemMilestone) 
+                        {
+                            milestone.Title = newTitle;
+                        }
+                        if (!string.IsNullOrWhiteSpace(newDescription)) 
+                        {
+                            milestone.Description = newDescription;
+                        }
                         successCount++;
                     }
                 }
@@ -341,16 +427,16 @@ namespace FYPTracker.Controllers
 
                 if (errorCount > 0)
                 {
-                    TempData["Success"] = $"Updated '{targetTitle}' for {successCount} student(s). Skipped {errorCount} as they are already Approved.";
+                    TempData["Success"] = $"Updated '{targetTitle}' for all {successCount} active student(s). Skipped {errorCount} as they are already Approved.";
                 }
                 else
                 {
-                    TempData["Success"] = $"Successfully updated '{targetTitle}' for {successCount} student(s).";
+                    TempData["Success"] = $"Successfully updated '{targetTitle}' for all {successCount} active student(s).";
                 }
             }
             else
             {
-                TempData["Error"] = "No matching milestones found for the selected students.";
+                TempData["Error"] = "No active student projects have this milestone.";
             }
 
             return RedirectToAction(nameof(MyProjects));
@@ -358,27 +444,28 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkDeleteMilestone(List<int> projectIds, string targetTitle)
+        public async Task<IActionResult> BulkDeleteMilestone(string targetTitle)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
 
-            if (projectIds == null || !projectIds.Any() || string.IsNullOrEmpty(targetTitle))
+            if (string.IsNullOrEmpty(targetTitle))
             {
-                TempData["Error"] = "Invalid request or no students selected.";
+                TempData["Error"] = "Invalid request.";
                 return RedirectToAction(nameof(MyProjects));
             }
 
             var milestones = await _context.FYPMilestones
                 .Include(m => m.Project)
-                .Where(m => projectIds.Contains(m.FYPProjectId) && m.Project.SupervisorId == user.Id && m.Title == targetTitle)
+                .ThenInclude(p => p.Student)
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && m.Title == targetTitle)
                 .ToListAsync();
 
             if (milestones.Any())
             {
-                if (targetTitle.Contains("Proposal", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("Final", StringComparison.OrdinalIgnoreCase))
+                if (targetTitle.Contains("Proposal", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("Final", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("IAF", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase))
                 {
-                    TempData["Error"] = "Core system milestones (Proposal and Final Report) cannot be deleted.";
+                    TempData["Error"] = "Core system milestones (IAF, Proposal, and Final Report) cannot be deleted.";
                     return RedirectToAction(nameof(MyProjects));
                 }
 
@@ -393,16 +480,16 @@ namespace FYPTracker.Controllers
 
                 if (skippedCount > 0)
                 {
-                    TempData["Success"] = $"Deleted '{targetTitle}' from {toDelete.Count} student(s). Skipped {skippedCount} because they were already submitted.";
+                    TempData["Success"] = $"Deleted '{targetTitle}' from all {toDelete.Count} active student(s). Skipped {skippedCount} because they were already submitted.";
                 }
                 else
                 {
-                    TempData["Success"] = $"Successfully deleted '{targetTitle}' from {toDelete.Count} student(s).";
+                    TempData["Success"] = $"Successfully deleted '{targetTitle}' from all {toDelete.Count} active student(s).";
                 }
             }
             else
             {
-                TempData["Error"] = "No matching milestones found for the selected students.";
+                TempData["Error"] = "No active student projects have this milestone.";
             }
 
             return RedirectToAction(nameof(MyProjects));
@@ -818,6 +905,118 @@ namespace FYPTracker.Controllers
 
             TempData["Success"] = "All notifications marked as read.";
             return RedirectToAction(nameof(Notifications));
+        }
+
+        private string ValidateChronology(List<FYPMilestone> existingMilestones, string targetTitle, DateTime? newDueDate, string originalTitle = null)
+        {
+            if (!newDueDate.HasValue) return null;
+
+            var simulated = existingMilestones.Select(m => new { Title = m.Title, DueDate = m.DueDate }).ToList();
+            
+            // Remove the target if it exists (for edit)
+            if (originalTitle != null) {
+                simulated.RemoveAll(m => m.Title == originalTitle);
+            } else {
+                simulated.RemoveAll(m => m.Title == targetTitle);
+            }
+            
+            // Add the new state
+            simulated.Add(new { Title = targetTitle, DueDate = newDueDate });
+
+            var iaf = simulated.FirstOrDefault(m => m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation"));
+            var proposal = simulated.FirstOrDefault(m => m.Title.Contains("Proposal"));
+            var final = simulated.FirstOrDefault(m => m.Title.Contains("Final"));
+            var progressList = simulated.Where(m => 
+                !(m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation") || m.Title.Contains("Proposal") || m.Title.Contains("Final")))
+                .Where(m => m.DueDate.HasValue).ToList();
+
+
+
+            if (proposal?.DueDate.HasValue == true)
+            {
+                foreach (var p in progressList)
+                {
+                    if (p.DueDate.Value.Date < proposal.DueDate.Value.Date)
+                        return $"Date Validation Error: '{p.Title}' due date cannot be before the FYP 1: Proposal due date.";
+                }
+            }
+
+            if (final?.DueDate.HasValue == true)
+            {
+                foreach (var p in progressList)
+                {
+                    if (p.DueDate.Value.Date > final.DueDate.Value.Date)
+                        return $"Date Validation Error: '{p.Title}' due date cannot be after the FYP 2: Final Dissertation due date.";
+                }
+
+                if (proposal?.DueDate.HasValue == true && proposal.DueDate.Value.Date > final.DueDate.Value.Date)
+                {
+                    return "Date Validation Error: FYP 1: Proposal due date cannot be after the FYP 2: Final Dissertation due date.";
+                }
+            }
+
+            return null;
+        }
+
+        // ────────────────────────────────────────────────────────
+        // Reporting
+        // ────────────────────────────────────────────────────────
+        public async Task<IActionResult> Reporting()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            ViewBag.CurrentUser = user;
+
+            // 1. Milestone Status Distribution
+            var milestones = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign)
+                .ToListAsync();
+
+            var milestoneStatusCounts = milestones
+                .GroupBy(m => m.Status)
+                .Select(g => new { Status = g.Key, Count = g.Count() })
+                .ToList();
+
+            // 2. Student Program Distribution
+            var projects = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign)
+                .ToListAsync();
+
+            var programCounts = projects
+                .Where(p => !string.IsNullOrEmpty(p.Student?.Programme))
+                .GroupBy(p => p.Student.Programme)
+                .Select(g => new { Program = g.Key, Count = g.Count() })
+                .ToList();
+
+            // 3. Meeting Request Status
+            var meetings = await _context.MeetingBookings
+                .Include(m => m.Student)
+                .Where(m => m.SupervisorId == user.Id && !m.Student.IsResign)
+                .ToListAsync();
+
+            var meetingStatusCounts = meetings
+                .GroupBy(m => m.Status)
+                .Select(g => new { Status = g.Key, Count = g.Count() })
+                .ToList();
+
+            // 4. Monthly Meeting Activity (Current Year)
+            var currentYear = DateTime.Today.Year;
+            var monthlyMeetings = meetings
+                .Where(m => m.MeetingDate.Year == currentYear)
+                .GroupBy(m => m.MeetingDate.Month)
+                .Select(g => new { Month = g.Key, Count = g.Count() })
+                .OrderBy(x => x.Month)
+                .ToList();
+
+            // Serialize to JSON for frontend Chart.js
+            ViewBag.MilestoneStatsJson = System.Text.Json.JsonSerializer.Serialize(milestoneStatusCounts);
+            ViewBag.ProgramStatsJson = System.Text.Json.JsonSerializer.Serialize(programCounts);
+            ViewBag.MeetingStatsJson = System.Text.Json.JsonSerializer.Serialize(meetingStatusCounts);
+            ViewBag.MonthlyMeetingStatsJson = System.Text.Json.JsonSerializer.Serialize(monthlyMeetings);
+
+            return View();
         }
     }
 }

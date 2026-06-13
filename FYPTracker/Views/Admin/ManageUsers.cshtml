@@ -182,6 +182,94 @@
     </div>
 </div>
 
+<!-- Edit User Modal -->
+<div class="modal fade" id="editAccModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-600px">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit User</h2>
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+            <div class="modal-body p-5">
+                <div class="form-horizontal">
+                    <input type="hidden" id="editUserId" />
+                    <input type="hidden" id="editUserType" />
+
+                    <div class="fv-row mb-5">
+                        <label class="form-label fw-bolder text-dark fs-6">Full Name</label>
+                        <input type="text" id="editFullName" class="form-control form-control-lg form-control-solid bg-light text-muted" readonly />
+                        <div class="form-text mt-2"><i class="fas fa-lock me-1"></i> Name cannot be modified.</div>
+                    </div>
+
+                    <div class="fv-row mb-5">
+                        <label class="form-label fw-bolder text-dark fs-6">Phone</label>
+                        <input type="text" id="editPhone" class="form-control form-control-lg form-control-solid" placeholder="e.g. 0123456789 or +60123456789" />
+                    </div>
+
+                    <div class="fv-row mb-5">
+                        <label class="form-label fw-bolder text-dark fs-6">Email <span class="text-danger">*</span></label>
+                        <input type="email" id="editEmail" class="form-control form-control-lg form-control-solid" placeholder="xxx@gmail.com or xxx@student.newinti.edu.my" />
+                    </div>
+
+                    <div id="editStudentFields" style="display:none;">
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Programme</label>
+                            <select id="editProgramme" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Programme --</option>
+                                <option value="BCSCUNP (Bachelor of Computer Science)">BCSCUNP (Bachelor of Computer Science)</option>
+                                <option value="BIT (Bachelor of Information Technology)">BIT (Bachelor of Information Technology)</option>
+                                <option value="BSE (Bachelor of Software Engineering)">BSE (Bachelor of Software Engineering)</option>
+                                <option value="DIT (Diploma in Information Technology)">DIT (Diploma in Information Technology)</option>
+                                <option value="FIC (Foundation in Computing)">FIC (Foundation in Computing)</option>
+                                <option value="BCSC-CC (BSc Cloud Computing)">BCSC-CC (BSc Cloud Computing)</option>
+                                <option value="BCSC-MC (BSc Mobile Computing)">BCSC-MC (BSc Mobile Computing)</option>
+                                <option value="BCSC-BA (BSc Business Analytics)">BCSC-BA (BSc Business Analytics)</option>
+                                <option value="BCSC-CS (BSc Cyber Security)">BCSC-CS (BSc Cyber Security)</option>
+                            </select>
+                        </div>
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Academic Session</label>
+                            <select id="editAcademicSession" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Session --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="editSupervisorFields" style="display:none;">
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Title</label>
+                            <input type="text" id="editTitle" class="form-control form-control-lg form-control-solid" placeholder="e.g. Dr." />
+                        </div>
+
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Department <span class="text-danger">*</span></label>
+                            <select id="editDepartment" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Department --</option>
+                                @foreach (var dept in departmentList)
+                                {
+                                    <option value="@dept.Value">@dept.Text</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <button type="button" id="btn_edit_submit" class="btn btn-lg btn-primary w-100">Save Changes</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Bulk Invite Modal -->
 <div class="modal fade" id="bulkInviteModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered mw-600px">
@@ -268,10 +356,12 @@
         var currentYear = new Date().getFullYear();
         var intakes = ['Jan', 'April', 'Aug'];
         var sessionSelect = $('#createAcademicSession');
+        var editSessionSelect = $('#editAcademicSession');
         for (var y = currentYear - 1; y <= currentYear + 2; y++) {
             intakes.forEach(function(intake) {
                 var sessionText = y + ' ' + intake;
                 sessionSelect.append(new Option(sessionText, sessionText));
+                editSessionSelect.append(new Option(sessionText, sessionText));
             });
         }
 
@@ -548,66 +638,74 @@
     }
 
     function Edit(employeeId) {
-        window.location.href = '/Admin/EditUser?id=' + employeeId;
+        $.ajax({
+            type: "GET",
+            url: '/Admin/GetUserDetails',
+            data: { id: employeeId },
+            success: function (data) {
+                if (data.success) {
+                    $('#editUserId').val(data.id);
+                    $('#editUserType').val(data.userType);
+                    $('#editFullName').val(data.fullName);
+                    $('#editEmail').val(data.email);
+                    $('#editPhone').val(data.phone);
 
+                    if (data.userType === 'Student' || data.userType === 'STUDENT') {
+                        $('#editStudentFields').show();
+                        $('#editSupervisorFields').hide();
+                        $('#editProgramme').val(data.programme);
+                        $('#editAcademicSession').val(data.academicSession);
+                    } else if (data.userType === 'Supervisor' || data.userType === 'SUPERVISOR') {
+                        $('#editStudentFields').hide();
+                        $('#editSupervisorFields').show();
+                        $('#editTitle').val(data.title);
+                        $('#editDepartment').val(data.department);
+                    } else {
+                        $('#editStudentFields').hide();
+                        $('#editSupervisorFields').hide();
+                    }
+                    
+                    $('#editAccModal').modal('show');
+                } else {
+                    Swal.fire({ text: data.msg || "Could not fetch user details.", icon: "error", confirmButtonText: "Ok, got it!" });
+                }
+            },
+            error: function () {
+                Swal.fire({ text: "Server error while fetching user details.", icon: "error", confirmButtonText: "Ok, got it!" });
+            }
+        });
     }
 
-    function ResetModal() {
-        $("#ApplicationUser_Id").val('');
-        $("#ApplicationUser_FullName").val('');
-        $("#ApplicationUser_Email").val('');
-        $("#ApplicationUser_PassCode").val('');
-        $("#UserImage").attr('value', '');
-        $("#uploadedImg").attr('src', '');
-    }
+    $('#btn_edit_submit').click(function () {
+        var id = $('#editUserId').val();
+        var email = $('#editEmail').val().trim();
+        var phone = $('#editPhone').val().trim();
+        var department = $('#editDepartment').val();
+        var programme = $('#editProgramme').val();
+        var academicSession = $('#editAcademicSession').val();
+        var title = $('#editTitle').val().trim();
 
-    function ViewModal() {
-        $("#ApplicationUser_FullName").attr('readonly', true);
-        $("#ApplicationUser_Email").attr('readonly', true);
-        $("#ApplicationUser_PassCode").attr('readonly', true);
-        //$("#UserImage").hide();
-        $("#lbl-UserImage").hide();
-        $("#btn-removeImg").hide();
-        $("#div-submit").hide();
-    }
+        if (!email) {
+            Swal.fire({ text: "Please enter an email.", icon: "warning", confirmButtonText: "Ok, got it!" });
+            return;
+        }
 
-    function EditableModal() {
-        $("#ApplicationUser_FullName").attr('readonly', false);
-        $("#ApplicationUser_Email").attr('readonly', false);
-        $("#ApplicationUser_PassCode").attr('readonly', false);
-        //$("#UserImage").show();
-        $("#lbl-UserImage").show();
-        //$("#btn-removeImg").show();
-        $("#div-submit").show();
-    }
-
-
-    function RemoveImg() {
-        $("#UserImage").attr('value', '');
-        $("#uploadedImg").attr('src', '');
-        $("#isImgChanged").val('false');
-    }
-
-    $("#UserImage").click(function () {
-        $("#UserImage").attr('value', '');
-        $("#uploadedImg").attr('src', '');
+        $.ajax({
+            url: "/Admin/UpdateUserModal", method: "POST",
+            data: { id: id, email: email, phone: phone, department: department, programme: programme, academicSession: academicSession, title: title },
+            success: function (r) {
+                if (r.status) {
+                    $('#editAccModal').modal('hide');
+                    Swal.fire({ text: r.msg, icon: "success", confirmButtonText: "Ok, got it!" }).then(function () { LoadTable(); });
+                } else {
+                    Swal.fire({ text: r.msg, icon: "warning", confirmButtonText: "Ok, got it!" });
+                }
+            },
+            error: function () {
+                Swal.fire({ text: "An error occurred. Please try again.", icon: "error", confirmButtonText: "Ok, got it!" });
+            }
+        });
     });
-
-
-    $("#UserImage").change(function () {
-        $("#isImgChanged").val('true');
-    });
-
-    $("#UserImage").click(function () {
-        this.value = null;
-        //CheckHasImage();
-    });
-
-    function OpenViewModal(employeeId) {
-        ResetModal();
-        OpenEditModal(employeeId, "View");
-        ViewModal();
-    }
 
 </script>
 }

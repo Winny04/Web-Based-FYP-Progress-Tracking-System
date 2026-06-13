@@ -249,6 +249,66 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             foreach (var col in ws.Columns()) col.Width += 2;
         }
 
+        [HttpGet]
+        public async Task<IActionResult> GetUserDetails(int id)
+        {
+            var user = await _context.ApplicationUsers.Include(x => x.EmpDepartment).FirstOrDefaultAsync(u => u.Id == id);
+            if (user == null) return Json(new { success = false, msg = "User not found." });
+            return Json(new {
+                success = true,
+                id = user.Id,
+                fullName = user.FullName,
+                email = user.Email,
+                phone = user.Phone,
+                userType = user.UserType,
+                department = user.EmpDepartment?.Name,
+                programme = user.Programme,
+                academicSession = user.AcademicSession,
+                title = user.Title
+            });
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> UpdateUserModal(int id, string email, string phone, string department, string programme, string academicSession, string title)
+        {
+            try
+            {
+                var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == id);
+                if (user == null) return Json(new { status = false, msg = "User not found." });
+
+                // Check email uniqueness if email changed
+                if (user.Email != email)
+                {
+                    var emailExists = await _context.ApplicationUsers.AnyAsync(u => u.Email == email && u.Id != id);
+                    if (emailExists) return Json(new { status = false, msg = "Email already in use by another account." });
+                }
+
+                user.Email = email;
+                user.Phone = phone;
+                
+                if (user.UserType == "Supervisor" || user.UserType == "SUPERVISOR")
+                {
+                    var deptId = await _context.Department.Where(x => x.Name == department).Select(x => x.Id).FirstOrDefaultAsync();
+                    user.DepartmentId = deptId > 0 ? deptId : user.DepartmentId;
+                    user.Title = title;
+                }
+                else if (user.UserType == "Student" || user.UserType == "STUDENT")
+                {
+                    user.Programme = programme;
+                    user.AcademicSession = academicSession;
+                }
+
+                _context.Update(user);
+                await _context.SaveChangesAsync();
+                
+                return Json(new { status = true, msg = "User details updated successfully." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { status = false, msg = "Server error: " + ex.Message });
+            }
+        }
+
         [Authorize]
         public ActionResult EditUser(int id)
         {
@@ -562,9 +622,71 @@ public ActionResult ManageUsersData()
                 return false;
             }
         }
-        public IActionResult Settings()
+        public async Task<IActionResult> Settings()
         {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+
+            var existingIaf = await _context.FYPMilestones
+                .Where(m => m.Title == "Initial Project Allocation Form (IAF)" && m.DueDate != null)
+                .OrderByDescending(m => m.DueDate)
+                .FirstOrDefaultAsync();
+                
+            if (existingIaf != null && existingIaf.DueDate.HasValue)
+            {
+                ViewBag.IAFDeadline = existingIaf.DueDate.Value.ToString("yyyy-MM-dd");
+            }
+            else
+            {
+                ViewBag.IAFDeadline = "";
+            }
+
             return View();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateIAFDeadline(DateTime? deadline)
+        {
+            try 
+            {
+                if (!deadline.HasValue)
+                {
+                    TempData["Error"] = "The date provided was invalid or empty.";
+                    return RedirectToAction(nameof(Settings));
+                }
+
+                // Set the time to 11:59:59 PM of the selected date
+                var endOfDayDeadline = new DateTime(deadline.Value.Year, deadline.Value.Month, deadline.Value.Day, 23, 59, 59);
+
+                var milestones = await _context.FYPMilestones
+                    .Where(m => m.Title == "Initial Project Allocation Form (IAF)" || m.Title.Contains("IAF"))
+                    .ToListAsync();
+
+                int count = 0;
+                foreach(var m in milestones)
+                {
+                    m.DueDate = endOfDayDeadline;
+                    count++;
+                }
+
+                if (count > 0)
+                {
+                    await _context.SaveChangesAsync();
+                    TempData["Success"] = $"Successfully updated the IAF deadline for {count} student project(s).";
+                }
+                else
+                {
+                    TempData["Info"] = "No IAF milestones found to update.";
+                }
+
+                return RedirectToAction(nameof(Settings));
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"Crash Details: {ex.Message} | Inner: {ex.InnerException?.Message}";
+                return RedirectToAction(nameof(Settings));
+            }
         }
 
         public async Task<IActionResult> DefenseList()
@@ -828,6 +950,74 @@ public ActionResult ManageUsersData()
             }
 
             return RedirectToAction(nameof(ManageUsers));
+        }
+
+        // ────────────────────────────────────────────────────────
+        // Reporting (Admin)
+        // ────────────────────────────────────────────────────────
+        public async Task<IActionResult> Reporting()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            if (user == null || (user.UserType != "Admin" && user.UserType != "SuperAdmin")) return RedirectToAction("Login", "User");
+            ViewBag.CurrentUser = user;
+
+            // 1. Supervisor Capacity vs Workload
+            var supervisors = await _context.ApplicationUsers
+                .Where(u => u.UserType == "Supervisor" && !u.IsResign)
+                .Select(s => new {
+                    Name = s.FullName ?? s.UserName,
+                    MaxSlots = s.MaxStudentSlots,
+                    CurrentStudents = _context.FYPProjects.Count(p => p.SupervisorId == s.Id && !p.Student.IsResign && p.Status == "Approved")
+                })
+                .ToListAsync();
+
+            // 2. Global Student Allocation Status
+            var allActiveStudents = await _context.ApplicationUsers
+                .Where(u => u.UserType == "Student" && !u.IsResign)
+                .Select(s => new {
+                    s.Id,
+                    HasApprovedProject = _context.FYPProjects.Any(p => p.StudentId == s.Id && p.Status == "Approved"),
+                    HasPendingProject = _context.FYPProjects.Any(p => p.StudentId == s.Id && p.Status == "Pending")
+                })
+                .ToListAsync();
+
+            var allocationStatusCounts = new[] {
+                new { Status = "Allocated", Count = allActiveStudents.Count(s => s.HasApprovedProject) },
+                new { Status = "Pending", Count = allActiveStudents.Count(s => !s.HasApprovedProject && s.HasPendingProject) },
+                new { Status = "No Project", Count = allActiveStudents.Count(s => !s.HasApprovedProject && !s.HasPendingProject) }
+            };
+
+            // 3. Faculty Demographics / Program Distribution
+            var programCounts = await _context.ApplicationUsers
+                .Where(u => u.UserType == "Student" && !u.IsResign && !string.IsNullOrEmpty(u.Programme))
+                .GroupBy(u => u.Programme)
+                .Select(g => new { Program = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            // 4. Global Milestone Bottlenecks
+            var milestones = await _context.FYPMilestones
+                .Where(m => !m.Project.Student.IsResign)
+                .Select(m => new { m.Title, m.Status })
+                .ToListAsync();
+
+            var milestoneStatusData = milestones
+                .Select(m => new {
+                    Category = m.Title.Contains("IAF") || m.Title.Contains("Initial") ? "IAF" :
+                               m.Title.Contains("Proposal") ? "Proposal" :
+                               m.Title.Contains("Final") ? "Final Report" : "Other",
+                    m.Status
+                })
+                .Where(m => m.Category != "Other")
+                .GroupBy(m => new { m.Category, m.Status })
+                .Select(g => new { g.Key.Category, g.Key.Status, Count = g.Count() })
+                .ToList();
+
+            ViewBag.SupervisorCapacityJson = System.Text.Json.JsonSerializer.Serialize(supervisors);
+            ViewBag.AllocationStatsJson = System.Text.Json.JsonSerializer.Serialize(allocationStatusCounts);
+            ViewBag.ProgramStatsJson = System.Text.Json.JsonSerializer.Serialize(programCounts);
+            ViewBag.MilestoneBottlenecksJson = System.Text.Json.JsonSerializer.Serialize(milestoneStatusData);
+
+            return View();
         }
     }
 }

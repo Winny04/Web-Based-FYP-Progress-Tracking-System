@@ -21,7 +21,8 @@
                         <div class="alert alert-success border-0 p-2 small mb-3">@TempData["Success"]</div>
                     }
                     <div class="mb-3">
-                        <input type="text" name="deadline" class="form-control bg-light" value="@ViewBag.IAFDeadline" required placeholder="e.g. 15th April 2026 before 11.59pm" />
+                        <input type="date" name="deadline" class="form-control bg-light" value="@ViewBag.IAFDeadline" min="@DateTime.Now.ToString("yyyy-MM-dd")" required />
+                        <div class="form-text text-muted small mt-1"><i class="fas fa-info-circle me-1"></i>Time will be automatically set to 11:59 PM.</div>
                     </div>
                     <button type="submit" class="btn btn-primary w-100 fw-bold">Save Deadline</button>
                 </form>

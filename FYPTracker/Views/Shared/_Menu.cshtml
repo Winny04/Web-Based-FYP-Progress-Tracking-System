@@ -144,6 +144,11 @@
                     </span>
                 </a>
             </div>
+            <div class="menu-item @(pageTitle == "Reports & Analytics" ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle == "Reports & Analytics" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/Reporting">
+                    <span class="menu-title">Reporting</span>
+                </a>
+            </div>
             <div class="menu-item @(pageTitle == "Messages" ? "here show" : "")">
                 <a class="menu-link py-3 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" href="/Chat">
                     <span class="menu-title">Messages</span>
@@ -153,31 +158,40 @@
         }
         else if (userType == "Admin" || userType == "SuperAdmin")
         {
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Admin">
+            bool isDashboard = currentPath == "/Admin" || currentPath == "/Admin/" || currentPath.StartsWith("/Admin/Index", StringComparison.OrdinalIgnoreCase);
+            bool isUsers = currentPath.StartsWith("/Admin/ManageUsers", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/EditUser", StringComparison.OrdinalIgnoreCase);
+            bool isProjects = currentPath.StartsWith("/Admin/ManageProjects", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/ProjectDetails", StringComparison.OrdinalIgnoreCase);
+            bool isReporting = currentPath.StartsWith("/Admin/Reporting", StringComparison.OrdinalIgnoreCase);
+            bool isSettings = currentPath.StartsWith("/Admin/Settings", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/DefenseList", StringComparison.OrdinalIgnoreCase);
+
+            <div class="menu-item @(isDashboard ? "here show" : "")">
+                <a class="menu-link py-3 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Admin">
                     <span class="menu-title d-flex align-items-center">
                         Dashboard
                         @if(adminPendingRequests > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@adminPendingRequests</span> }
                     </span>
                 </a>
             </div>
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Admin/ManageUsers">
+            <div class="menu-item @(isUsers ? "here show" : "")">
+                <a class="menu-link py-3 @(isUsers ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageUsers">
                     <span class="menu-title">Manage Users</span>
                 </a>
             </div>
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Admin/ManageProjects">
+            <div class="menu-item @(isProjects ? "here show" : "")">
+                <a class="menu-link py-3 @(isProjects ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageProjects">
                     <span class="menu-title">All Projects</span>
                 </a>
             </div>
-            <div class="menu-item">
-                <a class="menu-link py-3" href="/Admin/Settings">
+            <div class="menu-item @(isReporting ? "here show" : "")">
+                <a class="menu-link py-3 @(isReporting ? "active border-bottom border-3 border-primary" : "")" href="/Admin/Reporting">
+                    <span class="menu-title">Reporting</span>
+                </a>
+            </div>
+            <div class="menu-item @(isSettings ? "here show" : "")">
+                <a class="menu-link py-3 @(isSettings ? "active border-bottom border-3 border-primary" : "")" href="/Admin/Settings">
                     <span class="menu-title">System Settings</span>
                 </a>
             </div>
-
-
         }
 
     </div>

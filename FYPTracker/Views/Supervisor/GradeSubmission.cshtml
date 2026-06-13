@@ -142,18 +142,22 @@
                     <form asp-action="ReviewSubmission" method="post">
                         <input type="hidden" name="milestoneId" value="@Model.Id" />
                         
+                        @{
+                            bool isLocked = Model.Status == "Approved" || Model.Status == "Rejected";
+                        }
+                        
                         @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)))
                         {
                             <div class="mb-4">
                                 <label class="form-label fw-bold text-dark"><i class="fas fa-signature text-primary me-2"></i>Supervisor Signature</label>
-                                <input type="text" name="supervisorSignature" class="form-control form-control-solid form-control-lg border-primary bg-light-primary" placeholder="Type your full name to digitally sign" required />
+                                <input type="text" name="supervisorSignature" class="form-control form-control-solid form-control-lg border-primary bg-light-primary" placeholder="Type your full name to digitally sign" @(isLocked ? "disabled" : "required") />
                                 <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Required to officially approve the Initial Project Allocation Form.</div>
                             </div>
                         }
 
                         <div class="mb-4">
                             <label class="form-label fw-bold text-dark">Decision</label>
-                            <select name="status" class="form-select form-select-solid form-select-lg" required>
+                            <select name="status" class="form-select form-select-solid form-select-lg" @(isLocked ? "disabled" : "required")>
                                 <option value="">- Select a decision -</option>
                                 <option value="Approved" selected="@(Model.Status == "Approved")">Approve (Passed)</option>
                                 <option value="Rejected" selected="@(Model.Status == "Rejected")">Reject (Needs Revision)</option>
@@ -163,15 +167,24 @@
                         
                         <div class="mb-4">
                             <label class="form-label fw-bold text-dark">Feedback / Remarks</label>
-                            <textarea name="remarks" class="form-control form-control-solid rounded-3" rows="6" placeholder="Provide detailed feedback for the student here...">@Model.SupervisorFeedback</textarea>
+                            <textarea name="remarks" class="form-control form-control-solid rounded-3" rows="6" placeholder="Provide detailed feedback for the student here..." @(isLocked ? "readonly" : "")>@Model.SupervisorFeedback</textarea>
                             <div class="form-text mt-2">This feedback will be visible to the student immediately.</div>
                         </div>
 
-                        <div class="d-grid mt-5">
-                            <button type="submit" class="btn btn-primary btn-lg rounded-3 fw-bold shadow-sm">
-                                <i class="fas fa-save me-2"></i>Submit Grade
-                            </button>
-                        </div>
+                        @if (isLocked)
+                        {
+                            <div class="alert alert-warning mt-4 mb-0 border-warning shadow-sm">
+                                <i class="fas fa-lock me-2 text-warning"></i>This submission has already been graded and locked.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="d-grid mt-5">
+                                <button type="submit" class="btn btn-primary btn-lg rounded-3 fw-bold shadow-sm">
+                                    <i class="fas fa-save me-2"></i>Submit Grade
+                                </button>
+                            </div>
+                        }
                     </form>
                 </div>
             </div>

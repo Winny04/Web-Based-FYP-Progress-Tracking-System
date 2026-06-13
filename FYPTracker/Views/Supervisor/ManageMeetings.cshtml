@@ -72,113 +72,177 @@
             <h2 class="fw-bold mb-1 text-white"><i class="fas fa-calendar-alt me-2"></i>Manage Meetings</h2>
             <p class="mb-0 text-white opacity-75">Oversee and respond to meeting requests from your students.</p>
         </div>
-        <div class="d-flex gap-2">
-            <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-dark">@Model.Count(m => m.Status == "Pending") Pending</span>
-            <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-dark">@Model.Count(m => m.Status == "Approved") Approved</span>
+        <div class="d-flex flex-wrap gap-2">
+            <div class="d-flex align-items-center position-relative my-1">
+                <i class="fas fa-user position-absolute ms-3 text-muted"></i>
+                <select id="studentFilter" class="form-select border-0 shadow-sm ps-10 w-200px" style="border-radius: 10px;">
+                    <option value="">All Students</option>
+                    @foreach (var studentName in Model.Select(m => m.Student?.FullName).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s))
+                    {
+                        <option value="@studentName">@studentName</option>
+                    }
+                </select>
+            </div>
+            <div class="d-flex align-items-center position-relative my-1">
+                <i class="fas fa-info-circle position-absolute ms-3 text-muted"></i>
+                <select id="statusFilter" class="form-select border-0 shadow-sm ps-10 w-150px" style="border-radius: 10px;">
+                    <option value="">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected">Rejected</option>
+                    <option value="Postponed">Postponed</option>
+                </select>
+            </div>
+            <div class="d-flex align-items-center position-relative my-1">
+                <i class="fas fa-comment-dots position-absolute ms-3 text-muted"></i>
+                <select id="feedbackFilter" class="form-select border-0 shadow-sm ps-10 w-200px" style="border-radius: 10px;">
+                    <option value="">All Feedback States</option>
+                    <option value="NeedFeedback">Needs Feedback</option>
+                    <option value="Done">Reviewed / Signed</option>
+                </select>
+            </div>
         </div>
     </div>
 
     <div class="glass-card p-4">
         <div class="table-responsive">
-            <table class="table table-hover">
+            <table class="table align-middle gs-0 gy-4">
                 <thead>
-                    <tr>
-                        <th>Student</th>
-                        <th>Date & Time</th>
-                        <th>Status</th>
-                        <th class="text-end">Actions</th>
+                    <tr class="fw-bolder text-muted bg-light">
+                        <th class="ps-4 min-w-150px">Date & Time</th>
+                        <th class="min-w-120px">Status</th>
+                        <th class="min-w-150px">Logbook Feedback</th>
+                        <th class="text-end min-w-120px pe-4">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var m in Model)
+                    @{
+                        var groupedMeetings = Model.GroupBy(m => m.Student).Where(g => g.Key != null).ToList();
+                    }
+                    @foreach (var group in groupedMeetings)
                     {
-                        <tr>
-                            <td>
-                                <div class="fw-bold text-dark">@m.Student?.FullName</div>
-                                <div class="text-muted" style="font-size: .75rem;">@m.Student?.UserName</div>
-                            </td>
-                            <td>
-                                <div class="fw-bold">@m.MeetingDate.ToString("dd MMM yyyy")</div>
-                                <div class="text-muted small">@m.MeetingTime</div>
-                            </td>
-                            <td>
-                                <span class="status-badge @(m.Status == "Approved" ? "badge-approved" : m.Status == "Rejected" ? "badge-rejected" : m.Status == "Postponed" ? "badge-postponed" : "badge-pending")">
-                                    @m.Status
-                                </span>
-                            </td>
-                            <td class="text-end">
-                                <button type="button" class="btn btn-sm btn-light-primary rounded-3" 
-                                        onclick="showMeetingDetails(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")', '@m.MeetingTime', '@(m.Student?.FullName)', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Reason ?? "No agenda provided."))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.SupervisorNote ?? "No notes added."))', '@m.Status')">
-                                    <i class="fas fa-info-circle me-1"></i> Details
-                                </button>
-                                
-                                @if (m.Status == "Pending")
-                                {
-                                    <button type="button" class="btn btn-sm btn-primary rounded-3 ms-1" data-bs-toggle="modal" data-bs-target="#respondModal_@m.Id">
-                                        Respond
-                                    </button>
-
-                                    <!-- Quick Respond Modal -->
-                                    <div class="modal fade" id="respondModal_@m.Id" tabindex="-1">
-                                        <div class="modal-dialog modal-dialog-centered">
-                                            <div class="modal-content border-0 shadow-lg">
-                                                <form asp-action="RespondMeeting" method="post">
-                                                    <div class="modal-header">
-                                                        <h5 class="fw-bold">Respond to @m.Student?.FullName</h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                    </div>
-                                                    <div class="modal-body text-start">
-                                                        <input type="hidden" name="meetingId" value="@m.Id" />
-                                                        <div class="mb-3">
-                                                            <label class="form-label fw-bold">Decision</label>
-                                                            <select name="status" class="form-select rounded-3">
-                                                                <option value="Approved">Approve Meeting</option>
-                                                                <option value="Rejected">Decline Meeting</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label fw-bold">Meeting Time (Edit if needed)</label>
-                                                            <input type="time" name="newMeetingTime" class="form-control rounded-3" value="@m.MeetingTime" />
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label fw-bold">Message to Student</label>
-                                                            <textarea name="note" class="form-control rounded-3" rows="3" placeholder="Add instructions or feedback..."></textarea>
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer border-0">
-                                                        <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Cancel</button>
-                                                        <button type="submit" class="btn btn-primary rounded-3 px-4">Submit</button>
-                                                    </div>
-                                                </form>
-                                            </div>
-                                        </div>
+                        var student = group.Key;
+                        
+                        <tr class="bg-light-primary student-group" data-student-id="@student?.Id">
+                            <td colspan="4" class="ps-4 py-3 border-bottom border-primary">
+                                <div class="d-flex align-items-center">
+                                    <div class="symbol symbol-40px me-3">
+                                        <span class="symbol-label bg-primary text-inverse-primary fw-bolder">@(student?.FullName?.FirstOrDefault() ?? '?')</span>
                                     </div>
-                                }
-                                else if (m.Status == "Approved" && m.MeetingLog != null)
-                                {
-                                    if (m.MeetingLog.LogStatus == "Draft")
-                                    {
-                                        <button type="button" class="btn btn-sm btn-warning rounded-3 ms-1" 
-                                                data-id="@m.Id"
-                                                data-student="@m.Student?.FullName"
-                                                data-date="@m.MeetingDate.ToString("dd/MM/yyyy")"
-                                                data-topics="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.KeyTopicsDiscussed)"
-                                                data-action="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.ActionPointsForNextMeeting)"
-                                                data-completed="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.CompletedActionsAndNotes)"
-                                                data-next-date="@(m.MeetingLog.NextMeetingDate?.ToString("yyyy-MM-ddTHH:mm"))"
-                                                onclick="openReviewLogModal(this)">
-                                            Review Log
-                                        </button>
-                                    }
-                                    else if (m.MeetingLog.LogStatus == "Signed")
-                                    {
-                                        <button type="button" class="btn btn-sm btn-success rounded-3 ms-1" onclick="viewFinalLog(@m.MeetingLog.Id)">
-                                            View Log
-                                        </button>
-                                    }
-                                }
+                                    <div class="d-flex flex-column">
+                                        <span class="text-dark fw-bolder fs-5">@student?.FullName</span>
+                                        <span class="text-muted fw-bold fs-7">@student?.UserName</span>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
+
+                        @foreach (var m in group.OrderByDescending(x => x.MeetingDate).ThenByDescending(x => x.MeetingTime))
+                        {
+                            var feedbackState = (m.Status == "Approved" && m.MeetingLog != null && m.MeetingLog.LogStatus == "Draft") ? "NeedFeedback" : (m.MeetingLog != null && m.MeetingLog.LogStatus == "Signed" ? "Done" : "");
+
+                            <tr class="meeting-item" data-student-id="@student?.Id" data-student-name="@student?.FullName" data-status="@m.Status" data-feedback="@feedbackState">
+                                <td class="ps-4">
+                                    <div class="fw-bold">@m.MeetingDate.ToString("dd MMM yyyy")</div>
+                                    <div class="text-muted small">@m.MeetingTime</div>
+                                </td>
+                                <td>
+                                    <span class="status-badge @(m.Status == "Approved" ? "badge-approved" : m.Status == "Rejected" ? "badge-rejected" : m.Status == "Postponed" ? "badge-postponed" : "badge-pending")">
+                                        @m.Status
+                                    </span>
+                                </td>
+                                <td>
+                                    @if (feedbackState == "NeedFeedback")
+                                    {
+                                        <span class="badge badge-light-warning">Needs Feedback</span>
+                                    }
+                                    else if (feedbackState == "Done")
+                                    {
+                                        <span class="badge badge-light-success">Reviewed & Signed</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">-</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <button type="button" class="btn btn-sm btn-light-primary rounded-3" 
+                                            onclick="showMeetingDetails(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")', '@m.MeetingTime', '@(m.Student?.FullName)', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Reason ?? "No agenda provided."))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.SupervisorNote ?? "No notes added."))', '@m.Status')">
+                                        <i class="fas fa-info-circle"></i> View Details
+                                    </button>
+                                    
+                                    @if (m.Status == "Pending")
+                                    {
+                                        <button type="button" class="btn btn-sm btn-primary rounded-3 ms-1" data-bs-toggle="modal" data-bs-target="#respondModal_@m.Id">
+                                            Respond
+                                        </button>
+
+                                        <!-- Quick Respond Modal -->
+                                        <div class="modal fade" id="respondModal_@m.Id" tabindex="-1">
+                                            <div class="modal-dialog modal-dialog-centered">
+                                                <div class="modal-content border-0 shadow-lg">
+                                                    <form asp-action="RespondMeeting" method="post">
+                                                        <div class="modal-header">
+                                                            <h5 class="fw-bold">Respond to @m.Student?.FullName</h5>
+                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                        </div>
+                                                        <div class="modal-body text-start">
+                                                            <input type="hidden" name="meetingId" value="@m.Id" />
+                                                            <div class="mb-3">
+                                                                <label class="form-label fw-bold">Decision</label>
+                                                                <select name="status" class="form-select rounded-3">
+                                                                    <option value="Approved">Approve Meeting</option>
+                                                                    <option value="Rejected">Decline Meeting</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label fw-bold">Meeting Time (Edit if needed)</label>
+                                                                <input type="time" name="newMeetingTime" class="form-control rounded-3" value="@m.MeetingTime" />
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label fw-bold">Message to Student</label>
+                                                                <textarea name="note" class="form-control rounded-3" rows="3" placeholder="Add instructions or feedback..."></textarea>
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer border-0">
+                                                            <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Cancel</button>
+                                                            <button type="submit" class="btn btn-primary rounded-3 px-4">Submit</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                    else if (m.Status == "Approved" && m.MeetingLog != null)
+                                    {
+                                        if (m.MeetingLog.LogStatus == "Draft")
+                                        {
+                                            <button type="button" class="btn btn-sm btn-warning rounded-3 ms-1" 
+                                                    data-id="@m.Id"
+                                                    data-student="@m.Student?.FullName"
+                                                    data-date="@m.MeetingDate.ToString("dd/MM/yyyy")"
+                                                    data-topics="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.KeyTopicsDiscussed)"
+                                                    data-action="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.ActionPointsForNextMeeting)"
+                                                    data-completed="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.CompletedActionsAndNotes)"
+                                                    data-next-date="@(m.MeetingLog.NextMeetingDate?.ToString("yyyy-MM-ddTHH:mm"))"
+                                                    onclick="openReviewLogModal(this)">
+                                                Review Log
+                                            </button>
+                                        }
+                                        else if (m.MeetingLog.LogStatus == "Signed")
+                                        {
+                                            <button type="button" class="btn btn-sm btn-success rounded-3 ms-1" onclick="viewFinalLog(@m.MeetingLog.Id)">
+                                                View Final Log
+                                            </button>
+                                        }
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (!groupedMeetings.Any())
+                    {
+                        <tr><td colspan="4" class="text-center py-4 text-muted">No meeting records found.</td></tr>
                     }
                 </tbody>
             </table>
@@ -290,6 +354,48 @@
 
 @section Scripts {
 <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const stFilter = document.getElementById('studentFilter');
+        const statFilter = document.getElementById('statusFilter');
+        const fbFilter = document.getElementById('feedbackFilter');
+
+        function applyFilters() {
+            const stVal = stFilter ? stFilter.value : '';
+            const statVal = statFilter ? statFilter.value : '';
+            const fbVal = fbFilter ? fbFilter.value : '';
+            
+            const items = document.querySelectorAll('.meeting-item');
+            const groups = document.querySelectorAll('.student-group');
+            
+            const visibleGroups = new Set();
+
+            items.forEach(item => {
+                const matchSt = !stVal || item.getAttribute('data-student-name') === stVal;
+                const matchStat = !statVal || item.getAttribute('data-status') === statVal;
+                const matchFb = !fbVal || item.getAttribute('data-feedback') === fbVal;
+                
+                if (matchSt && matchStat && matchFb) {
+                    item.style.display = '';
+                    visibleGroups.add(item.getAttribute('data-student-id'));
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+            groups.forEach(group => {
+                if (visibleGroups.has(group.getAttribute('data-student-id'))) {
+                    group.style.display = '';
+                } else {
+                    group.style.display = 'none';
+                }
+            });
+        }
+
+        if(stFilter) stFilter.addEventListener('change', applyFilters);
+        if(statFilter) statFilter.addEventListener('change', applyFilters);
+        if(fbFilter) fbFilter.addEventListener('change', applyFilters);
+    });
+
     const editTimeInput = document.getElementById('editTimeInput');
     const editTimeError = document.getElementById('editTimeError');
     const supId = @(user?.Id ?? 0);

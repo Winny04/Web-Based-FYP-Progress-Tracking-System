@@ -92,6 +92,16 @@
                     </div>
                 </div>
                 <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
+                    @if (TempData["AddModalError"] != null)
+                    {
+                        <div class="alert alert-danger bg-light-danger border-danger d-flex align-items-center p-5 mb-7">
+                            <i class="fas fa-exclamation-triangle text-danger fs-1 me-4"></i>
+                            <div class="d-flex flex-column text-danger pe-0 pe-sm-10">
+                                <h4 class="mb-1 text-danger">Validation Error</h4>
+                                <span>@TempData["AddModalError"]</span>
+                            </div>
+                        </div>
+                    }
                     <div class="d-flex flex-column mb-7 fv-row">
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span class="required">Milestone Title</span>
@@ -111,38 +121,7 @@
                         <textarea class="form-control form-control-solid" rows="3" name="description" placeholder="Instructions for students..."></textarea>
                     </div>
 
-                    <div class="mb-7 fv-row">
-                        <div class="d-flex flex-stack mb-3">
-                            <div class="fw-bolder fs-6 text-gray-800">Assign To Students</div>
-                            <div class="d-flex align-items-center mb-3">
-                                <div style="width: 30px;">
-                                    <input type="checkbox" id="selectAllStudents" style="width: 18px; height: 18px; cursor: pointer;" />
-                                </div>
-                                <label class="cursor-pointer text-muted fw-bold mb-0 ps-3" for="selectAllStudents">Select All</label>
-                            </div>
-                        </div>
-                        
-                        <div class="mh-300px scroll-y border rounded p-5 bg-light">
-                            @if (Model.Any())
-                            {
-                                foreach (var proj in Model)
-                                {
-                                    <div class="d-flex align-items-center mb-4 p-2 rounded bg-white border border-dashed">
-                                        <div style="width: 30px; display: flex; align-items: center;">
-                                            <input type="checkbox" class="student-checkbox" name="projectIds" value="@proj.Id" id="proj_@proj.Id" style="width: 20px; height: 20px; cursor: pointer;" />
-                                        </div>
-                                        <label class="text-dark fw-bold cursor-pointer mb-0 ps-3 w-100" for="proj_@proj.Id">
-                                            @proj.Student?.FullName <span class="text-muted fw-normal ms-2">(@proj.Title)</span>
-                                        </label>
-                                    </div>
-                                }
-                            }
-                            else
-                            {
-                                <span class="text-muted">No students available.</span>
-                            }
-                        </div>
-                    </div>
+                    <!-- Checkbox section removed as requested by user -->
                 </div>
                 <div class="modal-footer flex-center">
                     <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
@@ -167,6 +146,16 @@
                     </div>
                 </div>
                 <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
+                    @if (TempData["EditModalError"] != null)
+                    {
+                        <div class="alert alert-danger bg-light-danger border-danger d-flex align-items-center p-5 mb-7">
+                            <i class="fas fa-exclamation-triangle text-danger fs-1 me-4"></i>
+                            <div class="d-flex flex-column text-danger pe-0 pe-sm-10">
+                                <h4 class="mb-1 text-danger">Validation Error</h4>
+                                <span>@TempData["EditModalError"]</span>
+                            </div>
+                        </div>
+                    }
                     <div class="d-flex flex-column mb-7 fv-row">
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span class="required">Target Milestone to Edit</span>
@@ -184,14 +173,16 @@
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span>New Title (Optional)</span>
                         </label>
-                        <input type="text" class="form-control form-control-solid" placeholder="Leave blank to keep same" name="newTitle" />
+                        <input type="text" class="form-control form-control-solid" placeholder="Leave blank to keep same" name="newTitle" id="bulkNewTitle" />
+                        <small id="bulkTitleWarning" class="text-danger mt-1" style="display: none;"><i class="fas fa-lock me-1"></i>Core system milestone titles cannot be renamed.</small>
                     </div>
 
                     <div class="d-flex flex-column mb-7 fv-row">
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span>New Due Date (Optional)</span>
                         </label>
-                        <input type="date" class="form-control form-control-solid" name="newDueDate" />
+                        <input type="date" class="form-control form-control-solid" name="newDueDate" id="bulkNewDueDate" />
+                        <small id="bulkDateWarning" class="text-danger mt-1" style="display: none;"><i class="fas fa-lock me-1"></i>The IAF deadline is centrally managed by the Admin.</small>
                     </div>
 
                     <div class="d-flex flex-column mb-7 fv-row">
@@ -199,34 +190,7 @@
                         <textarea class="form-control form-control-solid" rows="3" name="newDescription" placeholder="Leave blank to keep same..."></textarea>
                     </div>
 
-                    <div class="mb-7 fv-row">
-                        <div class="d-flex flex-stack mb-3">
-                            <div class="fw-bolder fs-6 text-gray-800">Apply Edit To Students</div>
-                            <div class="d-flex align-items-center mb-3">
-                                <div style="width: 30px;">
-                                    <input type="checkbox" id="selectAllEditStudents" style="width: 18px; height: 18px; cursor: pointer;" />
-                                </div>
-                                <label class="cursor-pointer text-muted fw-bold mb-0 ps-3" for="selectAllEditStudents">Select All</label>
-                            </div>
-                        </div>
-                        
-                        <div class="mh-300px scroll-y border rounded p-5 bg-light">
-                            @if (Model.Any())
-                            {
-                                foreach (var proj in Model)
-                                {
-                                    <div class="d-flex align-items-center mb-4 p-2 rounded bg-white border border-dashed student-row-edit" data-milestones="@string.Join("|", proj.Milestones.Select(m => m.Title))">
-                                        <div style="width: 30px; display: flex; align-items: center;">
-                                            <input type="checkbox" class="student-checkbox-edit" name="projectIds" value="@proj.Id" id="proj_edit_@proj.Id" style="width: 20px; height: 20px; cursor: pointer;" />
-                                        </div>
-                                        <label class="text-dark fw-bold cursor-pointer mb-0 ps-3 w-100" for="proj_edit_@proj.Id">
-                                            @proj.Student?.FullName <span class="text-muted fw-normal ms-2">(@proj.Title)</span>
-                                        </label>
-                                    </div>
-                                }
-                            }
-                        </div>
-                    </div>
+                    <!-- Checkbox section removed as requested by user -->
                 </div>
                 <div class="modal-footer flex-center">
                     <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
@@ -255,41 +219,14 @@
                         </label>
                         <select name="targetTitle" class="form-select form-select-solid" required>
                             <option value="">-- Select Milestone --</option>
-                            @foreach(var t in distinctMilestones)
+                            @foreach(var t in distinctMilestones.Where(m => !m.Contains("IAF", StringComparison.OrdinalIgnoreCase) && !m.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) && !m.Contains("Proposal", StringComparison.OrdinalIgnoreCase) && !m.Contains("Final", StringComparison.OrdinalIgnoreCase)))
                             {
                                 <option value="@t">@t</option>
                             }
                         </select>
                     </div>
 
-                    <div class="mb-7 fv-row">
-                        <div class="d-flex flex-stack mb-3">
-                            <div class="fw-bolder fs-6 text-gray-800">Delete From Students</div>
-                            <div class="d-flex align-items-center mb-3">
-                                <div style="width: 30px;">
-                                    <input type="checkbox" id="selectAllDeleteStudents" style="width: 18px; height: 18px; cursor: pointer;" />
-                                </div>
-                                <label class="cursor-pointer text-muted fw-bold mb-0 ps-3" for="selectAllDeleteStudents">Select All</label>
-                            </div>
-                        </div>
-                        
-                        <div class="mh-300px scroll-y border rounded p-5 bg-light">
-                            @if (Model.Any())
-                            {
-                                foreach (var proj in Model)
-                                {
-                                    <div class="d-flex align-items-center mb-4 p-2 rounded bg-white border border-dashed student-row-delete" data-milestones="@string.Join("|", proj.Milestones.Select(m => m.Title))">
-                                        <div style="width: 30px; display: flex; align-items: center;">
-                                            <input type="checkbox" class="student-checkbox-delete" name="projectIds" value="@proj.Id" id="proj_delete_@proj.Id" style="width: 20px; height: 20px; cursor: pointer;" />
-                                        </div>
-                                        <label class="text-dark fw-bold cursor-pointer mb-0 ps-3 w-100" for="proj_delete_@proj.Id">
-                                            @proj.Student?.FullName <span class="text-muted fw-normal ms-2">(@proj.Title)</span>
-                                        </label>
-                                    </div>
-                                }
-                            }
-                        </div>
-                    </div>
+                    <!-- Checkbox section removed as requested by user -->
                 </div>
                 <div class="modal-footer flex-center">
                     <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
@@ -303,38 +240,6 @@
 @section Scripts {
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            function setupSelectAll(selectAllId, checkboxClass) {
-                var selectAll = document.getElementById(selectAllId);
-                if(selectAll) {
-                    selectAll.addEventListener('change', function() {
-                        var checkboxes = document.querySelectorAll('.' + checkboxClass);
-                        checkboxes.forEach(function(cb) {
-                            cb.checked = selectAll.checked;
-                        });
-                    });
-                }
-            }
-
-            setupSelectAll('selectAllStudents', 'student-checkbox');
-            setupSelectAll('selectAllEditStudents', 'student-checkbox-edit');
-            setupSelectAll('selectAllDeleteStudents', 'student-checkbox-delete');
-
-            function setupFormValidation(formId, checkboxClass) {
-                var form = document.getElementById(formId);
-                if(form) {
-                    form.addEventListener('submit', function(e) {
-                        var checked = form.querySelectorAll('.' + checkboxClass + ':checked');
-                        if(checked.length === 0) {
-                            e.preventDefault();
-                            alert('Please select at least one student.');
-                        }
-                    });
-                }
-            }
-
-            setupFormValidation('bulkAddForm', 'student-checkbox');
-            setupFormValidation('bulkEditForm', 'student-checkbox-edit');
-            setupFormValidation('bulkDeleteForm', 'student-checkbox-delete');
 
             function setupDynamicFiltering(formId, rowClass) {
                 var form = document.getElementById(formId);
@@ -343,19 +248,44 @@
                     if(selectElement) {
                         selectElement.addEventListener('change', function() {
                             var selectedTitle = this.value;
-                            var rows = form.querySelectorAll('.' + rowClass);
-                            rows.forEach(function(row) {
-                                var milestones = row.getAttribute('data-milestones');
-                                if(!selectedTitle) {
-                                    row.style.setProperty('display', 'flex', 'important');
-                                } else if(milestones && milestones.split('|').indexOf(selectedTitle) !== -1) {
-                                    row.style.setProperty('display', 'flex', 'important');
-                                } else {
-                                    row.style.setProperty('display', 'none', 'important');
-                                    var cb = row.querySelector('input[type="checkbox"]');
-                                    if(cb) cb.checked = false;
+
+                            if (formId === 'bulkEditForm') {
+                                var titleInput = document.getElementById('bulkNewTitle');
+                                var dateInput = document.getElementById('bulkNewDueDate');
+                                var titleWarning = document.getElementById('bulkTitleWarning');
+                                var dateWarning = document.getElementById('bulkDateWarning');
+
+                                if (titleInput && dateInput) {
+                                    // Reset states
+                                    titleInput.readOnly = false;
+                                    titleInput.classList.remove('bg-light');
+                                    dateInput.readOnly = false;
+                                    dateInput.classList.remove('bg-light');
+                                    if(titleWarning) titleWarning.style.display = 'none';
+                                    if(dateWarning) dateWarning.style.display = 'none';
+
+                                    if (selectedTitle) {
+                                        var isIaf = selectedTitle.includes('IAF') || selectedTitle.includes('Initial Project');
+                                        var isSystem = isIaf || selectedTitle.includes('Proposal') || selectedTitle.includes('Progress') || selectedTitle.includes('Final');
+
+                                        if (isSystem) {
+                                            titleInput.readOnly = true;
+                                            titleInput.value = '';
+                                            titleInput.classList.add('bg-light');
+                                            if(titleWarning) titleWarning.style.display = 'block';
+                                        }
+
+                                        if (isIaf) {
+                                            dateInput.readOnly = true;
+                                            dateInput.value = '';
+                                            dateInput.classList.add('bg-light');
+                                            if(dateWarning) dateWarning.style.display = 'block';
+                                        }
+                                    }
                                 }
-                            });
+                            }
+
+                            // Student rows removed, no need to filter them here
                         });
                         
                         // Initialize state on load
@@ -364,8 +294,49 @@
                 }
             }
 
-            setupDynamicFiltering('bulkEditForm', 'student-row-edit');
-            setupDynamicFiltering('bulkDeleteForm', 'student-row-delete');
+            setupDynamicFiltering('bulkEditForm');
+            setupDynamicFiltering('bulkDeleteForm');
+
+            // --- Auto-trigger modals based on query parameters ---
+            const urlParams = new URLSearchParams(window.location.search);
+            const action = urlParams.get('action');
+            const target = urlParams.get('target');
+
+            if (action === 'bulk-edit') {
+                var modalElement = document.getElementById('bulkEditMilestoneModal');
+                if (modalElement) {
+                    var modal = new bootstrap.Modal(modalElement);
+                    if (target) {
+                        var select = document.querySelector('#bulkEditForm select[name="targetTitle"]');
+                        if(select) { 
+                            select.value = target; 
+                            select.dispatchEvent(new Event('change')); 
+                        }
+                    }
+                    modal.show();
+                }
+            } else if (action === 'bulk-delete') {
+                var modalElement = document.getElementById('bulkDeleteMilestoneModal');
+                if (modalElement) {
+                    var modal = new bootstrap.Modal(modalElement);
+                    if (target) {
+                        var select = document.querySelector('#bulkDeleteForm select[name="targetTitle"]');
+                        if(select) { 
+                            select.value = target; 
+                            select.dispatchEvent(new Event('change')); 
+                        }
+                    }
+                    modal.show();
+                }
+            } else if (action === 'bulk-add') {
+                var modalElement = document.getElementById('bulkAddMilestoneModal');
+                if (modalElement) {
+                    var modal = new bootstrap.Modal(modalElement);
+                    modal.show();
+                }
+            }
         });
+
+
     </script>
 }

@@ -1,0 +1,235 @@
+@{
+    ViewData["Title"] = "Global Analytics Dashboard";
+}
+
+<style>
+    :root { --hero-grad-admin: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
+
+    .page-hero {
+        background: var(--hero-grad-admin);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(15,23,42,.25);
+    }
+
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid #f1f5f9;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        padding: 24px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .chart-container {
+        position: relative;
+        flex-grow: 1;
+        min-height: 300px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+
+<div class="container-fluid py-4">
+
+    <div class="page-hero">
+        <h2 class="fw-bold mb-1"><i class="fas fa-globe-asia me-2"></i>Global Analytics Dashboard</h2>
+        <p class="mb-0 opacity-80">System-wide overview of student allocation, supervisor capacity, and academic bottlenecks.</p>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <!-- Student Allocation Doughnut -->
+        <div class="col-md-6 col-lg-4">
+            <div class="glass-card">
+                <h6 class="fw-bold text-dark text-uppercase mb-4" style="letter-spacing: 0.5px; font-size: 0.85rem;">Global Project Allocation</h6>
+                <div class="chart-container">
+                    <canvas id="allocationChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Faculty Demographics Pie -->
+        <div class="col-md-6 col-lg-4">
+            <div class="glass-card">
+                <h6 class="fw-bold text-dark text-uppercase mb-4" style="letter-spacing: 0.5px; font-size: 0.85rem;">Student Demographics (Program)</h6>
+                <div class="chart-container">
+                    <canvas id="programChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Milestone Bottlenecks Stacked Bar -->
+        <div class="col-md-12 col-lg-4">
+            <div class="glass-card">
+                <h6 class="fw-bold text-dark text-uppercase mb-4" style="letter-spacing: 0.5px; font-size: 0.85rem;">Milestone Health</h6>
+                <div class="chart-container">
+                    <canvas id="milestoneChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <!-- Supervisor Capacity Horizontal Bar Chart -->
+        <div class="col-12">
+            <div class="glass-card">
+                <h6 class="fw-bold text-dark text-uppercase mb-4" style="letter-spacing: 0.5px; font-size: 0.85rem;">Supervisor Capacity vs. Workload</h6>
+                <div class="chart-container" style="min-height: 500px;">
+                    <canvas id="capacityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            // Shared Color Palette 
+            const colors = {
+                success: 'rgba(16, 185, 129, 0.8)', // Emerald
+                warning: 'rgba(245, 158, 11, 0.8)',  // Amber
+                danger: 'rgba(239, 68, 68, 0.8)',    // Red
+                info: 'rgba(59, 130, 246, 0.8)',     // Blue
+                purple: 'rgba(139, 92, 246, 0.8)',   // Purple
+                slate1: 'rgba(100, 116, 139, 0.8)',  // Slate
+                slate2: 'rgba(203, 213, 225, 0.8)'   // Light Slate
+            };
+
+            const bgColors = [colors.info, colors.purple, colors.success, colors.warning, colors.danger, colors.slate1];
+
+            // 1. Allocation Chart (Doughnut)
+            const rawAllocation = @Html.Raw(ViewBag.AllocationStatsJson ?? "[]");
+            if(rawAllocation.length > 0) {
+                const ctx1 = document.getElementById('allocationChart').getContext('2d');
+                new Chart(ctx1, {
+                    type: 'doughnut',
+                    data: {
+                        labels: rawAllocation.map(x => x.Status),
+                        datasets: [{
+                            data: rawAllocation.map(x => x.Count),
+                            backgroundColor: [
+                                colors.success, // Allocated
+                                colors.warning, // Pending
+                                colors.danger   // No Project
+                            ],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                });
+            } else {
+                document.getElementById('allocationChart').outerHTML = '<div class="text-muted text-center w-100">No student allocation data available.</div>';
+            }
+
+            // 2. Program Demographics (Pie)
+            const rawPrograms = @Html.Raw(ViewBag.ProgramStatsJson ?? "[]");
+            if(rawPrograms.length > 0) {
+                const ctx2 = document.getElementById('programChart').getContext('2d');
+                new Chart(ctx2, {
+                    type: 'pie',
+                    data: {
+                        labels: rawPrograms.map(x => x.Program),
+                        datasets: [{
+                            data: rawPrograms.map(x => x.Count),
+                            backgroundColor: bgColors,
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                });
+            } else {
+                document.getElementById('programChart').outerHTML = '<div class="text-muted text-center w-100">No program data available.</div>';
+            }
+
+            // 3. Milestone Health (Stacked Bar)
+            // JSON format: [{Category: "IAF", Status: "Approved", Count: 5}, ...]
+            const rawMilestones = @Html.Raw(ViewBag.MilestoneBottlenecksJson ?? "[]");
+            if(rawMilestones.length > 0) {
+                const categories = ["IAF", "Proposal", "Final Report"];
+                
+                // Helper to get count for a specific category and status
+                const getCount = (cat, stat) => {
+                    const match = rawMilestones.find(m => m.Category === cat && m.Status === stat);
+                    return match ? match.Count : 0;
+                };
+
+                const approvedData = categories.map(c => getCount(c, "Approved"));
+                const pendingData = categories.map(c => getCount(c, "Pending") + getCount(c, "UnderReview") + getCount(c, "Submitted"));
+                const rejectedData = categories.map(c => getCount(c, "Rejected") + getCount(c, "NeedRevision"));
+
+                const ctx3 = document.getElementById('milestoneChart').getContext('2d');
+                new Chart(ctx3, {
+                    type: 'bar',
+                    data: {
+                        labels: categories,
+                        datasets: [
+                            { label: 'Approved', data: approvedData, backgroundColor: colors.success },
+                            { label: 'In Progress/Pending', data: pendingData, backgroundColor: colors.warning },
+                            { label: 'Rejected/Revision', data: rejectedData, backgroundColor: colors.danger }
+                        ]
+                    },
+                    options: { 
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom' } },
+                        scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } }
+                    }
+                });
+            } else {
+                document.getElementById('milestoneChart').outerHTML = '<div class="text-muted text-center w-100">No milestone data available.</div>';
+            }
+
+            // 4. Supervisor Capacity (Horizontal Bar)
+            // JSON format: [{Name: "Dr. A", MaxSlots: 5, CurrentStudents: 3}, ...]
+            const rawSupervisors = @Html.Raw(ViewBag.SupervisorCapacityJson ?? "[]");
+            if(rawSupervisors.length > 0) {
+                // Sort by Most loaded to least loaded
+                rawSupervisors.sort((a,b) => b.CurrentStudents - a.CurrentStudents);
+
+                const ctx4 = document.getElementById('capacityChart').getContext('2d');
+                new Chart(ctx4, {
+                    type: 'bar',
+                    data: {
+                        labels: rawSupervisors.map(s => s.Name),
+                        datasets: [
+                            {
+                                label: 'Current Assigned Students',
+                                data: rawSupervisors.map(s => s.CurrentStudents),
+                                backgroundColor: colors.info,
+                                borderRadius: 4
+                            },
+                            {
+                                label: 'Remaining Capacity (Max Slots)',
+                                data: rawSupervisors.map(s => Math.max(0, s.MaxSlots - s.CurrentStudents)),
+                                backgroundColor: colors.slate2,
+                                borderRadius: 4
+                            }
+                        ]
+                    },
+                    options: {
+                        indexAxis: 'y', // Makes it horizontal
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top' } },
+                        scales: { 
+                            x: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } },
+                            y: { stacked: true }
+                        }
+                    }
+                });
+            } else {
+                document.getElementById('capacityChart').outerHTML = '<div class="text-muted text-center w-100">No active supervisors found.</div>';
+            }
+
+        });
+    </script>
+}

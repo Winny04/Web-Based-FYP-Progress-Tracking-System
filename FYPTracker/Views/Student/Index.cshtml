@@ -52,6 +52,132 @@
 
     var upcomingMeeting = ViewBag.UpcomingMeeting as MeetingBooking;
     var pendingMeetingsCount = ViewBag.PendingMeetingsCount != null ? (int)ViewBag.PendingMeetingsCount : 0;
+
+    // ── NEXT STEP LOGIC ──
+    string nextStepTitle = "";
+    string nextStepDesc = "";
+    string nextStepIcon = "";
+    string nextStepBtnText = "";
+    string nextStepLink = "";
+    string nextStepColor = "";
+    string nextStepDueDate = "";
+
+    if (Model != null && milestones.Any())
+    {
+        var iaf = milestones.FirstOrDefault(m => m.Title.Contains("IAF"));
+        var proposal = milestones.FirstOrDefault(m => m.Title.Contains("Proposal"));
+        var progress = milestones.FirstOrDefault(m => m.Title.Contains("Progress"));
+        var final = milestones.FirstOrDefault(m => m.Title.Contains("Final"));
+
+        // Check for ANY rejections first (highest priority)
+        var rejectedMilestone = milestones.FirstOrDefault(m => m.Status == "Rejected" || m.Status == "Revision");
+        if (rejectedMilestone != null)
+        {
+            nextStepTitle = $"Revision Required: {rejectedMilestone.Title}";
+            nextStepDesc = $"Your supervisor has requested revisions for your {rejectedMilestone.Title}. Please review the feedback and resubmit.";
+            nextStepIcon = "fas fa-exclamation-triangle";
+            nextStepBtnText = "View Feedback & Revise";
+            nextStepLink = "/Student/Forms";
+            nextStepDueDate = rejectedMilestone.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+        }
+        else
+        {
+            // Calculate strictly sequential next step
+            var isIafApproved = iaf != null && iaf.Status == "Approved";
+            var isProposalApproved = proposal != null && proposal.Status == "Approved";
+            var isProgressApproved = progress != null && progress.Status == "Approved";
+            var isFinalApproved = final != null && final.Status == "Approved";
+
+            var isIafPending = iaf != null && (iaf.Status == "Submitted" || iaf.Status == "UnderReview" || (iaf.Status == "Pending" && iaf.SubmittedDate.HasValue));
+            var isProposalPending = proposal != null && (proposal.Status == "Submitted" || proposal.Status == "UnderReview" || (proposal.Status == "Pending" && proposal.SubmittedDate.HasValue));
+            var isProgressPending = progress != null && (progress.Status == "Submitted" || progress.Status == "UnderReview" || (progress.Status == "Pending" && progress.SubmittedDate.HasValue));
+            var isFinalPending = final != null && (final.Status == "Submitted" || final.Status == "UnderReview" || (final.Status == "Pending" && final.SubmittedDate.HasValue));
+
+            if (!isIafApproved && !isIafPending)
+            {
+                nextStepTitle = "Submit Initial Assessment Form (IAF)";
+                nextStepDesc = "Your project is registered. Your first step is to submit your IAF to your supervisor.";
+                nextStepIcon = "far fa-file-alt";
+                nextStepBtnText = "Go to Forms";
+                nextStepLink = "/Student/Forms";
+                nextStepDueDate = iaf?.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+            }
+            else if (isIafPending)
+            {
+                nextStepTitle = "Wait for IAF Approval";
+                nextStepDesc = "Your IAF is currently under review by your supervisor. You must wait for approval before proceeding.";
+                nextStepIcon = "fas fa-hourglass-half";
+                nextStepBtnText = "View Status";
+                nextStepLink = "/Student/ProjectDetails";
+                nextStepDueDate = iaf?.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+            }
+            else if (isIafApproved && !isProposalApproved && !isProposalPending)
+            {
+                nextStepTitle = "Submit Proposal Form";
+                nextStepDesc = "Your IAF is approved. You can now submit your formal Project Proposal.";
+                nextStepIcon = "fas fa-feather-alt";
+                nextStepBtnText = "Submit Proposal";
+                nextStepLink = "/Student/Forms";
+                nextStepDueDate = proposal?.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+            }
+            else if (isProposalPending)
+            {
+                nextStepTitle = "Wait for Proposal Approval";
+                nextStepDesc = "Your Proposal is currently under review by your supervisor.";
+                nextStepIcon = "fas fa-hourglass-half";
+                nextStepBtnText = "View Status";
+                nextStepLink = "/Student/ProjectDetails";
+                nextStepDueDate = proposal?.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+            }
+            else if (isProposalApproved && !isProgressApproved && !isProgressPending)
+            {
+                nextStepTitle = "Submit Progress Report";
+                nextStepDesc = "Your Proposal is approved. Continue working on your project and submit your Progress Report.";
+                nextStepIcon = "fas fa-tasks";
+                nextStepBtnText = "Submit Progress Report";
+                nextStepLink = "/Student/Forms";
+                nextStepDueDate = progress?.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+            }
+            else if (isProgressPending)
+            {
+                nextStepTitle = "Wait for Progress Report Approval";
+                nextStepDesc = "Your Progress Report is currently under review by your supervisor.";
+                nextStepIcon = "fas fa-hourglass-half";
+                nextStepBtnText = "View Status";
+                nextStepLink = "/Student/ProjectDetails";
+                nextStepDueDate = progress?.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+            }
+            else if (isProgressApproved && !isFinalApproved && !isFinalPending)
+            {
+                nextStepTitle = "Submit Final Submission";
+                nextStepDesc = "Your Progress Report is approved. You are now in the final stretch. Submit your Final Documentation.";
+                nextStepIcon = "fas fa-graduation-cap";
+                nextStepBtnText = "Final Submission";
+                nextStepLink = "/Student/Forms";
+                nextStepDueDate = final?.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+            }
+            else if (isFinalPending)
+            {
+                nextStepTitle = "Wait for Final Approval";
+                nextStepDesc = "Your Final Submission is currently under review by your supervisor.";
+                nextStepIcon = "fas fa-hourglass-half";
+                nextStepBtnText = "View Status";
+                nextStepLink = "/Student/ProjectDetails";
+                nextStepDueDate = final?.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+            }
+            else if (isFinalApproved)
+            {
+                nextStepTitle = "Congratulations!";
+                nextStepDesc = "Your FYP is fully approved and completed! Fantastic work.";
+                nextStepIcon = "fas fa-award";
+                nextStepBtnText = "View Final Details";
+                nextStepLink = "/Student/ProjectDetails";
+            }
+        }
+        
+        // Single sleek primary color for uniform design
+        nextStepColor = "#4f46e5";
+    }
 }
 
 <style>
@@ -217,7 +343,7 @@
     @* ── TOP TASKBAR ────────────────────────────────────────── *@
     <div class="taskbar mb-4 d-flex justify-content-between align-items-center flex-wrap gap-4">
         <div>
-            <h1 class="fw-bold mb-1" style="font-size: 1.75rem;">Welcome Back, @name</h1>
+            <h1 class="display-6 fw-bold mb-2">Welcome Back, @name</h1>
             <div class="d-flex align-items-center gap-3 flex-wrap opacity-90" style="font-size: 0.9rem;">
                 <span><strong>Student ID:</strong> @studentId</span>
                 <span class="text-white-50">|</span>
@@ -261,28 +387,13 @@
         </div>
     }
 
-    @* ── PENDING REVIEW ALERT ── *@
-    @if (pending > 0 || pendingMeetingsCount > 0)
+    @* ── PENDING MEETINGS ALERT ── *@
+    @if (pendingMeetingsCount > 0)
     {
-        var pendingMilestones = milestones.Where(m => m.Status == "Submitted" || m.Status == "UnderReview" || m.Status == "Pending" && m.SubmittedDate.HasValue).Select(m => m.Title).ToList();
-        var pendingItemsText = new List<string>();
-        
-        if (pendingMilestones.Any()) {
-            pendingItemsText.Add($"<strong>{pendingMilestones.Count} form(s)</strong> ({string.Join(", ", pendingMilestones)})");
-        }
-        if (pendingMeetingsCount > 0) {
-            pendingItemsText.Add($"<strong>{pendingMeetingsCount} meeting request(s)</strong>");
-        }
-        
-        string specificPendingMsg = "You have items waiting for supervisor review. You'll be notified as soon as they respond.";
-        if (pendingItemsText.Any()) {
-            specificPendingMsg = $"You have {string.Join(" and ", pendingItemsText)} waiting for supervisor review. You'll be notified as soon as they respond.";
-        }
-
         <div class="alert alert-info bg-info bg-opacity-10 text-dark border-0 shadow-sm d-flex align-items-center gap-3 p-3 mb-4 rounded-3" role="alert" style="border-left: 4px solid #0dcaf0 !important;">
-            <span class="fs-4 text-info"><i class="fas fa-hourglass-half"></i></span>
+            <span class="fs-4 text-info"><i class="fas fa-handshake"></i></span>
             <div class="flex-grow-1" style="font-size: 0.95rem;">
-                <strong>Hang tight!</strong> @Html.Raw(specificPendingMsg)
+                <strong>Hang tight!</strong> You have <strong>@pendingMeetingsCount meeting request(s)</strong> waiting for supervisor approval. You'll be notified as soon as they respond.
             </div>
         </div>
     }
@@ -306,31 +417,25 @@
         </div>
     }
 
-    @* ── NEXT STEPS CHECKLIST (For newly approved students) ── *@
-    @if (Model != null && pct == 0 && pending == 0)
+    @* ── DYNAMIC NEXT STEP INDICATOR ── *@
+    @if (Model != null && milestones.Any() && !string.IsNullOrEmpty(nextStepTitle))
     {
-        <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="background-color: #f0f9ff; border-left: 6px solid #0ea5e9 !important;">
-            <h4 class="fw-bold mb-3" style="color: #0369a1;"><i class="fas fa-clipboard-check me-2"></i>Project Approved! What's Next?</h4>
-            <div class="d-flex flex-column gap-3 mt-4">
-                
-                <div class="d-flex align-items-center gap-3 bg-white p-3 rounded-3 shadow-sm border" style="border-color: #e0f2fe !important;">
-                    <i class="far fa-calendar-plus fs-2" style="color: #0ea5e9;"></i>
-                    <div class="flex-grow-1">
-                        <strong class="d-block fs-6" style="color: #0f172a;">1. Schedule an Initial Meeting</strong>
-                        <div class="text-muted small">Meet with @supervisorName to discuss your project direction and expectations.</div>
-                    </div>
-                    <a href="/Student/BookMeeting" class="btn btn-sm text-white fw-bold px-4 rounded-pill shadow-sm hover-elevate-up" style="background-color: #0ea5e9;">Book Meeting</a>
+        <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="background-color: #ffffff; border-left: 6px solid @nextStepColor !important;">
+            <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-compass me-2" style="color: @nextStepColor;"></i>Current Action Required</h5>
+            
+            <div class="d-flex align-items-center flex-wrap gap-3 bg-white p-3 rounded-3 shadow-sm border" style="border-color: rgba(0,0,0,0.05) !important;">
+                <i class="@nextStepIcon fs-2 d-none d-sm-block" style="color: @nextStepColor; min-width: 40px; text-align: center;"></i>
+                <div class="flex-grow-1">
+                    <strong class="d-block fs-5" style="color: #0f172a;">@nextStepTitle</strong>
+                    <div class="text-muted mt-1 mb-2" style="font-size: 0.95rem;">@nextStepDesc</div>
+                    @if (!string.IsNullOrEmpty(nextStepDueDate))
+                    {
+                        <span class="badge bg-light text-dark border"><i class="far fa-calendar-alt me-1 text-primary"></i> Due: @nextStepDueDate</span>
+                    }
                 </div>
-                
-                <div class="d-flex align-items-center gap-3 bg-white p-3 rounded-3 shadow-sm border" style="border-color: #e0f2fe !important;">
-                    <i class="far fa-file-alt fs-2" style="color: #0ea5e9;"></i>
-                    <div class="flex-grow-1">
-                        <strong class="d-block fs-6" style="color: #0f172a;">2. Submit your IAF</strong>
-                        <div class="text-muted small">Once discussed, formally submit your Initial Assessment Form (IAF).</div>
-                    </div>
-                    <a href="/Student/Forms" class="btn btn-sm text-white fw-bold px-4 rounded-pill shadow-sm hover-elevate-up" style="background-color: #0ea5e9;">Go to Forms</a>
+                <div class="text-end">
+                    <a href="@nextStepLink" class="btn fw-bold px-4 py-2 rounded-pill shadow-sm hover-elevate-up action-btn" style="background-color: @nextStepColor; color: white;">@nextStepBtnText</a>
                 </div>
-
             </div>
         </div>
     }

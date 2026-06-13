@@ -41,8 +41,27 @@
             <h2 class="fw-bold mb-1"><i class="fas fa-user-clock me-2"></i>Student Supervision Requests</h2>
             <p class="mb-0 opacity-80">Review student applications and approve or reject requests to supervise their projects.</p>
         </div>
-        <div class="text-end">
-            <span class="badge bg-white text-dark fw-bold px-3 py-2 rounded-pill">
+        <div class="text-end d-flex flex-wrap gap-2 align-items-center">
+            <div class="d-flex align-items-center position-relative my-1">
+                <i class="fas fa-user position-absolute ms-3 text-muted"></i>
+                <select id="studentFilter" class="form-select border-0 shadow-sm ps-10 w-200px" style="border-radius: 10px;">
+                    <option value="">All Students</option>
+                    @foreach (var studentName in Model.Select(m => m.Student?.FullName).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s))
+                    {
+                        <option value="@studentName">@studentName</option>
+                    }
+                </select>
+            </div>
+            <div class="d-flex align-items-center position-relative my-1">
+                <i class="fas fa-info-circle position-absolute ms-3 text-muted"></i>
+                <select id="statusFilter" class="form-select border-0 shadow-sm ps-10 w-150px" style="border-radius: 10px;">
+                    <option value="">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected">Rejected</option>
+                </select>
+            </div>
+            <span class="badge bg-white text-dark fw-bold px-3 py-2 rounded-pill ms-2">
                 @Model.Count(r => r.Status == "Pending") Pending Applications
             </span>
         </div>
@@ -62,7 +81,7 @@
                 <tbody>
                     @foreach (var req in Model)
                     {
-                        <tr>
+                        <tr class="request-item" data-student-name="@req.Student?.FullName" data-status="@req.Status">
                             <td>
                                 <div class="fw-bold text-dark">@req.Student?.FullName</div>
                                 <div class="text-muted small">Matric: @req.MatricNumber</div>
@@ -247,6 +266,30 @@
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
         }
+
+        const reqStudentFilter = document.getElementById('studentFilter');
+        const reqStatusFilter = document.getElementById('statusFilter');
+
+        function applyReqFilters() {
+            const stVal = reqStudentFilter ? reqStudentFilter.value : '';
+            const statVal = reqStatusFilter ? reqStatusFilter.value : '';
+            
+            const items = document.querySelectorAll('.request-item');
+            
+            items.forEach(item => {
+                const matchSt = !stVal || item.getAttribute('data-student-name') === stVal;
+                const matchStat = !statVal || item.getAttribute('data-status') === statVal;
+                
+                if (matchSt && matchStat) {
+                    item.style.display = '';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        if(reqStudentFilter) reqStudentFilter.addEventListener('change', applyReqFilters);
+        if(reqStatusFilter) reqStatusFilter.addEventListener('change', applyReqFilters);
     });
 </script>
 }

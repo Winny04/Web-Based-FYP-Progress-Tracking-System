@@ -22,15 +22,35 @@
         <h2 class="fw-bold mb-1 text-white"><i class="fas fa-clipboard-check me-2"></i>Review Submissions</h2>
         <p class="mb-0 text-white opacity-75">Review and grade milestones submitted by your students.</p>
     </div>
-    <div>
+    <div class="d-flex flex-wrap gap-2">
         <div class="d-flex align-items-center position-relative my-1">
             <i class="fas fa-filter position-absolute ms-3 text-muted"></i>
-            <select id="milestoneFilter" class="form-select border-0 shadow-sm ps-10 w-250px" style="border-radius: 10px;">
+            <select id="milestoneFilter" class="form-select border-0 shadow-sm ps-10 w-200px" style="border-radius: 10px;">
                 <option value="">All Milestones</option>
                 @foreach (var title in Model.Select(m => m.Title).Distinct().OrderBy(t => t))
                 {
                     <option value="@title">@title</option>
                 }
+            </select>
+        </div>
+        <div class="d-flex align-items-center position-relative my-1">
+            <i class="fas fa-user position-absolute ms-3 text-muted"></i>
+            <select id="studentFilter" class="form-select border-0 shadow-sm ps-10 w-200px" style="border-radius: 10px;">
+                <option value="">All Students</option>
+                @foreach (var studentName in Model.Select(m => m.Project?.Student?.FullName).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s))
+                {
+                    <option value="@studentName">@studentName</option>
+                }
+            </select>
+        </div>
+        <div class="d-flex align-items-center position-relative my-1">
+            <i class="fas fa-info-circle position-absolute ms-3 text-muted"></i>
+            <select id="statusFilter" class="form-select border-0 shadow-sm ps-10 w-200px" style="border-radius: 10px;">
+                <option value="">All Statuses</option>
+                <option value="UnderReview">Under Review</option>
+                <option value="Pending">Pending</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected / Revise</option>
             </select>
         </div>
     </div>
@@ -80,7 +100,7 @@
 
                         @foreach (var ms in group.OrderBy(m => m.DueDate ?? DateTime.MaxValue))
                         {
-                            <tr class="milestone-item" data-project-id="@project?.Id" data-milestone-title="@ms.Title">
+                            <tr class="milestone-item" data-project-id="@project?.Id" data-milestone-title="@ms.Title" data-student-name="@(student?.FullName)" data-status="@(ms.Status == "Submitted" || ms.Status == "UnderReview" ? "UnderReview" : ms.Status)">
                                 <td class="ps-4">
                                     <span class="text-dark fw-bolder d-block fs-6">@ms.Title</span>
                                 </td>
@@ -127,9 +147,16 @@
                                     }
                                 </td>
                                 <td class="text-end pe-4">
-                                    <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-primary">Grade</a>
-                            </td>
-                        </tr>
+                                    @if (ms.Status == "Approved" || ms.Status == "Rejected")
+                                    {
+                                        <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-info">View Details</a>
+                                    }
+                                    else
+                                    {
+                                        <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-primary">Grade</a>
+                                    }
+                                </td>
+                            </tr>
                         }
                     }
                     @if (!groupedMilestones.Any())
@@ -145,34 +172,45 @@
 @section Scripts {
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const filter = document.getElementById('milestoneFilter');
-            if (filter) {
-                filter.addEventListener('change', function() {
-                    const selected = this.value;
-                    const items = document.querySelectorAll('.milestone-item');
-                    const groups = document.querySelectorAll('.student-group');
+            const msFilter = document.getElementById('milestoneFilter');
+            const stFilter = document.getElementById('studentFilter');
+            const stStatus = document.getElementById('statusFilter');
+
+            function applyFilters() {
+                const msVal = msFilter ? msFilter.value : '';
+                const stVal = stFilter ? stFilter.value : '';
+                const statVal = stStatus ? stStatus.value : '';
+                
+                const items = document.querySelectorAll('.milestone-item');
+                const groups = document.querySelectorAll('.student-group');
+                
+                const visibleGroups = new Set();
+
+                items.forEach(item => {
+                    const matchMs = !msVal || item.getAttribute('data-milestone-title') === msVal;
+                    const matchSt = !stVal || item.getAttribute('data-student-name') === stVal;
+                    const matchStat = !statVal || item.getAttribute('data-status') === statVal;
                     
-                    const visibleGroups = new Set();
+                    if (matchMs && matchSt && matchStat) {
+                        item.style.display = '';
+                        visibleGroups.add(item.getAttribute('data-project-id'));
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
 
-                    items.forEach(item => {
-                        if (!selected || item.getAttribute('data-milestone-title') === selected) {
-                            item.style.display = '';
-                            visibleGroups.add(item.getAttribute('data-project-id'));
-                        } else {
-                            item.style.display = 'none';
-                        }
-                    });
-
-                    groups.forEach(group => {
-                        if (visibleGroups.has(group.getAttribute('data-project-id'))) {
-                            group.style.display = '';
-                        } else {
-                            group.style.display = 'none';
-                        }
-                    });
+                groups.forEach(group => {
+                    if (visibleGroups.has(group.getAttribute('data-project-id'))) {
+                        group.style.display = '';
+                    } else {
+                        group.style.display = 'none';
+                    }
                 });
             }
 
+            if(msFilter) msFilter.addEventListener('change', applyFilters);
+            if(stFilter) stFilter.addEventListener('change', applyFilters);
+            if(stStatus) stStatus.addEventListener('change', applyFilters);
         });
     </script>
 }

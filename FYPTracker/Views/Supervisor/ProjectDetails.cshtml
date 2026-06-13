@@ -72,9 +72,9 @@
             <p class="mb-0 opacity-80">Configure tracking milestones for this student.</p>
         </div>
         <div class="text-end">
-            <button class="btn btn-light text-primary fw-bold rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#addMilestoneModal">
+            <a href="/Supervisor/MyProjects?action=bulk-add" class="btn btn-light text-primary fw-bold rounded-pill px-4 text-decoration-none" title="Manage milestones in bulk">
                 <i class="fas fa-plus me-1"></i> Add Milestone
-            </button>
+            </a>
         </div>
     </div>
 
@@ -136,72 +136,16 @@
                                     </div>
                                 </div>
                                 <div class="d-flex gap-2">
-                                    @if (m.Status != "Approved")
-                                    {
-                                        <button class="btn-action btn-edit" data-bs-toggle="modal" data-bs-target="#editMilestoneModal_@m.Id">
-                                            <i class="fas fa-edit"></i> Edit
-                                        </button>
-                                    }
+                                    <a href="/Supervisor/MyProjects?action=bulk-edit&target=@Uri.EscapeDataString(m.Title)" class="btn-action btn-edit text-decoration-none" title="Manage in Bulk">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </a>
                                     @if (m.Status == "Pending" && !m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) && !m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase))
                                     {
-                                        <form asp-action="DeleteMilestone" method="post" onsubmit="confirmDelete(event, this)">
-                                            <input type="hidden" name="milestoneId" value="@m.Id" />
-                                            <button type="submit" class="btn-action btn-delete">
-                                                <i class="fas fa-trash"></i> Delete
-                                            </button>
-                                        </form>
+                                        <a href="/Supervisor/MyProjects?action=bulk-delete&target=@Uri.EscapeDataString(m.Title)" class="btn-action btn-delete text-decoration-none" title="Manage in Bulk">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </a>
                                     }
-                                </div>
-                            </div>
-
-                            <!-- Edit Modal for @m.Id -->
-                            <div class="modal fade" id="editMilestoneModal_@m.Id" tabindex="-1">
-                                <div class="modal-dialog modal-dialog-centered">
-                                    <div class="modal-content border-0 shadow-lg rounded-4">
-                                        <form asp-action="EditMilestone" method="post">
-                                            @Html.AntiForgeryToken()
-                                            <input type="hidden" name="milestoneId" value="@m.Id" />
-                                            <div class="modal-header border-0 pb-0">
-                                                <h5 class="fw-bold text-primary"><i class="fas fa-edit me-2"></i>Edit Milestone</h5>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                            </div>
-                                            <div class="modal-body py-4">
-                                                <div class="mb-3">
-                                                    <label class="form-label fw-bold text-muted">Milestone Title</label>
-                                                    @if (m.Status != "Pending")
-                                                    {
-                                                        <input type="text" name="title" class="form-control rounded-3 bg-light" value="@m.Title" readonly required />
-                                                    }
-                                                    else
-                                                    {
-                                                        <input type="text" name="title" class="form-control rounded-3" value="@m.Title" required />
-                                                    }
-                                                </div>
-                                                <div class="mb-3">
-                                                    <label class="form-label fw-bold text-muted">Description</label>
-                                                    @if (m.Status != "Pending")
-                                                    {
-                                                        <textarea name="description" class="form-control rounded-3 bg-light" rows="3" readonly>@m.Description</textarea>
-                                                        <small class="text-info mt-1 d-block"><i class="fas fa-info-circle me-1"></i>Only the due date can be updated for active submissions.</small>
-                                                    }
-                                                    else
-                                                    {
-                                                        <textarea name="description" class="form-control rounded-3" rows="3">@m.Description</textarea>
-                                                    }
-                                                </div>
-                                                <div class="mb-3">
-                                                    <label class="form-label fw-bold text-muted">Due Date</label>
-                                                    <input type="date" name="dueDate" class="form-control rounded-3" value="@(m.DueDate?.ToString("yyyy-MM-dd"))" />
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer border-0 pt-0">
-                                                <button type="button" class="btn btn-light rounded-3 fw-bold" data-bs-dismiss="modal">Cancel</button>
-                                                <button type="submit" class="btn btn-primary rounded-3 fw-bold px-4">Save Changes</button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
+                                </div>                            </div>
                         }
                     </div>
                 }
@@ -210,39 +154,6 @@
     </div>
 </div>
 
-<!-- Add Modal -->
-<div class="modal fade" id="addMilestoneModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg rounded-4">
-            <form asp-action="AddMilestone" method="post">
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="projectId" value="@Model.Id" />
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="fw-bold text-primary"><i class="fas fa-plus-circle me-2"></i>Add Custom Milestone</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body py-4">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold text-muted">Milestone Title</label>
-                        <input type="text" name="title" class="form-control rounded-3" placeholder="e.g. Hardware Prototype Demo" required />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold text-muted">Description</label>
-                        <textarea name="description" class="form-control rounded-3" rows="3" placeholder="Explain the requirements..."></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold text-muted">Due Date</label>
-                        <input type="date" name="dueDate" class="form-control rounded-3" />
-                    </div>
-                </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-light rounded-3 fw-bold" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary rounded-3 fw-bold px-4">Add Milestone</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 
 @section Scripts {
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
