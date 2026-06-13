@@ -5,7 +5,7 @@
 @inject FYPTrackerContext DbContext
 @{
     //ViewBag.Title = "Configuration>Users";
-    ViewBag.Title = PageTitle.ManageUser;
+    ViewBag.Title = "Manage Users";
     var departmentList = Departments.DepartmentListFromDb(DbContext);
     var userTypeList = new List<SelectListItem>();
     userTypeList = UserTypes.UserTypeFilterList();

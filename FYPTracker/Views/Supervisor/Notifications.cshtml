@@ -280,7 +280,6 @@
                                 </div>
                                 <small class="text-muted flex-shrink-0">@timeAgo</small>
                             </div>
-
                             @if (!string.IsNullOrEmpty(n.Message))
                             {
                                 <div class="text-muted mb-2" style="font-size:.84rem;">@n.Message</div>
@@ -291,15 +290,37 @@
 
                                 @if (!n.IsRead)
                                 {
-                                    if (n.Type == "MeetingRequest" && n.RelatedRecordId != null)
+                                    <form asp-action="MarkAsRead" asp-controller="Supervisor" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="notificationId" value="@n.Id" />
+                                        <button type="submit" class="btn-read">
+                                            <i class="fas fa-check me-1"></i>Mark Read
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <small class="text-success"><i class="fas fa-check-circle me-1"></i>Read</small>
+                                }
+                            </div>
+
+                            @if (!n.IsRead)
+                            {
+                                <div class="mt-3">
+                                    @if (n.Type == "MeetingRequest" && n.RelatedRecordId != null)
                                     {
-                                        <form asp-action="RespondMeetingFromNotification" asp-controller="Supervisor" method="post" class="d-flex align-items-center gap-2 flex-wrap">
+                                        <form asp-action="RespondMeetingFromNotification" asp-controller="Supervisor" method="post" style="width: 100%; max-width: 300px;">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="meetingId" value="@n.RelatedRecordId" />
                                             <input type="hidden" name="notificationId" value="@n.Id" />
-                                            <input type="text" name="note" class="form-control form-control-sm" placeholder="Note (optional)..." style="max-width:200px;border-radius:8px;" />
-                                            <button type="submit" name="status" value="Approved" class="btn btn-sm btn-success fw-bold px-3" style="border-radius:8px;">Approve</button>
-                                            <button type="submit" name="status" value="Rejected" class="btn btn-sm btn-danger fw-bold px-3" style="border-radius:8px;">Reject</button>
+                                            
+                                            <div class="mb-2">
+                                                <input type="text" name="note" class="form-control form-control-sm w-100" placeholder="Note (optional)..." style="border-radius:8px;" />
+                                            </div>
+                                            <div class="d-flex gap-2">
+                                                <button type="submit" name="status" value="Approved" class="btn btn-sm btn-success fw-bold px-3" style="border-radius:8px;">Approve</button>
+                                                <button type="submit" name="status" value="Rejected" class="btn btn-sm btn-danger fw-bold px-3" style="border-radius:8px;">Reject</button>
+                                            </div>
                                         </form>
                                     }
                                     else if (n.Type == "SupervisionRequest")
@@ -316,20 +337,8 @@
                                             <i class="fas fa-arrow-right me-1"></i>Review Submission
                                         </a>
                                     }
-
-                                    <form asp-action="MarkAsRead" asp-controller="Supervisor" method="post" class="d-inline">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="notificationId" value="@n.Id" />
-                                        <button type="submit" class="btn-read">
-                                            <i class="fas fa-check me-1"></i>Mark Read
-                                        </button>
-                                    </form>
-                                }
-                                else
-                                {
-                                    <small class="text-success"><i class="fas fa-check-circle me-1"></i>Read</small>
-                                }
-                            </div>
+                                </div>
+                            }
                         </div>
                     </div>
                 }

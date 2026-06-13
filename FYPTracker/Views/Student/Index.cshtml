@@ -182,37 +182,116 @@
 
 <style>
     :root {
-        --glass-bg: rgba(255, 255, 255, 0.85);
-        --glass-border: rgba(255, 255, 255, 0.25);
-        --primary-indigo: #4f46e5;
-        --accent-teal: #0d9488;
+        --bg-body: #f8fafc;
+        --card-bg: #ffffff;
+        --text-main: #1e293b;
+        --text-muted: #64748b;
+        --border-color: #e2e8f0;
+        --accent-dark: #0f172a;
+        --accent-light: #334155;
     }
 
     body {
-        background-color: #f3f4f6;
-        font-family: 'Outfit', 'Inter', sans-serif;
+        background-color: var(--bg-body);
+        font-family: 'Inter', sans-serif;
     }
 
     .premium-card {
-        background: var(--glass-bg);
-        backdrop-filter: blur(12px);
-        border: 1px solid var(--glass-border);
-        border-radius: 20px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-    
+
     .premium-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
     }
 
     .taskbar {
-        background: linear-gradient(135deg, #1e1b4b 0%, #311042 100%);
-        border-radius: 20px;
+        background-color: var(--accent-dark);
+        border-radius: 16px;
         color: white;
-        padding: 24px 32px;
-        box-shadow: 0 8px 32px rgba(30, 27, 75, 0.2);
+        padding: 32px 40px;
+        box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.3);
+        margin-bottom: 32px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .stat-card-clean {
+        background-color: #ffffff;
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 24px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        transition: transform 0.2s ease;
+    }
+
+    .stat-card-clean:hover {
+        transform: translateY(-2px);
+        border-color: #cbd5e1;
+    }
+
+    .stat-icon-wrapper {
+        width: 56px;
+        height: 56px;
+        border-radius: 12px;
+        background-color: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--accent-dark);
+        font-size: 1.5rem;
+    }
+
+    .action-alert {
+        border-left: 4px solid var(--accent-dark);
+        background-color: #f8fafc;
+        padding: 16px 20px;
+        border-radius: 8px;
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 12px;
+        border-top: 1px solid var(--border-color);
+        border-right: 1px solid var(--border-color);
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .action-alert-icon {
+        color: var(--accent-dark);
+        font-size: 1.25rem;
+        margin-top: 2px;
+    }
+
+    .btn-monochrome {
+        background-color: var(--accent-dark);
+        color: white;
+        border: none;
+        font-weight: 500;
+        transition: background-color 0.2s;
+    }
+
+    .btn-monochrome:hover {
+        background-color: var(--accent-light);
+        color: white;
+    }
+
+    .btn-outline-monochrome {
+        background-color: transparent;
+        color: var(--accent-dark);
+        border: 1px solid var(--border-color);
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .btn-outline-monochrome:hover {
+        background-color: var(--accent-dark);
+        color: white;
     }
 
     .badge-bell {
@@ -229,30 +308,6 @@
         background-color: #e5e7eb;
         border-radius: 999px;
         overflow: hidden;
-    }
-    
-    .glow-alert {
-        animation: pulseGlow 2s infinite alternate;
-    }
-
-    @@keyframes pulseGlow {
-        0% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
-        100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.8); }
-    }
-
-    .stat-card-gradient-1 {
-        background: linear-gradient(135deg, #34d399 0%, #059669 100%);
-        color: white;
-    }
-    
-    .stat-card-gradient-2 {
-        background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
-        color: white;
-    }
-    
-    .stat-card-gradient-3 {
-        background: linear-gradient(135deg, #fca5a5 0%, #dc2626 100%);
-        color: white;
     }
 
     .timeline-element {
@@ -369,20 +424,21 @@
     @if (upcomingUrgent != null && upcomingUrgent.DueDate.HasValue && daysLeft.HasValue && daysLeft.Value <= 5)
     {
         var isOverdue = daysLeft < 0;
-        var urgencyColor = isOverdue ? "#ef4444" : "#f59e0b";
         var absDays = Math.Abs(daysLeft.Value);
         
-        <div class="premium-card p-4 mb-4 d-flex align-items-center flex-wrap gap-4 border-0" style="background-color: @(isOverdue ? "#fef2f2" : "#fffbeb"); border-left: 6px solid @urgencyColor !important;">
-            <div class="text-center bg-white shadow-sm rounded-3 p-3" style="min-width: 100px;">
-                <span class="d-block fs-1 fw-bold" style="color: @urgencyColor; line-height: 1;">@absDays</span>
-                <span class="d-block text-muted fw-bold text-uppercase mt-1" style="font-size: 0.75rem;">@(absDays == 1 ? "Day" : "Days") @(isOverdue ? "Overdue" : "Left")</span>
+        <div class="action-alert">
+            <div class="action-alert-icon">
+                <i class="fas @(isOverdue ? "fa-exclamation-circle text-danger" : "fa-clock text-warning")"></i>
             </div>
             <div class="flex-grow-1">
-                <h4 class="fw-bold mb-1" style="color: #1f2937;"><i class="fas fa-clock me-2" style="color: @urgencyColor;"></i>Impending Deadline: @upcomingUrgent.Title</h4>
-                <p class="mb-0 text-muted fs-6" style="max-width: 600px;">Due Date: <strong class="text-dark">@upcomingUrgent.DueDate.Value.ToString("dd MMMM yyyy")</strong>. Ensure your documents are submitted promptly.</p>
+                <h6 class="fw-bold mb-1 text-dark">Impending Deadline: @upcomingUrgent.Title</h6>
+                <div class="text-muted" style="font-size: 0.9rem;">
+                    Due Date: <strong class="text-dark">@upcomingUrgent.DueDate.Value.ToString("dd MMMM yyyy")</strong>. 
+                    (@(absDays == 1 ? "1 Day" : $"{absDays} Days") @(isOverdue ? "Overdue" : "Left"))
+                </div>
             </div>
             <div>
-                <a href="/Student/Forms" class="btn fw-bold px-4 py-2 rounded-pill text-white shadow-sm action-btn" style="background-color: @urgencyColor;">Go to Forms</a>
+                <a href="/Student/Forms" class="btn btn-monochrome btn-sm py-2 px-3">Go to Forms</a>
             </div>
         </div>
     }
@@ -390,28 +446,31 @@
     @* ── PENDING MEETINGS ALERT ── *@
     @if (pendingMeetingsCount > 0)
     {
-        <div class="alert alert-info bg-info bg-opacity-10 text-dark border-0 shadow-sm d-flex align-items-center gap-3 p-3 mb-4 rounded-3" role="alert" style="border-left: 4px solid #0dcaf0 !important;">
-            <span class="fs-4 text-info"><i class="fas fa-handshake"></i></span>
+        <div class="action-alert">
+            <div class="action-alert-icon">
+                <i class="fas fa-handshake"></i>
+            </div>
             <div class="flex-grow-1" style="font-size: 0.95rem;">
-                <strong>Hang tight!</strong> You have <strong>@pendingMeetingsCount meeting request(s)</strong> waiting for supervisor approval. You'll be notified as soon as they respond.
+                <strong>Meeting Request Pending</strong> You have <strong>@pendingMeetingsCount meeting request(s)</strong> waiting for supervisor approval. You'll be notified as soon as they respond.
             </div>
         </div>
     }
 
     @if (scheduledDefense != null && scheduledDefense.DefenseDate.HasValue)
     {
-        <div class="alert alert-danger bg-danger text-white border-0 shadow-lg glow-alert d-flex align-items-center gap-3 p-4 mb-4 rounded-3" role="alert">
-            <span class="fs-1"><i class="fas fa-shield-alt"></i></span>
+        <div class="action-alert" style="border-left-color: #ef4444;">
+            <div class="action-alert-icon text-danger">
+                <i class="fas fa-shield-alt"></i>
+            </div>
             <div class="flex-grow-1">
-                <h4 class="fw-bold mb-1">Defense Presentation Scheduled!</h4>
-                <div class="opacity-90" style="font-size: 1.05rem;">
+                <h6 class="fw-bold mb-1 text-danger">Defense Presentation Scheduled</h6>
+                <div class="text-muted mb-2" style="font-size: 0.9rem;">
                     Your IAF has been rejected 3 times. You are required to attend a mandatory Defense session.
                 </div>
-                <hr class="border-white opacity-25 my-2">
-                <div class="d-flex flex-wrap gap-4 mt-2 fw-bold" style="font-size: 1.1rem;">
-                    <span><i class="fas fa-calendar-day me-2"></i>@scheduledDefense.DefenseDate.Value.ToString("dd MMMM yyyy")</span>
-                    <span><i class="fas fa-clock me-2"></i>@scheduledDefense.DefenseTime</span>
-                    <span><i class="fas fa-map-marker-alt me-2"></i>@scheduledDefense.DefenseVenue</span>
+                <div class="d-flex flex-wrap gap-4 fw-bold" style="font-size: 0.9rem; color: #1e293b;">
+                    <span><i class="fas fa-calendar-day me-2 text-muted"></i>@scheduledDefense.DefenseDate.Value.ToString("dd MMM yyyy")</span>
+                    <span><i class="fas fa-clock me-2 text-muted"></i>@scheduledDefense.DefenseTime</span>
+                    <span><i class="fas fa-map-marker-alt me-2 text-muted"></i>@scheduledDefense.DefenseVenue</span>
                 </div>
             </div>
         </div>
@@ -420,22 +479,16 @@
     @* ── DYNAMIC NEXT STEP INDICATOR ── *@
     @if (Model != null && milestones.Any() && !string.IsNullOrEmpty(nextStepTitle))
     {
-        <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="background-color: #ffffff; border-left: 6px solid @nextStepColor !important;">
-            <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-compass me-2" style="color: @nextStepColor;"></i>Current Action Required</h5>
-            
-            <div class="d-flex align-items-center flex-wrap gap-3 bg-white p-3 rounded-3 shadow-sm border" style="border-color: rgba(0,0,0,0.05) !important;">
-                <i class="@nextStepIcon fs-2 d-none d-sm-block" style="color: @nextStepColor; min-width: 40px; text-align: center;"></i>
-                <div class="flex-grow-1">
-                    <strong class="d-block fs-5" style="color: #0f172a;">@nextStepTitle</strong>
-                    <div class="text-muted mt-1 mb-2" style="font-size: 0.95rem;">@nextStepDesc</div>
-                    @if (!string.IsNullOrEmpty(nextStepDueDate))
-                    {
-                        <span class="badge bg-light text-dark border"><i class="far fa-calendar-alt me-1 text-primary"></i> Due: @nextStepDueDate</span>
-                    }
-                </div>
-                <div class="text-end">
-                    <a href="@nextStepLink" class="btn fw-bold px-4 py-2 rounded-pill shadow-sm hover-elevate-up action-btn" style="background-color: @nextStepColor; color: white;">@nextStepBtnText</a>
-                </div>
+        <div class="action-alert">
+            <div class="action-alert-icon">
+                <i class="@nextStepIcon"></i>
+            </div>
+            <div class="flex-grow-1">
+                <h6 class="fw-bold mb-1 text-dark">Current Action Required: @nextStepTitle</h6>
+                <div class="text-muted" style="font-size: 0.9rem;">@nextStepDesc</div>
+            </div>
+            <div class="text-end">
+                <a href="@nextStepLink" class="btn btn-monochrome btn-sm py-2 px-3">@nextStepBtnText</a>
             </div>
         </div>
     }
@@ -447,16 +500,16 @@
             @if (Model == null)
             {
                 <!-- Empty State CTA -->
-                <div class="premium-card p-5 mb-4 text-center border-0 shadow-lg" style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: white;">
+                <div class="premium-card p-5 mb-4 text-center">
                     <div class="mb-4 mt-2">
-                        <i class="fas fa-rocket fa-4x text-white opacity-75 drop-shadow"></i>
+                        <i class="fas fa-folder-plus fa-4x text-muted opacity-50"></i>
                     </div>
-                    <h2 class="fw-bolder mb-3 text-white">Welcome to FYP Tracker!</h2>
-                    <p class="fs-5 mb-5 opacity-90 mx-auto" style="max-width: 500px;">
+                    <h3 class="fw-bold text-dark mb-3">Welcome to FYP Tracker</h3>
+                    <p class="text-muted mb-4 mx-auto" style="max-width: 500px;">
                         Your very first step is to secure a supervisor and register your project topic. You won't be able to submit forms or book meetings until this is done!
                     </p>
-                    <a href="/Student/SelectSupervisor" class="btn btn-light btn-lg fw-bold rounded-pill px-5 py-3 text-primary shadow-sm hover-elevate-up mb-2">
-                        Step 1: Select Supervisor <i class="fas fa-arrow-right ms-2"></i>
+                    <a href="/Student/SelectSupervisor" class="btn btn-monochrome px-4 py-2">
+                        <i class="fas fa-user-plus me-2"></i> Select Supervisor
                     </a>
                 </div>
             }
@@ -465,36 +518,47 @@
                 <!-- Progress Bar Card -->
                 <div class="premium-card p-4 mb-4">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="fw-bold text-dark mb-0"><i class="fas fa-chart-line text-primary me-2"></i>Your FYP Progress</h5>
+                        <h6 class="fw-bold text-dark mb-0 text-uppercase" style="letter-spacing: 0.5px; font-size: 0.85rem;"><i class="fas fa-chart-line text-muted me-2"></i>Your FYP Progress</h6>
                         <span class="badge bg-light text-dark fw-bold px-3 py-2 border">@pct% Completed</span>
                     </div>
                     <div class="progress-bar-container progress">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated @progressColor" 
-                             role="progressbar" style="width: @pct%" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                        <div class="progress-bar bg-dark" role="progressbar" style="width: @pct%" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
                     </div>
                 </div>
 
                 <!-- Statistics Cards (3 columns) -->
                 <div class="row g-3 mb-4">
                     <div class="col-md-4">
-                        <div class="premium-card stat-card-gradient-1 p-4 text-center border-0">
-                            <span class="fs-1 d-block mb-1"><i class="fas fa-check-circle"></i></span>
-                            <h6 class="fw-bold opacity-80 uppercase mb-2">Approved / Done</h6>
-                            <h2 class="display-5 fw-bold mb-0">@approved</h2>
+                        <div class="stat-card-clean">
+                            <div class="stat-icon-wrapper">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div>
+                                <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Approved</h6>
+                                <h3 class="fw-bold text-dark mb-0">@approved</h3>
+                            </div>
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="premium-card stat-card-gradient-2 p-4 text-center border-0">
-                            <span class="fs-1 d-block mb-1"><i class="fas fa-hourglass-half"></i></span>
-                            <h6 class="fw-bold opacity-80 uppercase mb-2">Pending / Review</h6>
-                            <h2 class="display-5 fw-bold mb-0">@pending</h2>
+                        <div class="stat-card-clean">
+                            <div class="stat-icon-wrapper">
+                                <i class="fas fa-hourglass-half"></i>
+                            </div>
+                            <div>
+                                <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Pending</h6>
+                                <h3 class="fw-bold text-dark mb-0">@pending</h3>
+                            </div>
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="premium-card stat-card-gradient-3 p-4 text-center border-0">
-                            <span class="fs-1 d-block mb-1"><i class="fas fa-redo-alt"></i></span>
-                            <h6 class="fw-bold opacity-80 uppercase mb-2">Revision / Redo</h6>
-                            <h2 class="display-5 fw-bold mb-0">@revision</h2>
+                        <div class="stat-card-clean">
+                            <div class="stat-icon-wrapper">
+                                <i class="fas fa-redo-alt"></i>
+                            </div>
+                            <div>
+                                <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Revision</h6>
+                                <h3 class="fw-bold text-dark mb-0">@revision</h3>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -507,7 +571,7 @@
                 {
                     <div class="text-center py-5">
                         <p class="text-muted">You do not have any project created yet. Please select a supervisor first!</p>
-                        <a href="/Student/SelectSupervisor" class="btn btn-primary rounded-3 px-4 mt-2">
+                        <a href="/Student/SelectSupervisor" class="btn btn-monochrome rounded-3 px-4 mt-2">
                             <i class="fas fa-user-plus me-1"></i> Choose Supervisor
                         </a>
                     </div>
@@ -516,7 +580,7 @@
                 {
                     <div class="text-center py-5">
                         <p class="text-muted">No milestones/chapters defined for your project.</p>
-                        <a href="/Student/Forms" class="btn btn-outline-primary rounded-3 px-4 mt-2">Submit Proposal</a>
+                        <a href="/Student/Forms" class="btn btn-outline-monochrome rounded-3 px-4 mt-2">Submit Proposal</a>
                     </div>
                 }
                 else
@@ -754,15 +818,15 @@
 
             @if (upcomingMeeting != null)
             {
-                <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);">
-                    <h5 class="fw-bold text-success mb-3"><i class="fas fa-calendar-check me-2"></i>Upcoming Meeting</h5>
+                <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="background-color: #f8fafc; border-left: 6px solid #1e293b !important;">
+                    <h5 class="fw-bold text-dark mb-3"><i class="fas fa-calendar-check me-2 text-muted"></i>Upcoming Meeting</h5>
                     <div class="d-flex flex-column gap-2">
                         <div class="d-flex align-items-center text-dark fw-bold">
-                            <i class="far fa-calendar-alt text-success me-3 fs-5"></i>
+                            <i class="far fa-calendar-alt text-muted me-3 fs-5"></i>
                             @upcomingMeeting.MeetingDate.ToString("dd MMMM yyyy") (@upcomingMeeting.MeetingDay)
                         </div>
                         <div class="d-flex align-items-center text-dark fw-bold">
-                            <i class="far fa-clock text-success me-3 fs-5"></i>
+                            <i class="far fa-clock text-muted me-3 fs-5"></i>
                             @{
                                 string dispTime = upcomingMeeting.MeetingTime;
                                 try {
@@ -774,7 +838,7 @@
                             @dispTime
                         </div>
                         <div class="d-flex align-items-start text-dark mt-2">
-                            <i class="fas fa-quote-left text-success me-3 mt-1 opacity-50"></i>
+                            <i class="fas fa-quote-left text-muted me-3 mt-1 opacity-50"></i>
                             <span class="small opacity-75 fw-semibold" style="line-height: 1.4;">@upcomingMeeting.Reason</span>
                         </div>
                     </div>

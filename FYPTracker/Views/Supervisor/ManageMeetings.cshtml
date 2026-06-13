@@ -221,9 +221,9 @@
                                                     data-id="@m.Id"
                                                     data-student="@m.Student?.FullName"
                                                     data-date="@m.MeetingDate.ToString("dd/MM/yyyy")"
-                                                    data-topics="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.KeyTopicsDiscussed)"
-                                                    data-action="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.ActionPointsForNextMeeting)"
-                                                    data-completed="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.CompletedActionsAndNotes)"
+                                                    data-topics="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.KeyTopicsDiscussed ?? "")"
+                                                    data-action="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.ActionPointsForNextMeeting ?? "")"
+                                                    data-completed="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.CompletedActionsAndNotes ?? "")"
                                                     data-next-date="@(m.MeetingLog.NextMeetingDate?.ToString("yyyy-MM-ddTHH:mm"))"
                                                     onclick="openReviewLogModal(this)">
                                                 Review Log

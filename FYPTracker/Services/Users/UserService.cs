@@ -54,6 +54,7 @@ namespace FYPTracker.Services.Employees
 
         public virtual async Task<bool> ValidateEmployeeAsync(string username,string password)
         {
+            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)) return false;
             return await _context.ApplicationUsers.Where(x => (x.UserName == username || x.Email == username) && x.PassCode == GetHash(password) && !x.IsResign).FirstOrDefaultAsync() != null;
         }
 

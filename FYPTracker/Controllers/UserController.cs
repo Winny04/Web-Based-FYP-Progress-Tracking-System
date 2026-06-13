@@ -426,7 +426,7 @@ namespace FYPTracker.Controllers
             else if (emp.UserType == "Supervisor")
                 return RedirectToAction("Index", "Supervisor");
             else if (emp.UserType == "SuperAdmin" || emp.UserType == "Admin")
-                return RedirectToAction("ManageUsers", "Admin");
+                return RedirectToAction("Index", "Admin");
 
             return RedirectToAction("Index", "Home");
         }
@@ -498,7 +498,7 @@ namespace FYPTracker.Controllers
             else if (user.UserType == "Supervisor")
                 return RedirectToAction("Index", "Supervisor");
             else if (user.UserType == "SuperAdmin" || user.UserType == "Admin")
-                return RedirectToAction("ManageUsers", "Admin");
+                return RedirectToAction("Index", "Admin");
 
             return RedirectToAction("Index", "Home");
         }
