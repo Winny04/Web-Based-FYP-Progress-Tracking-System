@@ -326,13 +326,13 @@ namespace FYPTracker.Controllers
             if (allFiles.Any())
             {
                 // Validate all files BEFORE proceeding
-                var allowedExt = new[] { ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".zip" };
+                var allowedExt = new[] { ".pdf" };
                 foreach (var file in allFiles)
                 {
                     var extCheck = Path.GetExtension(file.FileName).ToLowerInvariant();
                     if (!allowedExt.Contains(extCheck))
                     {
-                        TempData["Error"] = "Only PDF, DOC, PPT, and ZIP files are allowed.";
+                        TempData["Error"] = "Only PDF files are allowed.";
                         return RedirectToAction("Forms");
                     }
                     if (file.Length > 20 * 1024 * 1024)

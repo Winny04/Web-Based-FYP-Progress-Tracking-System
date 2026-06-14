@@ -190,8 +190,16 @@
         var proposalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
         bool isProposalApproved = proposalMilestone != null && proposalMilestone.Status == "Approved";
         
-        var allProgressMilestones = milestones.Where(m => m.Title.Contains("Progress", StringComparison.OrdinalIgnoreCase)).ToList();
-        bool isAllProgressApproved = allProgressMilestones.Any() && allProgressMilestones.All(m => m.Status == "Approved");
+        var finalMsRef = milestones.FirstOrDefault(m => m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase));
+
+        // Any milestone that isn't IAF, Proposal, or Final is considered an intermediate "Progress" milestone
+        var allProgressMilestones = milestones.Where(m => 
+            m.Id != (iafMilestone?.Id ?? -1) && 
+            m.Id != (proposalMilestone?.Id ?? -1) && 
+            m.Id != (finalMsRef?.Id ?? -1)).ToList();
+            
+        // If there are intermediate milestones, they must all be approved. If none exist, it is true by default.
+        bool isAllProgressApproved = allProgressMilestones.Any() ? allProgressMilestones.All(m => m.Status == "Approved") : true;
 
         // Force logical cascade: if a later milestone is approved, logically treat the previous ones as approved
         // so the UI doesn't break into multiple active tabs.
@@ -472,9 +480,9 @@
                                     <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="dropZone" onclick="document.getElementById('proposalDocument').click()">
                                         <i class="fas fa-cloud-upload-alt fs-1 mb-3" style="color: var(--primary-orange) !important;"></i>
                                         <h6 class="fw-bold mb-1">Drag & Drop your proposal here</h6>
-                                        <p class="text-muted small mb-0">or click to browse files (PDF / DOCX)</p>
+                                        <p class="text-muted small mb-0">or click to browse files (PDF ONLY)</p>
                                         <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
-                                        <input type="file" name="attachedFile" id="proposalDocument" class="d-none" accept=".pdf,.doc,.docx" required onchange="updateFileName(this)" />
+                                        <input type="file" name="attachedFile" id="proposalDocument" class="d-none" accept=".pdf" required onchange="updateFileName(this)" />
                                         <div id="fileNameDisplay" class="mt-3 fw-bold text-success" style="display:none;">
                                             <i class="fas fa-file-pdf me-2"></i><span id="fName"></span>
                                         </div>
@@ -588,8 +596,8 @@
                                         <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="progressDropZone" onclick="document.getElementById('progressFiles').click()">
                                             <i class="fas fa-copy fs-1 mb-3" style="color: #3b82f6 !important;"></i>
                                             <h6 class="fw-bold mb-1">Drag & Drop your files here</h6>
-                                            <p class="text-muted small mb-0">or click to browse (PDF / DOCX)</p>
-                                            <input type="file" name="attachedFiles" id="progressFiles" class="d-none" accept=".pdf,.doc,.docx" multiple onchange="updateMultiFileNames(this, 'progressFileList')" />
+                                            <p class="text-muted small mb-0">or click to browse (PDF ONLY)</p>
+                                            <input type="file" name="attachedFiles" id="progressFiles" class="d-none" accept=".pdf" multiple onchange="updateMultiFileNames(this, 'progressFileList')" />
                                             <div id="progressFileList" class="mt-3 text-start small fw-semibold text-primary" style="display:none; max-width: 300px; margin: auto;">
                                             </div>
                                         </div>
