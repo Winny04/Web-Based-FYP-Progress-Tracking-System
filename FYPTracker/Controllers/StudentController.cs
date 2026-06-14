@@ -227,6 +227,12 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(SelectSupervisor));
             }
 
+            if (string.IsNullOrWhiteSpace(matricNumber) || !System.Text.RegularExpressions.Regex.IsMatch(matricNumber, @"^[pP]\d{8}$"))
+            {
+                TempData["Error"] = "Please provide a valid Matric Number starting with 'P' followed by 8 numbers (e.g., P210244501).";
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+
             if (string.IsNullOrWhiteSpace(sessionSemester))
             {
                 TempData["Error"] = "Session / Semester cannot be empty.";
@@ -269,6 +275,7 @@ namespace FYPTracker.Controllers
             };
 
             // Update user profile with latest provided data
+            user.EmployeeId = matricNumber;
             user.Phone = phoneNumber;
             user.Programme = program;
             user.AcademicSession = sessionSemester;
@@ -482,7 +489,19 @@ namespace FYPTracker.Controllers
 
             ViewBag.CurrentUser = user;
 
-            ViewBag.IAFDeadline = "15th April 2026 before 11.59pm";
+            var globalIaf = await _context.FYPMilestones
+                .Where(m => m.Title == "Initial Project Allocation Form (IAF)" && m.DueDate != null)
+                .OrderByDescending(m => m.DueDate)
+                .FirstOrDefaultAsync();
+
+            if (globalIaf != null && globalIaf.DueDate.HasValue)
+            {
+                ViewBag.IAFDeadline = globalIaf.DueDate.Value.ToString("dd MMMM yyyy") + " before 11.59pm";
+            }
+            else
+            {
+                ViewBag.IAFDeadline = "No deadline set yet.";
+            }
 
             var project = await _context.FYPProjects
                 .Include(p => p.Supervisor)

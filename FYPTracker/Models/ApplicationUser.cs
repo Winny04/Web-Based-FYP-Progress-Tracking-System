@@ -46,7 +46,7 @@ namespace FYPTracker.Models
         // Supervisor Specific
         public string? Title { get; set; } // e.g., Dr, Prof, Mr, Ms
 
-        public int MaxStudentSlots { get; set; } = 5;
+        public int? MaxStudentSlots { get; set; }
 
         [ForeignKey(nameof(DepartmentId))]
         public Department? EmpDepartment { get; set; }

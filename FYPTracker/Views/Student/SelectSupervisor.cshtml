@@ -1,6 +1,6 @@
 @using FYPTracker.Models
 @{
-    ViewData["Title"] = "Select FYP Supervisor";
+    ViewData["Title"] = "Select Supervisor";
     var currentUser     = ViewBag.CurrentUser as ApplicationUser;
     var supervisors     = ViewBag.Supervisors as List<ApplicationUser> ?? new();
     var applicantCounts = ViewBag.ApplicantCounts as Dictionary<int, int> ?? new();
@@ -187,7 +187,7 @@
                                     var appCount = applicantCounts.ContainsKey(sup.Id) ? applicantCounts[sup.Id] : 0;
                                     
                                     // Dynamically read MaxStudentSlots from the DB
-                                    int maxSlots = sup.MaxStudentSlots;
+                                    int maxSlots = sup.MaxStudentSlots ?? 5;
                                     int slotsLeft = Math.Max(0, maxSlots - appCount);
                                     string deptLabel = sup.EmpDepartment?.Name ?? "General";
                                     string expertise = !string.IsNullOrEmpty(sup.Programme) ? sup.Programme : "General";
@@ -312,7 +312,8 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Matric Number</label>
-                                <input type="text" name="matricNumber" class="form-control bg-light border-0" value="@currentUser?.EmployeeId" readonly />
+                                <input type="text" name="matricNumber" class="form-control" placeholder="e.g. P210244501" pattern="^[pP]\d{8}$" required title="Please enter a valid Matric Number starting with 'P' followed by 8 numbers (e.g., P210244501)" oninput="this.classList.toggle('is-invalid', !this.checkValidity());" />
+                                <div class="invalid-feedback text-danger small mt-1">Matric Number must start with 'P' followed by 8 numbers.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Program</label>

@@ -64,7 +64,7 @@ namespace FYPTracker.Migrations
                     b.Property<bool>("IsResign")
                         .HasColumnType("bit");
 
-                    b.Property<int>("MaxStudentSlots")
+                    b.Property<int?>("MaxStudentSlots")
                         .HasColumnType("int");
 
                     b.Property<string>("PassCode")
@@ -153,7 +153,7 @@ namespace FYPTracker.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Department");
+                    b.ToTable("Department", (string)null);
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPActivity", b =>

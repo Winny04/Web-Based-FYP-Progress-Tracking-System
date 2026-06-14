@@ -55,9 +55,7 @@
                     <!--start:: Btn Bulk Invite-->
                     <a href="#" id="btn-BulkInvite" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#bulkInviteModal">Bulk Invite</a>
                     <!--end:: Btn Bulk Invite-->
-                    <!--start:: Btn Create-->
-                    <a href="#" id="btn-Create" class="btn btn-success " data-bs-toggle="modal" data-bs-target="#createAcc" value="Create">Create</a>
-                    <!--end:: Btn Create-->
+
                 </div>
             </div>
         </div>
@@ -84,103 +82,7 @@
     </div>
 </div>
 
-<div class="modal fade" id="createAcc" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered mw-600px">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Create New User</h2>
-                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
-                    <span class="svg-icon svg-icon-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
-                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
-                        </svg>
-                    </span>
-                </div>
-            </div>
-            <div class="modal-body p-5">
-                <div class="form-horizontal">
 
-                    <div class="fv-row mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">Full Name <span class="text-danger">*</span></label>
-                        <input type="text" id="createFullName" class="form-control form-control-lg form-control-solid" placeholder="e.g. Ahmad bin Ali" />
-                    </div>
-
-
-
-
-
-                    <div class="fv-row mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">Phone</label>
-                        <input type="text" id="createPhone" class="form-control form-control-lg form-control-solid" placeholder="e.g. 0123456789 or +60123456789" />
-                    </div>
-
-                    <div class="fv-row mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">Email <span class="text-danger">*</span></label>
-                        <input type="email" id="createEmail" class="form-control form-control-lg form-control-solid" placeholder="xxx@gmail.com or xxx@student.newinti.edu.my" />
-                    </div>
-
-                    <div class="fv-row mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">User Type <span class="text-danger">*</span></label>
-                        <select id="createUserType" class="form-select form-select-solid form-select-lg fw-bold">
-                            <option value="">-- Select Type --</option>
-                            <option value="Student">Student</option>
-                            <option value="Supervisor">Supervisor</option>
-                        </select>
-                    </div>
-
-                    <div id="studentFields" style="display:none;">
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Programme</label>
-                            <select id="createProgramme" class="form-select form-select-solid form-select-lg fw-bold">
-                                <option value="">-- Select Programme --</option>
-                                <option value="BCSCUNP (Bachelor of Computer Science)">BCSCUNP (Bachelor of Computer Science)</option>
-                                <option value="BIT (Bachelor of Information Technology)">BIT (Bachelor of Information Technology)</option>
-                                <option value="BSE (Bachelor of Software Engineering)">BSE (Bachelor of Software Engineering)</option>
-                                <option value="DIT (Diploma in Information Technology)">DIT (Diploma in Information Technology)</option>
-                                <option value="FIC (Foundation in Computing)">FIC (Foundation in Computing)</option>
-                                <option value="BCSC-CC (BSc Cloud Computing)">BCSC-CC (BSc Cloud Computing)</option>
-                                <option value="BCSC-MC (BSc Mobile Computing)">BCSC-MC (BSc Mobile Computing)</option>
-                                <option value="BCSC-BA (BSc Business Analytics)">BCSC-BA (BSc Business Analytics)</option>
-                                <option value="BCSC-CS (BSc Cyber Security)">BCSC-CS (BSc Cyber Security)</option>
-                            </select>
-                        </div>
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Academic Session</label>
-                            <select id="createAcademicSession" class="form-select form-select-solid form-select-lg fw-bold">
-                                <option value="">-- Select Session --</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div id="supervisorFields" style="display:none;">
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Title</label>
-                            <input type="text" id="createTitle" class="form-control form-control-lg form-control-solid" placeholder="e.g. Dr." />
-                        </div>
-
-
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Department <span class="text-danger">*</span></label>
-                            <select id="createDepartment" class="form-select form-select-solid form-select-lg fw-bold">
-                                <option value="">-- Select Department --</option>
-                                @foreach (var dept in departmentList)
-                                {
-                                    <option value="@dept.Value">@dept.Text</option>
-                                }
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="text-center mt-4">
-                        <button type="button" id="kt_sign_up_submit" class="btn btn-lg btn-primary w-100">Create User</button>
-                    </div>
-
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Edit User Modal -->
 <div class="modal fade" id="editAccModal" tabindex="-1" aria-hidden="true">
@@ -367,70 +269,7 @@
 
         LoadTable();
 
-        $('#createUserType').change(function () {
-            var t = $(this).val();
-            $('#studentFields').toggle(t === 'Student');
-            $('#supervisorFields').toggle(t === 'Supervisor');
-        });
 
-        $('#createAcc').on('hidden.bs.modal', function () {
-            $('#createFullName,#createEmail,#createProgramme,#createAcademicSession,#createTitle,#createPhone').val('');
-            $('#createUserType,#createDepartment').val('');
-            $('#studentFields,#supervisorFields').hide();
-        });
-
-        $('#kt_sign_up_submit').click(function () {
-            var FullName = $('#createFullName').val().trim();
-            var Email = $('#createEmail').val().trim();
-            var UserType = $('#createUserType').val();
-            var Department = $('#createDepartment').val();
-            var Phone = $('#createPhone').val().trim();
-
-            if (!FullName || !Email || !UserType) {
-                Swal.fire({ text: "Please fill in all required fields.", icon: "warning", confirmButtonText: "Ok, got it!", buttonsStyling: false, customClass: { confirmButton: "btn btn-primary" } });
-                return;
-            }
-
-            if (Phone) {
-                var cleanPhone = Phone.replace(/[\s\-\(\)]/g, '');
-                var phoneRegex = /^(?:\+?6?0)[1-9]\d{7,9}$/;
-                if (!phoneRegex.test(cleanPhone)) {
-                    Swal.fire({ text: "Invalid Malaysia phone number format (e.g. +60123456789 or 0123456789).", icon: "warning", confirmButtonText: "Ok, got it!", buttonsStyling: false, customClass: { confirmButton: "btn btn-primary" } });
-                    return;
-                }
-            }
-            if (UserType === 'Supervisor' && !Department) {
-                Swal.fire({ text: "Please select a Department for Supervisors.", icon: "warning", confirmButtonText: "Ok, got it!", buttonsStyling: false, customClass: { confirmButton: "btn btn-primary" } });
-                return;
-            }
-            if (Email.indexOf("gmail.com") < 0 && Email.indexOf("student.newinti.edu.my") < 0) {
-                Swal.fire({ text: "Incorrect email format. Please use gmail.com or student.newinti.edu.my.", icon: "warning", confirmButtonText: "Ok, got it!", buttonsStyling: false, customClass: { confirmButton: "btn btn-primary" } });
-                return;
-            }
-
-            $.ajax({
-                url: "/Admin/Create", method: "POST",
-                data: { newEmployee: {
-                    FullName: FullName, PassCode: 'auto_generated', Email: Email, UserType: UserType,
-                    Department: UserType === 'Supervisor' ? Department : '',
-                    Programme: UserType === 'Student' ? $('#createProgramme').val().trim() : '',
-                    AcademicSession: UserType === 'Student' ? $('#createAcademicSession').val().trim() : '',
-                    Title: UserType === 'Supervisor' ? $('#createTitle').val().trim() : '',
-                    Phone: $('#createPhone').val().trim()
-                }},
-                success: function (r) {
-                    if (r.status) {
-                        Swal.fire({ text: r.msg, icon: "success", confirmButtonText: "Ok, got it!", buttonsStyling: false, customClass: { confirmButton: "btn btn-primary" } })
-                            .then(function () { window.location.reload(); });
-                    } else {
-                        Swal.fire({ text: r.msg, icon: "warning", confirmButtonText: "Ok, got it!", buttonsStyling: false, customClass: { confirmButton: "btn btn-primary" } });
-                    }
-                },
-                error: function () {
-                    Swal.fire({ text: "An error occurred. Please try again.", icon: "error", confirmButtonText: "Ok, got it!", buttonsStyling: false, customClass: { confirmButton: "btn btn-primary" } });
-                }
-            });
-        });
     });
 
     $('#typeFilter').change(function (e) { $('#mytable').DataTable().columns(2).search(e.target.value).draw(); });

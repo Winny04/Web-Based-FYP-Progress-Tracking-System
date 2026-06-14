@@ -181,7 +181,7 @@
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Current Student Slots</label>
                                 <input type="number" name="MaxStudentSlots" class="form-control" value="@Model.MaxStudentSlots" min="1" max="10" />
-                                <small class="text-muted d-block mt-1">Currently @currentStudents slots are filled. (@Math.Max(0, Model.MaxStudentSlots - (int)currentStudents)) available left)</small>
+                                <small class="text-muted d-block mt-1">Currently @currentStudents slots are filled. (@Math.Max(0, (Model.MaxStudentSlots ?? 5) - (int)currentStudents)) available left)</small>
                             </div>
                         }
                     </div>

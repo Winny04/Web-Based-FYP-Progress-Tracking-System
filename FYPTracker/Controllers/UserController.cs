@@ -272,6 +272,15 @@ namespace FYPTracker.Controllers
                 model.Department = check.EmpDepartment?.Name;
                 model.EmployeeId = check.EmployeeId;
                 
+                if (string.IsNullOrEmpty(model.EmployeeId) && !string.IsNullOrEmpty(model.Email) && model.Email.Contains("@student.newinti.edu", StringComparison.OrdinalIgnoreCase))
+                {
+                    var idPart = model.Email.Split('@')[0];
+                    if (idPart.StartsWith("p", StringComparison.OrdinalIgnoreCase))
+                    {
+                        model.EmployeeId = idPart;
+                    }
+                }
+                
                 model.Phone = check.Phone;
                 model.Programme = check.Programme;
                 model.AcademicSession = check.AcademicSession;
@@ -352,9 +361,9 @@ namespace FYPTracker.Controllers
                 {
                     if (!string.IsNullOrEmpty(ApplicationUser.Title))
                         model.Title = ApplicationUser.Title;
-                    if (ApplicationUser.MaxStudentSlots > 0)
+                    if (ApplicationUser.MaxStudentSlots.HasValue && ApplicationUser.MaxStudentSlots > 0)
                     {
-                        model.MaxStudentSlots = ApplicationUser.MaxStudentSlots;
+                        model.MaxStudentSlots = ApplicationUser.MaxStudentSlots.Value;
                     }
                 }
                 else if (model.UserType == "Student")
@@ -410,6 +419,21 @@ namespace FYPTracker.Controllers
             }
                 
             var emp = await _userService.GetEmpByUserNameAsync(username);
+
+            // Auto-populate Student ID from email if missing
+            if (emp != null && emp.UserType == "Student" && string.IsNullOrEmpty(emp.EmployeeId) && !string.IsNullOrEmpty(emp.Email))
+            {
+                if (emp.Email.Contains("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase))
+                {
+                    var idPart = emp.Email.Split('@')[0];
+                    if (idPart.StartsWith("p", StringComparison.OrdinalIgnoreCase))
+                    {
+                        emp.EmployeeId = idPart;
+                        _context.ApplicationUsers.Update(emp);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+            }
 
             await _userService.SignInEmployeeAsync(emp, rmbMe);
 
@@ -721,7 +745,7 @@ namespace FYPTracker.Controllers
         public string? Programme { get; set; }
         public string? AcademicSession { get; set; }
         public string? Title { get; set; }
-        public int MaxStudentSlots { get; set; }
+        public int? MaxStudentSlots { get; set; }
     }
 }
 

@@ -501,6 +501,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                             Programme = newEmployee.Programme,
                             AcademicSession = newEmployee.AcademicSession,
                             Title = newEmployee.Title,
+                            MaxStudentSlots = newEmployee.UserType == "Supervisor" ? 5 : null,
                             RequirePasswordChange = true
                     };
                         _context.ApplicationUsers.Add(model);
@@ -966,7 +967,7 @@ public ActionResult ManageUsersData()
                 .Where(u => u.UserType == "Supervisor" && !u.IsResign)
                 .Select(s => new {
                     Name = s.FullName ?? s.UserName,
-                    MaxSlots = s.MaxStudentSlots,
+                    MaxSlots = s.MaxStudentSlots ?? 5,
                     CurrentStudents = _context.FYPProjects.Count(p => p.SupervisorId == s.Id && !p.Student.IsResign && p.Status == "Approved")
                 })
                 .ToListAsync();
