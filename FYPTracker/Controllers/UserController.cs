@@ -309,16 +309,31 @@ namespace FYPTracker.Controllers
             Match m = r.Match(ApplicationUser.Email ?? "");
 
             var deptQuery = _context.Department.AsQueryable();
-            if (!m.Success)
+            
+            bool isDuplicateMatric = false;
+            if (model != null && model.UserType == "Student" && !string.IsNullOrWhiteSpace(ApplicationUser.EmployeeId))
+            {
+                isDuplicateMatric = _context.ApplicationUsers.Any(u => u.UserType == "Student" && u.Id != model.Id && u.EmployeeId != null && u.EmployeeId.ToLower() == ApplicationUser.EmployeeId.ToLower());
+            }
+
+            if (!m.Success || isDuplicateMatric)
             {
                 var referer = Request.Headers["Referer"].ToString();
                 if (referer.Contains("/Profile", StringComparison.OrdinalIgnoreCase))
                 {
-                    TempData["Error"] = "Please enter a valid email address (e.g., @newinti.edu.my, @student.newinti.edu.my, @gmail.com).";
+                    if (isDuplicateMatric)
+                        TempData["Error"] = $"Matric ID '{ApplicationUser.EmployeeId}' is already registered to another student.";
+                    else
+                        TempData["Error"] = "Please enter a valid email address (e.g., @newinti.edu.my, @student.newinti.edu.my, @gmail.com).";
+                    
                     return RedirectToAction("Profile", new { name = ApplicationUser.UserName });
                 }
                 
-                ModelState.AddModelError("Email", "Please enter the correct email! (xxx@gmail.com or xxx@student.newinti.edu.my)");
+                if (isDuplicateMatric)
+                    ModelState.AddModelError("EmployeeId", $"Matric ID '{ApplicationUser.EmployeeId}' is already registered to another student.");
+                if (!m.Success)
+                    ModelState.AddModelError("Email", "Please enter the correct email! (xxx@gmail.com or xxx@student.newinti.edu.my)");
+
                 EmployeeEditVM model1 = new EmployeeEditVM();
                 model1.Id = model.Id;
                 model1.UserName = ApplicationUser.UserName;

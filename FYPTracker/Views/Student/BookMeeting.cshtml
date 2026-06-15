@@ -115,6 +115,13 @@
         </div>
     }
 
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-4 d-flex align-items-center gap-3">
+            <span class="fs-4 text-danger"><i class="fas fa-exclamation-circle"></i></span>
+            <div class="fw-bold">@TempData["Error"]</div>
+        </div>
+    }
     @* ── Page Hero ──────────────────────────────────────────── *@
     <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
@@ -122,6 +129,28 @@
             <p class="mb-0 opacity-90">Schedule discussion slots with your supervisor. Instantly syncs with your academic calendar.</p>
         </div>
     </div>
+
+    <!-- Tomorrow's Meeting Reminder -->
+    @{
+        var meetingsList = ViewBag.Meetings as List<FYPTracker.Models.MeetingBooking> ?? new List<FYPTracker.Models.MeetingBooking>();
+        var tomorrowMeetings = meetingsList.Where(m => m.Status == "Approved" && m.MeetingDate.Date == DateTime.Today.AddDays(1).Date).ToList();
+    }
+    @if (tomorrowMeetings.Any())
+    {
+        foreach(var tm in tomorrowMeetings)
+        {
+            <div class="alert alert-primary border-0 shadow-sm rounded-3 mb-4 d-flex align-items-center" style="background-color: #e0f2fe;">
+                <i class="fas fa-bell fa-2x text-primary me-3"></i>
+                <div>
+                    <h5 class="mb-1 fw-bold text-primary">Reminder: Upcoming Meeting Tomorrow!</h5>
+                    <p class="mb-0 text-dark">You have an approved meeting scheduled for tomorrow at <strong>@tm.MeetingTime</strong>.</p>
+                    @if(!string.IsNullOrEmpty(tm.Location)) {
+                        <p class="mb-0 mt-1 text-dark"><i class="fas fa-map-marker-alt text-danger me-1"></i> <strong>Location / Link:</strong> @tm.Location</p>
+                    }
+                </div>
+            </div>
+        }
+    }
 
     <div class="premium-card p-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -214,10 +243,20 @@
                                             </button>
                                         }
                                     }
+                                    else if (m.Status == "Postponed")
+                                    {
+                                        <form asp-action="AcceptPostponedMeeting" method="post" class="d-inline" id="acceptForm_@m.Id">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="meetingId" value="@m.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-success border-0 fw-semibold">Accept</button>
+                                        </form>
+                                    }
 
                                     <button type="button" class="btn btn-sm btn-outline-secondary border-0 fw-semibold" 
                                             data-status="@m.Status" 
                                             data-note="@(m.SupervisorNote ?? "None")"
+                                            data-date="@m.MeetingDate.ToString("dd MMM yyyy")"
+                                            data-proposed-date="@(m.ProposedNewDate?.ToString("dd MMM yyyy") ?? "")"
                                             onclick="viewMeetingDetails(this)">
                                         Details
                                     </button>
@@ -326,7 +365,7 @@
             <form id="studentRescheduleForm" asp-action="RescheduleMeeting" method="post">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="meetingId" id="reschedMeetingId" />
-                <input type="hidden" name="meetingTime" id="reschedTimeInput" required />
+                <input type="hidden" name="meetingTime" id="reschedTimeInput" value="@ViewBag.FixedTime" />
                 
                 <div class="modal-header border-0 pb-0">
                     <h5 class="fw-bold text-dark"><i class="fas fa-calendar-plus text-primary me-2"></i>Reschedule Your Meeting</h5>
@@ -415,7 +454,9 @@
 
                     <div class="mb-4">
                         <label class="form-label fw-bold text-primary">Proposed Date for Next Meeting</label>
-                        <input type="date" name="nextMeetingDate" id="logNextMeetingDate" class="form-control rounded-3 border-primary" required />
+                        <div class="d-flex gap-2">
+                            <input type="date" name="nextMeetingDate" id="logNextMeetingDate" class="form-control rounded-3 border-primary" required />
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer border-0">
@@ -428,94 +469,177 @@
 </div>
 
 <script>
-    const timeInput = document.getElementById('meetingTimeInput');
-    const timeError = document.getElementById('timeError');
     const supervisorId = @(assignedSupervisor?.Id ?? 0);
+    const timeInput    = document.getElementById('meetingTimeInput');
+    const timeError    = document.getElementById('timeError');
 
+    // ── Day auto-fill ──────────────────────────────────────────
     function calculateDay() {
-        const dateInput = document.getElementById('meetingDate').value;
-        if (dateInput) {
-            const date = new Date(dateInput);
-            const options = { weekday: 'long' };
-            document.getElementById('meetingDay').value = new Intl.DateTimeFormat('en-US', options).format(date);
+        const val = document.getElementById('meetingDate').value;
+        if (val) {
+            const d = new Date(val + 'T00:00:00');
+            document.getElementById('meetingDay').value =
+                new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(d);
             updateAvailability();
         } else {
-            document.getElementById('meetingDay').value = "";
+            document.getElementById('meetingDay').value = '';
         }
     }
 
+    // ── Fetch & mark booked slots (Book modal) ──────────────────
     async function updateAvailability() {
-        const dateInput = document.getElementById('meetingDate').value;
-        if (!dateInput || supervisorId === 0) return;
-        
+        const dateVal = document.getElementById('meetingDate').value;
+        if (!dateVal || supervisorId === 0) return;
+
         const container = document.getElementById('timeSlotsContainer');
+        if (!container) return;
+
         container.querySelectorAll('.time-slot').forEach(s => {
             s.classList.remove('booked', 'selected');
-            s.title = "";
+            s.title = '';
         });
-        timeInput.value = "";
+        if (timeInput) timeInput.value = '';
 
         try {
-            const resp = await fetch(`/Student/GetBookedSlots?supervisorId=${supervisorId}&date=${dateInput}`);
-            const bookedTimes = await resp.json();
-            
+            const resp = await fetch(`/Student/GetBookedSlots?supervisorId=${supervisorId}&date=${dateVal}`);
+            const booked = await resp.json();
             container.querySelectorAll('.time-slot').forEach(slot => {
-                if (bookedTimes.includes(slot.dataset.time)) {
+                if (booked.includes(slot.dataset.time)) {
                     slot.classList.add('booked');
-                    slot.title = "Already booked";
+                    slot.title = 'Already booked';
                 }
             });
         } catch (err) { console.error(err); }
     }
 
+    // ── Generic slot selector ───────────────────────────────────
     function selectTime(el, containerId, inputId, errorId) {
         if (el.classList.contains('booked')) return;
-        document.getElementById(containerId).querySelectorAll('.time-slot').forEach(s => s.classList.remove('selected'));
+        document.getElementById(containerId).querySelectorAll('.time-slot')
+            .forEach(s => s.classList.remove('selected'));
         el.classList.add('selected');
         document.getElementById(inputId).value = el.dataset.time;
-        document.getElementById(errorId).style.display = 'none';
+        const err = document.getElementById(errorId);
+        if (err) err.style.display = 'none';
     }
 
+    // ── Book meeting form validation ────────────────────────────
     document.getElementById('bookingForm')?.addEventListener('submit', function(e) {
-        if (!timeInput.value) {
+        const dateVal = document.getElementById('meetingDate')?.value;
+        const timeVal = timeInput?.value;
+        let valid = true;
+
+        if (!dateVal) {
+            Swal.fire('Missing Date', 'Please select a meeting date.', 'warning');
             e.preventDefault();
-            timeError.style.display = 'block';
+            return;
+        }
+        if (!timeVal && !document.querySelector('[name="meetingTime"][type="hidden"]')?.value) {
+            e.preventDefault();
+            if (timeError) timeError.style.display = 'block';
+            Swal.fire('Missing Time', 'Please select a time slot.', 'warning');
+            return;
         }
     });
 
+    // ── Reschedule modal (Pending → change date/time) ───────────
+    const reschedTimeInput = document.getElementById('reschedTimeInput');
+    const reschedTimeError = document.getElementById('reschedTimeError');
+
+    function openRescheduleModal(id, date) {
+        document.getElementById('reschedMeetingId').value = id;
+        document.getElementById('reschedDateInput').value = date;
+        if (reschedTimeInput && document.getElementById('reschedTimeSlots')) reschedTimeInput.value = '';
+        document.getElementById('reschedTimeSlots')?.querySelectorAll('.time-slot')
+            .forEach(s => s.classList.remove('selected', 'booked'));
+        updateReschedAvailability();
+        new bootstrap.Modal(document.getElementById('rescheduleModal')).show();
+    }
+
+    async function updateReschedAvailability() {
+        const dateVal = document.getElementById('reschedDateInput')?.value;
+        if (!dateVal || supervisorId === 0) return;
+
+        const container = document.getElementById('reschedTimeSlots');
+        if (!container) return;
+
+        container.querySelectorAll('.time-slot').forEach(s => {
+            s.classList.remove('booked', 'selected');
+            s.title = '';
+        });
+        if (reschedTimeInput && document.getElementById('reschedTimeSlots')) reschedTimeInput.value = '';
+
+        try {
+            const resp = await fetch(`/Student/GetBookedSlots?supervisorId=${supervisorId}&date=${dateVal}`);
+            const booked = await resp.json();
+            container.querySelectorAll('.time-slot').forEach(slot => {
+                if (booked.includes(slot.dataset.time)) {
+                    slot.classList.add('booked');
+                    slot.title = 'Already booked';
+                }
+            });
+        } catch (err) { console.error(err); }
+    }
+
+    document.getElementById('studentRescheduleForm')?.addEventListener('submit', function(e) {
+        if (document.getElementById('reschedTimeSlots') && !reschedTimeInput?.value) {
+            e.preventDefault();
+            if (reschedTimeError) reschedTimeError.style.display = 'block';
+            Swal.fire('Missing Time', 'Please select a time slot.', 'warning');
+        }
+    });
+
+    // ── Cancel confirmation ─────────────────────────────────────
     function confirmCancel(id) {
         Swal.fire({
-            title: 'Cancel Meeting?',
-            text: "Are you sure you want to cancel this meeting request?",
+            title: 'Cancel Request?',
+            text: 'Are you sure you want to cancel this meeting request?',
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#ef4444',
-            cancelButtonColor: '#6b7280',
-            confirmButtonText: 'Yes, Cancel It!'
-        }).then((result) => {
-            if (result.isConfirmed) {
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Yes, cancel it'
+        }).then(result => {
+            if (result.isConfirmed)
                 document.getElementById('cancelForm_' + id).submit();
-            }
         });
     }
 
+    // ── View Meeting Details popup ──────────────────────────────
     function viewMeetingDetails(btn) {
-        const status = btn.getAttribute('data-status');
-        const note = btn.getAttribute('data-note');
-        
+        const status       = btn.getAttribute('data-status');
+        const note         = btn.getAttribute('data-note');
+        const originalDate = btn.getAttribute('data-date');
+        const proposedDate = btn.getAttribute('data-proposed-date');
+        const location     = btn.getAttribute('data-location');
+
         let iconType = 'info';
-        if (status === 'Approved') iconType = 'success';
-        if (status === 'Rejected') iconType = 'error';
+        if (status === 'Approved')  iconType = 'success';
+        if (status === 'Rejected')  iconType = 'error';
         if (status === 'Postponed') iconType = 'warning';
 
-        let showCancel = false;
+        let showCancel  = false;
         let confirmText = 'Close';
-        let cancelText = '';
+        let cancelText  = '';
 
         if (status === 'Rejected') {
-            showCancel = true;
-            confirmText = 'Kindly book another slot meeting';
-            cancelText = 'Close';
+            showCancel  = true;
+            confirmText = 'Book Another Slot';
+            cancelText  = 'Close';
+        }
+
+        let postponeHtml = '';
+        if (status === 'Postponed' && proposedDate) {
+            postponeHtml = `
+                <div class="alert alert-warning text-start mb-3" style="font-size:.9rem;">
+                    <strong>Previous Requested Date:</strong> ${originalDate}<br>
+                    <strong>New Proposed Date:</strong> ${proposedDate}
+                </div>`;
+        }
+
+        let locationHtml = '';
+        if (location) {
+            locationHtml = `<p class="mb-2"><i class="fas fa-map-marker-alt text-danger me-1"></i><strong>Location / Link:</strong> ${location}</p>`;
         }
 
         Swal.fire({
@@ -523,104 +647,54 @@
             html: `
                 <div class="text-start mt-3">
                     <p class="mb-2"><strong>Status:</strong> <span class="badge bg-light text-dark border">${status}</span></p>
+                    ${locationHtml}
+                    ${postponeHtml}
                     <p class="mb-1"><strong>Supervisor's Note:</strong></p>
-                    <div class="p-3 bg-light rounded border text-muted" style="white-space: pre-wrap;">${note}</div>
-                </div>
-            `,
+                    <div class="p-3 bg-light rounded border text-muted" style="white-space:pre-wrap;">${note}</div>
+                </div>`,
             icon: iconType,
             showCancelButton: showCancel,
             confirmButtonText: confirmText,
-            cancelButtonText: cancelText,
+            cancelButtonText:  cancelText,
             confirmButtonColor: status === 'Rejected' ? '#3b82f6' : '#ef4444',
-            cancelButtonColor: '#ef4444'
-        }).then((result) => {
+            cancelButtonColor:  '#6c757d'
+        }).then(result => {
             if (result.isConfirmed && status === 'Rejected') {
                 new bootstrap.Modal(document.getElementById('scheduleMeetingModal')).show();
             }
         });
     }
 
-    // Reschedule Logic
-    const reschedTimeInput = document.getElementById('reschedTimeInput');
-    const reschedTimeError = document.getElementById('reschedTimeError');
-
-    function openRescheduleModal(id, date) {
-        document.getElementById('reschedMeetingId').value = id;
-        document.getElementById('reschedDateInput').value = date;
-        reschedTimeInput.value = "";
-        document.getElementById('reschedTimeSlots').querySelectorAll('.time-slot').forEach(s => s.classList.remove('selected', 'booked'));
-        updateReschedAvailability();
-        new bootstrap.Modal(document.getElementById('rescheduleModal')).show();
-    }
-
-    async function updateReschedAvailability() {
-        const dateInput = document.getElementById('reschedDateInput').value;
-        if (!dateInput || supervisorId === 0) return;
-        
-        const container = document.getElementById('reschedTimeSlots');
-        container.querySelectorAll('.time-slot').forEach(s => {
-            s.classList.remove('booked', 'selected');
-            s.title = "";
-        });
-        reschedTimeInput.value = "";
-
-        try {
-            const resp = await fetch(`/Student/GetBookedSlots?supervisorId=${supervisorId}&date=${dateInput}`);
-            const bookedTimes = await resp.json();
-            
-            container.querySelectorAll('.time-slot').forEach(slot => {
-                if (bookedTimes.includes(slot.dataset.time)) {
-                    slot.classList.add('booked');
-                    slot.title = "Already booked";
-                }
-            });
-        } catch (err) { console.error(err); }
-    }
-
-
-
-    document.getElementById('studentRescheduleForm')?.addEventListener('submit', function(e) {
-        if (!reschedTimeInput.value) {
-            e.preventDefault();
-            reschedTimeError.style.display = 'block';
-        }
-    });
-
+    // ── Open Student Log Modal ──────────────────────────────────
     function openStudentLogModal(btn) {
-        document.getElementById('logMeetingId').value = btn.getAttribute('data-id');
-        document.getElementById('logKeyTopics').value = btn.getAttribute('data-topics') || '';
-        document.getElementById('logActionPoints').value = btn.getAttribute('data-action') || '';
+        document.getElementById('logMeetingId').value        = btn.getAttribute('data-id');
+        document.getElementById('logKeyTopics').value        = btn.getAttribute('data-topics') || '';
+        document.getElementById('logActionPoints').value     = btn.getAttribute('data-action') || '';
         document.getElementById('logCompletedActions').value = btn.getAttribute('data-completed') || '';
         new bootstrap.Modal(document.getElementById('studentLogModal')).show();
     }
 
+    // ── View Final Log as PDF ───────────────────────────────────
     async function viewFinalLog(logId) {
         if (typeof html2pdf === 'undefined') {
             await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
+                const s = document.createElement('script');
+                s.src     = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                s.onload  = resolve;
+                s.onerror = reject;
+                document.head.appendChild(s);
             });
         }
-
-        const response = await fetch('/Student/ViewMeetingLog/' + logId);
-        let htmlText = await response.text();
-
-        // Remove the print button from the HTML string before generating PDF
+        const resp = await fetch('/Student/ViewMeetingLog/' + logId);
+        let htmlText = await resp.text();
         htmlText = htmlText.replace(/<button class="print-btn"[^>]*>.*?<\/button>/i, '');
-
-        const opt = {
+        await html2pdf().set({
             margin: 0.5,
             filename: 'MeetingLog_' + logId + '.pdf',
-            image: { type: 'jpeg', quality: 0.98 },
+            image:    { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true },
-            jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-        };
-
-        // html2pdf can render directly from an HTML string using an isolated iframe
-        await html2pdf().set(opt).from(htmlText).save();
+            jsPDF:    { unit: 'in', format: 'a4', orientation: 'portrait' }
+        }).from(htmlText).save();
     }
 </script>
 

@@ -67,6 +67,27 @@
         </div>
     }
 
+    <!-- Tomorrow's Meeting Reminder -->
+    @{
+        var tomorrowMeetings = Model.Where(m => m.Status == "Approved" && m.MeetingDate.Date == DateTime.Today.AddDays(1).Date).ToList();
+    }
+    @if (tomorrowMeetings.Any())
+    {
+        foreach(var tm in tomorrowMeetings)
+        {
+            <div class="alert alert-primary border-0 shadow-sm rounded-3 mb-4 d-flex align-items-center" style="background-color: #e0f2fe;">
+                <i class="fas fa-bell fa-2x text-primary me-3"></i>
+                <div>
+                    <h5 class="mb-1 fw-bold text-primary">Reminder: Upcoming Meeting Tomorrow!</h5>
+                    <p class="mb-0 text-dark">You have an approved meeting scheduled for tomorrow with <strong>@tm.Student?.FullName</strong> at <strong>@tm.MeetingTime</strong>.</p>
+                    @if(!string.IsNullOrEmpty(tm.Location)) {
+                        <p class="mb-0 mt-1 text-dark"><i class="fas fa-map-marker-alt text-danger me-1"></i> <strong>Location / Link:</strong> @tm.Location</p>
+                    }
+                </div>
+            </div>
+        }
+    }
+
     <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
             <h2 class="fw-bold mb-1 text-white"><i class="fas fa-calendar-alt me-2"></i>Manage Meetings</h2>
@@ -167,7 +188,7 @@
                                 </td>
                                 <td class="text-end pe-4">
                                     <button type="button" class="btn btn-sm btn-light-primary rounded-3" 
-                                            onclick="showMeetingDetails(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")', '@m.MeetingTime', '@(m.Student?.FullName)', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Reason ?? "No agenda provided."))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.SupervisorNote ?? "No notes added."))', '@m.Status')">
+                                            onclick="showMeetingDetails(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")', '@m.MeetingTime', '@(m.Student?.FullName)', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Reason ?? "No agenda provided."))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.SupervisorNote ?? "No notes added."))', '@m.Status', '@(m.ProposedNewDate?.ToString("yyyy-MM-dd") ?? "")', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Location ?? ""))')">
                                         <i class="fas fa-info-circle"></i> View Details
                                     </button>
                                     
@@ -190,14 +211,23 @@
                                                             <input type="hidden" name="meetingId" value="@m.Id" />
                                                             <div class="mb-3">
                                                                 <label class="form-label fw-bold">Decision</label>
-                                                                <select name="status" class="form-select rounded-3">
+                                                                <select name="status" class="form-select rounded-3" id="decisionSelect_@m.Id" onchange="toggleProposedDate(@m.Id)">
                                                                     <option value="Approved">Approve Meeting</option>
                                                                     <option value="Rejected">Decline Meeting</option>
+                                                                    <option value="Postponed">Postpone Meeting</option>
                                                                 </select>
+                                                            </div>
+                                                            <div class="mb-3" id="proposedDateContainer_@m.Id" style="display: none;">
+                                                                <label class="form-label fw-bold text-primary">Proposed New Date</label>
+                                                                <input type="date" name="proposedDate" class="form-control rounded-3 border-primary" min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" />
                                                             </div>
                                                             <div class="mb-3">
                                                                 <label class="form-label fw-bold">Meeting Time (Edit if needed)</label>
                                                                 <input type="time" name="newMeetingTime" class="form-control rounded-3" value="@m.MeetingTime" />
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label fw-bold">Meeting Location / Link</label>
+                                                                <input type="text" name="location" class="form-control rounded-3" placeholder="e.g. MS Teams Link, Room 404" />
                                                             </div>
                                                             <div class="mb-3">
                                                                 <label class="form-label fw-bold">Message to Student</label>
@@ -269,6 +299,15 @@
                             <small class="text-muted">Requested Time</small>
                         </div>
                     </div>
+
+                    <div id="detLocationContainer" class="alert alert-info py-2 px-3 mb-3" style="display: none;">
+                        <i class="fas fa-map-marker-alt text-danger me-2"></i><strong>Location/Link: </strong><span id="detLocation"></span>
+                    </div>
+
+                    <div id="detPostponedContainer" class="alert alert-warning text-start mb-4" style="display: none; font-size: 0.9rem;">
+                        <strong>Previous Requested Date:</strong> <span id="detOriginalDate"></span><br>
+                        <strong>New Postponed Date:</strong> <span id="detProposedDate"></span>
+                    </div>
                     
                     <div class="p-3 bg-light rounded-3 mb-4">
                         <label class="text-muted small fw-bold text-uppercase mb-1 d-block">Student</label>
@@ -331,7 +370,7 @@
                     </div>
 
                     <!-- Supervisor inputs -->
-                        <label class="form-label fw-bold text-primary">Proposed Date & Time for Next Meeting</label>
+                        <label class="form-label fw-bold text-primary">Proposed Date for Next Meeting</label>
                         <div id="revNextMeetingDate" class="text-dark fw-bold" style="font-size: 0.95rem;"></div>
 
                     <div class="mb-4">
@@ -431,7 +470,7 @@
         editTimeError.style.display = 'none';
     }
 
-    function showMeetingDetails(id, date, time, user, reason, notes, status) {
+    function showMeetingDetails(id, date, time, user, reason, notes, status, proposedDate, location) {
         const d = new Date(date + 'T00:00:00');
         const formattedDate = d.toLocaleDateString('en-US', { day:'2-digit', month:'short', year:'numeric' });
         
@@ -439,6 +478,25 @@
         document.getElementById('detUser').textContent = user;
         document.getElementById('detReason').textContent = reason;
         document.getElementById('detNotes').textContent = notes;
+
+        const locContainer = document.getElementById('detLocationContainer');
+        if (location) {
+            document.getElementById('detLocation').textContent = location;
+            locContainer.style.display = 'block';
+        } else {
+            locContainer.style.display = 'none';
+        }
+
+        const postponeContainer = document.getElementById('detPostponedContainer');
+        if (status === 'Postponed' && proposedDate) {
+            const pd = new Date(proposedDate + 'T00:00:00');
+            const fpd = pd.toLocaleDateString('en-US', { day:'2-digit', month:'short', year:'numeric' });
+            document.getElementById('detOriginalDate').textContent = formattedDate;
+            document.getElementById('detProposedDate').textContent = fpd;
+            postponeContainer.style.display = 'block';
+        } else {
+            postponeContainer.style.display = 'none';
+        }
         
         const badge = document.getElementById('detStatusBadge');
         badge.textContent = status;
@@ -462,7 +520,7 @@
         let nextDate = btn.getAttribute('data-next-date');
         if (nextDate) {
             const d = new Date(nextDate);
-            document.getElementById('revNextMeetingDate').textContent = d.toLocaleString('en-US', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+            document.getElementById('revNextMeetingDate').textContent = d.toLocaleString('en-US', { day:'2-digit', month:'short', year:'numeric' });
         } else {
             document.getElementById('revNextMeetingDate').textContent = "Not proposed";
         }
@@ -497,6 +555,16 @@
 
         // html2pdf can render directly from an HTML string using an isolated iframe
         await html2pdf().set(opt).from(htmlText).save();
+    }
+
+    function toggleProposedDate(id) {
+        var select = document.getElementById('decisionSelect_' + id);
+        var container = document.getElementById('proposedDateContainer_' + id);
+        if (select.value === 'Postponed') {
+            container.style.display = 'block';
+        } else {
+            container.style.display = 'none';
+        }
     }
 </script>
 }

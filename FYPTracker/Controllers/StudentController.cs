@@ -257,6 +257,18 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(SelectSupervisor));
             }
 
+            // Duplicate Matric Number check — no other student should share the same ID
+            var duplicateMatric = await _context.ApplicationUsers
+                .AnyAsync(u => u.UserType == "Student"
+                            && u.Id != user.Id
+                            && u.EmployeeId != null
+                            && u.EmployeeId.ToLower() == matricNumber.ToLower());
+            if (duplicateMatric)
+            {
+                TempData["Error"] = $"Matric ID '{matricNumber}' is already registered to another student. Please use your own matric ID.";
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+
             var request = new SupervisorRequest
             {
                 StudentId       = user.Id,
@@ -284,11 +296,14 @@ namespace FYPTracker.Controllers
             _context.SupervisorRequests.Add(request);
             await _context.SaveChangesAsync();
 
-            await LogActivityAsync(user.Id, "General", "Supervisor Request Sent", $"Sent request to supervisor {supervisorId}");
+            // Fetch supervisor to get their name for the activity log
+            var supervisor = await _context.ApplicationUsers.FindAsync(supervisorId);
+            string supervisorName = supervisor != null ? supervisor.FullName : supervisorId.ToString();
+
+            await LogActivityAsync(user.Id, "General", "Supervisor Request Sent", $"Sent request to {supervisorName}");
             await AddNotificationAsync(user.Id, "General", "Request Submitted", "Your supervision request has been sent.");
 
             // Notify Supervisor
-            var supervisor = await _context.ApplicationUsers.FindAsync(supervisorId);
             if (supervisor != null)
             {
                 await AddNotificationAsync(supervisor.Id, "SupervisionRequest", "New Student Request", $"{user.FullName} has requested you as their supervisor for: {projectTopic}.", request.Id);
@@ -564,6 +579,21 @@ namespace FYPTracker.Controllers
                 
             ViewBag.FixedTime = firstMeeting?.MeetingTime;
 
+            // Auto-Expire Stale Pending Meetings
+            var staleMeetings = await _context.MeetingBookings
+                .Where(m => m.StudentId == user.Id && m.Status == "Pending" && m.MeetingDate < DateTime.Today)
+                .ToListAsync();
+
+            if (staleMeetings.Any())
+            {
+                foreach (var stale in staleMeetings)
+                {
+                    stale.Status = "Expired";
+                    stale.SupervisorNote = "This meeting request has expired because the date has passed without a response.";
+                }
+                await _context.SaveChangesAsync();
+            }
+
             var meetings = await _context.MeetingBookings
                 .Include(m => m.Supervisor)
                 .Include(m => m.MeetingLog)
@@ -589,6 +619,27 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
+            // Date must be in the future
+            if (parsedDate.Date <= DateTime.Today)
+            {
+                TempData["Error"] = "Meeting date must be a future date (at least tomorrow).";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            // Time is required
+            if (string.IsNullOrWhiteSpace(meetingTime))
+            {
+                TempData["Error"] = "Please select a time slot for your meeting.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            // Reason/Agenda required
+            if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
+            {
+                TempData["Error"] = "Please provide a reason or agenda (at least 5 characters).";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
             var startOfWeek = parsedDate.Date.AddDays(-(int)parsedDate.DayOfWeek);
             var endOfWeek = startOfWeek.AddDays(7);
             var existingThisWeek = await _context.MeetingBookings
@@ -601,13 +652,26 @@ namespace FYPTracker.Controllers
             }
 
             var firstMeeting = await _context.MeetingBookings
-                .Where(m => m.StudentId == user.Id && m.Status != "Rejected" && m.Status != "Postponed")
+                .Where(m => m.StudentId == user.Id && m.Status == "Approved")
                 .OrderBy(m => m.CreatedDate)
                 .FirstOrDefaultAsync();
 
             if (firstMeeting != null && !string.IsNullOrEmpty(firstMeeting.MeetingTime))
             {
                 meetingTime = firstMeeting.MeetingTime;
+            }
+
+            // Smart Double-Booking Prevention
+            var isSlotTaken = await _context.MeetingBookings.AnyAsync(m => 
+                m.SupervisorId == supervisorId && 
+                m.MeetingDate.Date == parsedDate.Date && 
+                m.MeetingTime == meetingTime &&
+                (m.Status == "Approved" || m.Status == "Pending"));
+
+            if (isSlotTaken)
+            {
+                TempData["Error"] = "This time slot was just booked by another student. Please select a different time.";
+                return RedirectToAction(nameof(BookMeeting));
             }
 
             var booking = new MeetingBooking
@@ -759,13 +823,21 @@ namespace FYPTracker.Controllers
 
             if (meeting != null)
             {
-                meeting.MeetingDate = parsedDate;
-                meeting.MeetingDay  = parsedDate.DayOfWeek.ToString();
-                meeting.MeetingTime = meetingTime;
-                meeting.Status      = "Pending"; // Set to Pending so supervisor can re-approve
-                meeting.RespondedDate = null;
-                meeting.SupervisorNote = "Student rescheduled this meeting.";
+                // Create a completely new booking so the old one (e.g. Rejected) stays in history
+                var newBooking = new MeetingBooking
+                {
+                    StudentId = user.Id,
+                    SupervisorId = meeting.SupervisorId,
+                    MeetingDate = parsedDate,
+                    MeetingDay = parsedDate.DayOfWeek.ToString(),
+                    MeetingTime = meetingTime,
+                    Reason = string.IsNullOrEmpty(meeting.Reason) ? "Rescheduled meeting" : meeting.Reason,
+                    Status = "Pending",
+                    CreatedDate = DateTime.Now
+                };
                 
+                _context.MeetingBookings.Add(newBooking);
+
                 // Mark any previous unread notifications for this meeting as read
                 var oldNotifs = await _context.FYPNotifications
                     .Where(n => n.RelatedRecordId == meeting.Id && n.Type == "MeetingRequest" && !n.IsRead)
@@ -782,14 +854,21 @@ namespace FYPTracker.Controllers
                     RecipientId = meeting.SupervisorId,
                     Type = "MeetingRequest",
                     Title = "Meeting Rescheduled",
-                    Message = $"Student {user.FullName} rescheduled their meeting request to {parsedDate:dd MMM yyyy} at {meetingTime}. Reason: {(string.IsNullOrEmpty(meeting.Reason) ? "None provided" : meeting.Reason)}",
-                    RelatedRecordId = meeting.Id
+                    Message = $"Student {user.FullName} booked a new meeting request to {parsedDate:dd MMM yyyy} at {meetingTime}. Reason: {(string.IsNullOrEmpty(newBooking.Reason) ? "None provided" : newBooking.Reason)}",
+                    RelatedRecordId = newBooking.Id // Note: Id will be assigned after SaveChanges, but it's okay for now or we can save first
                 });
 
                 await _context.SaveChangesAsync();
 
+                // Update the related record ID after save
+                var latestNotif = await _context.FYPNotifications.OrderByDescending(n => n.Id).FirstOrDefaultAsync(n => n.RecipientId == meeting.SupervisorId && n.Type == "MeetingRequest");
+                if (latestNotif != null) {
+                    latestNotif.RelatedRecordId = newBooking.Id;
+                    await _context.SaveChangesAsync();
+                }
+
                 await LogActivityAsync(user.Id, "MeetingUpdate", "Meeting Rescheduled", 
-                    $"Meeting moved to {parsedDate:dd MMM} at {meetingTime}.");
+                    $"Meeting booked for {parsedDate:dd MMM} at {meetingTime}.");
                 
                 var supervisor = await _context.ApplicationUsers.FindAsync(meeting.SupervisorId);
                 string supName = supervisor?.FullName ?? "your supervisor";
@@ -821,7 +900,8 @@ namespace FYPTracker.Controllers
             string keyTopics, 
             string actionPoints, 
             string completedActions,
-            DateTime? nextMeetingDate)
+            DateTime? nextMeetingDate,
+            string? nextMeetingTime)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
@@ -844,14 +924,28 @@ namespace FYPTracker.Controllers
 
             if (nextMeetingDate.HasValue)
             {
-                var firstMeeting = await _context.MeetingBookings
-                    .Where(m => m.StudentId == user.Id && m.Status != "Rejected" && m.Status != "Postponed")
-                    .OrderBy(m => m.CreatedDate)
-                    .FirstOrDefaultAsync();
+                // Inherit time from the current meeting or default to "10:00"
+                string defaultTime = meeting.MeetingTime ?? "10:00";
+                
+                // Prevent duplicate bookings on the exact same date
+                bool duplicateExists = await _context.MeetingBookings
+                    .AnyAsync(m => m.StudentId == user.Id && m.MeetingDate.Date == nextMeetingDate.Value.Date && m.Status != "Rejected" && m.Status != "Postponed");
 
-                if (firstMeeting != null && !string.IsNullOrEmpty(firstMeeting.MeetingTime) && TimeSpan.TryParse(firstMeeting.MeetingTime, out var ts))
+                if (!duplicateExists)
                 {
-                    nextMeetingDate = nextMeetingDate.Value.Date.Add(ts);
+                    // Instantly generate a new Meeting Booking so it appears in the list.
+                    var newBooking = new MeetingBooking
+                    {
+                        StudentId = user.Id,
+                        SupervisorId = meeting.SupervisorId,
+                        MeetingDate = nextMeetingDate.Value,
+                        MeetingDay = nextMeetingDate.Value.DayOfWeek.ToString(),
+                        MeetingTime = defaultTime,
+                        Reason = "Follow-up meeting generated from logbook to confirm next meeting",
+                        Status = "Pending",
+                        CreatedDate = DateTime.Now
+                    };
+                    _context.MeetingBookings.Add(newBooking);
                 }
             }
 
@@ -958,6 +1052,24 @@ namespace FYPTracker.Controllers
 
             TempData["Success"] = "All notifications marked as read.";
             return RedirectToAction(nameof(Notifications));
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> CheckDuplicateMatric(string matricNumber)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || string.IsNullOrWhiteSpace(matricNumber))
+            {
+                return Json(new { isDuplicate = false });
+            }
+
+            var duplicateMatric = await _context.ApplicationUsers
+                .AnyAsync(u => u.UserType == "Student"
+                            && u.Id != user.Id
+                            && u.EmployeeId != null
+                            && u.EmployeeId.ToLower() == matricNumber.ToLower());
+
+            return Json(new { isDuplicate = duplicateMatric });
         }
 
         [HttpGet]

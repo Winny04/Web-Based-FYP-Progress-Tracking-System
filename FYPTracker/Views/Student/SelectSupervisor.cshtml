@@ -311,9 +311,9 @@
                                 <input type="text" class="form-control bg-light border-0" value="@currentUser?.FullName" readonly />
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold small">Matric Number</label>
-                                <input type="text" name="matricNumber" class="form-control" placeholder="e.g. P210244501" pattern="^[pP]\d{8}$" required title="Please enter a valid Matric Number starting with 'P' followed by 8 numbers (e.g., P210244501)" oninput="this.classList.toggle('is-invalid', !this.checkValidity());" />
-                                <div class="invalid-feedback text-danger small mt-1">Matric Number must start with 'P' followed by 8 numbers.</div>
+                                <label class="form-label fw-semibold small">Matric ID</label>
+                                <input type="text" name="matricNumber" class="form-control" value="@currentUser?.EmployeeId" placeholder="e.g. P210244501" pattern="^[pP]\d{8}$" required title="Please enter a valid Matric ID starting with 'P' followed by 8 numbers (e.g., P210244501)" oninput="this.classList.toggle('is-invalid', !this.checkValidity());" />
+                                <div class="invalid-feedback text-danger small mt-1">Matric ID must start with 'P' followed by 8 numbers.</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Program</label>
@@ -420,6 +420,42 @@
         
         updateTimers();
         setInterval(updateTimers, 1000);
+    });
+
+    // Client-side validation for Matric ID duplication
+    document.getElementById('subReqForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var form = this;
+        var matricInput = form.elements['matricNumber'].value;
+        
+        // Disable button to prevent double submission
+        var submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...';
+
+        try {
+            const response = await fetch('/Student/CheckDuplicateMatric?matricNumber=' + encodeURIComponent(matricInput));
+            const data = await response.json();
+            
+            if (data.isDuplicate) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Duplicate Matric ID',
+                    text: 'Matric ID \'' + matricInput + '\' is already registered to another student. Please use your own.',
+                    confirmButtonColor: '#0f172a'
+                });
+                // Reset button
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Confirm & Request';
+            } else {
+                // If not duplicate, actually submit the form
+                form.submit();
+            }
+        } catch (error) {
+            console.error("Error checking matric ID", error);
+            // Fallback to normal submission if API fails
+            form.submit();
+        }
     });
 </script>
 }

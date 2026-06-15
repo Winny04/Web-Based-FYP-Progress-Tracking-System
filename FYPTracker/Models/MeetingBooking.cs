@@ -35,6 +35,9 @@ namespace FYPTracker.Models
 
         public string? SupervisorNote { get; set; }
 
+        [StringLength(255)]
+        public string? Location { get; set; }
+
         /// <summary>If Postponed, suggested new date by supervisor</summary>
         [Column(TypeName = "date")]
         public DateTime? ProposedNewDate { get; set; }

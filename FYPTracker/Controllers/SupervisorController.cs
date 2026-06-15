@@ -704,6 +704,21 @@ namespace FYPTracker.Controllers
             ViewBag.StartHour = 8;
             ViewBag.EndHour = 17;
 
+            // Auto-Expire Stale Pending Meetings
+            var staleMeetings = await _context.MeetingBookings
+                .Where(m => m.SupervisorId == user.Id && m.Status == "Pending" && m.MeetingDate < DateTime.Today)
+                .ToListAsync();
+
+            if (staleMeetings.Any())
+            {
+                foreach (var stale in staleMeetings)
+                {
+                    stale.Status = "Expired";
+                    stale.SupervisorNote = "This meeting request has expired because the date has passed without a response.";
+                }
+                await _context.SaveChangesAsync();
+            }
+
             var meetings = await _context.MeetingBookings
                 .Include(m => m.Student)
                 .Include(m => m.MeetingLog)
@@ -716,7 +731,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> RespondMeeting(int meetingId, string status, string? note, DateTime? proposedDate, string? newMeetingTime)
+        public async Task<IActionResult> RespondMeeting(int meetingId, string status, string? note, DateTime? proposedDate, string? newMeetingTime, string? location)
         {
             var user = await GetCurrentUserAsync();
             var meeting = await _context.MeetingBookings.FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
@@ -730,6 +745,7 @@ namespace FYPTracker.Controllers
                 {
                     meeting.MeetingTime = newMeetingTime;
                 }
+                meeting.Location = location;
                 meeting.RespondedDate = DateTime.Now;
                 await _context.SaveChangesAsync();
 

@@ -153,7 +153,7 @@ namespace FYPTracker.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Department", (string)null);
+                    b.ToTable("Department");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPActivity", b =>
@@ -442,6 +442,10 @@ namespace FYPTracker.Migrations
 
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("datetime");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<DateTime>("MeetingDate")
                         .HasColumnType("date");

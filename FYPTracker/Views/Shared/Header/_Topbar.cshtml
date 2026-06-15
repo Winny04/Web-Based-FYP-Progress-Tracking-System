@@ -23,6 +23,11 @@
                 } else if (userType == "Supervisor") {
                     notifUrl = "/Supervisor/Notifications";
                 }
+                
+                int unreadCount = 0;
+                if (currentUserObj != null && dbContext != null) {
+                    unreadCount = dbContext.FYPNotifications.Count(n => n.RecipientId == currentUserObj.Id && !n.IsRead);
+                }
             }
             <img class="h-30px w-30px rounded-circle" style="object-fit: cover;" src="@avatarImg" alt="Profile Image" onerror="this.onerror=null; this.src='/assets/media/avatars/blank.svg';" />
         </div>
@@ -34,7 +39,7 @@
                     <!--begin::Username-->
                     <div class="d-flex flex-column">
                         <div class="fw-bolder d-flex align-items-center fs-5">
-                            @(Context.User.Identity?.Name ?? "")
+                            @(Context.User.Claims.FirstOrDefault(c => c.Type == "FullName")?.Value ?? Context.User.Identity?.Name ?? "")
                         </div>
                     </div>
                     <!--end::Username-->
@@ -52,7 +57,11 @@
             <!--begin::Menu separator-->
             <div class="separator my-2"></div>
              <div class="menu-item px-5">
-                <a href="@notifUrl" class="menu-link px-5"><i class="fas fa-bell me-2 text-muted"></i> Notification</a>
+                <a href="@notifUrl" class="menu-link px-5">
+                    <i class="fas fa-bell me-2 text-muted"></i>
+                    <span class="flex-grow-1">Notification</span>
+                    @if(unreadCount > 0) { <span class="badge badge-sm badge-circle badge-danger" style="width: 18px; height: 18px; font-size: 0.75rem;">@unreadCount</span> }
+                </a>
             </div>
              <div class="separator my-2"></div>
             <div class="menu-item px-5">
