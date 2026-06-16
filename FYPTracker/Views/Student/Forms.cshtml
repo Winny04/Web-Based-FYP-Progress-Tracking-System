@@ -384,6 +384,24 @@
                                         </div>
                                     }
 
+                                    @if (iafMilestone != null && iafMilestone.SubmissionFiles != null && iafMilestone.SubmissionFiles.Any(f => f.UploadedBy != Model.StudentId))
+                                    {
+                                        var gFiles = iafMilestone.SubmissionFiles.Where(f => f.UploadedBy != Model.StudentId).ToList();
+                                        <div class="mb-4">
+                                            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-file-pdf me-2"></i>Graded / Feedback Files</h6>
+                                            <div class="d-flex flex-column gap-2">
+                                                @foreach (var file in gFiles)
+                                                {
+                                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" target="_blank" class="btn btn-outline-primary text-start d-flex align-items-center rounded-3 p-3 text-decoration-none bg-light-primary border-primary border-opacity-25">
+                                                        <i class="fas fa-file-pdf text-primary me-3"></i>
+                                                        <span class="text-dark fw-bold text-truncate flex-grow-1">@file.FileName</span>
+                                                        <i class="fas fa-external-link-alt text-primary ms-3"></i>
+                                                    </a>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+
                                     @if (!isIafLocked)
                                     {
                                         <div class="d-flex gap-3 justify-content-end">
@@ -431,6 +449,23 @@
                                                 <hr class="my-2 border-info opacity-25">
                                                 <p class="mb-0 text-dark"><strong>Feedback:</strong> @propMilestone.SupervisorFeedback</p>
                                             }
+
+                                            @if (propMilestone?.SubmissionFiles != null && propMilestone.SubmissionFiles.Any(f => f.UploadedBy != Model.StudentId))
+                                            {
+                                                var gFiles = propMilestone.SubmissionFiles.Where(f => f.UploadedBy != Model.StudentId).ToList();
+                                                <hr class="my-3 border-info opacity-25">
+                                                <h6 class="fw-bold text-primary mb-2"><i class="fas fa-file-pdf me-2"></i>Graded / Feedback Files</h6>
+                                                <div class="d-flex flex-column gap-2">
+                                                    @foreach (var file in gFiles)
+                                                    {
+                                                        <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" target="_blank" class="btn btn-outline-primary text-start d-flex align-items-center rounded-3 p-2 text-decoration-none bg-white border-primary border-opacity-25 shadow-sm">
+                                                            <i class="fas fa-file-pdf text-primary me-3"></i>
+                                                            <span class="text-dark fw-bold text-truncate flex-grow-1">@file.FileName</span>
+                                                            <i class="fas fa-external-link-alt text-primary ms-3"></i>
+                                                        </a>
+                                                    }
+                                                </div>
+                                            }
                                         </div>
                                     </div>
                                 }
@@ -442,40 +477,12 @@
                                     <input type="hidden" name="milestoneId" value="@propMilestoneId" />
 
                                 <div class="form-section-title">Part 1: Proposal Details</div>
-                                <div class="mb-3">
+                                <div class="mb-4">
                                     <label class="form-label fw-semibold">Project Title</label>
                                     <input type="text" name="title" class="form-control bg-light" value="@Model.Title" readonly required />
                                 </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Problem Statement</label>
-                                    <textarea name="problemStatement" class="form-control" rows="3" required placeholder="Describe the problem being addressed..."></textarea>
-                                </div>
 
-                                <div class="form-section-title">Part 2: Objectives & Scope</div>
-                                <div class="row g-3 mb-3">
-                                    <div class="col-md-12">
-                                        <label class="form-label fw-semibold">Objectives (Up to 3)</label>
-                                        <input type="text" name="objective1" class="form-control mb-2" placeholder="Objective 1" required />
-                                        <input type="text" name="objective2" class="form-control mb-2" placeholder="Objective 2" required />
-                                        <input type="text" name="objective3" class="form-control" placeholder="Objective 3 (Optional)" />
-                                    </div>
-                                    <div class="col-md-12">
-                                        <label class="form-label fw-semibold">Scope of Work</label>
-                                        <textarea name="scope" class="form-control" rows="3" required placeholder="What parameters define the project limits..."></textarea>
-                                    </div>
-                                </div>
-
-                                <div class="form-section-title">Part 3: Expected Outcome & References</div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Expected Outcome</label>
-                                    <textarea name="outcome" class="form-control" rows="2" required placeholder="What are the tangible outcomes expected..."></textarea>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">References</label>
-                                    <textarea name="references" class="form-control" rows="2" required placeholder="List initial references..."></textarea>
-                                </div>
-
-                                <div class="form-section-title">Part 4: Document Attachment</div>
+                                <div class="form-section-title">Part 2: Document Attachment</div>
                                 <div class="mb-4">
                                     <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="dropZone" onclick="document.getElementById('proposalDocument').click()">
                                         <i class="fas fa-cloud-upload-alt fs-1 mb-3" style="color: var(--primary-orange) !important;"></i>
@@ -561,36 +568,8 @@
                                     </div>
                                 </div>
 
-                                <div class="form-section-title">Part 2: Progress Details</div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Work Completed So Far</label>
-                                    <textarea name="workDone" class="form-control" rows="3" required placeholder="Outline the main tasks completed..."></textarea>
-                                    <div class="invalid-feedback">Please describe the work completed.</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Challenges / Issues Faced</label>
-                                    <textarea name="challenges" class="form-control" rows="3" required placeholder="Describe technical hurdles or resource delays..."></textarea>
-                                    <div class="invalid-feedback">Please describe any challenges faced.</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Plan for Next Period</label>
-                                    <textarea name="nextPeriodPlan" class="form-control" rows="2" required placeholder="What tasks are prioritised next..."></textarea>
-                                    <div class="invalid-feedback">Please outline the plan for the next period.</div>
-                                </div>
-
-                                <div class="form-section-title">Part 3: Completion Metric</div>
+                                <div class="form-section-title">Part 2: Document Attachment</div>
                                 <div class="row g-3 mb-4">
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-semibold">Percentage Complete (%)</label>
-                                        <select name="pctComplete" class="form-select" required>
-                                            <option>10%</option>
-                                            <option>25%</option>
-                                            <option selected>50%</option>
-                                            <option>75%</option>
-                                            <option>90%</option>
-                                            <option>100%</option>
-                                        </select>
-                                    </div>
                                     <div class="col-md-12">
                                         <label class="form-label fw-semibold mb-2">Attach Supporting Files (Optional)</label>
                                         <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="progressDropZone" onclick="document.getElementById('progressFiles').click()">

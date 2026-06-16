@@ -97,7 +97,13 @@
                                                 if (!string.IsNullOrEmpty(kvp.Value)) {
                                                     <tr>
                                                         <td style="width: 30%; font-weight: bold; padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;">@kvp.Key:</td>
-                                                        <td style="padding: 8px; border-bottom: 1px solid #eee; white-space: pre-wrap;">@kvp.Value</td>
+                                                        <td style="padding: 8px; border-bottom: 1px solid #eee; white-space: pre-wrap;">
+                                                            @if (kvp.Key == "Supervisor Signature") {
+                                                                <span style="font-family: 'Brush Script MT', cursive; font-size: 24px; color: #00008B;">@kvp.Value</span>
+                                                            } else {
+                                                                @kvp.Value
+                                                            }
+                                                        </td>
                                                     </tr>
                                                 }
                                             }
@@ -106,25 +112,57 @@
                                 } catch {
                                     <div style="font-family: monospace; white-space: pre-wrap;">@parsedJson</div>
                                 }
+
+                                if (!string.IsNullOrEmpty(Model.SupervisorFeedback)) {
+                                    <hr style="border: 1px solid #ddd; margin: 20px 0;" />
+                                    <div style="font-family: sans-serif; font-size: 14px;">
+                                        <h5 style="color: #0d6efd; margin-bottom: 10px;">Supervisor Feedback</h5>
+                                        <div style="padding: 10px; background-color: #f8f9fa; border-left: 4px solid #0d6efd; white-space: pre-wrap;">@Model.SupervisorFeedback</div>
+                                        <p style="margin-top: 10px; font-weight: bold;">Status: <span style="color: @(Model.Status == "Approved" ? "green" : (Model.Status == "Rejected" ? "red" : "black"))">@Model.Status</span></p>
+                                    </div>
+                                }
                             }
                         </div>
                     }
 
                     @if (Model.SubmissionFiles != null && Model.SubmissionFiles.Any())
                     {
-                        <div class="mb-0">
-                            <h6 class="text-muted text-uppercase fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;">Attached Files</h6>
-                            <div class="d-flex flex-column gap-2">
-                                @foreach (var file in Model.SubmissionFiles)
-                                {
-                                    <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = file.Id })" target="_blank" class="btn btn-outline-secondary text-start d-flex align-items-center rounded-3 p-3 text-decoration-none">
-                                        <i class="fas fa-paperclip text-muted me-3"></i>
-                                        <span class="text-dark fw-medium text-truncate flex-grow-1">@file.FileName</span>
-                                        <i class="fas fa-external-link-alt text-primary ms-3"></i>
-                                    </a>
-                                }
+                        var studentFiles = Model.SubmissionFiles.Where(f => f.UploadedBy == Model.Project?.StudentId).ToList();
+                        var supervisorFiles = Model.SubmissionFiles.Where(f => f.UploadedBy != Model.Project?.StudentId).ToList();
+
+                        if (studentFiles.Any())
+                        {
+                            <div class="mb-4">
+                                <h6 class="text-muted text-uppercase fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;">Student Attached Files</h6>
+                                <div class="d-flex flex-column gap-2">
+                                    @foreach (var file in studentFiles)
+                                    {
+                                        <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = file.Id })" target="_blank" class="btn btn-outline-secondary text-start d-flex align-items-center rounded-3 p-3 text-decoration-none">
+                                            <i class="fas fa-paperclip text-muted me-3"></i>
+                                            <span class="text-dark fw-medium text-truncate flex-grow-1">@file.FileName</span>
+                                            <i class="fas fa-external-link-alt text-primary ms-3"></i>
+                                        </a>
+                                    }
+                                </div>
                             </div>
-                        </div>
+                        }
+
+                        if (supervisorFiles.Any())
+                        {
+                            <div class="mb-0">
+                                <h6 class="text-muted text-uppercase fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;">Graded / Feedback Files</h6>
+                                <div class="d-flex flex-column gap-2">
+                                    @foreach (var file in supervisorFiles)
+                                    {
+                                        <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = file.Id })" target="_blank" class="btn btn-outline-primary text-start d-flex align-items-center rounded-3 p-3 text-decoration-none bg-light-primary border-primary border-opacity-25">
+                                            <i class="fas fa-file-pdf text-primary me-3"></i>
+                                            <span class="text-dark fw-bold text-truncate flex-grow-1">@file.FileName</span>
+                                            <i class="fas fa-external-link-alt text-primary ms-3"></i>
+                                        </a>
+                                    }
+                                </div>
+                            </div>
+                        }
                     }
                 </div>
             </div>
@@ -139,7 +177,7 @@
                     </h5>
                 </div>
                 <div class="card-body p-4">
-                    <form asp-action="ReviewSubmission" method="post">
+                    <form asp-action="ReviewSubmission" method="post" enctype="multipart/form-data">
                         <input type="hidden" name="milestoneId" value="@Model.Id" />
                         
                         @{
@@ -152,6 +190,23 @@
                                 <label class="form-label fw-bold text-dark"><i class="fas fa-signature text-primary me-2"></i>Supervisor Signature</label>
                                 <input type="text" name="supervisorSignature" class="form-control form-control-solid form-control-lg border-primary bg-light-primary" placeholder="Type your full name to digitally sign" @(isLocked ? "disabled" : "required") />
                                 <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Required to officially approve the Initial Project Allocation Form.</div>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(Model.Title) && Model.Title.Contains("Progress", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <div class="mb-4">
+                                <label class="form-label fw-bold text-dark"><i class="fas fa-percentage text-primary me-2"></i>Completion Rating</label>
+                                <select name="pctComplete" class="form-select form-select-solid form-select-lg" @(isLocked ? "disabled" : "required")>
+                                    <option value="">- Select rating -</option>
+                                    <option value="10%">10%</option>
+                                    <option value="25%">25%</option>
+                                    <option value="50%">50%</option>
+                                    <option value="75%">75%</option>
+                                    <option value="90%">90%</option>
+                                    <option value="100%">100%</option>
+                                </select>
+                                <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Rate the student's progress.</div>
                             </div>
                         }
 
@@ -169,6 +224,12 @@
                             <label class="form-label fw-bold text-dark">Feedback / Remarks</label>
                             <textarea name="remarks" class="form-control form-control-solid rounded-3" rows="6" placeholder="Provide detailed feedback for the student here..." @(isLocked ? "readonly" : "")>@Model.SupervisorFeedback</textarea>
                             <div class="form-text mt-2">This feedback will be visible to the student immediately.</div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-bold text-dark"><i class="fas fa-file-pdf text-danger me-2"></i>Upload Graded File (Optional)</label>
+                            <input type="file" name="gradedFile" accept=".pdf" class="form-control form-control-solid form-control-lg" @(isLocked ? "disabled" : "") />
+                            <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Upload a marked/graded version of the student's submission.</div>
                         </div>
 
                         @if (isLocked)

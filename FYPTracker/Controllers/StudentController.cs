@@ -129,6 +129,8 @@ namespace FYPTracker.Controllers
                 .Include(p => p.Supervisor)
                 .Include(p => p.Milestones)
                     .ThenInclude(m => m.Feedbacks)
+                .Include(p => p.Milestones)
+                    .ThenInclude(m => m.SubmissionFiles)
                 .FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
             return View(project);
@@ -412,14 +414,10 @@ namespace FYPTracker.Controllers
                 {
                     var dict = new System.Collections.Generic.Dictionary<string, string> {
                         {"Start Period", startDate?.ToString("dd MMM yyyy") ?? ""},
-                        {"End Period", endDate?.ToString("dd MMM yyyy") ?? ""},
-                        {"Work Completed", workDone ?? ""},
-                        {"Challenges", challenges ?? ""},
-                        {"Next Plan", nextPeriodPlan ?? ""},
-                        {"Completion", pctComplete ?? ""}
+                        {"End Period", endDate?.ToString("dd MMM yyyy") ?? ""}
                     };
                     detailsJson = System.Text.Json.JsonSerializer.Serialize(dict);
-                    title = $"Progress Report: {pctComplete} Complete";
+                    title = "Progress Report";
                 }
                 else if (formType == "Initial Project Allocation Form (IAF)")
                 {
@@ -444,10 +442,7 @@ namespace FYPTracker.Controllers
                 else if (formType == "Proposal Form")
                 {
                     var dict = new System.Collections.Generic.Dictionary<string, string> {
-                        {"Project Title", title ?? ""},
-                        {"Problem Statement", problemStatement ?? ""},
-                        {"Scope of Work", scope ?? ""},
-                        {"Expected Outcome", outcome ?? ""}
+                        {"Project Title", title ?? ""}
                     };
                     detailsJson = System.Text.Json.JsonSerializer.Serialize(dict);
                 }
@@ -469,13 +464,6 @@ namespace FYPTracker.Controllers
                 if (formType == "Proposal Form")
                 {
                     if (!string.IsNullOrEmpty(title)) milestone.Project.Title = title;
-                    milestone.Project.ProblemStatement = problemStatement;
-                    milestone.Project.Objective1 = objective1;
-                    milestone.Project.Objective2 = objective2;
-                    milestone.Project.Objective3 = objective3;
-                    milestone.Project.Scope = scope;
-                    milestone.Project.ExpectedOutcome = outcome;
-                    milestone.Project.References = references;
                 }
                 
                 if (savedFileRecords.Any())
@@ -492,6 +480,41 @@ namespace FYPTracker.Controllers
 
             TempData["Success"] = "Your form has been submitted successfully!";
             return RedirectToAction("Forms");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ViewFile(int fileId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var file = await _context.FYPSubmissionFiles
+                .Include(f => f.Milestone)
+                .ThenInclude(m => m.Project)
+                .FirstOrDefaultAsync(f => f.Id == fileId);
+
+            if (file == null || string.IsNullOrEmpty(file.FilePath)) return NotFound();
+
+            // Ensure the student can only view files related to their project
+            if (file.Milestone?.Project?.StudentId != user.Id && file.UploadedBy != user.Id)
+            {
+                return Unauthorized("You do not have permission to view this file.");
+            }
+
+            var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
+            string mimeType = "application/octet-stream";
+            
+            if (ext == ".pdf") mimeType = "application/pdf";
+            else if (ext == ".docx") mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            else if (ext == ".doc") mimeType = "application/msword";
+            else if (ext == ".png") mimeType = "image/png";
+            else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+
+            var physicalPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", file.FilePath.TrimStart('/', '\\'));
+            if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+
+            Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}\"");
+            return PhysicalFile(physicalPath, mimeType);
         }
 
         // ══════════════════════════════════════════════════════

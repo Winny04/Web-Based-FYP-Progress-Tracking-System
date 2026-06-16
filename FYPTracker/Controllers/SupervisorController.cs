@@ -631,7 +631,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks, string? supervisorSignature)
+        public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks, string? supervisorSignature, string? pctComplete, IFormFile? gradedFile)
         {
             var user = await GetCurrentUserAsync();
             var milestone = await _context.FYPMilestones.Include(m => m.Project).FirstOrDefaultAsync(m => m.Id == milestoneId);
@@ -661,6 +661,52 @@ namespace FYPTracker.Controllers
                         }
                         catch {}
                     }
+                }
+
+                if ((milestone.Title.Contains("Progress", StringComparison.OrdinalIgnoreCase)) && !string.IsNullOrEmpty(pctComplete))
+                {
+                    string raw = milestone.Remarks ?? "";
+                    if (raw.Contains("JSON: "))
+                    {
+                        var parts = raw.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                        var formInfo = parts[0].Trim();
+                        var parsedJson = parts[1];
+                        try
+                        {
+                            var dict = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, string>>(parsedJson);
+                            if (dict != null)
+                            {
+                                dict["Completion"] = pctComplete;
+                                var updatedJson = System.Text.Json.JsonSerializer.Serialize(dict);
+                                milestone.Remarks = $"{formInfo} JSON: {updatedJson}";
+                            }
+                        }
+                        catch {}
+                    }
+                }
+
+                if (gradedFile != null && gradedFile.Length > 0)
+                {
+                    string uniqueFileName = Guid.NewGuid().ToString() + "_" + gradedFile.FileName;
+                    string folderPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", "uploads", "submissions");
+                    if (!System.IO.Directory.Exists(folderPath))
+                        System.IO.Directory.CreateDirectory(folderPath);
+
+                    string filePath = System.IO.Path.Combine(folderPath, uniqueFileName);
+                    using (var stream = new System.IO.FileStream(filePath, System.IO.FileMode.Create))
+                    {
+                        await gradedFile.CopyToAsync(stream);
+                    }
+
+                    _context.FYPSubmissionFiles.Add(new FYPSubmissionFile
+                    {
+                        MilestoneId = milestone.Id,
+                        FileName = gradedFile.FileName,
+                        FilePath = $"/uploads/submissions/{uniqueFileName}",
+                        FileSize = gradedFile.Length,
+                        UploadedBy = user.Id,
+                        UploadedDate = DateTime.Now
+                    });
                 }
 
                 await _context.SaveChangesAsync();
