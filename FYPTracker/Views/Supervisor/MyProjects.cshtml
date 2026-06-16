@@ -25,13 +25,13 @@
     </div>
     <div class="d-flex my-2 gap-2">
         <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#bulkEditMilestoneModal">
-            <i class="fas fa-edit text-white"></i> Bulk Edit
+            <i class="fas fa-edit text-white"></i> Edit
         </button>
         <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#bulkDeleteMilestoneModal">
-            <i class="fas fa-trash text-white"></i> Bulk Delete
+            <i class="fas fa-trash text-white"></i> Delete
         </button>
         <button type="button" class="btn btn-sm btn-light text-primary fw-bolder shadow-sm" data-bs-toggle="modal" data-bs-target="#bulkAddMilestoneModal">
-            <i class="fas fa-plus text-primary"></i> Bulk Add Milestone
+            <i class="fas fa-plus text-primary"></i> Add Milestone
         </button>
     </div>
 </div>
@@ -51,7 +51,7 @@
                             <span class="badge badge-light-primary fw-bolder px-4 py-2 rounded-pill">FYP Project</span>
                             <span class="text-muted fw-bold">@proj.CreatedDate.ToString("dd MMM yyyy")</span>
                         </div>
-                        <a href="/Supervisor/ProjectDetails/@proj.Id" class="text-dark fw-bolder text-hover-primary fs-3">@proj.Title</a>
+                        <a href="/Supervisor/ProjectDetails/@proj.Id" class="text-dark fw-bolder text-hover-primary fs-3">Title: @proj.Title</a>
                         <p class="text-gray-600 fw-bold fs-6 mt-3">Student: @proj.Student?.FullName</p>
                     </div>
 
@@ -86,7 +86,7 @@
         <div class="modal-content">
             <form asp-action="BulkAddMilestone" asp-controller="Supervisor" method="post" id="bulkAddForm">
                 <div class="modal-header">
-                    <h2 class="fw-bolder">Bulk Add Milestone</h2>
+                    <h2 class="fw-bolder">Add Milestone</h2>
                     <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
                         <i class="fas fa-times fs-1"></i>
                     </div>
@@ -140,7 +140,7 @@
         <div class="modal-content">
             <form asp-action="BulkEditMilestone" asp-controller="Supervisor" method="post" id="bulkEditForm">
                 <div class="modal-header">
-                    <h2 class="fw-bolder">Bulk Edit Milestone</h2>
+                    <h2 class="fw-bolder">Edit Milestone</h2>
                     <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
                         <i class="fas fa-times fs-1"></i>
                     </div>
@@ -207,7 +207,7 @@
         <div class="modal-content">
             <form asp-action="BulkDeleteMilestone" asp-controller="Supervisor" method="post" id="bulkDeleteForm">
                 <div class="modal-header">
-                    <h2 class="fw-bolder">Bulk Delete Milestone</h2>
+                    <h2 class="fw-bolder">Delete Milestone</h2>
                     <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
                         <i class="fas fa-times fs-1"></i>
                     </div>

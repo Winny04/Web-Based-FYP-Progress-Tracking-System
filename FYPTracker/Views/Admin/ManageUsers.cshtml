@@ -53,7 +53,7 @@
             <div class="d-flex align-items-center py-3 py-md-1">
                 <div class="me-4">
                     <!--start:: Btn Bulk Invite-->
-                    <a href="#" id="btn-BulkInvite" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#bulkInviteModal">Bulk Invite</a>
+                    <a href="#" id="btn-BulkInvite" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#bulkInviteModal">Invite</a>
                     <!--end:: Btn Bulk Invite-->
 
                 </div>
@@ -179,7 +179,7 @@
             <form method="post" action="/Admin/BulkInvite">
                 @Html.AntiForgeryToken()
                 <div class="modal-header">
-                    <h2>Bulk Invite Users</h2>
+                    <h2>Invite Users</h2>
                     <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
                         <span class="svg-icon svg-icon-1">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -306,8 +306,8 @@
                 else {
                     $("#UserImage").attr("value", '');
                     $("#uploadedImg").attr("src", '');
-                    $("#backImg").css("background-image", "url(" + "assets/media/svg/avatars/blank.svg" + ")");
-                    $("#backImg1").css("background-image", "url(" + "assets/media/svg/avatars/blank.svg" + ")");
+                    $("#backImg").css("background-image", "url(" + "assets/media/svg/avatars/blank.png" + ")");
+                    $("#backImg1").css("background-image", "url(" + "assets/media/svg/avatars/blank.png" + ")");
 
                 }
                 $('#create_new_user_modal').modal('show');
@@ -381,7 +381,7 @@
                                 let imageComponent = ""
 
                                 if (row.image !== "") {
-                                    imageComponent = '<div class="symbol symbol-45px me-5"><img alt="Pic" src="' + row.image + '" onerror="this.onerror=null;this.src=\'/assets/media/avatars/blank.svg\';" /></div>';
+                                    imageComponent = '<div class="symbol symbol-45px me-5"><img alt="Pic" src="' + row.image + '" onerror="this.onerror=null;this.src=\'/assets/media/avatars/blank.png\';" /></div>';
                                 } else {
                                     imageComponent = '<div class="symbol symbol-45px me-5"><span class="symbol-label bg-light-danger text-danger fw-bolder">' + row.fullName.charAt(0).toUpperCase() + '</span></div>'
                                 }

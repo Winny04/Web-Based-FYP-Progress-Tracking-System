@@ -504,7 +504,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                             DateJoin = DateTime.Now,
                             AddedBy = "sys",
                             UserType = String.IsNullOrEmpty(newEmployee.UserType) ? "Requestor" : newEmployee.UserType,
-                            Image = "/assets/media/avatars/blank.svg",
+                            Image = "/assets/media/avatars/blank.png",
                             DepartmentId = deptQuery.Where(x => x.Name == newEmployee.Department).FirstOrDefault()?.Id,
                             Phone = newEmployee.Phone,
                             Programme = newEmployee.Programme,
@@ -918,7 +918,7 @@ public ActionResult ManageUsersData()
                     DateJoin = DateTime.Now,
                     AddedBy = "sys",
                     UserType = bulkUserType,
-                    Image = "/assets/media/avatars/blank.svg",
+                    Image = "/assets/media/avatars/blank.png",
                     RequirePasswordChange = true // Forces onboarding flow
                 };
 

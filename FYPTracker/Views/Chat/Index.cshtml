@@ -22,7 +22,7 @@
                     <!-- Search Bar -->
                     <div class="position-relative">
                         <i class="fas fa-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" style="z-index:1;"></i>
-                        <input type="text" id="chat-search" class="form-control bg-light border-0 rounded-pill ps-5" placeholder="Search students..." onkeyup="filterStudents()">
+                        <input type="text" id="chat-search" class="form-control bg-light border-0 rounded-pill" style="padding-left: 2.8rem !important;" placeholder="Search students..." onkeyup="filterStudents()">
                     </div>
                     <!-- Filter Chips -->
                     <div class="d-flex gap-2 mt-3 overflow-auto" style="white-space: nowrap;">
@@ -53,10 +53,16 @@
                                              style="width:44px;height:44px;font-size:1rem;@initBg @initColor">
                                             @(student.Name?.Substring(0, 1) ?? "?")
                                         </div>
-                                        <div class="overflow-hidden">
+                                        <div class="overflow-hidden flex-grow-1">
                                             <h6 class="mb-0 fw-bold @textCls text-truncate">@student.Name</h6>
                                             <small class="@subCls text-truncate d-block">@student.Programme</small>
                                         </div>
+                                        @if (student.UnreadCount > 0)
+                                        {
+                                            <div class="ms-2">
+                                                <span class="badge rounded-pill bg-danger shadow-sm" style="font-size: 0.75rem; padding: 0.35em 0.6em;">@student.UnreadCount</span>
+                                            </div>
+                                        }
                                     </div>
                                 </a>
                             }

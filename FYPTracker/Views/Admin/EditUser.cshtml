@@ -17,7 +17,7 @@
                     <!--begin: Pic-->
                     <div class="me-7 mb-4">
                         <div class="symbol symbol-100px symbol-lg-160px symbol-fixed position-relative">
-                            <img src="@(string.IsNullOrEmpty(Model.Image) ? "/assets/media/avatars/blank.svg" : Model.Image)" alt="image" onerror="this.onerror=null;this.src='/assets/media/avatars/blank.svg';" />
+                            <img src="@(string.IsNullOrEmpty(Model.Image) ? "/assets/media/avatars/blank.png" : Model.Image)" alt="image" onerror="this.onerror=null;this.src='/assets/media/avatars/blank.png';" />
                             <div class="position-absolute translate-middle bottom-0 start-100 mb-6 bg-success rounded-circle border border-4 border-white h-20px w-20px"></div>
                         </div>
                     </div>
@@ -127,9 +127,9 @@
                         <!--begin::Col-->
                     <div class="col-lg-4" style="text-align:center;">
                             <!--begin::Image input-->
-                        <div class="image-input image-input-outline" data-kt-image-input="true" id="backImg" style="background-image: url(@(string.IsNullOrEmpty(Model.Image) ? "/assets/media/avatars/blank.svg" : Model.Image))">
+                        <div class="image-input image-input-outline" data-kt-image-input="true" id="backImg" style="background-image: url(@(string.IsNullOrEmpty(Model.Image) ? "/assets/media/avatars/blank.png" : Model.Image))">
                                 <!--begin::Preview existing avatar-->
-                            <div class="image-input-wrapper w-125px h-125px" id="backImg" style="background-image: url(@(string.IsNullOrEmpty(Model.Image) ? "/assets/media/avatars/blank.svg" : Model.Image))"></div>
+                            <div class="image-input-wrapper w-125px h-125px" id="backImg" style="background-image: url(@(string.IsNullOrEmpty(Model.Image) ? "/assets/media/avatars/blank.png" : Model.Image))"></div>
                                 <!--end::Preview existing avatar-->
                                 <!--begin::Label-->
                             <label class="btn btn-icon btn-circle btn-active-color-primary w-25px h-25px bg-body shadow" data-kt-image-input-action="change" data-bs-toggle="tooltip" title="Change avatar">

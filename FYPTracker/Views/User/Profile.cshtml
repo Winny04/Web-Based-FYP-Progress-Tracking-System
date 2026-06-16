@@ -101,11 +101,11 @@
                     <div class="profile-photo-circle">
                         @if (!string.IsNullOrEmpty(Model.Image))
                         {
-                            <img id="avatarPreview" src="@Model.Image" alt="Profile Image" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.src='/assets/media/avatars/blank.svg';" />
+                            <img id="avatarPreview" src="@Model.Image" alt="Profile Image" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.src='/assets/media/avatars/blank.png';" />
                         }
                         else
                         {
-                            <img id="avatarPreview" src="/assets/media/avatars/blank.svg" alt="Profile Image" style="width: 100%; height: 100%; object-fit: cover;" />
+                            <img id="avatarPreview" src="/assets/media/avatars/blank.png" alt="Profile Image" style="width: 100%; height: 100%; object-fit: cover;" />
                         }
                     </div>
                     <h4 class="fw-bold text-dark mb-0">@(Model.UserType == "Supervisor" ? Model.Title + " " : "")@Model.FullName</h4>

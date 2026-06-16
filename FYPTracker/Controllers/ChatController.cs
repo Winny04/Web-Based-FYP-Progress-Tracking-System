@@ -57,7 +57,7 @@ namespace FYPTracker.Controllers
             else if (user.UserType == "Supervisor")
             {
                 // Supervisor: list of active assigned students
-                var students = await _context.FYPProjects
+                var projectStudents = await _context.FYPProjects
                     .Include(p => p.Student)
                     .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign)
                     .Select(p => new ChatStudentItem {
@@ -66,6 +66,33 @@ namespace FYPTracker.Controllers
                         Programme = p.Student.Programme
                     })
                     .ToListAsync();
+
+                var studentIds = projectStudents.Select(s => s.Id).ToList();
+                var chatData = await _context.ChatMessages
+                    .Where(m => (m.ReceiverId == user.Id && studentIds.Contains(m.SenderId)) ||
+                                (m.SenderId == user.Id && studentIds.Contains(m.ReceiverId)))
+                    .GroupBy(m => m.SenderId == user.Id ? m.ReceiverId : m.SenderId)
+                    .Select(g => new {
+                        StudentId = g.Key,
+                        UnreadCount = g.Count(m => m.ReceiverId == user.Id && !m.IsRead),
+                        LatestMessageAt = g.Max(m => m.SentAt)
+                    })
+                    .ToListAsync();
+
+                foreach (var s in projectStudents)
+                {
+                    var data = chatData.FirstOrDefault(d => d.StudentId == s.Id);
+                    if (data != null)
+                    {
+                        s.UnreadCount = data.UnreadCount;
+                        s.LatestMessageAt = data.LatestMessageAt;
+                    }
+                }
+
+                var students = projectStudents
+                    .OrderByDescending(s => s.LatestMessageAt ?? DateTime.MinValue)
+                    .ThenBy(s => s.Name)
+                    .ToList();
 
                 ViewBag.AssignedStudents = students;
 
