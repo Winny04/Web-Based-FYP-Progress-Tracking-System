@@ -75,7 +75,7 @@
 
 <div class="container-fluid py-4">
 
-    @* ── Hero ─────────────────────────────────────────────── *@
+    @* â”€â”€ Hero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
     <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
             <h2 class="display-6 fw-bold mb-2"><i class="fas fa-project-diagram me-2"></i>Project Details</h2>
@@ -104,7 +104,7 @@
     {
         <div class="row g-4">
 
-            @* ── Project Info ──────────────────────────────────── *@
+            @* â”€â”€ Project Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
             <div class="col-lg-8">
                 <div class="glass-card p-4 mb-4">
                     <h5 class="fw-bold text-dark mb-4"><i class="fas fa-info-circle text-teal me-2" style="color:#0d9488;"></i>Project Information</h5>
@@ -115,11 +115,11 @@
                         </div>
                         <div class="col-md-6">
                             <div class="info-label">Category / Field</div>
-                            <div class="info-value">@(Model.Student?.Programme ?? "—")</div>
+                            <div class="info-value">@(Model.Student?.Programme ?? "â€”")</div>
                         </div>
                         <div class="col-md-6">
                             <div class="info-label">Academic Year / Session</div>
-                            <div class="info-value">@(Model.Student?.AcademicSession ?? "—")</div>
+                            <div class="info-value">@(Model.Student?.AcademicSession ?? "â€”")</div>
                         </div>
                         <div class="col-md-6">
                             <div class="info-label">Status</div>
@@ -140,11 +140,11 @@
                         </div>
                         <div class="col-md-6">
                             <div class="info-label">Start Date</div>
-                            <div class="info-value">@(Model.StartDate?.ToString("dd MMM yyyy") ?? "—")</div>
+                            <div class="info-value">@(Model.StartDate?.ToString("dd MMM yyyy") ?? "â€”")</div>
                         </div>
                         <div class="col-md-6">
                             <div class="info-label">End Date</div>
-                            <div class="info-value">@(Model.EndDate?.ToString("dd MMM yyyy") ?? "—")</div>
+                            <div class="info-value">@(Model.EndDate?.ToString("dd MMM yyyy") ?? "â€”")</div>
                         </div>
                         @if (!string.IsNullOrEmpty(Model.Description))
                         {
@@ -156,7 +156,7 @@
                     </div>
                 </div>
 
-                @* ── Visual Stage Indicator (Step-by-step) ───────── *@
+                @* â”€â”€ Visual Stage Indicator (Step-by-step) â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
                 <div class="glass-card p-4 mb-4">
                     <h5 class="fw-bold text-dark mb-4"><i class="fas fa-route me-2" style="color:#0d9488;"></i>Project Stage Indicator</h5>
                     @{
@@ -211,7 +211,7 @@
                     </div>
                 </div>
 
-                @* ── Progress Bar ─────────────────────────────────── *@
+                @* â”€â”€ Progress Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
                 <div class="glass-card p-4 mb-4">
                     <h5 class="fw-bold text-dark mb-3"><i class="fas fa-tasks me-2" style="color:#0d9488;"></i>Overall Progress</h5>
                     <div class="d-flex justify-content-between mb-2">
@@ -224,14 +224,14 @@
                              aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
                     </div>
                     <div class="d-flex gap-4 mt-3" style="font-size:.8rem;">
-                        <span class="text-muted">✅ Approved: <strong>@milestones.Count(m => m.Status == "Approved")</strong></span>
-                        <span class="text-muted">⏳ Pending: <strong>@milestones.Count(m => m.Status == "Pending")</strong></span>
-                        <span class="text-muted">🔵 Submitted: <strong>@milestones.Count(m => m.Status == "Submitted" || m.Status == "UnderReview")</strong></span>
-                        <span class="text-muted">❌ Rejected: <strong>@milestones.Count(m => m.Status == "Rejected")</strong></span>
+                        <span class="text-muted">âœ… Approved: <strong>@milestones.Count(m => m.Status == "Approved")</strong></span>
+                        <span class="text-muted">â³ Pending: <strong>@milestones.Count(m => m.Status == "Pending")</strong></span>
+                        <span class="text-muted">ðŸ”µ Submitted: <strong>@milestones.Count(m => m.Status == "Submitted" || m.Status == "UnderReview")</strong></span>
+                        <span class="text-muted">âŒ Rejected: <strong>@milestones.Count(m => m.Status == "Rejected")</strong></span>
                     </div>
                 </div>
 
-                @* ── Milestones / Chapters Timeline ─────────────────────────── *@
+                @* â”€â”€ Milestones / Chapters Timeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
                 <div class="glass-card p-4">
                     <h5 class="fw-bold text-dark mb-4"><i class="fas fa-stream me-2" style="color:#0d9488;"></i>Milestone Timeline</h5>
 
@@ -317,7 +317,7 @@
                 </div>
             </div>
 
-            @* ── Right Sidebar ─────────── *@
+            @* â”€â”€ Right Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
             <div class="col-lg-4">
 
 
@@ -335,8 +335,8 @@
                             </div>
                             <div>
                                 <div class="fw-bold text-dark">@sup.FullName</div>
-                                <small class="text-muted d-block">@(sup.Email ?? "—")</small>
-                                <small class="text-muted d-block">@(sup.EmpDepartment?.Name ?? "—")</small>
+                                <small class="text-muted d-block">@(sup.Email ?? "â€”")</small>
+                                <small class="text-muted d-block">@(sup.EmpDepartment?.Name ?? "â€”")</small>
                             </div>
                         </div>
                     }
@@ -468,6 +468,66 @@
                             </div>
                         }
 
+                        @if (!string.IsNullOrEmpty(parsedJson))
+                        {
+                            <h6 class="fw-bold text-primary mt-4 mb-2"><i class="fas fa-file-contract me-2"></i>Digital Form Document</h6>
+                            <div id="pdfLoading_@ms.Id" class="text-center py-3 bg-light rounded-3 border mb-2">
+                                <i class="fas fa-spinner fa-spin text-primary me-2"></i>
+                                <span class="text-muted fw-semibold">Loading preview...</span>
+                            </div>
+                            <div id="pdfContainer_@ms.Id" style="height:600px;display:none;border:1px solid #dee2e6;border-radius:10px;overflow:hidden;">
+                                <iframe id="pdfIframe_@ms.Id" style="width:100%;height:100%;border:none;"></iframe>
+                            </div>
+                            <script id="tpl_@ms.Id" type="text/template"><!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+body { font-family: sans-serif; padding: 40px; background: white; color: #111; }
+h4 { color: #0d6efd; margin-bottom: 10px; font-family: sans-serif; }
+p.meta { font-family: sans-serif; color: #555; margin-bottom: 4px; }
+hr { border: 1px solid #ddd; margin-bottom: 20px; margin-top: 10px; }
+table { width: 100%; font-family: sans-serif; font-size: 14px; border-collapse: collapse; }
+td { padding: 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+td.label { width: 30%; font-weight: bold; }
+td.value { white-space: pre-wrap; }
+.sig { font-family: 'Brush Script MT', cursive; font-size: 24px; color: #00008B; }
+.fb-box { margin-top: 24px; padding: 14px 18px; border-radius: 6px; border: 1px solid #bbf7d0; background: #f0fdf4; }
+.fb-title { color: #15803d; font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+.fb-text { color: #166534; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+.footer { margin-top: 40px; font-size: 11px; color: #9ca3af; text-align: center; border-top: 1px solid #eee; padding-top: 12px; }
+</style></head><body>
+<h4>@ms.Title</h4>
+<p class="meta">Student: @(currentUser?.FullName) (@(currentUser?.EmployeeId))</p>
+<hr />
+@{
+    try {
+        var dpdf = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parsedJson);
+        if (dpdf != null && dpdf.Any()) {
+            <table>
+                @foreach (var kv in dpdf) {
+                    if (!string.IsNullOrEmpty(kv.Value)) {
+                        <tr>
+                            <td class="label">@kv.Key:</td>
+                            <td class="value">
+                                @if (kv.Key == "Supervisor Signature") {
+                                    <span class="sig">@kv.Value</span>
+                                } else {
+                                    @kv.Value
+                                }
+                            </td>
+                        </tr>
+                    }
+                }
+            </table>
+        }
+    } catch { }
+}
+@if (!string.IsNullOrEmpty(ms.SupervisorFeedback)) {
+    <div class="fb-box">
+        <div class="fb-title">Supervisor Feedback</div>
+        <div class="fb-text">@ms.SupervisorFeedback</div>
+    </div>
+}
+<div class="footer">FYP Tracking System &mdash; @DateTime.Now.ToString("dd MMMM yyyy")</div>
+</body></html></script>
+                        }
                         @if (ms.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Progress", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Final Submission", StringComparison.OrdinalIgnoreCase))
                         {
                             <div class="mt-4 pt-3 border-top text-end">
@@ -482,5 +542,32 @@
         </div>
     }
 }
-
-
+@section Scripts {
+<script>
+(function(){
+    function run(){
+        document.querySelectorAll('.modal').forEach(function(m){
+            m.addEventListener('shown.bs.modal',function(){
+                var id=this.id.replace('viewMs_','');
+                var tpl=document.getElementById('tpl_'+id);
+                var box=document.getElementById('pdfContainer_'+id);
+                var ifr=document.getElementById('pdfIframe_'+id);
+                var ldr=document.getElementById('pdfLoading_'+id);
+                if(!ldr)return;
+                if(!tpl||!box||!ifr){ldr.style.display='none';return;}
+                if(box.style.display==='block')return;
+                try{
+                    var b=new Blob([tpl.innerHTML],{type:'text/html'});
+                    ldr.style.display='none';
+                    box.style.display='block';
+                    ifr.src=URL.createObjectURL(b);
+                }catch(e){
+                    ldr.innerHTML='<span class="text-danger">Could not load preview.</span>';
+                }
+            });
+        });
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run);}else{run();}
+})();
+</script>
+}

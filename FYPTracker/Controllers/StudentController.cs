@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using FYPTracker.Services.Others.Interfaces;
+using NPOI.XWPF.UserModel;
 
 namespace FYPTracker.Controllers
 {
@@ -642,10 +643,10 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
-            // Date must be in the future
-            if (parsedDate.Date <= DateTime.Today)
+            // Date must be today or in the future
+            if (parsedDate.Date < DateTime.Today)
             {
-                TempData["Error"] = "Meeting date must be a future date (at least tomorrow).";
+                TempData["Error"] = "Meeting date cannot be in the past.";
                 return RedirectToAction(nameof(BookMeeting));
             }
 
@@ -920,9 +921,7 @@ namespace FYPTracker.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SubmitMeetingLogStudent(
             int meetingId, 
-            string keyTopics, 
-            string actionPoints, 
-            string completedActions,
+            IFormFile logbookPdf,
             DateTime? nextMeetingDate,
             string? nextMeetingTime)
         {
@@ -977,9 +976,6 @@ namespace FYPTracker.Controllers
                 meeting.MeetingLog = new MeetingLog
                 {
                     MeetingBookingId = meeting.Id,
-                    KeyTopicsDiscussed = keyTopics,
-                    ActionPointsForNextMeeting = actionPoints,
-                    CompletedActionsAndNotes = completedActions,
                     NextMeetingDate = nextMeetingDate,
                     LogStatus = "Draft",
                     CreatedDate = DateTime.Now
@@ -987,11 +983,30 @@ namespace FYPTracker.Controllers
             }
             else
             {
-                meeting.MeetingLog.KeyTopicsDiscussed = keyTopics;
-                meeting.MeetingLog.ActionPointsForNextMeeting = actionPoints;
-                meeting.MeetingLog.CompletedActionsAndNotes = completedActions;
                 meeting.MeetingLog.NextMeetingDate = nextMeetingDate;
                 meeting.MeetingLog.LogStatus = "Draft";
+            }
+
+            if (logbookPdf != null && logbookPdf.Length > 0)
+            {
+                var extension = Path.GetExtension(logbookPdf.FileName).ToLower();
+                if (extension != ".pdf")
+                {
+                    TempData["Error"] = "Only PDF files are allowed for the logbook.";
+                    return RedirectToAction(nameof(BookMeeting));
+                }
+                
+                string uniqueFileName = $"logbook_student_{meeting.StudentId}_meeting_{meeting.Id}_{Guid.NewGuid().ToString().Substring(0, 8)}.pdf";
+                string uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "logbooks");
+                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+                string filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                using (var fileStream = new FileStream(filePath, FileMode.Create))
+                {
+                    await logbookPdf.CopyToAsync(fileStream);
+                }
+
+                meeting.MeetingLog.PdfLogbookPath = $"/uploads/logbooks/{uniqueFileName}";
             }
 
             await _context.SaveChangesAsync();
@@ -1015,6 +1030,11 @@ namespace FYPTracker.Controllers
 
             if (log == null || log.LogStatus != "Signed") return NotFound();
             
+            if (!string.IsNullOrEmpty(log.SignedPdfLogbookPath))
+                return Redirect(log.SignedPdfLogbookPath);
+            if (!string.IsNullOrEmpty(log.PdfLogbookPath))
+                return Redirect(log.PdfLogbookPath);
+
             var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == log.MeetingBooking.StudentId);
             ViewBag.ProjectName = project?.Title ?? "FYP Project";
 
@@ -1122,6 +1142,491 @@ namespace FYPTracker.Controllers
 
             Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}\"");
             return PhysicalFile(physicalPath, mimeType);
+        }
+
+        // ── Download FYP Proposal Word Template ──────────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> DownloadProposalTemplate()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Supervisor)
+                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+
+            using var ms = new System.IO.MemoryStream();
+
+            var doc = new NPOI.XWPF.UserModel.XWPFDocument();
+
+            // ── Helper to add a styled paragraph ──
+            System.Action<string, bool, int, string, bool> addPara = (text, bold, fontSize, color, center) =>
+            {
+                var para = doc.CreateParagraph();
+                if (center) para.Alignment = NPOI.XWPF.UserModel.ParagraphAlignment.CENTER;
+                var run = para.CreateRun();
+                run.SetText(text);
+                run.IsBold = bold;
+                run.FontSize = fontSize;
+                if (!string.IsNullOrEmpty(color)) run.SetColor(color);
+                run.FontFamily = "Times New Roman";
+            };
+
+            System.Action<string> addBlankLine = (_) =>
+            {
+                var p = doc.CreateParagraph();
+                var r = p.CreateRun();
+                r.SetText("");
+                r.FontFamily = "Times New Roman";
+                r.FontSize = 12;
+            };
+
+            System.Action<string, string> addLabelValue = (label, value) =>
+            {
+                var table = doc.CreateTable(1, 2);
+                table.Width = 5000;
+                table.GetCTTbl().tblPr.tblW.type = NPOI.OpenXmlFormats.Wordprocessing.ST_TblWidth.pct;
+                table.GetCTTbl().tblPr.tblW.w = "5000";
+
+                var cell0 = table.GetRow(0).GetCell(0);
+                cell0.GetCTTc().AddNewTcPr().AddNewTcW().w = "1500";
+                cell0.GetCTTc().AddNewTcPr().AddNewTcW().type = NPOI.OpenXmlFormats.Wordprocessing.ST_TblWidth.pct;
+
+                var cell1 = table.GetRow(0).GetCell(1);
+                cell1.GetCTTc().AddNewTcPr().AddNewTcW().w = "3500";
+                cell1.GetCTTc().AddNewTcPr().AddNewTcW().type = NPOI.OpenXmlFormats.Wordprocessing.ST_TblWidth.pct;
+                
+                // Style label cell
+                var p0 = cell0.Paragraphs.Count > 0 ? cell0.Paragraphs[0] : cell0.AddParagraph();
+                var r0 = p0.Runs.Count > 0 ? p0.Runs[0] : p0.CreateRun();
+                r0.SetText(label);
+                r0.IsBold = true;
+                r0.FontFamily = "Times New Roman";
+                r0.FontSize = 12;
+                
+                // Style value cell
+                var p1 = cell1.Paragraphs.Count > 0 ? cell1.Paragraphs[0] : cell1.AddParagraph();
+                var r1 = p1.Runs.Count > 0 ? p1.Runs[0] : p1.CreateRun();
+                r1.SetText(value ?? "");
+                r1.FontFamily = "Times New Roman";
+                r1.FontSize = 12;
+            };
+
+            // ─── Cover / Header ───────────────────────────────────────────────
+            addPara("FACULTY OF COMPUTING AND INFORMATICS", true, 13, "000080", true);
+            addPara("FINAL YEAR PROJECT (FYP)", true, 13, "000080", true);
+            addPara("PROPOSAL FORM", true, 14, "000080", true);
+            addBlankLine("");
+            addPara("Academic Year: " + DateTime.Now.Year + "/" + (DateTime.Now.Year + 1), false, 12, "", true);
+            addBlankLine("");
+
+            // ─── Section 1: Student Information ──────────────────────────────
+            addPara("SECTION 1: STUDENT INFORMATION", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addBlankLine("");
+            addLabelValue("Student Name:", user.FullName ?? "");
+            addLabelValue("Student ID / Matric No.:", user.EmployeeId ?? "");
+            addLabelValue("Programme:", "");
+            addLabelValue("Semester:", "");
+            addLabelValue("Contact Email:", user.Email ?? "");
+            addBlankLine("");
+
+            // ─── Section 2: Project Information ──────────────────────────────
+            addPara("SECTION 2: PROJECT INFORMATION", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addBlankLine("");
+            addLabelValue("Project Title:", project?.Title ?? "");
+            addLabelValue("Scope / Category:", "");
+            addBlankLine("");
+
+            // ─── Section 3: Problem Statement ────────────────────────────────
+            addPara("SECTION 3: PROBLEM STATEMENT", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addPara("(Supported with statistics and references. Include in-text citations.)", false, 10, "888888", false);
+            addBlankLine("");
+            for (int i = 0; i < 8; i++) addBlankLine("");
+
+            // ─── Section 4: Objectives ───────────────────────────────────────
+            addPara("SECTION 4: PROJECT OBJECTIVES", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addPara("(Use action verbs. Each objective must be measurable.)", false, 10, "888888", false);
+            addBlankLine("");
+            addPara("1.", false, 12, "", false);
+            addBlankLine("");
+            addPara("2.", false, 12, "", false);
+            addBlankLine("");
+            addPara("3.", false, 12, "", false);
+            addBlankLine("");
+
+            // ─── Section 5: Scope ─────────────────────────────────────────────
+            addPara("SECTION 5: SCOPE OF PROJECT", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addBlankLine("");
+            for (int i = 0; i < 5; i++) addBlankLine("");
+
+            // ─── Section 6: Methodology ──────────────────────────────────────
+            addPara("SECTION 6: METHODOLOGY", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addPara("(Describe your development methodology, tools and technologies.)", false, 10, "888888", false);
+            addBlankLine("");
+            for (int i = 0; i < 5; i++) addBlankLine("");
+
+            // ─── Section 7: Timeline ─────────────────────────────────────────
+            addPara("SECTION 7: PROJECT TIMELINE", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addBlankLine("");
+            // Timeline table
+            var tbl = doc.CreateTable(6, 3);
+            tbl.Width = 5000;
+            tbl.GetCTTbl().tblPr.tblW.type = NPOI.OpenXmlFormats.Wordprocessing.ST_TblWidth.pct;
+            tbl.GetCTTbl().tblPr.tblW.w = "5000";
+
+            string[] headers = { "Phase / Milestone", "Description", "Target Date" };
+            string[] phases = { "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5" };
+            for (int c = 0; c < 3; c++)
+            {
+                var cell = tbl.GetRow(0).GetCell(c);
+                cell.GetCTTc().AddNewTcPr().AddNewTcW().w = c == 1 ? "2000" : "1500";
+                cell.GetCTTc().AddNewTcPr().AddNewTcW().type = NPOI.OpenXmlFormats.Wordprocessing.ST_TblWidth.pct;
+                
+                var p = cell.Paragraphs.Count > 0 ? cell.Paragraphs[0] : cell.AddParagraph();
+                var run = p.Runs.Count > 0 ? p.Runs[0] : p.CreateRun();
+                run.SetText(headers[c]);
+                run.IsBold = true;
+                run.FontFamily = "Times New Roman";
+                run.FontSize = 11;
+            }
+            for (int r = 1; r <= 5; r++)
+            {
+                for (int c = 0; c < 3; c++)
+                {
+                    var cell = tbl.GetRow(r).GetCell(c);
+                    var p = cell.Paragraphs.Count > 0 ? cell.Paragraphs[0] : cell.AddParagraph();
+                    var run = p.Runs.Count > 0 ? p.Runs[0] : p.CreateRun();
+                    run.SetText(c == 0 ? phases[r - 1] : "");
+                    run.FontFamily = "Times New Roman";
+                    run.FontSize = 11;
+                }
+            }
+            addBlankLine("");
+
+            // ─── Section 8: References ───────────────────────────────────────
+            addPara("SECTION 8: REFERENCES", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addPara("(APA 7th Edition format)", false, 10, "888888", false);
+            addBlankLine("");
+            for (int i = 1; i <= 5; i++) { addPara($"[{i}]", false, 12, "", false); addBlankLine(""); }
+
+            // ─── Section 9: Supervisor Agreement ─────────────────────────────
+            addPara("SECTION 9: SUPERVISOR AGREEMENT", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addBlankLine("");
+            addLabelValue("Supervisor Name:", project?.Supervisor?.FullName ?? "");
+            addLabelValue("Supervisor Email:", project?.Supervisor?.Email ?? "");
+            addBlankLine("");
+            addPara("I confirm that I have reviewed and agreed to supervise this project.", false, 12, "", false);
+            addBlankLine("");
+            addLabelValue("Supervisor Signature:", "");
+            addLabelValue("Date:", "");
+            addBlankLine("");
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addLabelValue("Student Signature:", "");
+            addLabelValue("Date:", "");
+            addBlankLine("");
+
+            // ─── Footer note ─────────────────────────────────────────────────
+            addPara("Generated by FYP Tracking System  |  " + DateTime.Now.ToString("dd MMMM yyyy"), false, 9, "AAAAAA", true);
+
+            doc.Write(ms);
+            
+            var fileName = $"FYP_Proposal_Template_{(user.EmployeeId ?? "Student").Replace(" ", "_")}.docx";
+            return File(ms.ToArray(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                fileName);
+        }
+
+        // ── Download FYP Progress Report Word Template ───────────────────────
+        [HttpGet]
+        public async Task<IActionResult> DownloadProgressTemplate(int? milestoneId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Supervisor)
+                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+
+            string milestoneTitle = "PROGRESS REPORT";
+            if (milestoneId.HasValue)
+            {
+                var milestone = await _context.FYPMilestones.FindAsync(milestoneId.Value);
+                if (milestone != null) milestoneTitle = milestone.Title.ToUpper();
+            }
+
+            using var ms = new System.IO.MemoryStream();
+            var doc = new NPOI.XWPF.UserModel.XWPFDocument();
+
+            System.Action<string, bool, int, string, bool> addPara = (text, bold, fontSize, color, center) =>
+            {
+                var para = doc.CreateParagraph();
+                if (center) para.Alignment = NPOI.XWPF.UserModel.ParagraphAlignment.CENTER;
+                var run = para.CreateRun();
+                run.SetText(text);
+                run.IsBold = bold;
+                run.FontSize = fontSize;
+                if (!string.IsNullOrEmpty(color)) run.SetColor(color);
+                run.FontFamily = "Times New Roman";
+            };
+
+            System.Action<string> addBlankLine = (_) =>
+            {
+                var p = doc.CreateParagraph();
+                var r = p.CreateRun();
+                r.SetText("");
+                r.FontFamily = "Times New Roman";
+                r.FontSize = 12;
+            };
+
+            System.Action<string, string> addLabelValue = (label, value) =>
+            {
+                var table = doc.CreateTable(1, 2);
+                table.Width = 5000;
+                table.GetCTTbl().tblPr.tblW.type = NPOI.OpenXmlFormats.Wordprocessing.ST_TblWidth.pct;
+                table.GetCTTbl().tblPr.tblW.w = "5000";
+
+                var cell0 = table.GetRow(0).GetCell(0);
+                cell0.GetCTTc().AddNewTcPr().AddNewTcW().w = "1500";
+                cell0.GetCTTc().AddNewTcPr().AddNewTcW().type = NPOI.OpenXmlFormats.Wordprocessing.ST_TblWidth.pct;
+
+                var cell1 = table.GetRow(0).GetCell(1);
+                cell1.GetCTTc().AddNewTcPr().AddNewTcW().w = "3500";
+                cell1.GetCTTc().AddNewTcPr().AddNewTcW().type = NPOI.OpenXmlFormats.Wordprocessing.ST_TblWidth.pct;
+                
+                var p0 = cell0.Paragraphs.Count > 0 ? cell0.Paragraphs[0] : cell0.AddParagraph();
+                var r0 = p0.Runs.Count > 0 ? p0.Runs[0] : p0.CreateRun();
+                r0.SetText(label);
+                r0.IsBold = true;
+                r0.FontFamily = "Times New Roman";
+                r0.FontSize = 12;
+                
+                var p1 = cell1.Paragraphs.Count > 0 ? cell1.Paragraphs[0] : cell1.AddParagraph();
+                var r1 = p1.Runs.Count > 0 ? p1.Runs[0] : p1.CreateRun();
+                r1.SetText(value ?? "");
+                r1.FontFamily = "Times New Roman";
+                r1.FontSize = 12;
+            };
+
+            // Cover
+            addPara("FACULTY OF COMPUTING AND INFORMATICS", true, 13, "000080", true);
+            addPara("FINAL YEAR PROJECT (FYP)", true, 13, "000080", true);
+            addPara(milestoneTitle, true, 14, "000080", true);
+            addBlankLine("");
+            addPara("Academic Year: " + DateTime.Now.Year + "/" + (DateTime.Now.Year + 1), false, 12, "", true);
+            addBlankLine("");
+
+            // Section 1
+            addPara("SECTION 1: STUDENT & PROJECT INFORMATION", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addBlankLine("");
+            addLabelValue("Student Name:", user.FullName ?? "");
+            addLabelValue("Student ID / Matric No.:", user.EmployeeId ?? "");
+            addLabelValue("Programme:", "");
+            addLabelValue("Project Title:", project?.Title ?? "");
+            addLabelValue("Supervisor Name:", project?.Supervisor?.FullName ?? "");
+            addBlankLine("");
+
+            // Section 2
+            addPara("SECTION 2: REPORTING PERIOD", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addBlankLine("");
+            addLabelValue("Start Date:", "");
+            addLabelValue("End Date:", "");
+            addBlankLine("");
+
+            // Section 3
+            addPara("SECTION 3: PROGRESS SUMMARY", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addPara("(Describe the tasks completed during this reporting period.)", false, 10, "888888", false);
+            addBlankLine("");
+            for (int i = 0; i < 6; i++) addBlankLine("");
+
+            // Section 4
+            addPara("SECTION 4: CHALLENGES & ISSUES", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addPara("(Describe any challenges faced and how they were resolved or planned to be resolved.)", false, 10, "888888", false);
+            addBlankLine("");
+            for (int i = 0; i < 6; i++) addBlankLine("");
+
+            // Section 5
+            addPara("SECTION 5: NEXT STEPS & GOALS", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addPara("(Outline the tasks and goals for the next reporting period.)", false, 10, "888888", false);
+            addBlankLine("");
+            for (int i = 0; i < 6; i++) addBlankLine("");
+
+            // Section 6
+            addPara("SECTION 6: SUPERVISOR SIGN-OFF", true, 12, "1F3A7A", false);
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addBlankLine("");
+            addPara("I confirm that I have reviewed the student's progress for this reporting period.", false, 12, "", false);
+            addBlankLine("");
+            addLabelValue("Supervisor Signature:", "");
+            addLabelValue("Date:", "");
+            addBlankLine("");
+            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            addLabelValue("Student Signature:", "");
+            addLabelValue("Date:", "");
+            addBlankLine("");
+
+            addPara("Generated by FYP Tracking System  |  " + DateTime.Now.ToString("dd MMMM yyyy"), false, 9, "AAAAAA", true);
+
+            doc.Write(ms);
+
+            var fileName = $"FYP_Progress_Report_{(user.EmployeeId ?? "Student").Replace(" ", "_")}.docx";
+            return File(ms.ToArray(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                fileName);
+        }
+
+        // ── Download FYP Final Thesis Word Template ──────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> DownloadFinalTemplate()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Supervisor)
+                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+
+            using var ms = new System.IO.MemoryStream();
+            var doc = new NPOI.XWPF.UserModel.XWPFDocument();
+
+            System.Action<string, bool, int, string, bool> addPara = (text, bold, fontSize, color, center) =>
+            {
+                var para = doc.CreateParagraph();
+                if (center) para.Alignment = NPOI.XWPF.UserModel.ParagraphAlignment.CENTER;
+                var run = para.CreateRun();
+                run.SetText(text);
+                run.IsBold = bold;
+                run.FontSize = fontSize;
+                if (!string.IsNullOrEmpty(color)) run.SetColor(color);
+                run.FontFamily = "Times New Roman";
+            };
+
+            System.Action<string> addBlankLine = (_) =>
+            {
+                var p = doc.CreateParagraph();
+                var r = p.CreateRun();
+                r.SetText("");
+                r.FontFamily = "Times New Roman";
+                r.FontSize = 12;
+            };
+
+            // Title Page
+            addBlankLine("");
+            addBlankLine("");
+            addPara(project?.Title?.ToUpper() ?? "FINAL YEAR PROJECT TITLE", true, 18, "000000", true);
+            for (int i = 0; i < 5; i++) addBlankLine("");
+            addPara("by", false, 14, "000000", true);
+            addBlankLine("");
+            addPara(user.FullName?.ToUpper() ?? "STUDENT NAME", true, 14, "000000", true);
+            addPara(user.EmployeeId ?? "STUDENT ID", false, 14, "000000", true);
+            for (int i = 0; i < 5; i++) addBlankLine("");
+            addPara("A thesis submitted in partial fulfillment", false, 12, "000000", true);
+            addPara("of the requirements for the degree of", false, 12, "000000", true);
+            addBlankLine("");
+            addPara("BACHELOR OF SCIENCE", true, 14, "000000", true);
+            addBlankLine("");
+            addPara("FACULTY OF COMPUTING AND INFORMATICS", true, 14, "000000", true);
+            addPara("COVENTRY UNIVERSITY", true, 14, "000000", true);
+            for (int i = 0; i < 4; i++) addBlankLine("");
+            addPara(DateTime.Now.ToString("MMMM yyyy"), false, 12, "000000", true);
+
+            // Page Break
+            var pb = doc.CreateParagraph();
+            pb.CreateRun().AddBreak(NPOI.XWPF.UserModel.BreakType.PAGE);
+
+            // Abstract
+            addPara("ABSTRACT", true, 14, "000000", true);
+            addBlankLine("");
+            addPara("Write your abstract here. It should briefly summarize the problem, methodology, findings, and conclusion of your project in about 200-300 words.", false, 12, "000000", false);
+            
+            pb = doc.CreateParagraph();
+            pb.CreateRun().AddBreak(NPOI.XWPF.UserModel.BreakType.PAGE);
+
+            // Acknowledgements
+            addPara("ACKNOWLEDGEMENTS", true, 14, "000000", true);
+            addBlankLine("");
+            addPara("I would like to express my sincere gratitude to my supervisor, " + (project?.Supervisor?.FullName ?? "Supervisor Name") + ", for their continuous support and guidance during this project.", false, 12, "000000", false);
+
+            pb = doc.CreateParagraph();
+            pb.CreateRun().AddBreak(NPOI.XWPF.UserModel.BreakType.PAGE);
+
+            // Table of Contents Placeholder
+            addPara("TABLE OF CONTENTS", true, 14, "000000", true);
+            addBlankLine("");
+            addPara("CHAPTER 1: INTRODUCTION", true, 12, "000000", false);
+            addPara("CHAPTER 2: LITERATURE REVIEW", true, 12, "000000", false);
+            addPara("CHAPTER 3: METHODOLOGY", true, 12, "000000", false);
+            addPara("CHAPTER 4: IMPLEMENTATION & RESULTS", true, 12, "000000", false);
+            addPara("CHAPTER 5: CONCLUSION & FUTURE WORK", true, 12, "000000", false);
+            addPara("REFERENCES", true, 12, "000000", false);
+            addPara("APPENDICES", true, 12, "000000", false);
+
+            pb = doc.CreateParagraph();
+            pb.CreateRun().AddBreak(NPOI.XWPF.UserModel.BreakType.PAGE);
+
+            // Chapters layout
+            addPara("CHAPTER 1: INTRODUCTION", true, 14, "000000", false);
+            addBlankLine("");
+            addPara("1.1 Background of Study", true, 12, "000000", false);
+            addBlankLine("");
+            addPara("1.2 Problem Statement", true, 12, "000000", false);
+            addBlankLine("");
+            addPara("1.3 Project Objectives", true, 12, "000000", false);
+            addBlankLine("");
+            addPara("1.4 Project Scope", true, 12, "000000", false);
+
+            doc.Write(ms);
+
+            var fileName = $"FYP_Final_Thesis_{(user.EmployeeId ?? "Student").Replace(" ", "_")}.docx";
+            return File(ms.ToArray(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                fileName);
+        }
+
+        // ── Get Calendar Data API ──────────────────────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> GetMeetingsCalendarData()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return Json(new object[] { });
+
+            var meetings = await _context.MeetingBookings
+                .Include(m => m.Supervisor)
+                .Where(m => m.StudentId == user.Id && (m.Status == "Approved" || m.Status == "Pending" || m.Status == "Postponed"))
+                .ToListAsync();
+
+            var events = meetings.Select(m => {
+                string startTimeStr = m.MeetingTime ?? "09:00 AM";
+                DateTime startDt;
+                if (!DateTime.TryParse($"{m.MeetingDate:yyyy-MM-dd} {startTimeStr}", out startDt))
+                    startDt = m.MeetingDate;
+
+                string color = m.Status == "Approved" ? "#10b981" : (m.Status == "Pending" ? "#f59e0b" : "#ef4444");
+
+                return new {
+                    id = m.Id,
+                    title = $"Meeting with {m.Supervisor?.FullName ?? "Supervisor"}",
+                    start = startDt.ToString("yyyy-MM-ddTHH:mm:00"),
+                    description = $"Status: {m.Status}\nLocation: {m.Location ?? "TBA"}\nReason: {m.Reason}",
+                    color = color,
+                    url = Url.Action("BookMeeting", "Student")
+                };
+            }).ToList();
+
+            return Json(events);
         }
     }
 }

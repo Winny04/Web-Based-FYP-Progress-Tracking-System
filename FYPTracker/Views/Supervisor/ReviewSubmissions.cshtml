@@ -47,7 +47,7 @@
             <i class="fas fa-info-circle position-absolute ms-3 text-muted"></i>
             <select id="statusFilter" class="form-select border-0 shadow-sm ps-10 w-200px" style="border-radius: 10px;">
                 <option value="">All Statuses</option>
-                <option value="UnderReview">Under Review</option>
+                <option value="UnderReview">Needs Attention</option>
                 <option value="Pending">Pending</option>
                 <option value="Approved">Approved</option>
                 <option value="Rejected">Rejected / Revise</option>
@@ -131,7 +131,7 @@
                                 <td>
                                     @if (ms.Status == "Submitted" || ms.Status == "UnderReview")
                                     {
-                                        <span class="badge badge-light-warning">Under Review</span>
+                                        <span class="badge badge-light-warning">Needs Attention</span>
                                     }
                                     else if (ms.Status == "Approved")
                                     {
@@ -139,7 +139,7 @@
                                     }
                                     else if (ms.Status == "Pending")
                                     {
-                                        <span class="badge badge-light-secondary">Pending</span>
+                                        <span class="badge badge-light-info">Pending</span>
                                     }
                                     else
                                     {
@@ -147,13 +147,17 @@
                                     }
                                 </td>
                                 <td class="text-end pe-4">
-                                    @if (ms.Status == "Approved" || ms.Status == "Rejected")
+                                    @if (ms.Status == "Submitted" || ms.Status == "UnderReview")
+                                    {
+                                        <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-primary">Review</a>
+                                    }
+                                    else if (ms.Status == "Approved" || ms.Status == "Rejected")
                                     {
                                         <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-info">View Details</a>
                                     }
                                     else
                                     {
-                                        <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-primary">Grade</a>
+                                        <button class="btn btn-sm btn-light text-muted" disabled>Waiting</button>
                                     }
                                 </td>
                             </tr>

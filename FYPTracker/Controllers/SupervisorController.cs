@@ -859,7 +859,7 @@ namespace FYPTracker.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ReviewMeetingLogSupervisor(
             int meetingId, 
-            string supervisorComments)
+            IFormFile? signedLogbookPdf)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "User");
@@ -874,9 +874,30 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(ManageMeetings));
             }
 
-            meeting.MeetingLog.SupervisorComments = supervisorComments;
             meeting.MeetingLog.LogStatus = "Signed";
             meeting.MeetingLog.SignatureDate = DateTime.Now;
+
+            if (signedLogbookPdf != null && signedLogbookPdf.Length > 0)
+            {
+                var extension = Path.GetExtension(signedLogbookPdf.FileName).ToLower();
+                if (extension != ".pdf")
+                {
+                    TempData["Error"] = "Only PDF files are allowed for the signed logbook.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+                
+                string uniqueFileName = $"logbook_signed_student_{meeting.StudentId}_meeting_{meeting.Id}_{Guid.NewGuid().ToString().Substring(0, 8)}.pdf";
+                string uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "logbooks");
+                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+                string filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                using (var fileStream = new FileStream(filePath, FileMode.Create))
+                {
+                    await signedLogbookPdf.CopyToAsync(fileStream);
+                }
+
+                meeting.MeetingLog.SignedPdfLogbookPath = $"/uploads/logbooks/{uniqueFileName}";
+            }
 
             await _context.SaveChangesAsync();
             await AddNotificationAsync(meeting.StudentId, "MeetingLogSigned", "Progress Logbook Signed", $"Your supervisor has signed the progress logbook for the meeting on {meeting.MeetingDate:dd MMM yyyy}.");
@@ -898,6 +919,11 @@ namespace FYPTracker.Controllers
                 .FirstOrDefaultAsync(l => l.Id == id && l.MeetingBooking.SupervisorId == user.Id);
 
             if (log == null || log.LogStatus != "Signed") return NotFound();
+            
+            if (!string.IsNullOrEmpty(log.SignedPdfLogbookPath))
+                return Redirect(log.SignedPdfLogbookPath);
+            if (!string.IsNullOrEmpty(log.PdfLogbookPath))
+                return Redirect(log.PdfLogbookPath);
             
             var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == log.MeetingBooking.StudentId);
             ViewBag.ProjectName = project?.Title ?? "FYP Project";
@@ -1079,6 +1105,39 @@ namespace FYPTracker.Controllers
             ViewBag.MonthlyMeetingStatsJson = System.Text.Json.JsonSerializer.Serialize(monthlyMeetings);
 
             return View();
+        }
+
+        // ── Get Calendar Data API ──────────────────────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> GetMeetingsCalendarData()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return Json(new object[] { });
+
+            var meetings = await _context.MeetingBookings
+                .Include(m => m.Student)
+                .Where(m => m.SupervisorId == user.Id && (m.Status == "Approved" || m.Status == "Pending" || m.Status == "Postponed"))
+                .ToListAsync();
+
+            var events = meetings.Select(m => {
+                string startTimeStr = m.MeetingTime ?? "09:00 AM";
+                DateTime startDt;
+                if (!DateTime.TryParse($"{m.MeetingDate:yyyy-MM-dd} {startTimeStr}", out startDt))
+                    startDt = m.MeetingDate;
+
+                string color = m.Status == "Approved" ? "#10b981" : (m.Status == "Pending" ? "#f59e0b" : "#ef4444");
+
+                return new {
+                    id = m.Id,
+                    title = $"Meeting: {m.Student?.FullName ?? "Student"}",
+                    start = startDt.ToString("yyyy-MM-ddTHH:mm:00"),
+                    description = $"Status: {m.Status}\nLocation: {m.Location ?? "TBA"}\nReason: {m.Reason}",
+                    color = color,
+                    url = Url.Action("ManageMeetings", "Supervisor")
+                };
+            }).ToList();
+
+            return Json(events);
         }
     }
 }

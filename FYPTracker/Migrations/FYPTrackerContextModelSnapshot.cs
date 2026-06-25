@@ -464,6 +464,9 @@ namespace FYPTracker.Migrations
                     b.Property<string>("Reason")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("ReminderSent")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime?>("RespondedDate")
                         .HasColumnType("datetime");
 
@@ -499,18 +502,15 @@ namespace FYPTracker.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
 
                     b.Property<string>("ActionPointsForNextMeeting")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("CompletedActionsAndNotes")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("datetime");
 
                     b.Property<string>("KeyTopicsDiscussed")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("LogStatus")
@@ -524,8 +524,16 @@ namespace FYPTracker.Migrations
                     b.Property<DateTime?>("NextMeetingDate")
                         .HasColumnType("datetime");
 
+                    b.Property<string>("PdfLogbookPath")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.Property<DateTime?>("SignatureDate")
                         .HasColumnType("datetime");
+
+                    b.Property<string>("SignedPdfLogbookPath")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<string>("SupervisorComments")
                         .HasColumnType("nvarchar(max)");

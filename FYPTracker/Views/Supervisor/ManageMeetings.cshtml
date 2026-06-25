@@ -251,9 +251,7 @@
                                                     data-id="@m.Id"
                                                     data-student="@m.Student?.FullName"
                                                     data-date="@m.MeetingDate.ToString("dd/MM/yyyy")"
-                                                    data-topics="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.KeyTopicsDiscussed ?? "")"
-                                                    data-action="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.ActionPointsForNextMeeting ?? "")"
-                                                    data-completed="@System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLog.CompletedActionsAndNotes ?? "")"
+                                                    data-pdf="@(m.MeetingLog?.PdfLogbookPath)"
                                                     data-next-date="@(m.MeetingLog.NextMeetingDate?.ToString("yyyy-MM-ddTHH:mm"))"
                                                     onclick="openReviewLogModal(this)">
                                                 Review Log
@@ -337,7 +335,7 @@
 <div class="modal fade" id="reviewLogModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
-            <form asp-action="ReviewMeetingLogSupervisor" method="post">
+            <form asp-action="ReviewMeetingLogSupervisor" method="post" enctype="multipart/form-data">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="meetingId" id="revMeetingId" />
                 
@@ -346,45 +344,32 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small mb-4">Review the student's weekly progress logbook. Add your comments and sign to approve.</p>
+                    <p class="text-muted small mb-4">Review the student's weekly progress logbook. Add your comments, upload the signed PDF, and approve.</p>
                     
                     <div class="row mb-3">
                         <div class="col-6"><strong>Student:</strong> <span id="revStudentName"></span></div>
                         <div class="col-6 text-end"><strong>Date:</strong> <span id="revMeetingDate"></span></div>
                     </div>
 
-                    <!-- Readonly fields filled by student -->
-                    <div class="p-3 bg-light rounded-3 mb-4">
-                        <div class="mb-3">
-                            <label class="text-muted small fw-bold text-uppercase d-block">Progress Made / Tasks Completed</label>
-                            <div id="revKeyTopics" class="text-dark" style="white-space: pre-wrap; font-size: 0.9rem;"></div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="text-muted small fw-bold text-uppercase d-block">Plan for Next Week</label>
-                            <div id="revActionPoints" class="text-dark" style="white-space: pre-wrap; font-size: 0.9rem;"></div>
-                        </div>
-                        <div>
-                            <label class="text-muted small fw-bold text-uppercase d-block">Issues / Challenges</label>
-                            <div id="revCompleted" class="text-dark" style="white-space: pre-wrap; font-size: 0.9rem;"></div>
-                        </div>
+                    <div class="p-3 bg-light rounded-3 mb-4 text-center">
+                        <label class="text-muted small fw-bold text-uppercase d-block mb-2">Student's Logbook Submission</label>
+                        <a id="revStudentPdfLink" href="#" target="_blank" class="btn btn-outline-primary rounded-3">
+                            <i class="fas fa-file-pdf me-2"></i>View Student's PDF Logbook
+                        </a>
                     </div>
-
-                    <!-- Supervisor inputs -->
-                        <label class="form-label fw-bold text-primary">Proposed Date for Next Meeting</label>
-                        <div id="revNextMeetingDate" class="text-dark fw-bold" style="font-size: 0.95rem;"></div>
 
                     <div class="mb-4">
-                        <label class="form-label fw-bold text-primary">Supervisor Comments & Feedback</label>
-                        <textarea name="supervisorComments" class="form-control rounded-3 border-primary" rows="4" required placeholder="Provide feedback on the student's progress and the draft..."></textarea>
+                        <label class="form-label fw-bold text-primary">Upload Signed Logbook (PDF)</label>
+                        <input type="file" name="signedLogbookPdf" class="form-control rounded-3" accept="application/pdf" />
+                        <div class="text-muted small mt-1">Upload the signed version of the PDF to return to the student.</div>
                     </div>
 
-                    <div class="alert alert-info border-0 rounded-3 mb-0">
-                        <i class="fas fa-info-circle me-2"></i> Clicking "Sign & Approve" will permanently lock this log and apply today's date as your digital signature.
-                    </div>
+
+
                 </div>
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary px-4 rounded-3"><i class="fas fa-signature me-1"></i> Sign & Approve</button>
+                    <button type="submit" class="btn btn-primary px-4 rounded-3"><i class="fas fa-upload me-1"></i> Submit</button>
                 </div>
             </form>
         </div>
@@ -513,48 +498,19 @@
         document.getElementById('revStudentName').textContent = btn.getAttribute('data-student');
         document.getElementById('revMeetingDate').textContent = btn.getAttribute('data-date');
         
-        document.getElementById('revKeyTopics').textContent = btn.getAttribute('data-topics');
-        document.getElementById('revActionPoints').textContent = btn.getAttribute('data-action');
-        document.getElementById('revCompleted').textContent = btn.getAttribute('data-completed');
-        
-        let nextDate = btn.getAttribute('data-next-date');
-        if (nextDate) {
-            const d = new Date(nextDate);
-            document.getElementById('revNextMeetingDate').textContent = d.toLocaleString('en-US', { day:'2-digit', month:'short', year:'numeric' });
+        const pdfLink = document.getElementById('revStudentPdfLink');
+        const pdfPath = btn.getAttribute('data-pdf');
+        if (pdfPath && pdfPath !== '') {
+            pdfLink.href = pdfPath;
+            pdfLink.style.display = 'inline-block';
         } else {
-            document.getElementById('revNextMeetingDate').textContent = "Not proposed";
+            pdfLink.style.display = 'none';
         }
-        
         new bootstrap.Modal(document.getElementById('reviewLogModal')).show();
     }
 
-    async function viewFinalLog(logId) {
-        if (typeof html2pdf === 'undefined') {
-            await new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        }
-
-        const response = await fetch('/Supervisor/ViewMeetingLog/' + logId);
-        let htmlText = await response.text();
-
-        // Remove the print button from the HTML string before generating PDF
-        htmlText = htmlText.replace(/<button class="print-btn"[^>]*>.*?<\/button>/i, '');
-
-        const opt = {
-            margin: 0.5,
-            filename: 'MeetingLog_' + logId + '.pdf',
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true },
-            jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-        };
-
-        // html2pdf can render directly from an HTML string using an isolated iframe
-        await html2pdf().set(opt).from(htmlText).save();
+    function viewFinalLog(logId) {
+        window.open('/Supervisor/ViewMeetingLog/' + logId, '_blank');
     }
 
     function toggleProposedDate(id) {

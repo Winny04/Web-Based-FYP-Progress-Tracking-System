@@ -8,6 +8,7 @@ using FYPTracker.Services.Employees;
 using FYPTracker.Services.Others;
 using FYPTracker.Services.Others.Interfaces;
 using FYPTracker.Services.Quartz;
+using FYPTracker.Services.BackgroundTasks;
 using MailKit.Net.Smtp;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -41,6 +42,7 @@ builder.Services.AddScoped<IAuthenticationService, CookieAuthenticationService>(
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddTransient<IFileWriter, FileWriter>();
+builder.Services.AddHostedService<MeetingReminderService>();
 
 //register smtp
 var smtpSettings = new SmtpSettings();

@@ -12,14 +12,17 @@ namespace FYPTracker.Models
 
         public int MeetingBookingId { get; set; }
 
-        [Required]
-        public string KeyTopicsDiscussed { get; set; } = string.Empty;
+        public string? KeyTopicsDiscussed { get; set; }
 
-        [Required]
-        public string ActionPointsForNextMeeting { get; set; } = string.Empty;
+        public string? ActionPointsForNextMeeting { get; set; }
 
-        [Required]
-        public string CompletedActionsAndNotes { get; set; } = string.Empty;
+        public string? CompletedActionsAndNotes { get; set; }
+
+        [StringLength(255)]
+        public string? PdfLogbookPath { get; set; }
+
+        [StringLength(255)]
+        public string? SignedPdfLogbookPath { get; set; }
 
         public string? SupervisorComments { get; set; }
 

@@ -48,6 +48,8 @@ namespace FYPTracker.Models
         [Column(TypeName = "datetime")]
         public DateTime? RespondedDate { get; set; }
 
+        public bool ReminderSent { get; set; } = false;
+
         // Navigation
         [ForeignKey(nameof(StudentId))]
         public virtual ApplicationUser? Student { get; set; }

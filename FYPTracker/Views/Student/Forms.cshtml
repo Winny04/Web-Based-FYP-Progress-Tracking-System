@@ -376,6 +376,57 @@
                                         }
                                     </div>
 
+                                    @if (iafMilestone != null && !string.IsNullOrEmpty(iafMilestone.Remarks) && iafMilestone.Remarks.Contains("JSON: "))
+                                    {
+                                        var parts = iafMilestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                                        var parsedJson = parts[1];
+
+                                        <!-- The iframe to display the generated PDF -->
+                                        <div class="bg-light rounded-4 border border-secondary border-opacity-25 shadow-sm p-2 mb-4 mt-4" style="height: 900px;">
+                                            <h6 class="fw-bold text-primary mb-2 px-2 pt-2">Form Details (PDF)</h6>
+                                            <iframe id="iafPdfIframe" style="width: 100%; height: 90%; border: none; border-radius: 8px;"></iframe>
+                                        </div>
+
+                                        <!-- Off-screen container for HTML2PDF to read -->
+                                        <div id="iafPdfSource" style="display: none;">
+                                            <h4 style="color: #0d6efd; margin-bottom: 20px; font-family: sans-serif;">@iafMilestone.Title</h4>
+                                            <p style="font-family: sans-serif; color: #555;">Student: @(currentUser?.FullName) (@(currentUser?.EmployeeId))</p>
+                                            <hr style="border: 1px solid #ddd; margin-bottom: 20px;" />
+                                            @{
+                                                try {
+                                                    var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parsedJson);
+                                                    if (dict != null) {
+                                                        <table style="width: 100%; font-family: sans-serif; font-size: 14px; border-collapse: collapse;">
+                                                            @foreach (var kvp in dict) {
+                                                                if (!string.IsNullOrEmpty(kvp.Value)) {
+                                                                    <tr>
+                                                                        <td style="width: 30%; font-weight: bold; padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;">@kvp.Key:</td>
+                                                                        <td style="padding: 8px; border-bottom: 1px solid #eee; white-space: pre-wrap;">
+                                                                            @if (kvp.Key == "Supervisor Signature") {
+                                                                                <span style="font-family: 'Brush Script MT', cursive; font-size: 24px; color: #00008B;">@kvp.Value</span>
+                                                                            } else {
+                                                                                @kvp.Value
+                                                                            }
+                                                                        </td>
+                                                                    </tr>
+                                                                }
+                                                            }
+                                                        </table>
+                                                    }
+                                                } catch {
+                                                    <div style="font-family: monospace; white-space: pre-wrap;">@parsedJson</div>
+                                                }
+                                            }
+
+                                            @if (!string.IsNullOrEmpty(iafMilestone.SupervisorFeedback))
+                                            {
+                                                <hr style="border: 1px solid #ddd; margin: 20px 0;" />
+                                                <h5 style="color: #0d6efd; font-family: sans-serif;">Supervisor's Feedback</h5>
+                                                <p style="font-family: sans-serif; font-size: 14px; white-space: pre-wrap; background-color: #f8f9fa; padding: 15px; border-left: 4px solid #198754; color: #333;">@iafMilestone.SupervisorFeedback</p>
+                                            }
+                                        </div>
+                                    }
+
                                     @if (iafMilestone != null && !string.IsNullOrEmpty(iafMilestone.SupervisorFeedback) && iafMilestone.Status == "Approved")
                                     {
                                         <div class="form-section-title">Comment/Feedback</div>
@@ -482,6 +533,20 @@
                                     <input type="text" name="title" class="form-control bg-light" value="@Model.Title" readonly required />
                                 </div>
 
+                                <div class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1;">
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                                        <div>
+                                            <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>FYP Proposal Template</div>
+                                            <div class="text-muted small">Download the official Word template pre-filled with your student & project info. Complete it and upload as PDF below.</div>
+                                        </div>
+                                        <a href="@Url.Action("DownloadProposalTemplate", "Student")"
+                                           class="btn btn-outline-dark fw-semibold rounded-3 px-4 py-2 text-decoration-none d-flex align-items-center gap-2"
+                                           style="white-space: nowrap;">
+                                            <i class="fas fa-download"></i> Download Template (.docx)
+                                        </a>
+                                    </div>
+                                </div>
+
                                 <div class="form-section-title">Part 2: Document Attachment</div>
                                 <div class="mb-4">
                                     <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="dropZone" onclick="document.getElementById('proposalDocument').click()">
@@ -544,7 +609,7 @@
 
                                 <div class="mb-4">
                                     <label class="form-label fw-bold text-dark" style="font-size: 0.95rem;">Select Milestone to Report On</label>
-                                    <select name="milestoneId" class="form-select" required>
+                                    <select name="milestoneId" id="progressMilestoneSelect" class="form-select" required onchange="toggleProgressTemplate(this)">
                                         <option value="">-- Choose a Milestone --</option>
                                         @foreach (var m in progressMilestones)
                                         {
@@ -552,6 +617,21 @@
                                         }
                                     </select>
                                     <div class="invalid-feedback">Please select a milestone.</div>
+                                </div>
+
+                                <div id="progressTemplateSection" class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1; display: none;">
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                                        <div>
+                                            <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>FYP Progress Report Template</div>
+                                            <div class="text-muted small">Select a milestone above to download the pre-filled Word template for that specific progress report.</div>
+                                        </div>
+                                        <a href="@Url.Action("DownloadProgressTemplate", "Student")"
+                                           id="btnDownloadProgress"
+                                           class="btn btn-outline-dark fw-semibold rounded-3 px-4 py-2 text-decoration-none d-flex align-items-center gap-2"
+                                           style="white-space: nowrap;">
+                                            <i class="fas fa-download"></i> Download Template (.docx)
+                                        </a>
+                                    </div>
                                 </div>
 
                                 <div class="form-section-title">Part 1: Reporting Period</div>
@@ -620,7 +700,7 @@
                                         <i class="fas fa-lock fs-2 me-3 text-info"></i>
                                         <div>
                                             <h5 class="fw-bold text-dark mb-1">Final Submission Locked</h5>
-                                            <p class="mb-0 text-muted">Your final submission is currently: <span class="badge bg-white text-dark ms-1 shadow-sm border">@finalMilestone.Status</span></p>
+                                                <p class="mb-0 text-muted">Your final submission is currently: <span class="badge bg-white text-dark ms-1 shadow-sm border">@finalMilestone.Status</span></p>
                                             @if (!string.IsNullOrEmpty(finalMilestone?.SupervisorFeedback))
                                             {
                                                 <hr class="my-2 border-info opacity-25">
@@ -635,6 +715,20 @@
                                 <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
                                     <input type="hidden" name="formType" value="Final Submission Form" />
                                     <input type="hidden" name="milestoneId" value="@finalMilestoneId" />
+
+                                <div class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1;">
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                                        <div>
+                                            <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>FYP Final Thesis Template</div>
+                                            <div class="text-muted small">Download the official University template containing the correct structure (Cover, Abstract, TOC, Chapters).</div>
+                                        </div>
+                                        <a href="@Url.Action("DownloadFinalTemplate", "Student")"
+                                           class="btn btn-outline-dark fw-semibold rounded-3 px-4 py-2 text-decoration-none d-flex align-items-center gap-2"
+                                           style="white-space: nowrap;">
+                                            <i class="fas fa-download"></i> Download Template (.docx)
+                                        </a>
+                                    </div>
+                                </div>
 
                                 <div class="form-section-title">Part 1: Thesis Metadata</div>
                                 <div class="mb-3">
@@ -715,6 +809,7 @@
 </script>
 
 @section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         // Drag and Drop Logic
@@ -933,7 +1028,48 @@
             
         })();
 
+        document.addEventListener("DOMContentLoaded", async function() {
+            const source = document.getElementById('iafPdfSource');
+            const iframe = document.getElementById('iafPdfIframe');
+            
+            if (source && iframe) {
+                if (typeof html2pdf === 'undefined') return;
 
+                const opt = {
+                    margin: 0.5,
+                    filename: 'FormDetails.pdf',
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+                };
+
+                const htmlString = `
+                    <div style="width: 800px; padding: 20px; background: white;">
+                        ${source.innerHTML}
+                    </div>
+                `;
+
+                try {
+                    const pdfBlob = await html2pdf().set(opt).from(htmlString).outputPdf('blob');
+                    const url = URL.createObjectURL(pdfBlob);
+                    iframe.src = url;
+                } catch(e) {
+                    console.error("PDF generation failed", e);
+                    iframe.parentElement.innerHTML = '<div class="alert alert-warning m-3">Failed to load PDF preview.</div>';
+                }
+            }
+        });
+
+        function toggleProgressTemplate(selectObj) {
+            const templateSection = document.getElementById('progressTemplateSection');
+            const downloadBtn = document.getElementById('btnDownloadProgress');
+            if (selectObj.value) {
+                templateSection.style.display = 'block';
+                downloadBtn.href = '@Url.Action("DownloadProgressTemplate", "Student")?milestoneId=' + selectObj.value;
+            } else {
+                templateSection.style.display = 'none';
+            }
+        }
     </script>
 }
 

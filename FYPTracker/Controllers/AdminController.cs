@@ -720,6 +720,8 @@ public ActionResult ManageUsersData()
             var defenseList = await _context.FYPMilestones
                 .Include(m => m.Project)
                     .ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Supervisor)
                 .Where(m => m.Title == "Initial Project Allocation Form (IAF)" && m.RejectionCount >= 3)
                 .ToListAsync();
 
@@ -737,6 +739,7 @@ public ActionResult ManageUsersData()
                     
                     var notificationMessage = $"Your Initial Project Allocation Form has been rejected 3 times. You are required to attend a defense session.\n\nDate: {formattedDate}\nTime: {formattedTime}\nVenue: {venue}";
                     var emailHtml = $@"
+                        <p>Dear {student.FullName},</p>
                         <p>Your Initial Project Allocation Form has been rejected 3 times. You are required to attend a defense session.</p>
                         <ul>
                             <li><strong>Date:</strong> {formattedDate}</li>
@@ -772,6 +775,31 @@ public ActionResult ManageUsersData()
                         {
                             // Log email failure if needed, continue notifying others
                         }
+                    }
+
+                    // Notify Supervisor
+                    var supervisor = milestone.Project?.Supervisor;
+                    if (supervisor != null && !string.IsNullOrEmpty(supervisor.Email))
+                    {
+                        var supEmailHtml = $@"
+                            <p>Dear {supervisor.FullName},</p>
+                            <p>Your student <strong>{student.FullName}</strong> is required to attend a defense session for their Initial Project Allocation Form.</p>
+                            <ul>
+                                <li><strong>Date:</strong> {formattedDate}</li>
+                                <li><strong>Time:</strong> {formattedTime}</li>
+                                <li><strong>Venue:</strong> {venue}</li>
+                            </ul>
+                            <p>As their supervisor, your attendance is highly encouraged.</p>";
+
+                        try
+                        {
+                            _emailService.Send(
+                                to: supervisor.Email,
+                                subject: "Student Defense Scheduled for FYP",
+                                html: supEmailHtml
+                            );
+                        }
+                        catch (Exception ex) {}
                     }
 
                     // Save schedule to database

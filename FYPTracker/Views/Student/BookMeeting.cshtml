@@ -229,11 +229,9 @@
                                         {
                                             <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" 
                                                     data-id="@m.Id"
-                                                    data-topics="@(m.MeetingLog?.KeyTopicsDiscussed)"
-                                                    data-action="@(m.MeetingLog?.ActionPointsForNextMeeting)"
-                                                    data-completed="@(m.MeetingLog?.CompletedActionsAndNotes)"
+                                                    data-pdf="@(m.MeetingLog?.PdfLogbookPath)"
                                                     onclick="openStudentLogModal(this)">
-                                                <i class="fas fa-edit"></i> @(m.MeetingLog == null ? "Weekly Logbook" : "Edit Logbook")
+                                                <i class="fas fa-edit"></i> @(m.MeetingLog == null ? "Upload Logbook" : "View/Re-upload Logbook")
                                             </button>
                                         }
                                         else if (m.MeetingLog.LogStatus == "Signed")
@@ -296,7 +294,7 @@
                         <!-- Date Picker -->
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Date</label>
-                            <input type="date" name="meetingDate" id="meetingDate" class="form-control" required onchange="calculateDay()" min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" />
+                            <input type="date" name="meetingDate" id="meetingDate" class="form-control" required onchange="calculateDay()" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
                         </div>
 
                         <!-- Day (Auto-filled & Read-only) -->
@@ -377,7 +375,7 @@
                     <div class="mb-4">
                         <label class="form-label fw-bold">Pick New Date</label>
                         <input type="date" name="meetingDate" id="reschedDateInput" class="form-control rounded-3" 
-                               min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" required onchange="updateReschedAvailability()" />
+                               min="@DateTime.Today.ToString("yyyy-MM-dd")" required onchange="updateReschedAvailability()" />
                     </div>
 
                     <div class="mb-3">
@@ -426,38 +424,31 @@
 <div class="modal fade" id="studentLogModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
-            <form asp-action="SubmitMeetingLogStudent" method="post">
+            <form asp-action="SubmitMeetingLogStudent" method="post" enctype="multipart/form-data">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="meetingId" id="logMeetingId" />
                 
                 <div class="modal-header border-0 pb-0">
-                    <h5 class="fw-bold text-dark"><i class="fas fa-edit text-primary me-2"></i>Weekly Progress Logbook</h5>
+                    <h5 class="fw-bold text-dark"><i class="fas fa-file-upload text-primary me-2"></i>Upload Weekly Logbook</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small mb-4">Please log your weekly progress below. Your supervisor will review and sign this log.</p>
+                    <p class="text-muted small mb-4">Download the template, fill it out, and upload it as a PDF. Your supervisor will review and sign this log.</p>
                     
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Progress Made / Tasks Completed</label>
-                        <textarea name="keyTopics" id="logKeyTopics" class="form-control rounded-3" rows="3" required></textarea>
+                    <div class="mb-4 text-center">
+                        <a href="/templates/Record_of_supervisor_meeting_template.docx" class="btn btn-outline-primary rounded-3" download>
+                            <i class="fas fa-download me-2"></i>Download Word Template
+                        </a>
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label fw-bold">Plan for Next Week / Next Steps</label>
-                        <textarea name="actionPoints" id="logActionPoints" class="form-control rounded-3" rows="3" required></textarea>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Issues / Challenges Faced</label>
-                        <textarea name="completedActions" id="logCompletedActions" class="form-control rounded-3" rows="3" required></textarea>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="form-label fw-bold text-primary">Proposed Date for Next Meeting</label>
-                        <div class="d-flex gap-2">
-                            <input type="date" name="nextMeetingDate" id="logNextMeetingDate" class="form-control rounded-3 border-primary" required />
+                        <label class="form-label fw-bold">Upload Completed Logbook (PDF)</label>
+                        <input type="file" name="logbookPdf" id="logbookPdf" class="form-control rounded-3" accept="application/pdf" required />
+                        <div id="existingLogbookLink" class="mt-2" style="display:none;">
+                            <a href="#" target="_blank" class="text-success"><i class="fas fa-file-pdf me-1"></i>View Previously Uploaded Logbook</a>
                         </div>
                     </div>
+
                 </div>
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
@@ -503,10 +494,30 @@
         try {
             const resp = await fetch(`/Student/GetBookedSlots?supervisorId=${supervisorId}&date=${dateVal}`);
             const booked = await resp.json();
+            
+            const today = new Date();
+            const selectedDate = new Date(dateVal + 'T00:00:00');
+            const isToday = today.toDateString() === selectedDate.toDateString();
+            const currentHour = today.getHours();
+            const currentMinutes = today.getMinutes();
+
             container.querySelectorAll('.time-slot').forEach(slot => {
+                let isPast = false;
+                if (isToday) {
+                    const parts = slot.dataset.time.split(':');
+                    const slotHr = parseInt(parts[0], 10);
+                    const slotMin = parseInt(parts[1], 10);
+                    if (slotHr < currentHour || (slotHr === currentHour && slotMin <= currentMinutes)) {
+                        isPast = true;
+                    }
+                }
+
                 if (booked.includes(slot.dataset.time)) {
                     slot.classList.add('booked');
                     slot.title = 'Already booked';
+                } else if (isPast) {
+                    slot.classList.add('booked');
+                    slot.title = 'Time has passed';
                 }
             });
         } catch (err) { console.error(err); }
@@ -572,10 +583,30 @@
         try {
             const resp = await fetch(`/Student/GetBookedSlots?supervisorId=${supervisorId}&date=${dateVal}`);
             const booked = await resp.json();
+            
+            const today = new Date();
+            const selectedDate = new Date(dateVal + 'T00:00:00');
+            const isToday = today.toDateString() === selectedDate.toDateString();
+            const currentHour = today.getHours();
+            const currentMinutes = today.getMinutes();
+
             container.querySelectorAll('.time-slot').forEach(slot => {
+                let isPast = false;
+                if (isToday) {
+                    const parts = slot.dataset.time.split(':');
+                    const slotHr = parseInt(parts[0], 10);
+                    const slotMin = parseInt(parts[1], 10);
+                    if (slotHr < currentHour || (slotHr === currentHour && slotMin <= currentMinutes)) {
+                        isPast = true;
+                    }
+                }
+
                 if (booked.includes(slot.dataset.time)) {
                     slot.classList.add('booked');
                     slot.title = 'Already booked';
+                } else if (isPast) {
+                    slot.classList.add('booked');
+                    slot.title = 'Time has passed';
                 }
             });
         } catch (err) { console.error(err); }
@@ -667,34 +698,29 @@
 
     // ── Open Student Log Modal ──────────────────────────────────
     function openStudentLogModal(btn) {
-        document.getElementById('logMeetingId').value        = btn.getAttribute('data-id');
-        document.getElementById('logKeyTopics').value        = btn.getAttribute('data-topics') || '';
-        document.getElementById('logActionPoints').value     = btn.getAttribute('data-action') || '';
-        document.getElementById('logCompletedActions').value = btn.getAttribute('data-completed') || '';
+        document.getElementById('logMeetingId').value = btn.getAttribute('data-id');
+        
+        const pdfPath = btn.getAttribute('data-pdf');
+        const linkContainer = document.getElementById('existingLogbookLink');
+        const fileInput = document.getElementById('logbookPdf');
+
+        if (pdfPath && pdfPath !== '') {
+            linkContainer.style.display = 'block';
+            linkContainer.querySelector('a').href = pdfPath;
+            fileInput.required = false; // Optional if already uploaded
+        } else {
+            linkContainer.style.display = 'none';
+            fileInput.required = true;
+        }
+
         new bootstrap.Modal(document.getElementById('studentLogModal')).show();
     }
 
     // ── View Final Log as PDF ───────────────────────────────────
-    async function viewFinalLog(logId) {
-        if (typeof html2pdf === 'undefined') {
-            await new Promise((resolve, reject) => {
-                const s = document.createElement('script');
-                s.src     = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-                s.onload  = resolve;
-                s.onerror = reject;
-                document.head.appendChild(s);
-            });
-        }
-        const resp = await fetch('/Student/ViewMeetingLog/' + logId);
-        let htmlText = await resp.text();
-        htmlText = htmlText.replace(/<button class="print-btn"[^>]*>.*?<\/button>/i, '');
-        await html2pdf().set({
-            margin: 0.5,
-            filename: 'MeetingLog_' + logId + '.pdf',
-            image:    { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true },
-            jsPDF:    { unit: 'in', format: 'a4', orientation: 'portrait' }
-        }).from(htmlText).save();
+    function viewFinalLog(logId) {
+        // Since the user uploads a PDF, we don't need html2pdf. We just redirect to the ViewMeetingLog endpoint
+        // which now returns the signed PDF directly.
+        window.open('/Student/ViewMeetingLog/' + logId, '_blank');
     }
 </script>
 

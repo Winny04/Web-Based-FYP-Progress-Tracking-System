@@ -196,6 +196,16 @@
         font-family: 'Inter', sans-serif;
     }
 
+    /* FullCalendar Custom Overrides */
+    .fc .fc-daygrid-body tr:hover {
+        background-color: transparent !important;
+    }
+    
+    .fc .fc-daygrid-day:hover {
+        background-color: #f8fafc !important;
+        cursor: pointer;
+    }
+
     .premium-card {
         background: var(--card-bg);
         border: 1px solid var(--border-color);
@@ -877,6 +887,16 @@
 
     </div>
 
+    <!-- Calendar Row -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="premium-card p-4">
+                <h5 class="fw-bold text-dark mb-4"><i class="fas fa-calendar-alt text-primary me-2"></i>Meeting Calendar</h5>
+                <div id="calendar" style="min-height: 400px;"></div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -887,6 +907,42 @@
         });
     });
 </script>
+
+@section scripts {
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+
+    <script>
+        function initCalendar() {
+            var calendarEl = document.getElementById('calendar');
+            if(calendarEl) {
+                var calendar = new FullCalendar.Calendar(calendarEl, {
+                    initialView: 'dayGridMonth',
+                    height: 'auto',
+                    contentHeight: 'auto',
+                    headerToolbar: {
+                        left: 'prev,next today',
+                        center: 'title',
+                        right: 'dayGridMonth,timeGridWeek'
+                    },
+                    events: '@Url.Action("GetMeetingsCalendarData", "Student")',
+                    eventClick: function(info) {
+                        if(info.event.url) {
+                            window.location.href = info.event.url;
+                            info.jsEvent.preventDefault();
+                        }
+                    }
+                });
+                calendar.render();
+            }
+        }
+        
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", initCalendar);
+        } else {
+            initCalendar();
+        }
+    </script>
+}
 
 
 
