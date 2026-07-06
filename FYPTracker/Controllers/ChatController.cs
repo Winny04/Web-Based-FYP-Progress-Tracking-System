@@ -3,8 +3,13 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Hosting;
 using FYPTracker.Models;
 using FYPTracker.Services.Others.Interfaces;
+using Microsoft.AspNetCore.SignalR;
+using FYPTracker.Hubs;
+using System.IO;
+using Microsoft.AspNetCore.Http;
 
 namespace FYPTracker.Controllers
 {
@@ -12,11 +17,15 @@ namespace FYPTracker.Controllers
     {
         private readonly FYPTrackerContext _context;
         private readonly IEmailService _emailService;
+        private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly IWebHostEnvironment _env;
 
-        public ChatController(FYPTrackerContext context, IEmailService emailService)
+        public ChatController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext, IWebHostEnvironment env)
         {
             _context = context;
             _emailService = emailService;
+            _hubContext = hubContext;
+            _env = env;
         }
 
         private async Task<ApplicationUser?> GetCurrentUserAsync()
@@ -36,6 +45,7 @@ namespace FYPTracker.Controllers
             ViewBag.CurrentUserId = user.Id;
             ViewBag.CurrentUserType = user.UserType;
             ViewBag.IsStudent = user.UserType == "Student";
+            ViewBag.MyName = user.FullName ?? user.UserName;
 
             if (user.UserType == "Student")
             {
@@ -129,25 +139,38 @@ namespace FYPTracker.Controllers
 
         // GET: /Chat/GetHistory?partnerId=xxx
         [HttpGet]
-        public async Task<IActionResult> GetHistory(int partnerId)
+        public async Task<IActionResult> GetHistory(int partnerId, int skip = 0, int take = 20)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return Unauthorized();
             if (partnerId <= 0) return BadRequest("Invalid partner ID");
 
-            var messages = await _context.ChatMessages
+            var messagesQuery = await _context.ChatMessages
                 .Where(m => (m.SenderId == user.Id && m.ReceiverId == partnerId) ||
                             (m.SenderId == partnerId && m.ReceiverId == user.Id))
-                .OrderBy(m => m.SentAt)
+                .OrderByDescending(m => m.SentAt)
+                .Skip(skip)
+                .Take(take)
                 .Select(m => new {
                     id = m.Id,
                     senderId = m.SenderId,
                     receiverId = m.ReceiverId,
-                    messageText = m.MessageText,
+                    messageText = m.IsDeleted ? null : m.MessageText,
+                    attachmentUrl = m.IsDeleted ? null : m.AttachmentUrl,
+                    attachmentName = m.IsDeleted ? null : m.AttachmentName,
                     sentAtStr = m.SentAt.ToString("dd MMM, HH:mm"),
-                    isMine = m.SenderId == user.Id
+                    isMine = m.SenderId == user.Id,
+                    isRead = m.IsRead,
+                    isPinned = m.IsPinned,
+                    isEdited = m.IsEdited,
+                    isDeleted = m.IsDeleted,
+                    replyToId = m.ReplyToId,
+                    replyToMessageText = m.ReplyToMessage != null ? (m.ReplyToMessage.IsDeleted ? "Deleted Message" : (m.ReplyToMessage.MessageText ?? m.ReplyToMessage.AttachmentName)) : null
                 })
                 .ToListAsync();
+
+            var messages = messagesQuery.ToList();
+            messages.Reverse(); // So oldest in this batch comes first in the DOM
 
             // Mark unread messages as read
             var unread = await _context.ChatMessages
@@ -165,24 +188,56 @@ namespace FYPTracker.Controllers
 
         // POST: /Chat/SendMessage
         [HttpPost]
-        public async Task<IActionResult> SendMessage(int receiverId, string messageText)
+        public async Task<IActionResult> SendMessage([FromForm] int receiverId, [FromForm] string? messageText, [FromForm] IFormFile? attachment, [FromForm] int? replyToId)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return Unauthorized();
-            if (receiverId <= 0 || string.IsNullOrWhiteSpace(messageText))
+            if (receiverId <= 0 || (string.IsNullOrWhiteSpace(messageText) && attachment == null))
                 return BadRequest("Invalid input");
+
+            string? attachmentUrl = null;
+            string? attachmentName = null;
+
+            if (attachment != null && attachment.Length > 0)
+            {
+                var uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "chat");
+                if (!Directory.Exists(uploadsFolder))
+                    Directory.CreateDirectory(uploadsFolder);
+
+                var uniqueFileName = Guid.NewGuid().ToString() + "_" + attachment.FileName;
+                var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                using (var fileStream = new FileStream(filePath, FileMode.Create))
+                {
+                    await attachment.CopyToAsync(fileStream);
+                }
+
+                attachmentUrl = "/uploads/chat/" + uniqueFileName;
+                attachmentName = attachment.FileName;
+            }
 
             var chatMsg = new ChatMessage
             {
                 SenderId = user.Id,
                 ReceiverId = receiverId,
-                MessageText = messageText.Trim(),
+                MessageText = string.IsNullOrWhiteSpace(messageText) ? null : messageText.Trim(),
+                AttachmentUrl = attachmentUrl,
+                AttachmentName = attachmentName,
                 SentAt = DateTime.Now,
-                IsRead = false
+                IsRead = false,
+                ReplyToId = replyToId,
+                IsPinned = false
             };
 
             _context.ChatMessages.Add(chatMsg);
             await _context.SaveChangesAsync();
+
+            string? replyText = null;
+            if (replyToId.HasValue)
+            {
+                var replyMsg = await _context.ChatMessages.FindAsync(replyToId.Value);
+                replyText = replyMsg?.MessageText ?? replyMsg?.AttachmentName;
+            }
 
             // --- Send Email Notification ---
             var receiver = await _context.ApplicationUsers.FindAsync(receiverId);
@@ -209,6 +264,25 @@ namespace FYPTracker.Controllers
                     }
                 }
             // -------------------------------
+            
+            var chatMsgDto = new {
+                id = chatMsg.Id,
+                senderId = chatMsg.SenderId,
+                receiverId = chatMsg.ReceiverId,
+                messageText = chatMsg.MessageText,
+                attachmentUrl = chatMsg.AttachmentUrl,
+                attachmentName = chatMsg.AttachmentName,
+                sentAtStr = chatMsg.SentAt.ToString("dd MMM, HH:mm"),
+                isMine = false,
+                isRead = false,
+                isPinned = false,
+                isEdited = false,
+                isDeleted = false,
+                replyToId = chatMsg.ReplyToId,
+                replyToMessageText = replyText
+            };
+            
+            await _hubContext.Clients.Group($"User_{receiverId}").SendAsync("ReceiveChatMessage", chatMsgDto);
 
             return Json(new {
                 success = true,
@@ -217,10 +291,95 @@ namespace FYPTracker.Controllers
                     senderId = chatMsg.SenderId,
                     receiverId = chatMsg.ReceiverId,
                     messageText = chatMsg.MessageText,
+                    attachmentUrl = chatMsg.AttachmentUrl,
+                    attachmentName = chatMsg.AttachmentName,
                     sentAtStr = chatMsg.SentAt.ToString("dd MMM, HH:mm"),
-                    isMine = true
+                    isMine = true,
+                    isRead = false,
+                    isPinned = false,
+                    isEdited = false,
+                    isDeleted = false,
+                    replyToId = chatMsg.ReplyToId,
+                    replyToMessageText = replyText
                 }
             });
+        }
+        
+        [HttpPost]
+        public async Task<IActionResult> MarkAsRead(int senderId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return Unauthorized();
+
+            var unread = await _context.ChatMessages
+                .Where(m => m.ReceiverId == user.Id && m.SenderId == senderId && !m.IsRead)
+                .ToListAsync();
+
+            if (unread.Any())
+            {
+                unread.ForEach(m => m.IsRead = true);
+                await _context.SaveChangesAsync();
+                
+                await _hubContext.Clients.Group($"User_{senderId}").SendAsync("MessagesRead", user.Id);
+            }
+            return Ok();
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> TogglePinMessage(int messageId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return Unauthorized();
+
+            var msg = await _context.ChatMessages.FindAsync(messageId);
+            if (msg == null || (msg.SenderId != user.Id && msg.ReceiverId != user.Id)) return NotFound();
+
+            msg.IsPinned = !msg.IsPinned;
+            await _context.SaveChangesAsync();
+
+            int otherUserId = msg.SenderId == user.Id ? msg.ReceiverId : msg.SenderId;
+            await _hubContext.Clients.Group($"User_{otherUserId}").SendAsync("MessagePinnedToggled", msg.Id, msg.IsPinned);
+
+            return Json(new { success = true, isPinned = msg.IsPinned });
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> EditMessage(int messageId, [FromForm] string newText)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return Unauthorized();
+            if (string.IsNullOrWhiteSpace(newText)) return BadRequest("Message cannot be empty.");
+
+            var msg = await _context.ChatMessages.FindAsync(messageId);
+            if (msg == null || msg.SenderId != user.Id || msg.IsDeleted) return NotFound();
+
+            msg.MessageText = newText.Trim();
+            msg.IsEdited = true;
+            await _context.SaveChangesAsync();
+
+            await _hubContext.Clients.Group($"User_{msg.ReceiverId}").SendAsync("MessageEdited", msg.Id, msg.MessageText);
+
+            return Json(new { success = true, newText = msg.MessageText });
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> DeleteMessage(int messageId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return Unauthorized();
+
+            var msg = await _context.ChatMessages.FindAsync(messageId);
+            if (msg == null || msg.SenderId != user.Id) return NotFound();
+
+            msg.IsDeleted = true;
+            msg.MessageText = null;
+            msg.AttachmentUrl = null;
+            msg.AttachmentName = null;
+            await _context.SaveChangesAsync();
+
+            await _hubContext.Clients.Group($"User_{msg.ReceiverId}").SendAsync("MessageDeleted", msg.Id);
+
+            return Json(new { success = true });
         }
     }
 }

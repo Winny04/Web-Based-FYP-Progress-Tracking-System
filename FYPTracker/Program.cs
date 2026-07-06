@@ -9,6 +9,7 @@ using FYPTracker.Services.Others;
 using FYPTracker.Services.Others.Interfaces;
 using FYPTracker.Services.Quartz;
 using FYPTracker.Services.BackgroundTasks;
+using FYPTracker.Hubs;
 using MailKit.Net.Smtp;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -61,6 +62,7 @@ builder.Services.AddDbContext<FYPTrackerContext>(options =>
 
 builder.Services.AddControllers().AddJsonOptions(options => { options.JsonSerializerOptions.PropertyNamingPolicy = null; });
 builder.Services.AddSession();
+builder.Services.AddSignalR();
 builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
 builder.Services.AddTransient<IAuthorizationHandler, UserTypeHandler>();
 builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
@@ -151,6 +153,7 @@ app.UseEndpoints(builder =>
         pattern: "",
         defaults: new { controller = "Home", action = "Index" }
         );
+    builder.MapHub<NotificationHub>("/notificationHub");
 });
 app.MapControllerRoute(
     name: "default",

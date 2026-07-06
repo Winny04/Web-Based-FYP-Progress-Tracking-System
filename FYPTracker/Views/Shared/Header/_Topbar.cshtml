@@ -60,7 +60,7 @@
                 <a href="@notifUrl" class="menu-link px-5">
                     <i class="fas fa-bell me-2 text-muted"></i>
                     <span class="flex-grow-1">Notification</span>
-                    @if(unreadCount > 0) { <span class="badge badge-sm badge-circle badge-danger" style="width: 18px; height: 18px; font-size: 0.75rem;">@unreadCount</span> }
+                    <span id="header_notification_badge" class="badge badge-sm badge-circle badge-danger @(unreadCount > 0 ? "" : "d-none")" style="width: 18px; height: 18px; font-size: 0.75rem; transition: transform 0.2s;">@unreadCount</span>
                 </a>
             </div>
              <div class="separator my-2"></div>

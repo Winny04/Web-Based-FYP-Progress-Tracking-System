@@ -59,7 +59,130 @@
 
     <script src="~/js/tail.select.min.js"></script>
     <script src="~/js/MultiMailPlugin.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
+        @{
+            var identity = User.Identity as System.Security.Claims.ClaimsIdentity;
+            var idClaim = identity?.FindFirst("Id");
+            var currentUserId = idClaim != null ? idClaim.Value : "0";
+        }
+        var globalUserId = parseInt('@currentUserId');
+        function incrementNotificationBadge() {
+            var badge = document.getElementById("header_notification_badge");
+            if (badge) {
+                var currentCount = parseInt(badge.innerText) || 0;
+                badge.innerText = currentCount + 1;
+                badge.classList.remove("d-none");
+                // Animate to grab attention
+                badge.style.transform = "scale(1.5)";
+                setTimeout(() => { badge.style.transform = "scale(1)"; }, 200);
+            }
+        }
+
+        if(globalUserId > 0) {
+            window.signalRConnection = new signalR.HubConnectionBuilder()
+                .withUrl("/notificationHub")
+                .build();
+
+            window.signalRConnection.on("ReceiveRequestStatusUpdate", (supervisorId, status) => {
+                incrementNotificationBadge();
+                Swal.fire({
+                    title: 'Status Updated!',
+                    text: `Your supervisor request was ${status}.`,
+                    icon: status === 'Approved' ? 'success' : 'info',
+                    confirmButtonText: 'OK'
+                }).then((result) => {
+                    // Update header bell if it exists
+                    var bellBadge = document.querySelector('.badge-bell');
+                    if(bellBadge) {
+                        bellBadge.innerText = parseInt(bellBadge.innerText) + 1;
+                    }
+                    
+                    // Dispatch event for local page handling, or just auto-reload if on specific pages
+                    var isDashboardOrRequestPage = window.location.pathname.toLowerCase().includes('/student/index') || window.location.pathname.toLowerCase().includes('/student/selectsupervisor');
+                    if (isDashboardOrRequestPage) {
+                        window.location.reload();
+                    }
+                });
+            });
+
+            window.signalRConnection.on("ReceiveNewSupervisorRequest", (studentName, topic) => {
+                incrementNotificationBadge();
+                Swal.fire({
+                    title: 'New Student Request!',
+                    text: `${studentName} has requested you as their supervisor for: ${topic}`,
+                    icon: 'info',
+                    confirmButtonText: 'View Request'
+                }).then((result) => {
+                    var isSupervisorRequestsPage = window.location.pathname.toLowerCase().includes('/supervisor/studentrequests') || window.location.pathname.toLowerCase().includes('/supervisor/index');
+                    if (isSupervisorRequestsPage) {
+                        window.location.reload();
+                    } else if (result.isConfirmed) {
+                        window.location.href = '/Supervisor/StudentRequests';
+                    }
+                });
+            });
+
+            // Meeting Notification
+            window.signalRConnection.on("ReceiveMeetingUpdate", (title, message) => {
+                incrementNotificationBadge();
+                Swal.fire({
+                    title: title,
+                    text: message,
+                    icon: 'info',
+                    confirmButtonText: 'OK'
+                }).then((result) => {
+                    var isMeetingPage = window.location.pathname.toLowerCase().includes('manage') || window.location.pathname.toLowerCase().includes('index') || window.location.pathname.toLowerCase().includes('calendar') || window.location.pathname.toLowerCase().includes('bookmeeting');
+                    if (isMeetingPage) {
+                        window.location.reload();
+                    }
+                });
+            });
+
+            // Milestone Notification
+            window.signalRConnection.on("ReceiveMilestoneUpdate", (title, message) => {
+                incrementNotificationBadge();
+                Swal.fire({
+                    title: title,
+                    text: message,
+                    icon: 'info',
+                    confirmButtonText: 'OK'
+                }).then((result) => {
+                    var isMilestonePage = window.location.pathname.toLowerCase().includes('projectdetails') || window.location.pathname.toLowerCase().includes('forms') || window.location.pathname.toLowerCase().includes('reviewsubmissions') || window.location.pathname.toLowerCase().includes('index');
+                    if (isMilestonePage) {
+                        window.location.reload();
+                    }
+                });
+            });
+
+            // Global Chat Notification
+            window.signalRConnection.on("ReceiveChatMessage", (msg) => {
+                var isChatPage = window.location.pathname.toLowerCase().includes('/chat');
+                if (!isChatPage) {
+                    // Show a toast notification if the user is not currently in the chat screen
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'info',
+                        title: 'New Chat Message',
+                        text: 'You have a new message. Click to view.',
+                        showConfirmButton: false,
+                        timer: 4000,
+                        timerProgressBar: true,
+                        didOpen: (toast) => {
+                            toast.addEventListener('mouseenter', Swal.stopTimer)
+                            toast.addEventListener('mouseleave', Swal.resumeTimer)
+                            toast.addEventListener('click', () => { window.location.href = '/Chat'; })
+                        }
+                    });
+                }
+            });
+
+            window.signalRConnection.start().then(() => {
+                window.signalRConnection.invoke("JoinUserGroup", globalUserId);
+            }).catch(err => console.error(err));
+        }
 
         //$("#noticeSlider").css("display", "none");
         //var myCarousel = document.getElementById('carouselExampleSlidesOnly')

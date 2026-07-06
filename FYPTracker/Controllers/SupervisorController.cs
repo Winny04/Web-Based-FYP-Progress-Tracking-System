@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using FYPTracker.Services.Others.Interfaces;
+using Microsoft.AspNetCore.SignalR;
+using FYPTracker.Hubs;
 
 namespace FYPTracker.Controllers
 {
@@ -11,11 +13,13 @@ namespace FYPTracker.Controllers
     {
         private readonly FYPTrackerContext _context;
         private readonly IEmailService _emailService;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
-        public SupervisorController(FYPTrackerContext context, IEmailService emailService)
+        public SupervisorController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext)
         {
             _context = context;
             _emailService = emailService;
+            _hubContext = hubContext;
         }
 
         private async Task<ApplicationUser?> GetCurrentUserAsync()
@@ -199,6 +203,10 @@ namespace FYPTracker.Controllers
                 }
 
                 await _context.SaveChangesAsync();
+                
+                // --- NEW: SignalR Real-Time Notification ---
+                await _hubContext.Clients.Group($"User_{req.StudentId}").SendAsync("ReceiveRequestStatusUpdate", req.SupervisorId, req.Status);
+
                 TempData["Success"] = $"Request {status.ToLower()}.";
             }
             return RedirectToAction(nameof(StudentRequests));
@@ -259,6 +267,10 @@ namespace FYPTracker.Controllers
                 };
                 _context.FYPMilestones.Add(milestone);
                 await _context.SaveChangesAsync();
+                
+                // --- SignalR Real-Time Notification ---
+                await _hubContext.Clients.Group($"User_{project.StudentId}").SendAsync("ReceiveMilestoneUpdate", "New Milestone Assigned", $"You have been assigned a new milestone: {title}");
+
                 TempData["Success"] = "Milestone added successfully.";
             }
             return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
@@ -322,6 +334,12 @@ namespace FYPTracker.Controllers
 
                 _context.FYPMilestones.AddRange(milestones);
                 await _context.SaveChangesAsync();
+                
+                // --- SignalR Real-Time Notification ---
+                foreach (var p in projects)
+                {
+                    await _hubContext.Clients.Group($"User_{p.StudentId}").SendAsync("ReceiveMilestoneUpdate", "New Milestone Assigned", $"You have been assigned a new milestone: {title}");
+                }
                 
                 TempData["Success"] = $"Successfully assigned milestone to all {projects.Count} active student(s).";
             }
@@ -423,6 +441,12 @@ namespace FYPTracker.Controllers
                 if (successCount > 0)
                 {
                     await _context.SaveChangesAsync();
+                    
+                    // --- SignalR Real-Time Notification ---
+                    foreach (var m in milestones.Where(m => m.Status != "Approved"))
+                    {
+                        await _hubContext.Clients.Group($"User_{m.Project.StudentId}").SendAsync("ReceiveMilestoneUpdate", "Milestone Updated", $"Your milestone '{targetTitle}' has been updated.");
+                    }
                 }
 
                 if (errorCount > 0)
@@ -476,6 +500,12 @@ namespace FYPTracker.Controllers
                 {
                     _context.FYPMilestones.RemoveRange(toDelete);
                     await _context.SaveChangesAsync();
+                    
+                    // --- SignalR Real-Time Notification ---
+                    foreach (var m in toDelete)
+                    {
+                        await _hubContext.Clients.Group($"User_{m.Project.StudentId}").SendAsync("ReceiveMilestoneUpdate", "Milestone Deleted", $"Your milestone '{targetTitle}' has been deleted.");
+                    }
                 }
 
                 if (skippedCount > 0)
@@ -527,6 +557,10 @@ namespace FYPTracker.Controllers
                 }
 
                 await _context.SaveChangesAsync();
+                
+                // --- SignalR Real-Time Notification ---
+                await _hubContext.Clients.Group($"User_{milestone.Project.StudentId}").SendAsync("ReceiveMilestoneUpdate", "Milestone Updated", $"Your milestone '{title}' has been updated.");
+                
                 return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
             }
             return RedirectToAction(nameof(MyProjects));
@@ -558,6 +592,10 @@ namespace FYPTracker.Controllers
                 int projectId = milestone.FYPProjectId;
                 _context.FYPMilestones.Remove(milestone);
                 await _context.SaveChangesAsync();
+                
+                // --- SignalR Real-Time Notification ---
+                await _hubContext.Clients.Group($"User_{milestone.Project.StudentId}").SendAsync("ReceiveMilestoneUpdate", "Milestone Deleted", $"Your milestone '{milestone.Title}' has been deleted.");
+                
                 TempData["Success"] = "Milestone deleted successfully.";
                 return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
             }
@@ -710,6 +748,10 @@ namespace FYPTracker.Controllers
                 }
 
                 await _context.SaveChangesAsync();
+                
+                // --- SignalR Real-Time Notification ---
+                string actionStr = status == "Approved" ? "graded" : "reviewed";
+                await _hubContext.Clients.Group($"User_{milestone.Project.StudentId}").SendAsync("ReceiveMilestoneUpdate", "Milestone Reviewed", $"Your milestone '{milestone.Title}' was {actionStr}.");
 
                 if (status == "Approved") {
                     await AddNotificationAsync(milestone.Project.StudentId, "SubmissionFeedback", $"{milestone.Title} Approved", remarks);
@@ -797,6 +839,9 @@ namespace FYPTracker.Controllers
 
                 await AddNotificationAsync(meeting.StudentId, "MeetingUpdate", $"Meeting {status}", note);
                 await LogActivityAsync(meeting.StudentId, "MeetingBooked", $"Meeting {status}");
+                
+                // --- SignalR Real-Time Notification ---
+                await _hubContext.Clients.Group($"User_{meeting.StudentId}").SendAsync("ReceiveMeetingUpdate", $"Meeting {status}", $"Your meeting request was {status.ToLower()}. {(string.IsNullOrEmpty(note) ? "" : "Note: " + note)}");
 
                 TempData["Success"] = $"Meeting {status.ToLower()}.";
             }
@@ -836,6 +881,9 @@ namespace FYPTracker.Controllers
 
                 await AddNotificationAsync(meeting.StudentId, "MeetingUpdate", $"Meeting {status}", notifMessage);
                 await LogActivityAsync(meeting.StudentId, "MeetingBooked", $"Meeting {status}");
+                
+                // --- SignalR Real-Time Notification ---
+                await _hubContext.Clients.Group($"User_{meeting.StudentId}").SendAsync("ReceiveMeetingUpdate", $"Meeting {status}", notifMessage);
 
                 TempData["Success"] = $"Meeting {status.ToLower()}.";
             }
@@ -901,6 +949,9 @@ namespace FYPTracker.Controllers
 
             await _context.SaveChangesAsync();
             await AddNotificationAsync(meeting.StudentId, "MeetingLogSigned", "Progress Logbook Signed", $"Your supervisor has signed the progress logbook for the meeting on {meeting.MeetingDate:dd MMM yyyy}.");
+            
+            // --- SignalR Real-Time Notification ---
+            await _hubContext.Clients.Group($"User_{meeting.StudentId}").SendAsync("ReceiveMeetingUpdate", "Logbook Signed", $"Your supervisor has signed your progress logbook.");
             
             TempData["Success"] = "Progress logbook signed and approved successfully!";
             return RedirectToAction(nameof(ManageMeetings));

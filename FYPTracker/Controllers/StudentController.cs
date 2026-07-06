@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using FYPTracker.Services.Others.Interfaces;
 using NPOI.XWPF.UserModel;
+using Microsoft.AspNetCore.SignalR;
+using FYPTracker.Hubs;
 
 namespace FYPTracker.Controllers
 {
@@ -13,12 +15,14 @@ namespace FYPTracker.Controllers
         private readonly FYPTrackerContext _context;
         private readonly IWebHostEnvironment _env;
         private readonly IEmailService _emailService;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
-        public StudentController(FYPTrackerContext context, IWebHostEnvironment env, IEmailService emailService)
+        public StudentController(FYPTrackerContext context, IWebHostEnvironment env, IEmailService emailService, IHubContext<NotificationHub> hubContext)
         {
             _context = context;
             _env     = env;
             _emailService = emailService;
+            _hubContext = hubContext;
         }
 
         // ══════════════════════════════════════════════════════
@@ -317,9 +321,12 @@ namespace FYPTracker.Controllers
                     string body = $"<p>Dear {supervisor.FullName},</p><p>You have received a new FYP supervision request from <b>{user.FullName}</b>.</p><p><b>Topic:</b> {projectTopic}</p><p>Please log in to the FYP Tracker portal to approve or reject this request.</p>";
                     _emailService.Send(supervisor.Email, subject, body);
                 }
+
+                // --- NEW: SignalR Real-Time Notification to Supervisor ---
+                await _hubContext.Clients.Group($"User_{supervisorId}").SendAsync("ReceiveNewSupervisorRequest", user.FullName, projectTopic);
             }
 
-            TempData["Success"] = "Supervision request sent successfully!";
+            TempData["Success"] = "Your supervisor request has been submitted successfully! Please wait for their approval.";
             return RedirectToAction(nameof(SelectSupervisor));
         }
 
@@ -476,7 +483,12 @@ namespace FYPTracker.Controllers
                 
                 await LogActivityAsync(user.Id, "Submission", "Form Submitted", $"Submitted {formType} for {milestone.Title}");
                 if (milestone.Project.SupervisorId.HasValue)
+                {
                     await AddNotificationAsync(milestone.Project.SupervisorId.Value, "Submission", "Form Submitted", $"Student {user.FullName} submitted {formType} for {milestone.Title}", milestoneId);
+                    
+                    // --- SignalR Real-Time Notification ---
+                    await _hubContext.Clients.Group($"User_{milestone.Project.SupervisorId.Value}").SendAsync("ReceiveMilestoneUpdate", "New Milestone Submission", $"Student {user.FullName} submitted {formType} for {milestone.Title}.");
+                }
             }
 
             TempData["Success"] = "Your form has been submitted successfully!";
@@ -736,6 +748,9 @@ namespace FYPTracker.Controllers
                 string supBody = $"<p>Dear {supervisor.FullName},</p><p>You have a new meeting booking request from <strong>{user.FullName}</strong>.</p><ul><li><strong>Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>Time:</strong> {meetingTime}</li><li><strong>Reason:</strong> {reason}</li></ul><p>Please log in to the FYP Tracker system to approve or reject this request.</p>";
                 _emailService.Send(supervisor.Email, supSubject, supBody);
             }
+            
+            // --- SignalR Real-Time Notification ---
+            await _hubContext.Clients.Group($"User_{supervisorId}").SendAsync("ReceiveMeetingUpdate", "New Meeting Request", $"Student {user.FullName} requested a meeting on {parsedDate:dd MMM yyyy} at {meetingTime}.");
 
             if (!string.IsNullOrEmpty(user.Email))
             {
@@ -903,6 +918,9 @@ namespace FYPTracker.Controllers
                     string supBody = $"<p>Dear {supervisor.FullName},</p><p><strong>{user.FullName}</strong> has rescheduled a meeting.</p><ul><li><strong>New Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>New Time:</strong> {meetingTime}</li></ul><p>Please log in to the FYP Tracker system to re-approve this request.</p>";
                     _emailService.Send(supervisor.Email, supSubject, supBody);
                 }
+                
+                // --- SignalR Real-Time Notification ---
+                await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", "Meeting Rescheduled", $"Student {user.FullName} rescheduled a meeting to {parsedDate:dd MMM yyyy} at {meetingTime}.");
 
                 if (!string.IsNullOrEmpty(user.Email))
                 {
@@ -1011,6 +1029,9 @@ namespace FYPTracker.Controllers
 
             await _context.SaveChangesAsync();
             await LogActivityAsync(user.Id, "MeetingLog", "Progress Logbook Drafted", $"You submitted a progress logbook draft for the meeting on {meeting.MeetingDate:dd MMM}.");
+            
+            // --- SignalR Real-Time Notification ---
+            await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", "Meeting Log Submitted", $"Student {user.FullName} submitted a progress logbook for review.");
             
             TempData["Success"] = "Progress logbook successfully submitted to supervisor for review!";
             return RedirectToAction(nameof(BookMeeting));

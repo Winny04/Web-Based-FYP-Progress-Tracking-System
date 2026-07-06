@@ -54,7 +54,10 @@
                                             @(student.Name?.Substring(0, 1) ?? "?")
                                         </div>
                                         <div class="overflow-hidden flex-grow-1">
-                                            <h6 class="mb-0 fw-bold @textCls text-truncate">@student.Name</h6>
+                                            <h6 class="mb-0 fw-bold @textCls text-truncate">
+                                                @student.Name
+                                                <span class="online-dot online-dot-@student.Id badge badge-circle bg-success ms-1 d-none" style="width: 8px; height: 8px; vertical-align: middle;"></span>
+                                            </h6>
                                             <small class="@subCls text-truncate d-block">@student.Programme</small>
                                         </div>
                                         @if (student.UnreadCount > 0)
@@ -104,10 +107,23 @@
                     </div>
                     <div>
                         <h5 class="fw-bold text-dark mb-0">@partnerName</h5>
-                        <span class="text-success small fw-semibold">
-                            <i class="fas fa-circle me-1" style="font-size:0.45rem;"></i>Active
+                        <span id="partner-online-status" class="text-success small fw-semibold d-none">
+                            <i class="fas fa-circle me-1" style="font-size:0.45rem;"></i>Online
+                        </span>
+                        <span id="partner-offline-status" class="text-muted small fw-semibold">
+                            <i class="fas fa-circle me-1" style="font-size:0.45rem;"></i>Offline
                         </span>
                     </div>
+                    <input type="text" id="chat-history-search" class="form-control form-control-sm rounded-pill w-auto ms-auto d-none d-md-block" placeholder="Search in chat..." onkeyup="searchChatHistory()">
+                </div>
+                
+                <!-- Pinned Messages Area -->
+                <div id="pinned-messages-container" class="bg-warning bg-opacity-10 border-bottom border-warning px-4 py-2 d-none shadow-sm" style="z-index: 9;">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <strong class="text-warning small text-uppercase"><i class="fas fa-thumbtack me-1"></i> Pinned Messages</strong>
+                        <button type="button" class="btn-close btn-sm" onclick="document.getElementById('pinned-messages-container').classList.add('d-none')"></button>
+                    </div>
+                    <div id="pinned-messages-list" class="mt-1 d-flex flex-column gap-1"></div>
                 </div>
 
                 <!-- Messages Area -->
@@ -118,13 +134,54 @@
                     <!-- Messages injected by JS -->
                 </div>
 
+                <!-- Typing Indicator -->
+                <div id="typingIndicator" class="px-4 py-2 d-none" style="background: rgba(248,250,252,0.9);">
+                    <small class="text-muted fst-italic">@partnerName is typing...</small>
+                </div>
+
                 <!-- Input Area -->
-                <div class="p-3 border-top bg-white">
-                    <form id="chat-form" class="d-flex align-items-center gap-2" onsubmit="sendMessage(event)">
+                <div class="p-3 border-top bg-white position-relative">
+                    
+                    <!-- Attachment Preview -->
+                    <div id="attachment-preview-container" class="mb-2 px-3 py-2 bg-light rounded align-items-center justify-content-between border" style="display: none;">
+                        <div class="d-flex align-items-center overflow-hidden">
+                            <i id="attachment-preview-icon" class="fas fa-file-alt text-primary fs-4 me-2 flex-shrink-0"></i>
+                            <span id="attachment-preview-name" class="small text-truncate"></span>
+                        </div>
+                        <button type="button" class="btn-close btn-sm ms-2 flex-shrink-0" onclick="clearAttachment()"></button>
+                    </div>
+                    <div id="reply-preview-container" class="mb-2 px-3 py-2 bg-dark text-white rounded align-items-center justify-content-between shadow" style="display: none;">
+                        <div class="overflow-hidden">
+                            <strong id="reply-mode-label" class="small text-white-50 d-block"><i class="fa fa-reply me-1"></i> Replying to:</strong>
+                            <span id="reply-preview-text" class="small text-white text-truncate d-block"></span>
+                            <input type="hidden" id="reply-to-id" value="" />
+                        </div>
+                        <button type="button" class="btn-close btn-close-white btn-sm ms-2 flex-shrink-0" onclick="clearReply()"></button>
+                    </div>
+
+                    <emoji-picker id="emojiPicker" class="d-none shadow" style="position: absolute; bottom: 100%; left: 1rem; z-index: 1050; margin-bottom: 10px;"></emoji-picker>
+                    
+                    <form id="chat-form" class="d-flex align-items-center gap-2" onsubmit="event.preventDefault(); sendMessage(event); return false;">
+                        <button type="button" class="btn btn-light rounded-circle flex-shrink-0 d-flex align-items-center justify-content-center" id="emoji-btn" style="width:45px;height:45px;" title="Emojis">
+                            <i class="far fa-smile fs-5 text-muted"></i>
+                        </button>
+                        
+                        <input type="file" id="chat-attachment" class="d-none" accept="image/*,.pdf,.doc,.docx,.zip,.xls,.xlsx,.ppt,.pptx,.txt" onchange="previewAttachment(event)" />
+                        <button type="button" class="btn btn-light rounded-circle flex-shrink-0 d-flex align-items-center justify-content-center" onclick="document.getElementById('chat-attachment').click()" style="width:45px;height:45px;" title="Attach File">
+                            <i class="fas fa-paperclip fs-5 text-muted"></i>
+                        </button>
+                        
+                        <button type="button" class="btn btn-danger rounded-circle flex-shrink-0 align-items-center justify-content-center d-none" id="mic-stop-btn" style="width:45px;height:45px;" title="Stop Recording">
+                            <i class="fas fa-stop"></i>
+                        </button>
+                        <button type="button" class="btn btn-light rounded-circle flex-shrink-0 d-flex align-items-center justify-content-center" id="mic-start-btn" style="width:45px;height:45px;" title="Voice Note">
+                            <i class="fas fa-microphone fs-5 text-muted"></i>
+                        </button>
+
                         <input type="text" id="chat-input"
                                class="form-control form-control-lg border-0 shadow-none bg-light rounded-pill px-4"
-                               placeholder="Type your message..."
-                               autocomplete="off" required />
+                               placeholder="Type a message or attach a file..."
+                               autocomplete="off" />
                         <button type="submit"
                                 class="btn btn-primary rounded-circle d-flex align-items-center justify-content-center shadow flex-shrink-0"
                                 style="width:50px;height:50px;transition:transform 0.2s;"
@@ -156,6 +213,19 @@
         const messagesContainer = document.getElementById('chat-messages');
         const chatInput = document.getElementById('chat-input');
         let lastMessageCount = 0;
+        let editMessageId = null;
+        let currentSkip = 0;
+        const takeCount = 20;
+        let hasMoreMessages = true;
+        let isFetching = false;
+        
+        if (messagesContainer) {
+            messagesContainer.addEventListener('scroll', () => {
+                if (messagesContainer.scrollTop === 0 && hasMoreMessages && !isFetching) {
+                    fetchHistory(false);
+                }
+            });
+        }
 
         // Filter sidebar students
         function filterStudents() {
@@ -176,7 +246,7 @@
         }
 
         // Render a message bubble
-        function appendMessage(msg) {
+        function appendMessage(msg, prepend = false) {
             if (!messagesContainer) return;
             const isMine = msg.isMine === true;
             const alignClass = isMine ? 'justify-content-end' : 'justify-content-start';
@@ -185,34 +255,343 @@
                 : 'background: linear-gradient(135deg,#ffffff,#f8fafc); color:#0f172a; border:1px solid #e2e8f0;';
             const radius = isMine ? 'border-radius:20px 20px 0 20px;' : 'border-radius:20px 20px 20px 0;';
             const timeAlign = isMine ? 'text-end' : '';
-            const safeText = msg.messageText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+            let safeText = '';
+            
+            if (msg.isDeleted) {
+                safeText = '<span class="text-white-50 fst-italic" style="opacity: 0.8;">🚫 This message was deleted.</span>';
+                if (!isMine) safeText = '<span class="text-muted fst-italic">🚫 This message was deleted.</span>';
+            } else if (msg.messageText) {
+                safeText = msg.messageText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+            }
+
+            let attachmentHtml = '';
+            if (msg.attachmentUrl && !msg.isDeleted) {
+                const isImage = msg.attachmentUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) != null;
+                const isAudio = msg.attachmentUrl.match(/\.(webm|mp3|wav|ogg)$/i) != null;
+                if (isImage) {
+                    attachmentHtml = `<div class="mt-2 text-center"><img src="${msg.attachmentUrl}" alt="${msg.attachmentName}" style="max-width:100%; border-radius:10px; cursor:pointer;" onclick="window.open(this.src,'_blank')" /></div>`;
+                } else if (isAudio) {
+                    attachmentHtml = `<div class="mt-2"><audio controls style="max-width:200px; height: 35px;"><source src="${msg.attachmentUrl}" type="audio/webm">Your browser does not support audio element.</audio></div>`;
+                } else {
+                    attachmentHtml = `<div class="mt-2 p-2 bg-white rounded border d-flex align-items-center">
+                        <i class="fas fa-file-download fs-3 text-primary me-2"></i>
+                        <a href="${msg.attachmentUrl}" target="_blank" class="text-decoration-none text-dark small text-truncate" style="max-width:150px;">${msg.attachmentName}</a>
+                    </div>`;
+                }
+            }
+
+            let replyHtml = '';
+            if (msg.replyToMessageText) {
+                replyHtml = `<div class="mb-2 p-2 rounded" style="background: rgba(0,0,0,0.05); border-left: 3px solid ${isMine ? 'rgba(255,255,255,0.7)' : '#0ea5e9'}; font-size: 0.8rem; font-style: italic;">
+                    <i class="fas fa-reply me-1"></i> ${msg.replyToMessageText.length > 50 ? msg.replyToMessageText.substring(0,50) + '...' : msg.replyToMessageText}
+                </div>`;
+            }
+
+            let tickHtml = '';
+            if (isMine) {
+                tickHtml = msg.isRead 
+                    ? `<span class="ms-1" style="color: #0ea5e9;"><i class="fas fa-check-double"></i></span>`
+                    : `<span class="ms-1 text-white-50"><i class="fas fa-check"></i></span>`;
+            }
+            if (msg.isEdited && !msg.isDeleted) {
+                tickHtml = `<span class="text-white-50 ms-1" style="font-size: 0.65rem; opacity: 0.8;">(edited)</span> ` + tickHtml;
+            }
+
+            let pinClass = msg.isPinned ? "text-warning fw-bold" : "text-muted";
+            let pinText = msg.isPinned ? "Unpin" : "Pin";
+            
+            let actionsHtml = '';
+            if (!msg.isDeleted) {
+                actionsHtml = `<div class="chat-actions d-flex align-items-center gap-1 px-2" style="opacity: 0; transition: opacity 0.2s;">
+                    <button type="button" class="btn btn-sm btn-light rounded-pill border shadow-sm px-2 py-1 ${pinClass}" onclick="togglePin(${msg.id})" title="Pin Message"><i class="fas fa-thumbtack"></i> <span class="small ms-1 d-none d-md-inline">${pinText}</span></button>
+                    <button type="button" class="btn btn-sm btn-dark text-white rounded-pill border shadow-sm px-2 py-1" onclick="prepareReply(${msg.id})" title="Reply"><i class="fa fa-reply"></i> <span class="small ms-1 d-none d-md-inline">Reply</span></button>`;
+                
+                if (isMine && msg.messageText) {
+                    actionsHtml += `<button type="button" class="btn btn-sm btn-light rounded-pill border shadow-sm px-2 py-1 text-success" onclick="prepareEdit(${msg.id})" title="Edit"><i class="fa fa-pencil"></i></button>`;
+                }
+                if (isMine) {
+                    actionsHtml += `<button type="button" class="btn btn-sm btn-light rounded-pill border shadow-sm px-2 py-1 text-danger" onclick="deleteMessage(${msg.id})" title="Delete"><i class="fa fa-trash"></i></button>`;
+                }
+                actionsHtml += `</div>`;
+            }
 
             const div = document.createElement('div');
-            div.className = `d-flex mb-2 ${alignClass}`;
-            div.innerHTML = `
+            div.className = `d-flex mb-3 align-items-center ${alignClass} chat-message-bubble`;
+            div.id = `chat-msg-${msg.id}`;
+            div.setAttribute('data-text', msg.messageText ? msg.messageText.toLowerCase() : '');
+            div.setAttribute('data-original-text', msg.messageText ? msg.messageText : '');
+            
+            // Show actions on hover of the entire bubble
+            div.onmouseover = function() { const act = this.querySelector('.chat-actions'); if(act) act.style.opacity = '1'; };
+            div.onmouseout = function() { const act = this.querySelector('.chat-actions'); if(act) act.style.opacity = '0'; };
+            
+            let bubbleContent = `
                 <div style="max-width:75%;">
-                    <div style="${bubbleStyle}${radius}padding:10px 16px;font-size:0.95rem;line-height:1.4;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,0.08);">${safeText}</div>
-                    <div class="mt-1 text-muted ${timeAlign}" style="font-size:0.7rem;font-weight:500;">${msg.sentAtStr}</div>
+                    <div class="position-relative" style="${bubbleStyle}${radius}padding:10px 16px;font-size:0.95rem;line-height:1.4;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,0.08);">
+                        ${replyHtml}
+                        ${safeText}
+                        ${attachmentHtml}
+                    </div>
+                    <div class="mt-1 text-muted ${timeAlign}" style="font-size:0.7rem;font-weight:500;">
+                        ${msg.sentAtStr}
+                        ${tickHtml}
+                    </div>
                 </div>`;
-            messagesContainer.appendChild(div);
-            scrollToBottom();
+            
+            div.innerHTML = isMine ? actionsHtml + bubbleContent : bubbleContent + actionsHtml;
+            
+            if (prepend) {
+                messagesContainer.prepend(div);
+            } else {
+                messagesContainer.appendChild(div);
+            }
+
+            if (msg.isPinned) {
+                addPinnedMessageUI(msg);
+            }
         }
 
-        // Fetch full history (poll every 3s)
-        async function fetchHistory() {
+        function addPinnedMessageUI(msg) {
+            const container = document.getElementById('pinned-messages-container');
+            const list = document.getElementById('pinned-messages-list');
+            if (document.getElementById(`pinned-msg-${msg.id}`)) return; 
+            
+            let display = msg.messageText || msg.attachmentName || "Pinned Message";
+            if (display.length > 50) display = display.substring(0,50) + "...";
+            
+            const div = document.createElement('div');
+            div.id = `pinned-msg-${msg.id}`;
+            div.className = "bg-white rounded p-2 mb-1 small border d-flex justify-content-between align-items-center";
+            div.style.cursor = "pointer";
+            div.innerHTML = `<span class="text-truncate w-100" onclick="scrollToMessage(${msg.id})"><i class="fa fa-link text-muted me-1"></i> ${display}</span>`;
+            list.appendChild(div);
+            container.classList.remove('d-none');
+        }
+
+        function scrollToMessage(id) {
+            const target = document.getElementById('chat-msg-' + id);
+            if (target && messagesContainer) {
+                // Add a highlight class or style briefly
+                const originalTransition = target.style.transition;
+                const originalBg = target.style.backgroundColor;
+                target.style.transition = 'background-color 0.3s ease';
+                target.style.backgroundColor = 'rgba(255, 193, 7, 0.3)'; // Yellow highlight
+                
+                setTimeout(() => { 
+                    target.style.backgroundColor = originalBg; 
+                    setTimeout(() => { target.style.transition = originalTransition; }, 300);
+                }, 2000);
+                
+                // Scroll smoothly relative to container
+                messagesContainer.scrollTo({
+                    top: target.offsetTop - messagesContainer.offsetTop - 20,
+                    behavior: 'smooth'
+                });
+            }
+        }
+
+        // Fetch history with Pagination
+        async function fetchHistory(reset = true) {
             if (!partnerId || partnerId <= 0) return;
+            if (isFetching) return;
+            
+            if (reset) {
+                currentSkip = 0;
+                hasMoreMessages = true;
+                messagesContainer.innerHTML = '';
+                document.getElementById('pinned-messages-list').innerHTML = '';
+                document.getElementById('pinned-messages-container').classList.add('d-none');
+            }
+            
+            if (!hasMoreMessages) return;
+            isFetching = true;
+            
             try {
-                const res = await fetch(`/Chat/GetHistory?partnerId=${partnerId}`);
-                if (!res.ok) return;
+                // Save current scroll height to prevent jumping when prepending
+                const oldScrollHeight = messagesContainer.scrollHeight;
+                
+                const res = await fetch(`/Chat/GetHistory?partnerId=${partnerId}&skip=${currentSkip}&take=${takeCount}`);
+                if (!res.ok) { isFetching = false; return; }
+                
                 const messages = await res.json();
-                if (messages.length !== lastMessageCount) {
-                    lastMessageCount = messages.length;
-                    messagesContainer.innerHTML = '<div class="text-center text-muted small mb-3"><i class="fas fa-lock me-1"></i> Conversation is private</div>';
-                    messages.forEach(m => appendMessage(m));
+                
+                if (messages.length < takeCount) {
+                    hasMoreMessages = false;
                 }
+                
+                if (messages.length === 0 && reset) {
+                    messagesContainer.innerHTML = '<div class="text-center text-muted small mb-3"><i class="fas fa-lock me-1"></i> Conversation is private</div>';
+                } else if (messages.length > 0) {
+                    if (reset) {
+                        messagesContainer.innerHTML = '<div class="text-center text-muted small mb-3"><i class="fas fa-lock me-1"></i> Conversation is private</div>';
+                        messages.forEach(m => appendMessage(m, false));
+                        scrollToBottom();
+                    } else {
+                        // Prepend older messages
+                        messages.reverse().forEach(m => appendMessage(m, true));
+                        // Maintain scroll position
+                        const newScrollHeight = messagesContainer.scrollHeight;
+                        messagesContainer.scrollTop = newScrollHeight - oldScrollHeight;
+                    }
+                }
+                
+                currentSkip += messages.length;
             } catch (err) {
                 console.error('Failed to load messages', err);
+            } finally {
+                isFetching = false;
             }
+        }
+
+        // Search Chat History
+        function searchChatHistory() {
+            const query = document.getElementById('chat-history-search').value.toLowerCase();
+            const bubbles = messagesContainer.querySelectorAll('.chat-message-bubble');
+            bubbles.forEach(b => {
+                const text = b.getAttribute('data-text');
+                if (text.includes(query)) {
+                    b.classList.remove('d-none');
+                    b.classList.add('d-flex');
+                } else {
+                    b.classList.remove('d-flex');
+                    b.classList.add('d-none');
+                }
+            });
+        }
+
+        // Toggle Pin
+        async function togglePin(id) {
+            try {
+                const fd = new FormData();
+                fd.append('messageId', id);
+                await fetch('/Chat/TogglePinMessage', { method: 'POST', body: fd });
+                lastMessageCount = 0;
+                fetchHistory();
+            } catch(e) { console.error(e); }
+        }
+
+        function prepareReply(id) {
+            cancelEdit();
+            const bubble = document.getElementById('chat-msg-' + id);
+            const text = bubble ? bubble.getAttribute('data-original-text') : 'Attachment';
+            document.getElementById('reply-to-id').value = id;
+            document.getElementById('reply-preview-text').innerText = text || 'Attachment';
+            document.getElementById('reply-preview-container').style.display = 'flex';
+            document.getElementById('chat-input').focus();
+        }
+
+        function prepareEdit(id) {
+            clearPreview();
+            const bubble = document.getElementById('chat-msg-' + id);
+            const text = bubble ? bubble.getAttribute('data-original-text') : '';
+            if (!text) return; 
+            
+            editMessageId = id;
+            document.getElementById('chat-input').value = text;
+            document.getElementById('chat-input').focus();
+            
+            document.getElementById('reply-preview-container').style.display = 'flex';
+            document.getElementById('reply-preview-container').className = "mb-2 px-3 py-2 bg-warning text-dark rounded align-items-center justify-content-between shadow";
+            document.getElementById('reply-preview-text').innerText = text;
+            document.getElementById('reply-preview-text').classList.replace('text-white', 'text-dark');
+            document.getElementById('reply-mode-label').innerHTML = `<i class="fa fa-pencil me-1"></i> Editing Message:`;
+            document.getElementById('reply-mode-label').classList.replace('text-white-50', 'text-dark');
+        }
+
+        function cancelEdit() {
+            editMessageId = null;
+            document.getElementById('chat-input').value = '';
+            document.getElementById('reply-preview-container').style.display = 'none';
+            document.getElementById('reply-preview-container').className = "mb-2 px-3 py-2 bg-dark text-white rounded align-items-center justify-content-between shadow";
+            document.getElementById('reply-preview-text').classList.replace('text-dark', 'text-white');
+            document.getElementById('reply-mode-label').innerHTML = `<i class="fa fa-reply me-1"></i> Replying to:`;
+            document.getElementById('reply-mode-label').classList.replace('text-dark', 'text-white-50');
+        }
+
+        function clearPreview() {
+            document.getElementById('reply-to-id').value = '';
+            if (editMessageId) {
+                cancelEdit();
+            } else {
+                document.getElementById('reply-preview-container').style.display = 'none';
+            }
+        }
+
+        async function deleteMessage(id) {
+            if (!confirm('Are you sure you want to delete this message? This action cannot be undone.')) return;
+            try {
+                const fd = new FormData();
+                fd.append('messageId', id);
+                await fetch('/Chat/DeleteMessage', { method: 'POST', body: fd });
+                fetchHistory(true);
+            } catch(e) { console.error(e); }
+        }
+
+        // Voice Note logic
+        let mediaRecorder;
+        let audioChunks = [];
+
+        document.getElementById('mic-start-btn')?.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+                audioChunks = [];
+                
+                mediaRecorder.addEventListener("dataavailable", event => {
+                    audioChunks.push(event.data);
+                });
+
+                mediaRecorder.addEventListener("stop", () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const file = new File([audioBlob], "voice_note.webm", { type: 'audio/webm' });
+                    
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    document.getElementById('chat-attachment').files = dataTransfer.files;
+                    previewAttachment({ target: document.getElementById('chat-attachment') });
+                    
+                    stream.getTracks().forEach(track => track.stop());
+                });
+
+                document.getElementById('mic-start-btn').classList.add('d-none');
+                document.getElementById('mic-stop-btn').classList.remove('d-none');
+            } catch (err) {
+                alert('Microphone access denied or not available.');
+            }
+        });
+
+        document.getElementById('mic-stop-btn')?.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            document.getElementById('mic-stop-btn').classList.add('d-none');
+            document.getElementById('mic-start-btn').classList.remove('d-none');
+        });
+
+        // Attachment Preview
+        function previewAttachment(e) {
+            const file = e.target.files[0];
+            const container = document.getElementById('attachment-preview-container');
+            const nameSpan = document.getElementById('attachment-preview-name');
+            const icon = document.getElementById('attachment-preview-icon');
+            
+            if (file) {
+                nameSpan.innerText = file.name;
+                if (file.type.startsWith('image/')) {
+                    icon.className = 'fas fa-file-image text-success fs-4 me-2 flex-shrink-0';
+                } else {
+                    icon.className = 'fas fa-file-alt text-primary fs-4 me-2 flex-shrink-0';
+                }
+                container.style.display = 'flex';
+            } else {
+                clearAttachment();
+            }
+        }
+
+        function clearAttachment() {
+            document.getElementById('chat-attachment').value = '';
+            document.getElementById('attachment-preview-container').style.display = 'none';
         }
 
         // Send a message
@@ -220,22 +599,45 @@
             e.preventDefault();
             if (!partnerId || partnerId <= 0) return;
             const text = chatInput.value.trim();
-            if (!text) return;
+            const fileInput = document.getElementById('chat-attachment');
+            const file = fileInput.files[0];
+            const replyToId = document.getElementById('reply-to-id').value;
+
+            if (!text && !file) return;
+
+            if (editMessageId) {
+                const fd = new FormData();
+                fd.append('messageId', editMessageId);
+                fd.append('newText', text);
+                try {
+                    const res = await fetch('/Chat/EditMessage', { method: 'POST', body: fd });
+                    if (res.ok) cancelEdit();
+                    fetchHistory(true);
+                } catch(e) { console.error(e); }
+                return;
+            }
 
             chatInput.value = '';
+            clearAttachment();
+            clearPreview();
             chatInput.focus();
 
             const formData = new FormData();
             formData.append('receiverId', partnerId);
-            formData.append('messageText', text);
+            if (text) formData.append('messageText', text);
+            if (file) formData.append('attachment', file);
+            if (replyToId) formData.append('replyToId', replyToId);
 
             try {
-                const res = await fetch('/Chat/SendMessage', { method: 'POST', body: formData });
+                const res = await fetch('/Chat/SendMessage', { 
+                    method: 'POST', 
+                    body: formData 
+                });
                 if (res.ok) {
                     const result = await res.json();
                     if (result.success) {
                         appendMessage(result.message);
-                        lastMessageCount++;
+                        scrollToBottom();
                     }
                 }
             } catch (err) {
@@ -244,17 +646,166 @@
         }
 
         // Enter key sends message (Shift+Enter for newline)
+        let typingTimeout;
+        const myName = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.MyName ?? "User"));
         document.getElementById('chat-input')?.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+                sendMessage(e);
+            } else {
+                // Throttle typing indicator
+                if (!typingTimeout && window.signalRConnection && partnerId) {
+                    window.signalRConnection.invoke("SendTypingIndicator", partnerId, myName).catch(err => console.error(err));
+                    typingTimeout = setTimeout(() => { typingTimeout = null; }, 2000);
+                }
             }
         });
 
         // Init
         if (partnerId && partnerId > 0) {
             fetchHistory();
-            setInterval(fetchHistory, 3000);
+            
+            // Listen for incoming messages in real-time
+            if (window.signalRConnection) {
+                window.signalRConnection.on("ReceiveChatMessage", function(msg) {
+                    // Check if the message is from the active partner
+                    if (msg.senderId == partnerId) {
+                        appendMessage(msg);
+                        lastMessageCount++;
+                        // Instantly mark as read since we are actively viewing this chat
+                        fetch(`/Chat/MarkAsRead?senderId=${msg.senderId}`, { method: 'POST' });
+                    } else {
+                        // The message is from someone else. Update the sidebar badge!
+                        // Let's find the student in the sidebar by checking the links
+                        var links = document.querySelectorAll('.student-chat-item');
+                        links.forEach(link => {
+                            if (link.href.includes('partnerId=' + msg.senderId)) {
+                                var badge = link.querySelector('.badge');
+                                if (badge) {
+                                    badge.innerText = parseInt(badge.innerText) + 1;
+                                } else {
+                                    // Need to create a badge if it doesn't exist
+                                    var container = link.querySelector('.d-flex.align-items-center');
+                                    var badgeHtml = `<div class="ms-2"><span class="badge rounded-pill bg-danger shadow-sm" style="font-size: 0.75rem; padding: 0.35em 0.6em;">1</span></div>`;
+                                    container.insertAdjacentHTML('beforeend', badgeHtml);
+                                }
+                                
+                                // Optional: Move the chat item to the top of the list
+                                var ul = link.closest('ul');
+                                if (ul) {
+                                    ul.prepend(link);
+                                }
+                            }
+                        });
+                    }
+                });
+
+                // Listen for typing indicators
+                let hideTypingTimeout;
+                window.signalRConnection.on("ReceiveTypingIndicator", function(senderName) {
+                    var typingDiv = document.getElementById("typingIndicator");
+                    if (typingDiv) {
+                        typingDiv.querySelector('small').innerText = senderName + ' is typing...';
+                        typingDiv.classList.remove('d-none');
+                        clearTimeout(hideTypingTimeout);
+                        hideTypingTimeout = setTimeout(() => {
+                            typingDiv.classList.add('d-none');
+                        }, 3000);
+                    }
+                });
+
+                // Listen for Read Receipts
+                window.signalRConnection.on("MessagesRead", function(readerId) {
+                    if (partnerId == readerId) {
+                        fetchHistory(true);
+                    }
+                });
+
+                // Listen for Pin Toggles
+                window.signalRConnection.on("MessagePinnedToggled", function(messageId, isPinned) {
+                    fetchHistory(true);
+                });
+
+                window.signalRConnection.on("MessageEdited", function(messageId, newText) {
+                    fetchHistory(true);
+                });
+
+                window.signalRConnection.on("MessageDeleted", function(messageId) {
+                    fetchHistory(true);
+                });
+            }
         }
+
+        // --- Online Presence Tracking ---
+        function updateOnlineStatus(userId, isOnline) {
+            // Update sidebar dots
+            document.querySelectorAll('.online-dot-' + userId).forEach(dot => {
+                if (isOnline) {
+                    dot.classList.remove('d-none');
+                } else {
+                    dot.classList.add('d-none');
+                }
+            });
+            // Update main chat header if it's the active partner
+            if (partnerId === userId) {
+                const onStatus = document.getElementById('partner-online-status');
+                const offStatus = document.getElementById('partner-offline-status');
+                if (onStatus && offStatus) {
+                    if (isOnline) {
+                        onStatus.classList.remove('d-none');
+                        offStatus.classList.add('d-none');
+                    } else {
+                        onStatus.classList.add('d-none');
+                        offStatus.classList.remove('d-none');
+                    }
+                }
+            }
+        }
+
+        if (window.signalRConnection) {
+            window.signalRConnection.on("UserOnline", function(userId) {
+                updateOnlineStatus(userId, true);
+            });
+            window.signalRConnection.on("UserOffline", function(userId) {
+                updateOnlineStatus(userId, false);
+            });
+
+            // Fetch initial online users once connected
+            const checkConnection = setInterval(() => {
+                if (window.signalRConnection.state === signalR.HubConnectionState.Connected) {
+                    clearInterval(checkConnection);
+                    window.signalRConnection.invoke("GetOnlineUsers")
+                        .then(onlineUsers => {
+                            onlineUsers.forEach(userId => updateOnlineStatus(userId, true));
+                        })
+                        .catch(err => console.error(err));
+                }
+            }, 500);
+        }
+
+        // Emoji Picker Logic
+        import('https://unpkg.com/emoji-picker-element@1').then(() => {
+            const picker = document.getElementById('emojiPicker');
+            const btn = document.getElementById('emoji-btn');
+            
+            if (picker && btn) {
+                btn.addEventListener('click', () => {
+                    picker.classList.toggle('d-none');
+                });
+
+                picker.addEventListener('emoji-click', event => {
+                    chatInput.value += event.detail.unicode;
+                    picker.classList.add('d-none');
+                    chatInput.focus();
+                });
+
+                // Hide picker when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!picker.contains(e.target) && !btn.contains(e.target)) {
+                        picker.classList.add('d-none');
+                    }
+                });
+            }
+        });
     </script>
 }

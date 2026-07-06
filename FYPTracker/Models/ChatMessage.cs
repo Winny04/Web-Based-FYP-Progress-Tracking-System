@@ -15,12 +15,26 @@ namespace FYPTracker.Models
         [Required]
         public int ReceiverId { get; set; }
 
-        [Required]
-        public string MessageText { get; set; } = null!;
+        public string? MessageText { get; set; }
+
+        public string? AttachmentUrl { get; set; }
+
+        public string? AttachmentName { get; set; }
 
         public DateTime SentAt { get; set; } = DateTime.Now;
 
         public bool IsRead { get; set; } = false;
+
+        public bool IsPinned { get; set; } = false;
+
+        public bool IsEdited { get; set; } = false;
+
+        public bool IsDeleted { get; set; } = false;
+
+        public int? ReplyToId { get; set; }
+
+        [ForeignKey("ReplyToId")]
+        public virtual ChatMessage? ReplyToMessage { get; set; }
 
         // Navigation properties
         [ForeignKey("SenderId")]
