@@ -62,7 +62,7 @@ namespace FYPTracker.Controllers
 
         public async Task<IActionResult> Index()
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             ViewBag.CurrentUser = user;
             
             // 1. Calculate Stats
@@ -114,7 +114,7 @@ namespace FYPTracker.Controllers
         [ClaimRequirement("Type", "Admin")]
         public async Task<IActionResult> ManageUsers()
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             ViewBag.CurrentUser = user;
 
             // System-wide stats for Admin
@@ -130,7 +130,7 @@ namespace FYPTracker.Controllers
         [ClaimRequirement("Type", "Admin")]
         public async Task<IActionResult> ManageProjects()
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             ViewBag.CurrentUser = user;
 
             var students = await _context.ApplicationUsers
@@ -313,7 +313,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         public ActionResult EditUser(int id)
         {
             // Set the logged-in admin as CurrentUser so the menu shows the correct navigation
-            var loggedInUser = _context.ApplicationUsers.FirstOrDefault(u => u.UserName == HttpContext.User.Identity.Name);
+            var loggedInUser = _context.ApplicationUsers.FirstOrDefault(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             ViewBag.CurrentUser = loggedInUser;
 
             var check = _context.ApplicationUsers
@@ -397,7 +397,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 var filledSlots = projects.Count(p => p.SupervisorId == model1.Id);
                 ViewBag.FilledSlots = filledSlots;
                 
-                var currentUser = _context.ApplicationUsers.FirstOrDefault(u => u.UserName == HttpContext.User.Identity.Name);
+                var currentUser = _context.ApplicationUsers.FirstOrDefault(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
                 ViewBag.CurrentUser = currentUser;
 
                 return View(model1);
@@ -464,22 +464,33 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     }
                     else
                     {
-                        string prefix = newEmployee.UserType == "Student" ? "STU-" : "SUP-";
-                        var highestUser = _context.ApplicationUsers
-                            .Where(u => u.EmployeeId != null && u.EmployeeId.StartsWith(prefix))
-                            .OrderByDescending(u => u.EmployeeId)
-                            .FirstOrDefault();
-                            
-                        int nextIdNum = 1;
-                        if (highestUser != null && !string.IsNullOrEmpty(highestUser.EmployeeId) && highestUser.EmployeeId.Length > 4)
+                        if (newEmployee.UserType == "Student")
                         {
-                            if (int.TryParse(highestUser.EmployeeId.Substring(4), out int lastNum))
+                            var random = new Random();
+                            string randomId;
+                            do
                             {
-                                nextIdNum = lastNum + 1;
-                            }
+                                randomId = "P" + random.Next(10000000, 99999999).ToString();
+                            } while (_context.ApplicationUsers.Any(u => u.UserName == randomId || u.EmployeeId == randomId));
+                            newId = randomId;
                         }
-                        
-                        newId = $"{prefix}{nextIdNum:D3}";
+                        else
+                        {
+                            string prefix = "SUP-";
+                            var maxNums = _context.ApplicationUsers
+                                .Where(u => u.UserName != null && u.UserName.StartsWith(prefix))
+                                .Select(u => u.UserName.Substring(prefix.Length))
+                                .ToList();
+                                
+                            int nextIdNum = 1;
+                            var validNums = maxNums.Select(n => int.TryParse(n, out int num) ? num : 0);
+                            if (validNums.Any())
+                            {
+                                nextIdNum = validNums.Max() + 1;
+                            }
+                            
+                            newId = $"{prefix}{nextIdNum:D3}";
+                        }
                     }
 
                     newEmployee.EmplooyeeInfoID = newId;
@@ -634,7 +645,7 @@ public ActionResult ManageUsersData()
         }
         public async Task<IActionResult> Settings()
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             ViewBag.CurrentUser = user;
 
             var existingIaf = await _context.FYPMilestones
@@ -701,7 +712,7 @@ public ActionResult ManageUsersData()
 
         public async Task<IActionResult> DefenseList()
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             ViewBag.CurrentUser = user;
 
             var defenseList = await _context.FYPMilestones
@@ -895,20 +906,17 @@ public ActionResult ManageUsersData()
             int successCount = 0;
             int duplicateCount = 0;
             
-            // Get highest ID suffix to increment properly
-            string prefix = bulkUserType == "Student" ? "STU-" : "SUP-";
-            var highestUser = await _context.ApplicationUsers
-                .Where(u => u.EmployeeId != null && u.EmployeeId.StartsWith(prefix))
-                .OrderByDescending(u => u.EmployeeId)
-                .FirstOrDefaultAsync();
+            string prefix = "SUP-";
+            var maxNums = await _context.ApplicationUsers
+                .Where(u => u.UserName != null && u.UserName.StartsWith(prefix))
+                .Select(u => u.UserName.Substring(prefix.Length))
+                .ToListAsync();
 
             int nextIdNum = 1;
-            if (highestUser != null && !string.IsNullOrEmpty(highestUser.EmployeeId) && highestUser.EmployeeId.Length > 4)
+            var validNums = maxNums.Select(n => int.TryParse(n, out int num) ? num : 0);
+            if (validNums.Any())
             {
-                if (int.TryParse(highestUser.EmployeeId.Substring(4), out int lastNum))
-                {
-                    nextIdNum = lastNum + 1;
-                }
+                nextIdNum = validNums.Max() + 1;
             }
 
             var request = HttpContext.Request;
@@ -931,8 +939,21 @@ public ActionResult ManageUsersData()
                 }
                 else
                 {
-                    newId = $"{prefix}{nextIdNum:D3}";
-                    nextIdNum++;
+                    if (bulkUserType == "Student")
+                    {
+                        var random = new Random();
+                        string randomId;
+                        do
+                        {
+                            randomId = "P" + random.Next(10000000, 99999999).ToString();
+                        } while (await _context.ApplicationUsers.AnyAsync(u => u.UserName == randomId || u.EmployeeId == randomId));
+                        newId = randomId;
+                    }
+                    else
+                    {
+                        newId = $"{prefix}{nextIdNum:D3}";
+                        nextIdNum++;
+                    }
                 }
 
                 var newUser = new ApplicationUser
@@ -995,7 +1016,7 @@ public ActionResult ManageUsersData()
         // ────────────────────────────────────────────────────────
         public async Task<IActionResult> Reporting()
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             if (user == null || (user.UserType != "Admin" && user.UserType != "SuperAdmin")) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 

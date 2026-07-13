@@ -312,8 +312,7 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Matric ID</label>
-                                <input type="text" name="matricNumber" class="form-control" value="@currentUser?.EmployeeId" placeholder="e.g. P210244501" pattern="^[pP]\d{8}$" required title="Please enter a valid Matric ID starting with 'P' followed by 8 numbers (e.g., P210244501)" oninput="this.classList.toggle('is-invalid', !this.checkValidity());" />
-                                <div class="invalid-feedback text-danger small mt-1">Matric ID must start with 'P' followed by 8 numbers.</div>
+                                <input type="text" name="matricNumber" class="form-control bg-light border-0" value="@currentUser?.EmployeeId" readonly />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Program</label>
@@ -321,8 +320,7 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Phone Number</label>
-                                <input type="tel" name="phoneNumber" class="form-control" value="@currentUser?.Phone" pattern="^(\+?60|0)1[0-9][\-\s]?[0-9]{3,4}[\-\s]?[0-9]{4}$" required title="Please enter a valid Malaysia phone number (e.g. 012-3456789 or +60123456789)" oninput="this.classList.toggle('is-invalid', !this.checkValidity());" />
-                                <div class="invalid-feedback text-danger small mt-1">Please enter a valid Malaysia phone number (e.g., 012-3456789 or +60123456789).</div>
+                                <input type="tel" name="phoneNumber" class="form-control bg-light border-0" value="@currentUser?.Phone" readonly />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Session / Semester</label>
@@ -336,11 +334,13 @@
                         <h6 class="fw-bold text-primary mb-3"><i class="fas fa-file-alt me-1"></i>Part B: Project Topic</h6>
                         <div class="mb-3">
                             <label class="form-label fw-semibold small">Project Topic / Proposed Title</label>
-                            <input type="text" name="projectTopic" class="form-control" placeholder="Enter your proposed project title" minlength="5" maxlength="200" required />
+                            <input type="text" name="projectTopic" id="projectTopic" class="form-control" placeholder="Enter your proposed project title" minlength="5" maxlength="200" required />
+                            <div id="projectTopicError" class="text-danger small mt-1 d-none">Please enter a valid project topic (min 5 characters).</div>
                         </div>
                         <div class="mb-0">
                             <label class="form-label fw-semibold small">Brief Proposal / Message</label>
-                            <textarea name="requestMessage" class="form-control" rows="4" placeholder="e.g. My project aims to solve [Problem] by building a [Solution] using [Tech Stack]..." minlength="10" maxlength="1000" required></textarea>
+                            <textarea name="requestMessage" id="requestMessage" class="form-control" rows="4" placeholder="e.g. My project aims to solve [Problem] by building a [Solution] using [Tech Stack]..." minlength="10" maxlength="1000" required></textarea>
+                            <div id="requestMessageError" class="text-danger small mt-1 d-none">Please enter a brief proposal (min 10 characters).</div>
                             <div class="form-text mt-2 text-muted" style="font-size: 0.8rem;">
                                 <strong class="text-primary"><i class="fas fa-lightbulb me-1"></i>Quick Guide:</strong> Please include:
                                 <ul class="mb-0 ps-3 mt-1">
@@ -422,40 +422,53 @@
         setInterval(updateTimers, 1000);
     });
 
-    // Client-side validation for Matric ID duplication
-    document.getElementById('subReqForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        var form = this;
-        var matricInput = form.elements['matricNumber'].value;
-        
-        // Disable button to prevent double submission
-        var submitBtn = form.querySelector('button[type="submit"]');
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...';
-
-        try {
-            const response = await fetch('/Student/CheckDuplicateMatric?matricNumber=' + encodeURIComponent(matricInput));
-            const data = await response.json();
-            
-            if (data.isDuplicate) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Duplicate Matric ID',
-                    text: 'Matric ID \'' + matricInput + '\' is already registered to another student. Please use your own.',
-                    confirmButtonColor: '#0f172a'
-                });
-                // Reset button
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = 'Confirm & Request';
-            } else {
-                // If not duplicate, actually submit the form
-                form.submit();
-            }
-        } catch (error) {
-            console.error("Error checking matric ID", error);
-            // Fallback to normal submission if API fails
-            form.submit();
+    document.getElementById('projectTopic').addEventListener('input', function() {
+        var err = document.getElementById('projectTopicError');
+        if (this.value.trim().length < 5) {
+            err.classList.remove('d-none');
+            this.classList.add('is-invalid');
+        } else {
+            err.classList.add('d-none');
+            this.classList.remove('is-invalid');
         }
+    });
+
+    document.getElementById('requestMessage').addEventListener('input', function() {
+        var err = document.getElementById('requestMessageError');
+        if (this.value.trim().length < 10) {
+            err.classList.remove('d-none');
+            this.classList.add('is-invalid');
+        } else {
+            err.classList.add('d-none');
+            this.classList.remove('is-invalid');
+        }
+    });
+
+    document.getElementById('subReqForm').addEventListener('submit', function(e) {
+        var topic = document.getElementById('projectTopic');
+        var msg = document.getElementById('requestMessage');
+        var isValid = true;
+        
+        if (topic.value.trim().length < 5) {
+            document.getElementById('projectTopicError').classList.remove('d-none');
+            topic.classList.add('is-invalid');
+            isValid = false;
+        }
+        
+        if (msg.value.trim().length < 10) {
+            document.getElementById('requestMessageError').classList.remove('d-none');
+            msg.classList.add('is-invalid');
+            isValid = false;
+        }
+        
+        if (!isValid) {
+            e.preventDefault();
+            return;
+        }
+
+        var submitBtn = this.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Requesting...';
     });
 </script>
 }

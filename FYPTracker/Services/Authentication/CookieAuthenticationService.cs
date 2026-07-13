@@ -49,8 +49,9 @@ namespace FYPTracker.Services.Authentication
                 new Claim("EmployeeId",employee.EmployeeId ?? String.Empty)
             };
 
-            if (!string.IsNullOrEmpty(employee.UserName))
-                claims.Add(new Claim(ClaimTypes.Name, employee.UserName, ClaimValueTypes.String, AuthenticationDefaults.ClaimsIssuer));
+            string uniqueName = !string.IsNullOrEmpty(employee.UserName) ? employee.UserName : employee.Email;
+            if (!string.IsNullOrEmpty(uniqueName))
+                claims.Add(new Claim(ClaimTypes.Name, uniqueName, ClaimValueTypes.String, AuthenticationDefaults.ClaimsIssuer));
 
             if (!string.IsNullOrEmpty(employee.Email))
                 claims.Add(new Claim(ClaimTypes.Email, employee.Email, ClaimValueTypes.Email, AuthenticationDefaults.ClaimsIssuer));

@@ -351,6 +351,9 @@ namespace FYPTracker.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
 
+                    b.Property<string>("AcademicSession")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("datetime");
 
@@ -362,6 +365,10 @@ namespace FYPTracker.Migrations
 
                     b.Property<string>("ExpectedOutcome")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FinalGrade")
+                        .HasMaxLength(5)
+                        .HasColumnType("nvarchar(5)");
 
                     b.Property<string>("Objective1")
                         .HasColumnType("nvarchar(max)");

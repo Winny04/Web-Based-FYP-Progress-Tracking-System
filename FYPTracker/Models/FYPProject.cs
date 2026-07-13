@@ -42,6 +42,11 @@ namespace FYPTracker.Models
 
         public DateTime? EndDate { get; set; }
 
+        public string? AcademicSession { get; set; }
+
+        [StringLength(5)]
+        public string? FinalGrade { get; set; }
+
         [Column(TypeName = "datetime")]
         public DateTime CreatedDate { get; set; } = DateTime.Now;
 

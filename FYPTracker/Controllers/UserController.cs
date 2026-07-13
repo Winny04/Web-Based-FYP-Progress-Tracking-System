@@ -484,19 +484,20 @@ namespace FYPTracker.Controllers
         [HttpGet]
         public async Task<IActionResult> ForceChangePassword()
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             if (user == null) return RedirectToAction("Login");
             if (!user.RequirePasswordChange) return RedirectToAction("Index", "Home");
 
             ViewBag.User = user;
+            ViewBag.Departments = await _context.Department.ToListAsync();
             return View();
         }
 
         [Authorize]
         [HttpPost]
-        public async Task<IActionResult> ForceChangePassword(string newPassword, string confirmPassword, string fullName, string phone, string programme, string academicSession, string title)
+        public async Task<IActionResult> ForceChangePassword(string newPassword, string confirmPassword, string fullName, string phone, string programme, string academicSession, string title, int? departmentId)
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             if (user == null) return RedirectToAction("Login");
             if (!user.RequirePasswordChange) return RedirectToAction("Index", "Home");
 
@@ -505,12 +506,14 @@ namespace FYPTracker.Controllers
             if (string.IsNullOrEmpty(newPassword) || newPassword != confirmPassword)
             {
                 ViewBag.Error = "Passwords do not match or are empty.";
+                ViewBag.Departments = await _context.Department.ToListAsync();
                 return View();
             }
 
             if (string.IsNullOrEmpty(fullName))
             {
                 ViewBag.Error = "Full Name is required.";
+                ViewBag.Departments = await _context.Department.ToListAsync();
                 return View();
             }
 
@@ -527,6 +530,7 @@ namespace FYPTracker.Controllers
             else if (user.UserType == "Supervisor")
             {
                 user.Title = title;
+                user.DepartmentId = departmentId;
             }
             
             _context.ApplicationUsers.Update(user);
@@ -662,7 +666,7 @@ namespace FYPTracker.Controllers
         [Authorize]
         public async Task<IActionResult> ChangePassword(string currentPassword, string newPassword, string confirmPassword)
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             if (user == null) return Unauthorized();
 
             if (user.PassCode != Encryption.GetHash(currentPassword))

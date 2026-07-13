@@ -33,7 +33,7 @@ namespace FYPTracker.Controllers
             var userName = HttpContext.User.Identity?.Name;
             if (string.IsNullOrEmpty(userName)) return null;
             return await _context.ApplicationUsers
-                .FirstOrDefaultAsync(x => x.UserName == userName);
+                .FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
         }
 
         // GET: /Chat

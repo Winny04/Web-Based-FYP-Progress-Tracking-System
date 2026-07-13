@@ -80,9 +80,10 @@ namespace FYPTracker.Controllers
         private async Task<ApplicationUser?> GetCurrentUserAsync()
         {
             var userName = HttpContext.User.Identity?.Name;
+            if (string.IsNullOrEmpty(userName)) return null;
             return await _context.ApplicationUsers
                 .Include(x => x.EmpDepartment)
-                .FirstOrDefaultAsync(x => x.UserName == userName);
+                .FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
         }
 
         // ──────────────────────────────────────────────────────

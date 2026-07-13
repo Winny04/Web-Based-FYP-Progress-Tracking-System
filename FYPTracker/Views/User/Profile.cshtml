@@ -112,7 +112,7 @@
                     <span class="badge bg-light text-muted border px-3 py-1 rounded-pill mt-1">@Model.UserType</span>
                 </div>
 
-                <form asp-action="EditProfile" asp-controller="User" method="post" enctype="multipart/form-data">
+                <form asp-action="EditProfile" asp-controller="User" method="post" enctype="multipart/form-data" id="editProfileForm">
                     <input type="hidden" name="Id" value="@Model.Id" />
                     <input type="hidden" name="UserName" value="@Model.UserName" />
 
@@ -144,7 +144,8 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Phone Number</label>
-                            <input type="tel" name="Phone" class="form-control" value="@Model.Phone" placeholder="+60 12-345 6789" />
+                            <input type="tel" name="Phone" id="phone" class="form-control" value="@Model.Phone" placeholder="012-3456789" />
+                            <div id="phoneError" class="text-danger mt-1 fs-7 fw-bold"></div>
                         </div>
 
                         @if (Model.UserType == "Student")
@@ -223,6 +224,25 @@
                                 <i class="fas fa-eye text-muted"></i>
                             </span>
                         </div>
+                        
+                        <!-- Password requirements checklist -->
+                        <div class="mt-2 text-muted d-none" id="passwordRequirements" style="font-size: 0.85rem;">
+                            <div class="d-flex align-items-center mb-1" id="req-length">
+                                <i class="fas fa-circle fs-9 me-2"></i> At least 8 characters
+                            </div>
+                            <div class="d-flex align-items-center mb-1" id="req-uppercase">
+                                <i class="fas fa-circle fs-9 me-2"></i> At least one uppercase letter (A-Z)
+                            </div>
+                            <div class="d-flex align-items-center mb-1" id="req-lowercase">
+                                <i class="fas fa-circle fs-9 me-2"></i> At least one lowercase letter (a-z)
+                            </div>
+                            <div class="d-flex align-items-center mb-1" id="req-number">
+                                <i class="fas fa-circle fs-9 me-2"></i> At least one number (0-9)
+                            </div>
+                            <div class="d-flex align-items-center mb-1" id="req-symbol">
+                                <i class="fas fa-circle fs-9 me-2"></i> At least one special symbol (!@@#$%^&*)
+                            </div>
+                        </div>
                     </div>
 
                     <div class="mb-4">
@@ -233,6 +253,14 @@
                                 <i class="fas fa-eye text-muted"></i>
                             </span>
                         </div>
+                        
+                        <!-- Confirm match checklist -->
+                        <div class="mt-2 text-muted d-none" id="passwordMatchRequirement" style="font-size: 0.85rem;">
+                            <div class="d-flex align-items-center mb-1" id="req-match">
+                                <i class="fas fa-circle fs-9 me-2"></i> Passwords match
+                            </div>
+                        </div>
+                        <div id="passwordError" class="text-danger mt-2 fs-6 fw-bold"></div>
                     </div>
 
                     <div class="d-grid mt-4">
@@ -307,21 +335,122 @@
         }
     }
 
-    // Custom form validation before submit
-    $('#changePasswordForm').submit(function(e) {
-        var newPwd = $('#newPassword').val();
-        var confirmPwd = $('#confirmPassword').val();
+    // Dynamic requirement highlighting
+    document.getElementById('newPassword').addEventListener('input', function(e) {
+        var p = e.target.value;
+        var reqContainer = document.getElementById('passwordRequirements');
         
-        if (newPwd !== confirmPwd) {
-            e.preventDefault();
-            alert('New passwords do not match!');
-            return false;
+        if (p.length > 0) {
+            reqContainer.classList.remove('d-none');
+        } else {
+            reqContainer.classList.add('d-none');
         }
         
-        if (newPwd.length < 6) {
+        var hasLength = p.length >= 8;
+        var hasUpper = /[A-Z]/.test(p);
+        var hasLower = /[a-z]/.test(p);
+        var hasNumber = /[0-9]/.test(p);
+        var hasSymbol = /[^\da-zA-Z]/.test(p);
+        
+        function toggleReq(id, isValid) {
+            var el = document.getElementById(id);
+            var icon = el.querySelector('i');
+            if (isValid) {
+                el.classList.remove('text-muted');
+                el.classList.add('text-success', 'fw-bold');
+                icon.classList.remove('fa-circle', 'fs-9', 'text-muted');
+                icon.classList.add('fa-check-circle', 'text-success');
+            } else {
+                el.classList.add('text-muted');
+                el.classList.remove('text-success', 'fw-bold');
+                icon.classList.add('fa-circle', 'fs-9', 'text-muted');
+                icon.classList.remove('fa-check-circle', 'text-success');
+            }
+        }
+        
+        toggleReq('req-length', hasLength);
+        toggleReq('req-uppercase', hasUpper);
+        toggleReq('req-lowercase', hasLower);
+        toggleReq('req-number', hasNumber);
+        toggleReq('req-symbol', hasSymbol);
+        
+        checkMatch();
+    });
+
+    function checkMatch() {
+        var p = document.getElementById('newPassword').value;
+        var cp = document.getElementById('confirmPassword').value;
+        var matchContainer = document.getElementById('passwordMatchRequirement');
+        
+        if (cp.length > 0) {
+            matchContainer.classList.remove('d-none');
+        } else {
+            matchContainer.classList.add('d-none');
+        }
+
+        var match = (p === cp && cp.length > 0);
+        var el = document.getElementById('req-match');
+        var icon = el.querySelector('i');
+        
+        if (match) {
+            el.classList.remove('text-muted');
+            el.classList.add('text-success', 'fw-bold');
+            icon.classList.remove('fa-circle', 'fs-9', 'text-muted');
+            icon.classList.add('fa-check-circle', 'text-success');
+        } else {
+            el.classList.add('text-muted');
+            el.classList.remove('text-success', 'fw-bold');
+            icon.classList.add('fa-circle', 'fs-9', 'text-muted');
+            icon.classList.remove('fa-check-circle', 'text-success');
+        }
+    }
+
+    document.getElementById('confirmPassword').addEventListener('input', checkMatch);
+
+    // Custom form validation before submit
+    document.getElementById('changePasswordForm').addEventListener('submit', function(e) {
+        var password = document.getElementById('newPassword').value;
+        var confirmPassword = document.getElementById('confirmPassword').value;
+        var errorDiv = document.getElementById('passwordError');
+
+        var strengthRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,}$/;
+        if (!strengthRegex.test(password)) {
             e.preventDefault();
-            alert('Password must be at least 6 characters long.');
-            return false;
+            errorDiv.innerText = "Password must be at least 8 characters long, containing uppercase, lowercase, numbers, and symbols.";
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            e.preventDefault();
+            errorDiv.innerText = "Passwords do not match!";
+            return;
+        }
+
+        errorDiv.innerText = "";
+    });
+
+    // Phone validation
+    const phoneInput = document.getElementById('phone');
+    const phoneError = document.getElementById('phoneError');
+    const phonePattern = /^01[0-9]-?\d{7,8}$/;
+    
+    if (phoneInput) {
+        phoneInput.addEventListener('input', function() {
+            if (this.value && !phonePattern.test(this.value)) {
+                phoneError.innerText = "Please enter a valid Malaysian mobile number (e.g. 012-3456789).";
+                this.classList.add('is-invalid');
+            } else {
+                phoneError.innerText = "";
+                this.classList.remove('is-invalid');
+            }
+        });
+    }
+
+    document.getElementById('editProfileForm').addEventListener('submit', function(e) {
+        if (phoneInput && phoneInput.value && !phonePattern.test(phoneInput.value)) {
+            e.preventDefault();
+            phoneError.innerText = "Please enter a valid Malaysian mobile number before saving.";
+            phoneInput.focus();
         }
     });
 </script>

@@ -28,7 +28,7 @@ namespace FYPTracker.Controllers
             if (string.IsNullOrEmpty(username)) return null;
             return await _context.ApplicationUsers
                 .Include(x => x.EmpDepartment)
-                .FirstOrDefaultAsync(u => u.UserName == username);
+                .FirstOrDefaultAsync(u => u.UserName == username || u.Email == username);
         }
 
         private async Task AddNotificationAsync(int recipientId, string type, string title, string? message = null)
@@ -58,25 +58,55 @@ namespace FYPTracker.Controllers
             await _context.SaveChangesAsync();
         }
 
+        private async Task<string?> GetAndSetSessionFilterAsync(int supervisorId, string? sessionFilter)
+        {
+            var sessions = await _context.FYPProjects
+                .Where(p => p.SupervisorId == supervisorId && !string.IsNullOrEmpty(p.AcademicSession))
+                .Select(p => p.AcademicSession)
+                .Distinct()
+                .ToListAsync();
+
+            var reqSessions = await _context.SupervisorRequests
+                .Where(r => r.SupervisorId == supervisorId && !string.IsNullOrEmpty(r.Student.AcademicSession))
+                .Select(r => r.Student.AcademicSession)
+                .Distinct()
+                .ToListAsync();
+
+            var allSessions = sessions.Concat(reqSessions).Distinct().OrderByDescending(s => s).ToList();
+
+            if (!allSessions.Any()) return null;
+
+            string selectedSession = !string.IsNullOrEmpty(sessionFilter) && allSessions.Contains(sessionFilter) 
+                ? sessionFilter 
+                : allSessions.First()!;
+            
+            ViewBag.AllSessions = allSessions;
+            ViewBag.CurrentSession = selectedSession;
+
+            return selectedSession;
+        }
+
         // ══════════════════════════════════════════════════════
         //  DASHBOARD (INDEX)
         // ══════════════════════════════════════════════════════
-        public async Task<IActionResult> Index()
+        public async Task<IActionResult> Index(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
             if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "Authentication");
             ViewBag.CurrentUser = user;
 
+            var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
+
             // Stats
-            ViewBag.TotalProjects     = await _context.FYPProjects.CountAsync(p => p.SupervisorId == user.Id);
-            ViewBag.PendingRequests   = await _context.SupervisorRequests.CountAsync(r => r.SupervisorId == user.Id && r.Status == "Pending");
-            ViewBag.PendingReviews    = await _context.FYPMilestones.CountAsync(m => m.Project.SupervisorId == user.Id && m.Status == "Submitted");
-            ViewBag.UpcomingMeetings  = await _context.MeetingBookings.CountAsync(m => m.SupervisorId == user.Id && m.MeetingDate >= DateTime.Today && m.Status == "Approved");
+            ViewBag.TotalProjects     = await _context.FYPProjects.CountAsync(p => p.SupervisorId == user.Id && (activeSession == null || p.AcademicSession == activeSession));
+            ViewBag.PendingRequests   = await _context.SupervisorRequests.CountAsync(r => r.SupervisorId == user.Id && r.Status == "Pending" && (activeSession == null || r.Student.AcademicSession == activeSession));
+            ViewBag.PendingReviews    = await _context.FYPMilestones.CountAsync(m => m.Project.SupervisorId == user.Id && m.Status == "Submitted" && (activeSession == null || m.Project.AcademicSession == activeSession));
+            ViewBag.UpcomingMeetings  = await _context.MeetingBookings.CountAsync(m => m.SupervisorId == user.Id && m.MeetingDate >= DateTime.Today && m.Status == "Approved" && (activeSession == null || m.Student.AcademicSession == activeSession));
 
             // Recent Requests (Top 5)
             var recentRequests = await _context.SupervisorRequests
                 .Include(r => r.Student)
-                .Where(r => r.SupervisorId == user.Id && r.Status == "Pending" && !r.Student.IsResign)
+                .Where(r => r.SupervisorId == user.Id && r.Status == "Pending" && !r.Student.IsResign && (activeSession == null || r.Student.AcademicSession == activeSession))
                 .OrderByDescending(r => r.RequestedDate)
                 .Take(5)
                 .ToListAsync();
@@ -84,7 +114,7 @@ namespace FYPTracker.Controllers
             // Upcoming Meetings (Next 5)
             var nextMeetings = await _context.MeetingBookings
                 .Include(m => m.Student)
-                .Where(m => m.SupervisorId == user.Id && m.MeetingDate >= DateTime.Today && m.Status == "Approved" && !m.Student.IsResign)
+                .Where(m => m.SupervisorId == user.Id && m.MeetingDate >= DateTime.Today && m.Status == "Approved" && !m.Student.IsResign && (activeSession == null || m.Student.AcademicSession == activeSession))
                 .OrderBy(m => m.MeetingDate)
                 .ThenBy(m => m.MeetingTime)
                 .Take(5)
@@ -94,7 +124,7 @@ namespace FYPTracker.Controllers
             var pendingMilestones = await _context.FYPMilestones
                 .Include(m => m.Project)
                 .ThenInclude(p => p.Student)
-                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (m.Status == "Submitted" || (m.Status == "Pending" && m.SubmittedDate.HasValue)))
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (m.Status == "Submitted" || (m.Status == "Pending" && m.SubmittedDate.HasValue)) && (activeSession == null || m.Project.AcademicSession == activeSession))
                 .OrderBy(m => m.SubmittedDate ?? DateTime.MaxValue)
                 .Take(5)
                 .ToListAsync();
@@ -102,7 +132,7 @@ namespace FYPTracker.Controllers
             // Pending Meetings to Approve (Top 5)
             var pendingMeetingsList = await _context.MeetingBookings
                 .Include(m => m.Student)
-                .Where(m => m.SupervisorId == user.Id && m.Status == "Pending" && !m.Student.IsResign)
+                .Where(m => m.SupervisorId == user.Id && m.Status == "Pending" && !m.Student.IsResign && (activeSession == null || m.Student.AcademicSession == activeSession))
                 .OrderBy(m => m.MeetingDate)
                 .Take(5)
                 .ToListAsync();
@@ -122,15 +152,17 @@ namespace FYPTracker.Controllers
         // ────────────────────────────────────────────────────────
         // Student Requests
         // ────────────────────────────────────────────────────────
-        public async Task<IActionResult> StudentRequests()
+        public async Task<IActionResult> StudentRequests(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
             if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
+            var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
+
             var requests = await _context.SupervisorRequests
                 .Include(r => r.Student)
-                .Where(r => r.SupervisorId == user.Id && !r.Student.IsResign)
+                .Where(r => r.SupervisorId == user.Id && !r.Student.IsResign && (activeSession == null || r.Student.AcademicSession == activeSession))
                 .OrderByDescending(r => r.RequestedDate)
                 .ToListAsync();
 
@@ -157,6 +189,7 @@ namespace FYPTracker.Controllers
                         {
                             Title = req.ProjectTopic ?? "New FYP Project",
                             Description = req.RequestMessage ?? "Pending student updates.",
+                            AcademicSession = req.Student.AcademicSession,
                             StudentId = req.StudentId,
                             SupervisorId = req.SupervisorId,
                             Status = "Approved",
@@ -215,16 +248,18 @@ namespace FYPTracker.Controllers
         // ────────────────────────────────────────────────────────
         // My Projects
         // ────────────────────────────────────────────────────────
-        public async Task<IActionResult> MyProjects()
+        public async Task<IActionResult> MyProjects(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
             if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
+            var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
+
             var projects = await _context.FYPProjects
                 .Include(p => p.Student)
                 .Include(p => p.Milestones)
-                .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign)
+                .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign && (activeSession == null || p.AcademicSession == activeSession))
                 .OrderByDescending(p => p.CreatedDate)
                 .ToListAsync();
 
@@ -630,17 +665,23 @@ namespace FYPTracker.Controllers
             return PhysicalFile(physicalPath, mimeType);
         }
 
-        public async Task<IActionResult> ReviewSubmissions()
+        public async Task<IActionResult> ReviewSubmissions(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "Authentication");
             ViewBag.CurrentUser = user;
 
+            var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
+
+            // Fetch pending milestones for all projects supervised by this user
             var submissions = await _context.FYPMilestones
-                .Include(m => m.Project).ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .Include(m => m.Feedbacks)
                 .Include(m => m.SubmissionFiles)
-                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign)
-                .OrderByDescending(m => m.SubmittedDate ?? m.CreatedDate)
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (m.Status == "Submitted" || m.Status == "Pending" || m.Status == "Approved" || m.Status == "Revision") && (activeSession == null || m.Project.AcademicSession == activeSession))
+                .OrderBy(m => m.Status == "Submitted" ? 0 : 1)
+                .ThenBy(m => m.DueDate)
                 .ToListAsync();
 
             return View(submissions);
@@ -784,13 +825,15 @@ namespace FYPTracker.Controllers
         }
 
         // ────────────────────────────────────────────────────────
-        public async Task<IActionResult> ManageMeetings()
+        public async Task<IActionResult> ManageMeetings(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
             if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
             ViewBag.StartHour = 8;
             ViewBag.EndHour = 17;
+
+            var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
 
             // Auto-Expire Stale Pending Meetings
             var staleMeetings = await _context.MeetingBookings
@@ -810,7 +853,7 @@ namespace FYPTracker.Controllers
             var meetings = await _context.MeetingBookings
                 .Include(m => m.Student)
                 .Include(m => m.MeetingLog)
-                .Where(m => m.SupervisorId == user.Id && !m.Student.IsResign)
+                .Where(m => m.SupervisorId == user.Id && !m.Student.IsResign && (activeSession == null || m.Student.AcademicSession == activeSession))
                 .OrderByDescending(m => m.CreatedDate)
                 .ToListAsync();
 
@@ -1158,16 +1201,40 @@ namespace FYPTracker.Controllers
             return View();
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateFinalGrade(int projectId, string? finalGrade)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Account");
+
+            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user.Id);
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found or unauthorized.";
+                return RedirectToAction("MyProjects");
+            }
+
+            project.FinalGrade = finalGrade;
+            await _context.SaveChangesAsync();
+            await LogActivityAsync(user.Id, "Grading", $"Updated Final Grade", $"Assigned Final Grade {finalGrade ?? "Pending"} to project {project.Title}.");
+
+            TempData["Success"] = "Final grade updated successfully!";
+            return RedirectToAction("ProjectDetails", new { id = projectId });
+        }
+
         // ── Get Calendar Data API ──────────────────────────────────────────
         [HttpGet]
-        public async Task<IActionResult> GetMeetingsCalendarData()
+        public async Task<IActionResult> GetMeetingsCalendarData(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return Json(new object[] { });
 
+            var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
+
             var meetings = await _context.MeetingBookings
                 .Include(m => m.Student)
-                .Where(m => m.SupervisorId == user.Id && (m.Status == "Approved" || m.Status == "Pending" || m.Status == "Postponed"))
+                .Where(m => m.SupervisorId == user.Id && (m.Status == "Approved" || m.Status == "Pending" || m.Status == "Postponed") && (activeSession == null || m.Student.AcademicSession == activeSession))
                 .ToListAsync();
 
             var events = meetings.Select(m => {

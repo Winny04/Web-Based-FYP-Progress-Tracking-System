@@ -112,12 +112,14 @@
 
                     <div class="fv-row mb-5">
                         <label class="form-label fw-bolder text-dark fs-6">Phone</label>
-                        <input type="text" id="editPhone" class="form-control form-control-lg form-control-solid" placeholder="e.g. 0123456789 or +60123456789" />
+                        <input type="text" id="editPhone" class="form-control form-control-lg form-control-solid" placeholder="012-3456789" />
+                        <div id="editPhoneError" class="text-danger mt-1 fs-7 fw-bold"></div>
                     </div>
 
                     <div class="fv-row mb-5">
                         <label class="form-label fw-bolder text-dark fs-6">Email <span class="text-danger">*</span></label>
                         <input type="email" id="editEmail" class="form-control form-control-lg form-control-solid" placeholder="xxx@gmail.com or xxx@student.newinti.edu.my" />
+                        <div id="editEmailError" class="text-danger mt-1 fs-7 fw-bold"></div>
                     </div>
 
                     <div id="editStudentFields" style="display:none;">
@@ -147,7 +149,17 @@
                     <div id="editSupervisorFields" style="display:none;">
                         <div class="fv-row mb-5">
                             <label class="form-label fw-bolder text-dark fs-6">Title</label>
-                            <input type="text" id="editTitle" class="form-control form-control-lg form-control-solid" placeholder="e.g. Dr." />
+                            <select id="editTitle" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Title --</option>
+                                <option value="Mr.">Mr.</option>
+                                <option value="Ms.">Ms.</option>
+                                <option value="Mrs.">Mrs.</option>
+                                <option value="Dr.">Dr.</option>
+                                <option value="Prof.">Prof.</option>
+                                <option value="Assoc. Prof.">Assoc. Prof.</option>
+                                <option value="Ts.">Ts.</option>
+                                <option value="Ir.">Ir.</option>
+                            </select>
                         </div>
 
                         <div class="fv-row mb-5">
@@ -255,15 +267,24 @@
         }
 
         // Dynamically populate Academic Session dropdown
-        var currentYear = new Date().getFullYear();
-        var intakes = ['Jan', 'April', 'Aug'];
+        var now = new Date();
+        var currentYear = now.getFullYear();
+        var currentMonth = now.getMonth() + 1; // 1-12
+        var intakes = [
+            { name: 'Jan', month: 1 },
+            { name: 'April', month: 4 },
+            { name: 'Aug', month: 8 }
+        ];
         var sessionSelect = $('#createAcademicSession');
         var editSessionSelect = $('#editAcademicSession');
         for (var y = currentYear - 1; y <= currentYear + 2; y++) {
             intakes.forEach(function(intake) {
-                var sessionText = y + ' ' + intake;
-                sessionSelect.append(new Option(sessionText, sessionText));
-                editSessionSelect.append(new Option(sessionText, sessionText));
+                // Only allow selecting sessions from the current month onwards
+                if (y > currentYear || (y === currentYear && intake.month >= currentMonth)) {
+                    var sessionText = y + ' ' + intake.name;
+                    sessionSelect.append(new Option(sessionText, sessionText));
+                    editSessionSelect.append(new Option(sessionText, sessionText));
+                }
             });
         }
 
@@ -493,6 +514,9 @@
                         $('#editStudentFields').show();
                         $('#editSupervisorFields').hide();
                         $('#editProgramme').val(data.programme);
+                        if (data.academicSession && $('#editAcademicSession option[value="' + data.academicSession + '"]').length === 0) {
+                            $('#editAcademicSession').append(new Option(data.academicSession, data.academicSession));
+                        }
                         $('#editAcademicSession').val(data.academicSession);
                     } else if (data.userType === 'Supervisor' || data.userType === 'SUPERVISOR') {
                         $('#editStudentFields').hide();
@@ -503,6 +527,12 @@
                         $('#editStudentFields').hide();
                         $('#editSupervisorFields').hide();
                     }
+                    
+                    // Clear previous validation states
+                    $('#editPhoneError').text("");
+                    $('#editPhone').removeClass('is-invalid');
+                    $('#editEmailError').text("");
+                    $('#editEmail').removeClass('is-invalid');
                     
                     $('#editAccModal').modal('show');
                 } else {
@@ -529,6 +559,39 @@
             return;
         }
 
+        const emailPattern = /^[^@@\s]+@@[^@@\s]+\.[^@@\s]+$/;
+        if (!emailPattern.test(email)) {
+            Swal.fire({ text: "Please enter a valid email address.", icon: "warning", confirmButtonText: "Ok, got it!" });
+            return;
+        }
+
+        var userType = $('#editUserType').val();
+        if (userType === "Student") {
+            if (!programme) {
+                Swal.fire({ text: "Please select a Programme.", icon: "warning", confirmButtonText: "Ok, got it!" });
+                return;
+            }
+            if (!academicSession) {
+                Swal.fire({ text: "Please select an Academic Session.", icon: "warning", confirmButtonText: "Ok, got it!" });
+                return;
+            }
+        } else if (userType === "Supervisor") {
+            if (!title) {
+                Swal.fire({ text: "Please select a Title.", icon: "warning", confirmButtonText: "Ok, got it!" });
+                return;
+            }
+            if (!department) {
+                Swal.fire({ text: "Please select a Department.", icon: "warning", confirmButtonText: "Ok, got it!" });
+                return;
+            }
+        }
+
+        const phonePattern = /^01[0-9]-?\d{7,8}$/;
+        if (phone && !phonePattern.test(phone)) {
+            Swal.fire({ text: "Please enter a valid Malaysian mobile number (e.g. 012-3456789).", icon: "warning", confirmButtonText: "Ok, got it!" });
+            return;
+        }
+
         $.ajax({
             url: "/Admin/UpdateUserModal", method: "POST",
             data: { id: id, email: email, phone: phone, department: department, programme: programme, academicSession: academicSession, title: title },
@@ -546,6 +609,39 @@
         });
     });
 
+    // Real-time email validation
+    const editEmailInput = document.getElementById('editEmail');
+    const editEmailError = document.getElementById('editEmailError');
+    const editEmailPattern = /^[^@@\s]+@@[^@@\s]+\.[^@@\s]+$/;
+
+    if (editEmailInput) {
+        editEmailInput.addEventListener('input', function() {
+            if (this.value && !editEmailPattern.test(this.value)) {
+                editEmailError.innerText = "Please enter a valid email format.";
+                this.classList.add('is-invalid');
+            } else {
+                editEmailError.innerText = "";
+                this.classList.remove('is-invalid');
+            }
+        });
+    }
+
+    // Real-time phone validation for Edit modal
+    const editPhoneInput = document.getElementById('editPhone');
+    const editPhoneError = document.getElementById('editPhoneError');
+    const editPhonePattern = /^01[0-9]-?\d{7,8}$/;
+
+    if (editPhoneInput) {
+        editPhoneInput.addEventListener('input', function() {
+            if (this.value && !editPhonePattern.test(this.value)) {
+                editPhoneError.innerText = "Please enter a valid Malaysian mobile number (e.g. 012-3456789).";
+                this.classList.add('is-invalid');
+            } else {
+                editPhoneError.innerText = "";
+                this.classList.remove('is-invalid');
+            }
+        });
+    }
 </script>
 }
 
