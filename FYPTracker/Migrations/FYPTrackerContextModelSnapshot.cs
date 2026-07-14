@@ -410,6 +410,9 @@ namespace FYPTracker.Migrations
                     b.Property<DateTime?>("UpdatedDate")
                         .HasColumnType("datetime");
 
+                    b.Property<DateTime?>("VivaDate")
+                        .HasColumnType("datetime2");
+
                     b.HasKey("Id");
 
                     b.HasIndex("StudentId");

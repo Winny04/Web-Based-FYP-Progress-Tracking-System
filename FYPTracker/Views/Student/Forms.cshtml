@@ -321,7 +321,7 @@
                                     
                                     <div class="mb-3">
                                         <label class="form-label fw-semibold">Scope of Project</label>
-                                        <select name="scope" class="form-select" @(isIafLocked ? "disabled" : "") required>
+                                        <select name="scope" id="scope" class="form-select" @(isIafLocked ? "disabled" : "") required>
                                             <option value="">-- Select Scope --</option>
                                             <option value="Development" selected="@(Model.Scope == "Development")">Development</option>
                                             <option value="Research Based Project" selected="@(Model.Scope == "Research Based Project")">Research Based Project</option>
@@ -332,18 +332,49 @@
 
                                     <div class="mb-3">
                                         <label class="form-label fw-semibold">Problem Statement (supported with statistics and journal paper. Please make sure its included with in-text citation.)</label>
-                                        <textarea name="problemStatement" class="form-control" rows="5" @(isIafLocked ? "readonly" : "") required placeholder="Provide a problem statement supported with statistics and journal paper references with in-text citation...">@Model.ProblemStatement</textarea>
+                                        <textarea name="problemStatement" id="problemStatement" class="form-control" rows="5" @(isIafLocked ? "readonly" : "") required placeholder="Provide a problem statement supported with statistics and journal paper references with in-text citation...">@Model.ProblemStatement</textarea>
                                         <div class="invalid-feedback">Problem statement is required.</div>
-                                        <span class="text-danger fw-bold small">* Please include the references listing as well</span>
+                                        <div id="problemStatementError" class="text-danger small mt-1 d-none">Please include in-text citations (e.g. (Author, 2024) or [1]).</div>
+                                        @if (!isIafLocked)
+                                        {
+                                            <div class="mt-2">
+                                                <button type="button" class="btn btn-sm btn-light-primary border border-primary border-opacity-25 me-2" onclick="insertCitation('()')">
+                                                    <i class="fas fa-quote-left me-1"></i> Add (Author, Year)
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-light-info border border-info border-opacity-25" onclick="insertCitation('[]')">
+                                                    <i class="fas fa-list-ol me-1"></i> Add [1]
+                                                </button>
+                                            </div>
+                                        }
+                                        <span class="text-danger fw-bold small d-block mt-2">* Please include the references listing as well</span>
                                     </div>
 
                                     <div class="form-section-title">Part 3: Objectives (hint: must be in point form, must contain action verb and must be measurable)</div>
                                     <p class="text-muted small mb-2">The number of objectives should be more than 1 and less than or equal to 3. Example: 1. To (verb) indicate the platform and detailed out the project scope and feature</p>
                                     
                                     <div class="mb-3">
-                                        <input type="text" name="objective1" class="form-control mb-2" value="@Model.Objective1" @(isIafLocked ? "readonly" : "") placeholder="1. Objective 1" required />
-                                        <input type="text" name="objective2" class="form-control mb-2" value="@Model.Objective2" @(isIafLocked ? "readonly" : "") placeholder="2. Objective 2" required />
-                                        <input type="text" name="objective3" class="form-control" value="@Model.Objective3" @(isIafLocked ? "readonly" : "") placeholder="3. Objective 3 (Optional)" />
+                                        @{
+                                            var cleanObj1 = Model.Objective1?.StartsWith("1. To ", StringComparison.OrdinalIgnoreCase) == true ? Model.Objective1.Substring(6).TrimStart() : Model.Objective1;
+                                            var cleanObj2 = Model.Objective2?.StartsWith("2. To ", StringComparison.OrdinalIgnoreCase) == true ? Model.Objective2.Substring(6).TrimStart() : Model.Objective2;
+                                            var cleanObj3 = Model.Objective3?.StartsWith("3. To ", StringComparison.OrdinalIgnoreCase) == true ? Model.Objective3.Substring(6).TrimStart() : Model.Objective3;
+                                        }
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text bg-light fw-bold text-muted">1. To</span>
+                                            <input type="text" name="objective1" id="objective1" class="form-control" value="@cleanObj1" @(isIafLocked ? "readonly" : "") placeholder="develop a system..." required />
+                                        </div>
+                                        <div id="objective1Error" class="text-danger small mt-1 mb-3 d-none">Objective must be at least 10 characters long.</div>
+                                        
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text bg-light fw-bold text-muted">2. To</span>
+                                            <input type="text" name="objective2" id="objective2" class="form-control" value="@cleanObj2" @(isIafLocked ? "readonly" : "") placeholder="analyze the performance..." required />
+                                        </div>
+                                        <div id="objective2Error" class="text-danger small mt-1 mb-3 d-none">Objective must be at least 10 characters long.</div>
+                                        
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text bg-light fw-bold text-muted">3. To</span>
+                                            <input type="text" name="objective3" id="objective3" class="form-control" value="@cleanObj3" @(isIafLocked ? "readonly" : "") placeholder="evaluate the findings (Optional)" />
+                                        </div>
+                                        <div id="objective3Error" class="text-danger small mt-1 mb-3 d-none">Objective must be at least 10 characters long.</div>
                                         <div class="invalid-feedback">At least 2 objectives are required.</div>
                                     </div>
 
@@ -388,7 +419,7 @@
                                         </div>
 
                                         <!-- Off-screen container for HTML2PDF to read -->
-                                        <div id="iafPdfSource" style="display: none;">
+                                        <div id="iafPdfSource" style="position: absolute; left: -9999px; top: -9999px;">
                                             <h4 style="color: #0d6efd; margin-bottom: 20px; font-family: sans-serif;">@iafMilestone.Title</h4>
                                             <p style="font-family: sans-serif; color: #555;">Student: @(currentUser?.FullName) (@(currentUser?.EmployeeId))</p>
                                             <hr style="border: 1px solid #ddd; margin-bottom: 20px;" />
@@ -397,18 +428,31 @@
                                                     var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parsedJson);
                                                     if (dict != null) {
                                                         <table style="width: 100%; font-family: sans-serif; font-size: 14px; border-collapse: collapse;">
-                                                            @foreach (var kvp in dict) {
-                                                                if (!string.IsNullOrEmpty(kvp.Value)) {
-                                                                    <tr>
-                                                                        <td style="width: 30%; font-weight: bold; padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;">@kvp.Key:</td>
-                                                                        <td style="padding: 8px; border-bottom: 1px solid #eee; white-space: pre-wrap;">
-                                                                            @if (kvp.Key == "Supervisor Signature") {
-                                                                                <span style="font-family: 'Brush Script MT', cursive; font-size: 24px; color: #00008B;">@kvp.Value</span>
-                                                                            } else {
-                                                                                @kvp.Value
-                                                                            }
-                                                                        </td>
-                                                                    </tr>
+                                                            @{
+                                                                var keysOrder = new[] { "Project Title", "Scope of Project", "Problem Statement", "Objective 1", "Objective 2", "Objective 3", "Agreed Supervisor Name", "Completion", "Supervisor Signature" };
+                                                                
+                                                                foreach (var key in keysOrder) {
+                                                                    if (dict.TryGetValue(key, out var val) && !string.IsNullOrEmpty(val)) {
+                                                                        <tr>
+                                                                            <td style="width: 30%; font-weight: bold; padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;">@key:</td>
+                                                                            <td style="padding: 8px; border-bottom: 1px solid #eee; white-space: pre-wrap;">
+                                                                                @if (key == "Supervisor Signature") {
+                                                                                    <span style="font-family: 'Brush Script MT', cursive; font-size: 24px; color: #00008B;">@val</span>
+                                                                                } else {
+                                                                                    @val
+                                                                                }
+                                                                            </td>
+                                                                        </tr>
+                                                                    }
+                                                                }
+                                                                
+                                                                foreach (var kvp in dict.Where(k => !keysOrder.Contains(k.Key))) {
+                                                                    if (!string.IsNullOrEmpty(kvp.Value)) {
+                                                                        <tr>
+                                                                            <td style="width: 30%; font-weight: bold; padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;">@kvp.Key:</td>
+                                                                            <td style="padding: 8px; border-bottom: 1px solid #eee; white-space: pre-wrap;">@kvp.Value</td>
+                                                                        </tr>
+                                                                    }
                                                                 }
                                                             }
                                                         </table>
@@ -523,7 +567,7 @@
 
                                 @if (!isPropLocked)
                                 {
-                                <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
+                                <form id="proposalForm" asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
                                     <input type="hidden" name="formType" value="Proposal Form" />
                                     <input type="hidden" name="milestoneId" value="@propMilestoneId" />
 
@@ -554,7 +598,8 @@
                                         <h6 class="fw-bold mb-1">Drag & Drop your proposal here</h6>
                                         <p class="text-muted small mb-0">or click to browse files (PDF ONLY)</p>
                                         <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
-                                        <input type="file" name="attachedFile" id="proposalDocument" class="d-none" accept=".pdf" required onchange="updateFileName(this)" />
+                                        <input type="file" name="attachedFile" id="proposalDocument" class="d-none" accept=".pdf" onchange="updateFileName(this)" />
+                                        <div id="proposalFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please select a PDF file before submitting.</div>
                                         <div id="fileNameDisplay" class="mt-3 fw-bold text-success" style="display:none;">
                                             <i class="fas fa-file-pdf me-2"></i><span id="fName"></span>
                                         </div>
@@ -563,7 +608,7 @@
 
                                 <div class="d-flex gap-3 justify-content-end">
                                     <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
-                                    <button type="submit" class="btn-submit">Submit Proposal</button>
+                                    <button type="submit" class="btn-submit" onclick="return validateProposalForm()">Submit Proposal</button>
                                 </div>
                             </form>
                             }
@@ -638,25 +683,30 @@
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-6">
                                         <label class="form-label fw-semibold">Start Period</label>
-                                        <input type="date" name="startDate" class="form-control" required />
+                                        <input type="date" name="startDate" id="progressStartDate" class="form-control" required />
                                         <div class="invalid-feedback">Start date is required.</div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label fw-semibold">End Period</label>
-                                        <input type="date" name="endDate" class="form-control" required />
+                                        <input type="date" name="endDate" id="progressEndDate" class="form-control" required />
                                         <div class="invalid-feedback">End date is required.</div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div id="progressDateError" class="text-danger fw-bold d-none"><i class="fas fa-exclamation-triangle me-1"></i>End Period must be equal to or after the Start Period.</div>
                                     </div>
                                 </div>
 
                                 <div class="form-section-title">Part 2: Document Attachment</div>
                                 <div class="row g-3 mb-4">
                                     <div class="col-md-12">
-                                        <label class="form-label fw-semibold mb-2">Attach Supporting Files (Optional)</label>
+                                        <label class="form-label fw-semibold mb-2">Attach Completed Progress Report</label>
                                         <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="progressDropZone" onclick="document.getElementById('progressFiles').click()">
                                             <i class="fas fa-copy fs-1 mb-3" style="color: #3b82f6 !important;"></i>
                                             <h6 class="fw-bold mb-1">Drag & Drop your files here</h6>
                                             <p class="text-muted small mb-0">or click to browse (PDF ONLY)</p>
+                                            <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
                                             <input type="file" name="attachedFiles" id="progressFiles" class="d-none" accept=".pdf" multiple onchange="updateMultiFileNames(this, 'progressFileList')" />
+                                            <div id="progressFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please select at least one PDF file before submitting.</div>
                                             <div id="progressFileList" class="mt-3 text-start small fw-semibold text-primary" style="display:none; max-width: 300px; margin: auto;">
                                             </div>
                                         </div>
@@ -665,7 +715,7 @@
 
                                 <div class="d-flex gap-3 justify-content-end">
                                     <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
-                                    <button type="submit" class="btn-submit">Submit Progress Report</button>
+                                    <button type="submit" class="btn-submit" onclick="return validateProgressForm()">Submit Progress Report</button>
                                 </div>
                             </form>
                             }
@@ -706,6 +756,11 @@
                                                 <hr class="my-2 border-info opacity-25">
                                                 <p class="mb-0 text-dark"><strong>Feedback:</strong> @finalMilestone.SupervisorFeedback</p>
                                             }
+                                            @if (Model.VivaDate.HasValue)
+                                            {
+                                                <hr class="my-2 border-info opacity-25">
+                                                <p class="mb-0 text-dark"><strong><i class="fas fa-calendar-alt text-success me-1"></i> Scheduled Viva Date:</strong> <span class="text-success fw-bold">@Model.VivaDate.Value.ToString("dd MMMM yyyy, hh:mm tt")</span></p>
+                                            }
                                         </div>
                                     </div>
                                 }
@@ -737,23 +792,32 @@
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold">Abstract</label>
-                                    <textarea name="abstract" class="form-control" rows="4" required placeholder="Enter the project abstract..."></textarea>
-                                    <div class="invalid-feedback">Please provide an abstract.</div>
+                                    <textarea name="abstract" id="finalAbstract" class="form-control" rows="4" required placeholder="Enter the project abstract..."></textarea>
+                                    <div id="finalAbstractError" class="text-danger fw-bold small mt-1 d-none">Abstract must be at least 50 characters long.</div>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label fw-semibold">Acknowledgements</label>
-                                    <textarea name="acknowledgements" class="form-control" rows="2" placeholder="Acknowledge individuals and academic support..."></textarea>
+                                    <label class="form-label fw-semibold">Acknowledgements (Optional)</label>
+                                    <textarea name="acknowledgements" id="finalAck" class="form-control" rows="2" placeholder="Acknowledge individuals and academic support..."></textarea>
+                                    <div id="finalAckError" class="text-danger fw-bold small mt-1 d-none">Acknowledgements must be at least 10 characters long if provided.</div>
                                 </div>
 
                                 <div class="form-section-title">Part 2: Project Repos & Viva</div>
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-6">
                                         <label class="form-label fw-semibold">Link to Source Code Repository (Optional)</label>
-                                        <input type="url" name="sourceCodeLink" class="form-control" placeholder="GitHub, GitLab, etc." />
+                                        <input type="url" name="sourceCodeLink" id="finalRepo" class="form-control" placeholder="https://github.com/..." />
+                                        <div id="finalRepoError" class="text-danger fw-bold small mt-1 d-none">Please enter a valid URL (e.g. https://github.com/...).</div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label fw-semibold">Viva Oral Examination Date (Assigned by faculty)</label>
-                                        <input type="text" class="form-control bg-light border-0" value="TBA — Awaiting Final review" readonly />
+                                        @if (Model.VivaDate.HasValue)
+                                        {
+                                            <input type="text" class="form-control bg-light border-success text-success fw-bold" value="@Model.VivaDate.Value.ToString("dd MMMM yyyy, hh:mm tt")" readonly />
+                                        }
+                                        else
+                                        {
+                                            <input type="text" class="form-control bg-light border-0" value="TBA — Awaiting Final review" readonly />
+                                        }
                                     </div>
                                 </div>
 
@@ -765,16 +829,16 @@
                                         <h6 class="fw-bold mb-1">Drag & Drop your final thesis here</h6>
                                         <p class="text-muted small mb-0">or click to browse files (PDF ONLY)</p>
                                         <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
-                                        <input type="file" name="attachedFile" id="finalDocument" class="d-none" accept=".pdf" required onchange="updateFileNameForFinal(this)" />
+                                        <input type="file" name="attachedFile" id="finalDocument" class="d-none" accept=".pdf" onchange="updateFileNameForFinal(this)" />
+                                        <div id="finalFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please upload your final thesis PDF.</div>
                                         <div id="finalFileNameDisplay" class="mt-3 fw-bold text-danger" style="display:none;">
                                             <i class="fas fa-file-pdf me-2"></i><span id="fFinalName"></span>
                                         </div>
                                     </div>
-                                    <div class="invalid-feedback d-block" id="finalFileError" style="display:none;">Please upload your final thesis PDF.</div>
                                 </div>
 
                                 <div class="d-flex gap-3 justify-content-end">
-                                    <button type="submit" class="btn-submit bg-dark border-0">
+                                    <button type="submit" class="btn-submit bg-dark border-0" onclick="return validateFinalForm()">
                                         <i class="fas fa-file-pdf me-1"></i> Submit Final Report
                                     </button>
                                 </div>
@@ -1028,7 +1092,153 @@
             
         })();
 
+        // Real-time validation for IAF
+        const scopeSelect = document.getElementById('scope');
+        if (scopeSelect) {
+            scopeSelect.addEventListener('change', function() {
+                if (this.value === "") {
+                    this.classList.add('is-invalid');
+                    this.setCustomValidity('Please select a project scope');
+                } else {
+                    this.classList.remove('is-invalid');
+                    this.setCustomValidity('');
+                }
+            });
+        }
+
+        const probStmt = document.getElementById('problemStatement');
+        const probStmtErr = document.getElementById('problemStatementError');
+        
+        function insertCitation(type) {
+            if (!probStmt || probStmt.readOnly) return;
+            const start = probStmt.selectionStart;
+            const end = probStmt.selectionEnd;
+            const text = probStmt.value;
+            let insertion = type === '()' ? " (Author, Year)" : " [1]";
+            
+            probStmt.value = text.substring(0, start) + insertion + text.substring(end);
+            probStmt.selectionStart = probStmt.selectionEnd = start + insertion.length;
+            probStmt.focus();
+            probStmt.dispatchEvent(new Event('input'));
+        }
+
+        if (probStmt) {
+            probStmt.addEventListener('input', function() {
+                const val = this.value.trim();
+                const hasCitation = val.includes('(') || val.includes('[');
+                const hasLength = val.length >= 50;
+                
+                if (val.length > 0 && (!hasCitation || !hasLength)) {
+                    probStmtErr.classList.remove('d-none');
+                    this.classList.add('is-invalid');
+                    let errMsg = "Please fix the following: ";
+                    if (!hasLength) errMsg += "Must be at least 50 characters. ";
+                    if (!hasCitation) errMsg += "Must include in-text citations (e.g. (Author, 2024) or [1]).";
+                    probStmtErr.innerText = errMsg;
+                    this.setCustomValidity('Invalid problem statement');
+                } else {
+                    probStmtErr.classList.add('d-none');
+                    this.classList.remove('is-invalid');
+                    this.setCustomValidity('');
+                }
+            });
+        }
+
+        function validateObjective(input, errDiv) {
+            if (!input) return;
+            input.addEventListener('input', function() {
+                const val = this.value.trim();
+                const hasLength = val.length >= 10;
+                
+                if (val.length > 0 && !hasLength) {
+                    errDiv.classList.remove('d-none');
+                    this.classList.add('is-invalid');
+                    errDiv.innerText = "Objective must be at least 10 characters long.";
+                    this.setCustomValidity('Invalid objective format');
+                } else {
+                    errDiv.classList.add('d-none');
+                    this.classList.remove('is-invalid');
+                    this.setCustomValidity('');
+                }
+            });
+        }
+
+        validateObjective(document.getElementById('objective1'), document.getElementById('objective1Error'));
+        validateObjective(document.getElementById('objective2'), document.getElementById('objective2Error'));
+        validateObjective(document.getElementById('objective3'), document.getElementById('objective3Error'));
+
         document.addEventListener("DOMContentLoaded", async function() {
+            // Enable Bootstrap validation
+            var forms = document.querySelectorAll('.needs-validation');
+            Array.prototype.slice.call(forms).forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                }, false);
+            });
+
+            // Final Form Real-time Validation
+            const finalAbstract = document.getElementById('finalAbstract');
+            const finalAbstractError = document.getElementById('finalAbstractError');
+            if (finalAbstract && finalAbstractError) {
+                finalAbstract.addEventListener('input', function() {
+                    if (this.value.trim().length >= 50) {
+                        this.classList.remove('is-invalid');
+                        this.classList.add('is-valid');
+                        finalAbstractError.classList.add('d-none');
+                    } else {
+                        this.classList.remove('is-valid');
+                        this.classList.add('is-invalid');
+                        finalAbstractError.classList.remove('d-none');
+                    }
+                });
+            }
+
+            const finalAck = document.getElementById('finalAck');
+            const finalAckError = document.getElementById('finalAckError');
+            if (finalAck && finalAckError) {
+                finalAck.addEventListener('input', function() {
+                    const val = this.value.trim();
+                    if (val === "" || val.length >= 10) {
+                        this.classList.remove('is-invalid');
+                        this.classList.add(val !== "" ? 'is-valid' : '');
+                        finalAckError.classList.add('d-none');
+                    } else {
+                        this.classList.remove('is-valid');
+                        this.classList.add('is-invalid');
+                        finalAckError.classList.remove('d-none');
+                    }
+                });
+            }
+
+            const finalRepo = document.getElementById('finalRepo');
+            const finalRepoError = document.getElementById('finalRepoError');
+            if (finalRepo && finalRepoError) {
+                finalRepo.addEventListener('input', function() {
+                    const val = this.value.trim();
+                    let isValidUrl = true;
+                    if (val !== "") {
+                        try {
+                            new URL(val);
+                        } catch (_) {
+                            isValidUrl = false;  
+                        }
+                    }
+                    if (val === "" || isValidUrl) {
+                        this.classList.remove('is-invalid');
+                        this.classList.add(val !== "" ? 'is-valid' : '');
+                        finalRepoError.classList.add('d-none');
+                    } else {
+                        this.classList.remove('is-valid');
+                        this.classList.add('is-invalid');
+                        finalRepoError.classList.remove('d-none');
+                    }
+                });
+            }
+
             const source = document.getElementById('iafPdfSource');
             const iframe = document.getElementById('iafPdfIframe');
             
@@ -1069,6 +1279,94 @@
             } else {
                 templateSection.style.display = 'none';
             }
+        }
+
+        function validateProposalForm() {
+            var fileInput = document.getElementById('proposalDocument');
+            var errorDiv = document.getElementById('proposalFileError');
+            if (fileInput && fileInput.files.length === 0) {
+                errorDiv.classList.remove('d-none');
+                return false; // Prevent form submission
+            }
+            errorDiv.classList.add('d-none');
+            return true; // Allow form submission
+        }
+
+        function validateProgressForm() {
+            var isValid = true;
+            
+            // Validate File
+            var fileInput = document.getElementById('progressFiles');
+            var fileErrorDiv = document.getElementById('progressFileError');
+            if (fileInput && fileInput.files.length === 0) {
+                fileErrorDiv.classList.remove('d-none');
+                isValid = false;
+            } else {
+                fileErrorDiv.classList.add('d-none');
+            }
+            
+            // Validate Dates
+            var startDateInput = document.getElementById('progressStartDate');
+            var endDateInput = document.getElementById('progressEndDate');
+            var dateErrorDiv = document.getElementById('progressDateError');
+            
+            if (startDateInput && endDateInput && startDateInput.value && endDateInput.value) {
+                var start = new Date(startDateInput.value);
+                var end = new Date(endDateInput.value);
+                if (end < start) {
+                    dateErrorDiv.classList.remove('d-none');
+                    isValid = false;
+                } else {
+                    dateErrorDiv.classList.add('d-none');
+                }
+            } else {
+                dateErrorDiv.classList.add('d-none');
+            }
+
+            return isValid;
+        }
+
+        function validateFinalForm() {
+            var isValid = true;
+
+            var fileInput = document.getElementById('finalDocument');
+            var errorDiv = document.getElementById('finalFileError');
+            if (fileInput && fileInput.files.length === 0) {
+                errorDiv.classList.remove('d-none');
+                isValid = false;
+            } else {
+                errorDiv.classList.add('d-none');
+            }
+
+            const abstract = document.getElementById('finalAbstract');
+            const abstractError = document.getElementById('finalAbstractError');
+            if (abstract && abstract.value.trim().length < 50) {
+                abstract.classList.add('is-invalid');
+                abstractError.classList.remove('d-none');
+                isValid = false;
+            }
+
+            const ack = document.getElementById('finalAck');
+            const ackError = document.getElementById('finalAckError');
+            if (ack && ack.value.trim() !== "" && ack.value.trim().length < 10) {
+                ack.classList.add('is-invalid');
+                ackError.classList.remove('d-none');
+                isValid = false;
+            }
+
+            const repo = document.getElementById('finalRepo');
+            const repoError = document.getElementById('finalRepoError');
+            if (repo && repo.value.trim() !== "") {
+                try {
+                    new URL(repo.value.trim());
+                } catch (_) {
+                    repo.classList.add('is-invalid');
+                    repoError.classList.remove('d-none');
+                    isValid = false;
+                }
+            }
+
+            return isValid;
         }
     </script>
 }

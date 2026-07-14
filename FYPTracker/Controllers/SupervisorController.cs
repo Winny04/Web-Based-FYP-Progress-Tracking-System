@@ -679,7 +679,7 @@ namespace FYPTracker.Controllers
                     .ThenInclude(p => p.Student)
                 .Include(m => m.Feedbacks)
                 .Include(m => m.SubmissionFiles)
-                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (m.Status == "Submitted" || m.Status == "Pending" || m.Status == "Approved" || m.Status == "Revision") && (activeSession == null || m.Project.AcademicSession == activeSession))
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (m.Status == "Submitted" || m.Status == "Pending" || m.Status == "Approved" || m.Status == "Revision" || m.Status == "Rejected" || m.Status == "UnderReview") && (activeSession == null || m.Project.AcademicSession == activeSession))
                 .OrderBy(m => m.Status == "Submitted" ? 0 : 1)
                 .ThenBy(m => m.DueDate)
                 .ToListAsync();
@@ -710,7 +710,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks, string? supervisorSignature, string? pctComplete, IFormFile? gradedFile)
+        public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks, string? supervisorSignature, string? pctComplete, DateTime? vivaDate, IFormFile? gradedFile)
         {
             var user = await GetCurrentUserAsync();
             var milestone = await _context.FYPMilestones.Include(m => m.Project).FirstOrDefaultAsync(m => m.Id == milestoneId);
@@ -762,6 +762,11 @@ namespace FYPTracker.Controllers
                         }
                         catch {}
                     }
+                }
+
+                if ((milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase)) && vivaDate.HasValue)
+                {
+                    milestone.Project.VivaDate = vivaDate.Value;
                 }
 
                 if (gradedFile != null && gradedFile.Length > 0)

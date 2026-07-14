@@ -75,7 +75,16 @@
                         </div>
                     }
 
-                    @if (!string.IsNullOrEmpty(parsedJson))
+                    @{
+                        bool isProposalOrProgress = false;
+                        if (!string.IsNullOrEmpty(formInfo)) {
+                            var fi = formInfo.ToLower();
+                            if (fi.Contains("proposal") || fi.Contains("progress")) {
+                                isProposalOrProgress = true;
+                            }
+                        }
+                    }
+                    @if (!string.IsNullOrEmpty(parsedJson) && !isProposalOrProgress)
                     {
                         <!-- The iframe to display the generated PDF -->
                         <div class="bg-light rounded-4 border border-secondary border-opacity-25 shadow-sm p-2 mb-4" style="height: 900px;">
@@ -84,7 +93,7 @@
                         </div>
 
                         <!-- Off-screen container for HTML2PDF to read -->
-                        <div id="iafPdfSource" style="display: none;">
+                        <div id="iafPdfSource" style="position: absolute; left: -9999px; top: -9999px;">
                             <h4 style="color: #0d6efd; margin-bottom: 20px; font-family: sans-serif;">@Model.Title</h4>
                             <p style="font-family: sans-serif; color: #555;">Student: @Model.Project?.Student?.FullName (@Model.Project?.Student?.EmployeeId)</p>
                             <hr style="border: 1px solid #ddd; margin-bottom: 20px;" />
@@ -93,18 +102,33 @@
                                     var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parsedJson);
                                     if (dict != null) {
                                         <table style="width: 100%; font-family: sans-serif; font-size: 14px; border-collapse: collapse;">
-                                            @foreach (var kvp in dict) {
-                                                if (!string.IsNullOrEmpty(kvp.Value)) {
-                                                    <tr>
-                                                        <td style="width: 30%; font-weight: bold; padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;">@kvp.Key:</td>
-                                                        <td style="padding: 8px; border-bottom: 1px solid #eee; white-space: pre-wrap;">
-                                                            @if (kvp.Key == "Supervisor Signature") {
-                                                                <span style="font-family: 'Brush Script MT', cursive; font-size: 24px; color: #00008B;">@kvp.Value</span>
-                                                            } else {
-                                                                @kvp.Value
-                                                            }
-                                                        </td>
-                                                    </tr>
+                                            @{
+                                                var keysOrder = new[] { "Project Title", "Scope of Project", "Problem Statement", "Objective 1", "Objective 2", "Objective 3", "Agreed Supervisor Name", "Completion", "Supervisor Signature" };
+                                                
+                                                // 1. Print keys in the defined order
+                                                foreach (var key in keysOrder) {
+                                                    if (dict.TryGetValue(key, out var val) && !string.IsNullOrEmpty(val)) {
+                                                        <tr>
+                                                            <td style="width: 30%; font-weight: bold; padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;">@key:</td>
+                                                            <td style="padding: 8px; border-bottom: 1px solid #eee; white-space: pre-wrap;">
+                                                                @if (key == "Supervisor Signature") {
+                                                                    <span style="font-family: 'Brush Script MT', cursive; font-size: 24px; color: #00008B;">@val</span>
+                                                                } else {
+                                                                    @val
+                                                                }
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                }
+                                                
+                                                // 2. Print any remaining keys that weren't in the array
+                                                foreach (var kvp in dict.Where(k => !keysOrder.Contains(k.Key))) {
+                                                    if (!string.IsNullOrEmpty(kvp.Value)) {
+                                                        <tr>
+                                                            <td style="width: 30%; font-weight: bold; padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;">@kvp.Key:</td>
+                                                            <td style="padding: 8px; border-bottom: 1px solid #eee; white-space: pre-wrap;">@kvp.Value</td>
+                                                        </tr>
+                                                    }
                                                 }
                                             }
                                         </table>
@@ -121,6 +145,18 @@
                                 <p style="font-family: sans-serif; font-size: 14px; white-space: pre-wrap; background-color: #f8f9fa; padding: 15px; border-left: 4px solid #198754; color: #333;">@Model.SupervisorFeedback</p>
                             }
                         </div>
+                    }
+                    
+                    @if (Model.SubmissionFiles != null && Model.SubmissionFiles.Any(f => f.UploadedBy == Model.Project?.StudentId))
+                    {
+                        var primaryFile = Model.SubmissionFiles.FirstOrDefault(f => f.UploadedBy == Model.Project?.StudentId);
+                        if (primaryFile != null)
+                        {
+                            <div class="bg-light rounded-4 border border-secondary border-opacity-25 shadow-sm p-2 mb-4" style="height: 900px;">
+                                <h6 class="fw-bold text-primary mb-2 px-2 pt-2">Student Attached Document (@primaryFile.FileName)</h6>
+                                <iframe src="@Url.Action("ViewFile", "Supervisor", new { fileId = primaryFile.Id })" style="width: 100%; height: 90%; border: none; border-radius: 8px;"></iframe>
+                            </div>
+                        }
                     }
 
                     @if (Model.SubmissionFiles != null && Model.SubmissionFiles.Any())
@@ -175,7 +211,7 @@
                     </h5>
                 </div>
                 <div class="card-body p-4">
-                    <form asp-action="ReviewSubmission" method="post" enctype="multipart/form-data">
+                    <form class="needs-validation" novalidate asp-action="ReviewSubmission" method="post" enctype="multipart/form-data">
                         <input type="hidden" name="milestoneId" value="@Model.Id" />
                         
                         @{
@@ -187,6 +223,7 @@
                             <div class="mb-4">
                                 <label class="form-label fw-bold text-dark"><i class="fas fa-signature text-primary me-2"></i>Supervisor Signature</label>
                                 <input type="text" name="supervisorSignature" class="form-control form-control-solid form-control-lg border-primary bg-light-primary" placeholder="Type your full name to digitally sign" @(isLocked ? "disabled" : "required") />
+                                <div class="invalid-feedback">Supervisor signature is required.</div>
                                 <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Required to officially approve the Initial Project Allocation Form.</div>
                             </div>
                         }
@@ -204,7 +241,17 @@
                                     <option value="90%">90%</option>
                                     <option value="100%">100%</option>
                                 </select>
+                                <div class="invalid-feedback">Please select a completion rating.</div>
                                 <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Rate the student's progress.</div>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            <div class="mb-4">
+                                <label class="form-label fw-bold text-dark"><i class="fas fa-calendar-alt text-primary me-2"></i>Schedule Viva Examination</label>
+                                <input type="datetime-local" name="vivaDate" class="form-control form-control-solid form-control-lg border-primary bg-light-primary" value="@(Model.Project?.VivaDate?.ToString("yyyy-MM-ddTHH:mm"))" @(isLocked ? "disabled" : "") />
+                                <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Select the date and time for the student's final Viva oral examination.</div>
                             </div>
                         }
 
@@ -216,11 +263,28 @@
                                 <option value="Rejected" selected="@(Model.Status == "Rejected")">Reject (Needs Revision)</option>
                                 <option value="UnderReview" selected="@(Model.Status == "UnderReview")">Mark as Needs Attention</option>
                             </select>
+                            <div class="invalid-feedback">Please select a decision.</div>
                         </div>
                         
                         <div class="mb-4">
                             <label class="form-label fw-bold text-dark">Feedback / Remarks</label>
-                            <textarea name="remarks" class="form-control form-control-solid rounded-3" rows="6" placeholder="Provide detailed feedback for the student here..." @(isLocked ? "readonly" : "")>@Model.SupervisorFeedback</textarea>
+                            <textarea name="remarks" id="remarks" class="form-control form-control-solid rounded-3" rows="6" placeholder="Provide detailed feedback for the student here..." @(isLocked ? "readonly" : "required")>@Model.SupervisorFeedback</textarea>
+                            <div class="invalid-feedback">Please provide feedback or remarks.</div>
+                            
+                            @if (!isLocked)
+                            {
+                                <div class="mt-3 d-flex flex-wrap gap-2">
+                                    <button type="button" class="btn btn-sm btn-light-success border border-success border-opacity-25" onclick="insertFeedback('Good progress, keep it up!')">
+                                        <i class="fas fa-thumbs-up me-1"></i> Good Progress
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-light-warning border border-warning border-opacity-25" onclick="insertFeedback('Needs minor revisions. Please check the graded file.')">
+                                        <i class="fas fa-edit me-1"></i> Needs Revision
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-light-primary border border-primary border-opacity-25" onclick="insertFeedback('Approved as requested.')">
+                                        <i class="fas fa-check me-1"></i> Approved
+                                    </button>
+                                </div>
+                            }
                             <div class="form-text mt-2">This feedback will be visible to the student immediately.</div>
                         </div>
 
@@ -287,5 +351,56 @@
                 }
             }
         });
+
+        // Real-time Bootstrap Validation
+        var forms = document.querySelectorAll('.needs-validation');
+        Array.prototype.slice.call(forms).forEach(function (form) {
+            // Validate on input/change
+            form.addEventListener('input', function(e) {
+                if (e.target.hasAttribute('required')) {
+                    if (e.target.checkValidity()) {
+                        e.target.classList.remove('is-invalid');
+                        e.target.classList.add('is-valid');
+                    } else {
+                        e.target.classList.remove('is-valid');
+                        e.target.classList.add('is-invalid');
+                    }
+                }
+            });
+            form.addEventListener('change', function(e) {
+                if (e.target.hasAttribute('required') && e.target.tagName === 'SELECT') {
+                    if (e.target.checkValidity()) {
+                        e.target.classList.remove('is-invalid');
+                        e.target.classList.add('is-valid');
+                    } else {
+                        e.target.classList.remove('is-valid');
+                        e.target.classList.add('is-invalid');
+                    }
+                }
+            });
+
+            // Validate on submit
+            form.addEventListener('submit', function (event) {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+
+        function insertFeedback(text) {
+            const remarks = document.getElementById('remarks');
+            if (!remarks || remarks.readOnly) return;
+            
+            if (remarks.value.trim().length > 0) {
+                remarks.value = remarks.value + '\n' + text;
+            } else {
+                remarks.value = text;
+            }
+            
+            remarks.focus();
+            remarks.dispatchEvent(new Event('input'));
+        }
     </script>
 }

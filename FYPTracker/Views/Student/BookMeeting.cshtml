@@ -273,7 +273,15 @@
                                         <form asp-action="AcceptPostponedMeeting" method="post" class="d-inline" id="acceptForm_@m.Id">
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="meetingId" value="@m.Id" />
-                                            <button type="submit" class="btn btn-sm btn-outline-success border-0 fw-semibold">Accept</button>
+                                            <button type="submit" class="btn btn-sm btn-outline-success border-0 fw-semibold me-1">Accept</button>
+                                        </form>
+                                        <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" onclick="openRescheduleModal(@m.Id, '@(m.ProposedNewDate?.ToString("yyyy-MM-dd") ?? m.MeetingDate.ToString("yyyy-MM-dd"))')">
+                                            Reschedule
+                                        </button>
+                                        <form asp-action="CancelMeeting" method="post" class="d-inline" id="cancelForm_@m.Id">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="meetingId" value="@m.Id" />
+                                            <button type="button" class="btn btn-sm btn-outline-danger border-0 fw-semibold" onclick="confirmCancel(@m.Id)">Cancel</button>
                                         </form>
                                     }
 
@@ -282,6 +290,7 @@
                                             data-note="@(m.SupervisorNote ?? "None")"
                                             data-date="@m.MeetingDate.ToString("dd MMM yyyy")"
                                             data-proposed-date="@(m.ProposedNewDate?.ToString("dd MMM yyyy") ?? "")"
+                                            data-proposed-iso="@(m.ProposedNewDate?.ToString("yyyy-MM-dd") ?? "")"
                                             onclick="viewMeetingDetails(this)">
                                         Details
                                     </button>
@@ -380,7 +389,8 @@
                         <!-- Reason -->
                         <div class="mb-4">
                             <label class="form-label fw-semibold">Reason / Agenda</label>
-                            <textarea name="reason" class="form-control" rows="3" required placeholder="Describe purpose of meeting..."></textarea>
+                            <textarea name="reason" id="meetingReason" class="form-control" rows="3" required placeholder="Describe purpose of meeting..."></textarea>
+                            <div id="meetingReasonError" class="text-danger fw-bold small mt-1 d-none">Please provide a detailed agenda (at least 10 characters).</div>
                         </div>
                     </div>
                     
@@ -572,6 +582,23 @@
         if (err) err.style.display = 'none';
     }
 
+    // ── Realtime Validation for Reason ──────────────────────────
+    const meetingReason = document.getElementById('meetingReason');
+    const meetingReasonError = document.getElementById('meetingReasonError');
+    if (meetingReason && meetingReasonError) {
+        meetingReason.addEventListener('input', function() {
+            if (this.value.trim().length >= 10) {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+                meetingReasonError.classList.add('d-none');
+            } else {
+                this.classList.remove('is-valid');
+                this.classList.add('is-invalid');
+                meetingReasonError.classList.remove('d-none');
+            }
+        });
+    }
+
     // ── Book meeting form validation ────────────────────────────
     document.getElementById('bookingForm')?.addEventListener('submit', function(e) {
         const dateVal = document.getElementById('meetingDate')?.value;
@@ -587,6 +614,15 @@
             e.preventDefault();
             if (timeError) timeError.style.display = 'block';
             Swal.fire('Missing Time', 'Please select a time slot.', 'warning');
+            return;
+        }
+
+        // Reason validation
+        if (meetingReason && meetingReason.value.trim().length < 10) {
+            e.preventDefault();
+            meetingReason.classList.add('is-invalid');
+            meetingReasonError.classList.remove('d-none');
+            // Not showing sweetalert for text length to keep it unobtrusive, inline error suffices
             return;
         }
     });
@@ -740,19 +776,33 @@
         
         const pdfPath = btn.getAttribute('data-pdf');
         const linkContainer = document.getElementById('existingLogbookLink');
-        const fileInput = document.getElementById('logbookPdf');
+        const linkAnchor = linkContainer.querySelector('a');
 
         if (pdfPath && pdfPath !== '') {
+            linkAnchor.href = pdfPath;
             linkContainer.style.display = 'block';
-            linkContainer.querySelector('a').href = pdfPath;
-            fileInput.required = false; // Optional if already uploaded
+            document.getElementById('logbookPdf').removeAttribute('required');
         } else {
             linkContainer.style.display = 'none';
-            fileInput.required = true;
+            document.getElementById('logbookPdf').setAttribute('required', 'required');
         }
 
         new bootstrap.Modal(document.getElementById('studentLogModal')).show();
     }
+
+    // ── Logbook File Validation ─────────────────────────────────
+    document.getElementById('logbookPdf')?.addEventListener('change', function(e) {
+        const file = this.files[0];
+        if (file && file.type !== 'application/pdf') {
+            Swal.fire({
+                icon: 'error',
+                title: 'Invalid File Format',
+                text: 'Only PDF files are allowed for the weekly logbook.',
+                confirmButtonColor: '#3b82f6'
+            });
+            this.value = ''; // clear the input to prevent submission
+        }
+    });
 
     // ── View Final Log as PDF ───────────────────────────────────
     function viewFinalLog(logId) {

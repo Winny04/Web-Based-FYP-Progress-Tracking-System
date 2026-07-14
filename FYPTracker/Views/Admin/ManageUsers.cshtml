@@ -42,11 +42,6 @@
                     </span>
                     <input type="text" id="searchBar" class="form-control form-control-solid w-250px" placeholder="Search user" style="padding-left:2.8rem !important;" />
                 </div>
-                <div class="d-flex align-items-center fw-bolder">
-                    <!--begin::Select-->
-                    @Html.DropDownListFor(model => model.UserType, userTypeList, new {@class = "form-select form-select-solid form-select-lg fw-bold",id = "typeFilter"})
-                    <!--end::Select-->
-                </div>
             </div>
         </div>
         <div class="card-toolbar">
@@ -55,13 +50,25 @@
                     <!--start:: Btn Bulk Invite-->
                     <a href="#" id="btn-BulkInvite" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#bulkInviteModal">Invite</a>
                     <!--end:: Btn Bulk Invite-->
-
                 </div>
             </div>
         </div>
     </div>
 
     <div class="card-body py-0">
+        
+        <!-- User Role Nav Tabs -->
+        <ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x mb-5 fs-5 fw-bold" id="userRoleTabs">
+            <li class="nav-item">
+                <a class="nav-link active text-primary" data-bs-toggle="tab" href="#all_users" onclick="filterUserType(event, '')">All Users</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-muted" data-bs-toggle="tab" href="#students" onclick="filterUserType(event, 'Student')">Students</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-muted" data-bs-toggle="tab" href="#supervisors" onclick="filterUserType(event, 'Supervisor')">Supervisors</a>
+            </li>
+        </ul>
         @* <label>@Html.ValidationMessageFor(model => model.EmplooyeeInfoID, "", new { @class = "text-danger" })</label>*@
         <div class="table-responsive">
             <table id="mytable" class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
@@ -459,42 +466,59 @@
         });
     }
 
-        function Activate(employeeId) {
-        if (confirm("Confirm activate?")) {
-            $.ajax({
-                type: "POST",
-                url: '/Admin/Activate',
-                data: {
-                    id: employeeId
-                },
-                success: function (data) {
-                    if (data) {
-                        toastr.success("User activated successfully");
-                        LoadTable();
-                    } else {
-                        toastr.error("Failed to activate user");
+    function Activate(employeeId) {
+        Swal.fire({
+            title: 'Confirm Activation',
+            text: "Are you sure you want to activate this user?",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#50cd89',
+            cancelButtonColor: '#f1416c',
+            confirmButtonText: 'Yes, activate!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    type: "POST",
+                    url: '/Admin/Activate',
+                    data: { id: employeeId },
+                    success: function (data) {
+                        if (data) {
+                            Swal.fire({ text: "User activated successfully", icon: "success", confirmButtonText: "Ok, got it!" });
+                            LoadTable();
+                        } else {
+                            Swal.fire({ text: "Failed to activate user", icon: "error", confirmButtonText: "Ok, got it!" });
+                        }
                     }
-                }
-            });
-        }
+                });
+            }
+        });
     }
 
     function Delete(employeeId) {
-        if (confirm("Confirm delete?")) {
-            $.ajax({
-                type: "POST",
-                url: '/Admin/Delete',
-                data: {
-                    id: employeeId
-                },
-                success: function (data) {
-                    LoadTable();
-                },
-                error: function (data) {
-                    LoadTable();
-                }
-            });
-        }
+        Swal.fire({
+            title: 'Confirm Deactivation',
+            text: "Are you sure you want to deactivate this user?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#f1416c',
+            cancelButtonColor: '#a1a5b7',
+            confirmButtonText: 'Yes, deactivate!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    type: "POST",
+                    url: '/Admin/Delete',
+                    data: { id: employeeId },
+                    success: function (data) {
+                        Swal.fire({ text: "User deactivated successfully", icon: "success", confirmButtonText: "Ok, got it!" });
+                        LoadTable();
+                    },
+                    error: function (data) {
+                        LoadTable();
+                    }
+                });
+            }
+        });
     }
 
     function Edit(employeeId) {
@@ -641,6 +665,32 @@
                 this.classList.remove('is-invalid');
             }
         });
+    }
+
+    // ── Tab Filtering Logic ────────────────────────────────────
+    function filterUserType(e, type) {
+        e.preventDefault();
+        const table = $("#mytable").DataTable();
+        
+        // Filter by user type column (index 2) using regex for exact match if type provided
+        table.column(2).search(type ? '^' + type + '$' : '', true, false).draw();
+        
+        // Dynamically hide/show columns based on the role
+        // Column 3 is Supervisor (for Students), Column 4 is Assigned Students (for Supervisors)
+        if (type === 'Student') {
+            table.column(3).visible(true);
+            table.column(4).visible(false);
+        } else if (type === 'Supervisor') {
+            table.column(3).visible(false);
+            table.column(4).visible(true);
+        } else {
+            table.column(3).visible(true);
+            table.column(4).visible(true);
+        }
+
+        // Update active tab styling
+        $('#userRoleTabs .nav-link').removeClass('active text-primary').addClass('text-muted');
+        $(e.target).removeClass('text-muted').addClass('active text-primary');
     }
 </script>
 }

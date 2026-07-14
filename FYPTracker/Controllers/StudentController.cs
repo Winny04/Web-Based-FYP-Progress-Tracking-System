@@ -430,12 +430,21 @@ namespace FYPTracker.Controllers
                 }
                 else if (formType == "Initial Project Allocation Form (IAF)")
                 {
+                    // Clean up existing prefixes if they accidentally get submitted
+                    var cleanObj1 = objective1?.StartsWith("1. To ", StringComparison.OrdinalIgnoreCase) == true ? objective1.Substring(6).TrimStart() : objective1;
+                    var cleanObj2 = objective2?.StartsWith("2. To ", StringComparison.OrdinalIgnoreCase) == true ? objective2.Substring(6).TrimStart() : objective2;
+                    var cleanObj3 = objective3?.StartsWith("3. To ", StringComparison.OrdinalIgnoreCase) == true ? objective3.Substring(6).TrimStart() : objective3;
+
+                    var finalObj1 = string.IsNullOrWhiteSpace(cleanObj1) ? "" : "1. To " + cleanObj1;
+                    var finalObj2 = string.IsNullOrWhiteSpace(cleanObj2) ? "" : "2. To " + cleanObj2;
+                    var finalObj3 = string.IsNullOrWhiteSpace(cleanObj3) ? "" : "3. To " + cleanObj3;
+
                     var dict = new System.Collections.Generic.Dictionary<string, string> {
                         {"Scope of Project", scope ?? ""},
                         {"Problem Statement", problemStatement ?? ""},
-                        {"Objective 1", objective1 ?? ""},
-                        {"Objective 2", objective2 ?? ""},
-                        {"Objective 3", objective3 ?? ""},
+                        {"Objective 1", finalObj1},
+                        {"Objective 2", finalObj2},
+                        {"Objective 3", finalObj3},
                         {"Agreed Supervisor Name", Request.Form.TryGetValue("supervisorName", out var supName) ? supName.ToString() : ""}
                     };
                     detailsJson = System.Text.Json.JsonSerializer.Serialize(dict);
@@ -443,9 +452,9 @@ namespace FYPTracker.Controllers
 
                     // Also save these directly to the Project record
                     milestone.Project.ProblemStatement = problemStatement;
-                    milestone.Project.Objective1 = objective1;
-                    milestone.Project.Objective2 = objective2;
-                    milestone.Project.Objective3 = objective3;
+                    milestone.Project.Objective1 = finalObj1;
+                    milestone.Project.Objective2 = finalObj2;
+                    milestone.Project.Objective3 = finalObj3;
                     milestone.Project.Scope = scope;
                 }
                 else if (formType == "Proposal Form")
@@ -788,7 +797,7 @@ namespace FYPTracker.Controllers
             if (user == null) return RedirectToAction("Login", "Authentication");
 
             var meeting = await _context.MeetingBookings
-                .FirstOrDefaultAsync(m => m.Id == meetingId && m.StudentId == user.Id && m.Status == "Pending");
+                .FirstOrDefaultAsync(m => m.Id == meetingId && m.StudentId == user.Id && (m.Status == "Pending" || m.Status == "Postponed"));
 
             if (meeting == null)
             {
@@ -863,20 +872,37 @@ namespace FYPTracker.Controllers
 
             if (meeting != null)
             {
-                // Create a completely new booking so the old one (e.g. Rejected) stays in history
-                var newBooking = new MeetingBooking
+                MeetingBooking targetBooking;
+
+                if (meeting.Status == "Pending" || meeting.Status == "Approved")
                 {
-                    StudentId = user.Id,
-                    SupervisorId = meeting.SupervisorId,
-                    MeetingDate = parsedDate,
-                    MeetingDay = parsedDate.DayOfWeek.ToString(),
-                    MeetingTime = meetingTime,
-                    Reason = string.IsNullOrEmpty(meeting.Reason) ? "Rescheduled meeting" : meeting.Reason,
-                    Status = "Pending",
-                    CreatedDate = DateTime.Now
-                };
-                
-                _context.MeetingBookings.Add(newBooking);
+                    // Update existing meeting instead of duplicating it
+                    meeting.MeetingDate = parsedDate;
+                    meeting.MeetingDay = parsedDate.DayOfWeek.ToString();
+                    meeting.MeetingTime = meetingTime;
+                    meeting.Status = "Pending";
+                    
+                    _context.MeetingBookings.Update(meeting);
+                    targetBooking = meeting;
+                }
+                else
+                {
+                    // Create a completely new booking so the old one (e.g. Rejected) stays in history
+                    var newBooking = new MeetingBooking
+                    {
+                        StudentId = user.Id,
+                        SupervisorId = meeting.SupervisorId,
+                        MeetingDate = parsedDate,
+                        MeetingDay = parsedDate.DayOfWeek.ToString(),
+                        MeetingTime = meetingTime,
+                        Reason = string.IsNullOrEmpty(meeting.Reason) ? "Rescheduled meeting" : meeting.Reason,
+                        Status = "Pending",
+                        CreatedDate = DateTime.Now
+                    };
+                    
+                    _context.MeetingBookings.Add(newBooking);
+                    targetBooking = newBooking;
+                }
 
                 // Mark any previous unread notifications for this meeting as read
                 var oldNotifs = await _context.FYPNotifications
@@ -894,8 +920,8 @@ namespace FYPTracker.Controllers
                     RecipientId = meeting.SupervisorId,
                     Type = "MeetingRequest",
                     Title = "Meeting Rescheduled",
-                    Message = $"Student {user.FullName} booked a new meeting request to {parsedDate:dd MMM yyyy} at {meetingTime}. Reason: {(string.IsNullOrEmpty(newBooking.Reason) ? "None provided" : newBooking.Reason)}",
-                    RelatedRecordId = newBooking.Id // Note: Id will be assigned after SaveChanges, but it's okay for now or we can save first
+                    Message = $"Student {user.FullName} booked a new meeting request to {parsedDate:dd MMM yyyy} at {meetingTime}. Reason: {(string.IsNullOrEmpty(targetBooking.Reason) ? "None provided" : targetBooking.Reason)}",
+                    RelatedRecordId = targetBooking.Id // Note: Id will be assigned after SaveChanges, but it's okay for now or we can save first
                 });
 
                 await _context.SaveChangesAsync();
@@ -903,7 +929,7 @@ namespace FYPTracker.Controllers
                 // Update the related record ID after save
                 var latestNotif = await _context.FYPNotifications.OrderByDescending(n => n.Id).FirstOrDefaultAsync(n => n.RecipientId == meeting.SupervisorId && n.Type == "MeetingRequest");
                 if (latestNotif != null) {
-                    latestNotif.RelatedRecordId = newBooking.Id;
+                    latestNotif.RelatedRecordId = targetBooking.Id;
                     await _context.SaveChangesAsync();
                 }
 
@@ -1239,7 +1265,7 @@ namespace FYPTracker.Controllers
             addPara("FINAL YEAR PROJECT (FYP)", true, 13, "000080", true);
             addPara("PROPOSAL FORM", true, 14, "000080", true);
             addBlankLine("");
-            addPara("Academic Year: " + DateTime.Now.Year + "/" + (DateTime.Now.Year + 1), false, 12, "", true);
+            addPara("Academic Session: " + (!string.IsNullOrEmpty(project?.AcademicSession) ? project.AcademicSession : (!string.IsNullOrEmpty(user.AcademicSession) ? user.AcademicSession : (DateTime.Now.Year + "/" + (DateTime.Now.Year + 1)))), false, 12, "", true);
             addBlankLine("");
 
             // ─── Section 1: Student Information ──────────────────────────────
@@ -1248,8 +1274,8 @@ namespace FYPTracker.Controllers
             addBlankLine("");
             addLabelValue("Student Name:", user.FullName ?? "");
             addLabelValue("Student ID / Matric No.:", user.EmployeeId ?? "");
-            addLabelValue("Programme:", "");
-            addLabelValue("Semester:", "");
+            addLabelValue("Faculty / Programme:", user.Programme ?? "");
+            addLabelValue("Academic Session:", project?.AcademicSession ?? user.AcademicSession ?? "");
             addLabelValue("Contact Email:", user.Email ?? "");
             addBlankLine("");
 
@@ -1258,7 +1284,7 @@ namespace FYPTracker.Controllers
             addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
             addBlankLine("");
             addLabelValue("Project Title:", project?.Title ?? "");
-            addLabelValue("Scope / Category:", "");
+            addLabelValue("Scope / Category:", project?.Scope ?? "");
             addBlankLine("");
 
             // ─── Section 3: Problem Statement ────────────────────────────────
@@ -1443,7 +1469,7 @@ namespace FYPTracker.Controllers
             addPara("FINAL YEAR PROJECT (FYP)", true, 13, "000080", true);
             addPara(milestoneTitle, true, 14, "000080", true);
             addBlankLine("");
-            addPara("Academic Year: " + DateTime.Now.Year + "/" + (DateTime.Now.Year + 1), false, 12, "", true);
+            addPara("Academic Session: " + (!string.IsNullOrEmpty(project?.AcademicSession) ? project.AcademicSession : (!string.IsNullOrEmpty(user.AcademicSession) ? user.AcademicSession : (DateTime.Now.Year + "/" + (DateTime.Now.Year + 1)))), false, 12, "", true);
             addBlankLine("");
 
             // Section 1
@@ -1452,7 +1478,7 @@ namespace FYPTracker.Controllers
             addBlankLine("");
             addLabelValue("Student Name:", user.FullName ?? "");
             addLabelValue("Student ID / Matric No.:", user.EmployeeId ?? "");
-            addLabelValue("Programme:", "");
+            addLabelValue("Faculty / Programme:", user.Programme ?? "");
             addLabelValue("Project Title:", project?.Title ?? "");
             addLabelValue("Supervisor Name:", project?.Supervisor?.FullName ?? "");
             addBlankLine("");
@@ -1558,12 +1584,13 @@ namespace FYPTracker.Controllers
             addPara("A thesis submitted in partial fulfillment", false, 12, "000000", true);
             addPara("of the requirements for the degree of", false, 12, "000000", true);
             addBlankLine("");
-            addPara("BACHELOR OF SCIENCE", true, 14, "000000", true);
+            addPara(!string.IsNullOrEmpty(user.Programme) ? user.Programme.ToUpper() : "BACHELOR OF SCIENCE", true, 14, "000000", true);
             addBlankLine("");
             addPara("FACULTY OF COMPUTING AND INFORMATICS", true, 14, "000000", true);
             addPara("COVENTRY UNIVERSITY", true, 14, "000000", true);
             for (int i = 0; i < 4; i++) addBlankLine("");
             addPara(DateTime.Now.ToString("MMMM yyyy"), false, 12, "000000", true);
+            addPara("ACADEMIC SESSION: " + (!string.IsNullOrEmpty(project?.AcademicSession) ? project.AcademicSession : (!string.IsNullOrEmpty(user.AcademicSession) ? user.AcademicSession : (DateTime.Now.Year + "/" + (DateTime.Now.Year + 1)))), false, 12, "000000", true);
 
             // Page Break
             var pb = doc.CreateParagraph();

@@ -230,16 +230,26 @@
                                         <div class="modal fade" id="respondModal_@m.Id" tabindex="-1">
                                             <div class="modal-dialog modal-dialog-centered">
                                                 <div class="modal-content border-0 shadow-lg">
-                                                    <form asp-action="RespondMeeting" method="post">
+                                                    <form asp-action="RespondMeeting" method="post" id="respondForm_@m.Id" onsubmit="return validateRespondModal(@m.Id)">
                                                         <div class="modal-header">
                                                             <h5 class="fw-bold">Respond to @m.Student?.FullName</h5>
                                                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                         </div>
                                                         <div class="modal-body text-start">
                                                             <input type="hidden" name="meetingId" value="@m.Id" />
+                                                            
+                                                            <!-- Meeting Context -->
+                                                            <div class="mb-4 p-3 bg-light rounded border border-primary border-opacity-25">
+                                                                <div class="fw-bold text-dark mb-1"><i class="fas fa-calendar-alt text-primary me-2"></i>Requested Date & Time:</div>
+                                                                <div class="mb-3 ms-4 fs-6">@m.MeetingDate.ToString("dd MMM yyyy") at @m.MeetingTime</div>
+                                                                
+                                                                <div class="fw-bold text-dark mb-1"><i class="fas fa-comment-dots text-primary me-2"></i>Student's Agenda:</div>
+                                                                <div class="ms-4 text-muted fst-italic" style="white-space: pre-wrap;">@(string.IsNullOrEmpty(m.Reason) ? "No specific agenda provided." : m.Reason)</div>
+                                                            </div>
+
                                                             <div class="mb-3">
                                                                 <label class="form-label fw-bold">Decision</label>
-                                                                <select name="status" class="form-select rounded-3" id="decisionSelect_@m.Id" onchange="toggleProposedDate(@m.Id)">
+                                                                <select name="status" class="form-select rounded-3 border-primary" id="decisionSelect_@m.Id" onchange="toggleProposedDate(@m.Id)">
                                                                     <option value="Approved">Approve Meeting</option>
                                                                     <option value="Rejected">Decline Meeting</option>
                                                                     <option value="Postponed">Postpone Meeting</option>
@@ -247,19 +257,32 @@
                                                             </div>
                                                             <div class="mb-3" id="proposedDateContainer_@m.Id" style="display: none;">
                                                                 <label class="form-label fw-bold text-primary">Proposed New Date</label>
-                                                                <input type="date" name="proposedDate" class="form-control rounded-3 border-primary" min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" />
+                                                                <input type="date" name="proposedDate" id="proposedDate_@m.Id" class="form-control rounded-3 border-primary" min="@DateTime.Today.AddDays(1).ToString("yyyy-MM-dd")" oninput="validateRespondModalRealtime(@m.Id)" />
+                                                                <div id="proposedDateError_@m.Id" class="text-danger fw-bold small mt-1 d-none">Please provide a proposed date.</div>
                                                             </div>
-                                                            <div class="mb-3">
-                                                                <label class="form-label fw-bold">Meeting Time (Edit if needed)</label>
-                                                                <input type="time" name="newMeetingTime" class="form-control rounded-3" value="@m.MeetingTime" />
+                                                            <div class="mb-3" id="meetingTimeContainer_@m.Id">
+                                                                <label class="form-label fw-bold">Meeting Time</label>
+                                                                <input type="time" name="newMeetingTime" id="newMeetingTime_@m.Id" class="form-control rounded-3 bg-light" value="@m.MeetingTime" readonly />
                                                             </div>
-                                                            <div class="mb-3">
+                                                            <div class="mb-3" id="locationContainer_@m.Id">
                                                                 <label class="form-label fw-bold">Meeting Location / Link</label>
-                                                                <input type="text" name="location" class="form-control rounded-3" placeholder="e.g. MS Teams Link, Room 404" />
+                                                                <input type="text" name="location" id="location_@m.Id" class="form-control rounded-3" placeholder="e.g. MS Teams Link, Room 404" oninput="validateRespondModalRealtime(@m.Id)" />
+                                                                <div class="mt-2 d-flex flex-wrap gap-2">
+                                                                    <button type="button" class="btn btn-sm btn-light border text-dark fw-semibold" onclick="document.getElementById('location_@m.Id').value = 'Lab 1'; validateRespondModalRealtime(@m.Id)">Lab 1</button>
+                                                                    <button type="button" class="btn btn-sm btn-light border text-dark fw-semibold" onclick="document.getElementById('location_@m.Id').value = 'Room 402'; validateRespondModalRealtime(@m.Id)">Room 402</button>
+                                                                    <button type="button" class="btn btn-sm btn-light border text-dark fw-semibold" onclick="document.getElementById('location_@m.Id').value = 'MS Teams'; validateRespondModalRealtime(@m.Id)">MS Teams</button>
+                                                                </div>
+                                                                <div id="locationError_@m.Id" class="text-danger fw-bold small mt-1 d-none">Location is required when approving.</div>
                                                             </div>
                                                             <div class="mb-3">
                                                                 <label class="form-label fw-bold">Message to Student</label>
-                                                                <textarea name="note" class="form-control rounded-3" rows="3" placeholder="Add instructions or feedback..."></textarea>
+                                                                <textarea name="note" id="note_@m.Id" class="form-control rounded-3" rows="3" placeholder="Add instructions or feedback..." oninput="validateRespondModalRealtime(@m.Id)"></textarea>
+                                                                <div class="mt-2 d-flex flex-wrap gap-2">
+                                                                    <button type="button" class="btn btn-sm btn-light border text-dark fw-semibold" onclick="document.getElementById('note_@m.Id').value = 'Approved! Please bring your updated logbook.'; validateRespondModalRealtime(@m.Id)">Bring Logbook</button>
+                                                                    <button type="button" class="btn btn-sm btn-light border text-dark fw-semibold" onclick="document.getElementById('note_@m.Id').value = 'I am currently away. Let\'s reschedule to the proposed date.'; validateRespondModalRealtime(@m.Id)">Away / Reschedule</button>
+                                                                    <button type="button" class="btn btn-sm btn-light border text-dark fw-semibold" onclick="document.getElementById('note_@m.Id').value = 'Please provide a more detailed agenda before we meet.'; validateRespondModalRealtime(@m.Id)">Need Agenda</button>
+                                                                </div>
+                                                                <div id="noteError_@m.Id" class="text-danger fw-bold small mt-1 d-none">Please provide a valid reason (at least 10 characters).</div>
                                                             </div>
                                                         </div>
                                                         <div class="modal-footer border-0">
@@ -592,12 +615,99 @@
 
     function toggleProposedDate(id) {
         var select = document.getElementById('decisionSelect_' + id);
-        var container = document.getElementById('proposedDateContainer_' + id);
+        var proposedContainer = document.getElementById('proposedDateContainer_' + id);
+        var locationContainer = document.getElementById('locationContainer_' + id);
+        var timeContainer = document.getElementById('meetingTimeContainer_' + id);
+
+        // Reset validation UI
+        document.getElementById('location_' + id).classList.remove('is-invalid', 'is-valid');
+        document.getElementById('locationError_' + id).classList.add('d-none');
+        document.getElementById('note_' + id).classList.remove('is-invalid', 'is-valid');
+        document.getElementById('noteError_' + id).classList.add('d-none');
+        document.getElementById('proposedDate_' + id).classList.remove('is-invalid', 'is-valid');
+        document.getElementById('proposedDateError_' + id).classList.add('d-none');
+
         if (select.value === 'Postponed') {
-            container.style.display = 'block';
+            proposedContainer.style.display = 'block';
+            locationContainer.style.display = 'none';
+            timeContainer.style.display = 'none';
+        } else if (select.value === 'Rejected') {
+            proposedContainer.style.display = 'none';
+            locationContainer.style.display = 'none';
+            timeContainer.style.display = 'none';
         } else {
-            container.style.display = 'none';
+            proposedContainer.style.display = 'none';
+            locationContainer.style.display = 'block';
+            timeContainer.style.display = 'block';
         }
+    }
+
+    function validateRespondModalRealtime(id) {
+        var select = document.getElementById('decisionSelect_' + id);
+        var location = document.getElementById('location_' + id);
+        var locationError = document.getElementById('locationError_' + id);
+        var note = document.getElementById('note_' + id);
+        var noteError = document.getElementById('noteError_' + id);
+        var proposedDate = document.getElementById('proposedDate_' + id);
+        var proposedDateError = document.getElementById('proposedDateError_' + id);
+
+        var isValid = true;
+
+        if (select.value === 'Approved') {
+            if (location.value.trim().length === 0) {
+                location.classList.remove('is-valid');
+                location.classList.add('is-invalid');
+                locationError.classList.remove('d-none');
+                isValid = false;
+            } else {
+                location.classList.remove('is-invalid');
+                location.classList.add('is-valid');
+                locationError.classList.add('d-none');
+            }
+            
+            // Note is optional when Approving
+            note.classList.remove('is-invalid', 'is-valid');
+            noteError.classList.add('d-none');
+            
+        } else if (select.value === 'Rejected') {
+            if (note.value.trim().length < 10) {
+                note.classList.remove('is-valid');
+                note.classList.add('is-invalid');
+                noteError.classList.remove('d-none');
+                isValid = false;
+            } else {
+                note.classList.remove('is-invalid');
+                note.classList.add('is-valid');
+                noteError.classList.add('d-none');
+            }
+        } else if (select.value === 'Postponed') {
+            if (note.value.trim().length < 10) {
+                note.classList.remove('is-valid');
+                note.classList.add('is-invalid');
+                noteError.classList.remove('d-none');
+                isValid = false;
+            } else {
+                note.classList.remove('is-invalid');
+                note.classList.add('is-valid');
+                noteError.classList.add('d-none');
+            }
+
+            if (proposedDate.value.trim().length === 0) {
+                proposedDate.classList.remove('is-valid');
+                proposedDate.classList.add('is-invalid');
+                proposedDateError.classList.remove('d-none');
+                isValid = false;
+            } else {
+                proposedDate.classList.remove('is-invalid');
+                proposedDate.classList.add('is-valid');
+                proposedDateError.classList.add('d-none');
+            }
+        }
+        return isValid;
+    }
+
+    function validateRespondModal(id) {
+        return validateRespondModalRealtime(id);
     }
 </script>
 }

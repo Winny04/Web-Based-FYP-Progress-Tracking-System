@@ -42,6 +42,8 @@ namespace FYPTracker.Models
 
         public DateTime? EndDate { get; set; }
 
+        public DateTime? VivaDate { get; set; }
+
         public string? AcademicSession { get; set; }
 
         [StringLength(5)]
