@@ -37,6 +37,19 @@
     </div>
 </div>
 
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success border-0 shadow-sm rounded-3 mb-4">
+        <i class="fas fa-check-circle me-2"></i>@TempData["Success"]
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger border-0 shadow-sm rounded-3 mb-4">
+        <i class="fas fa-exclamation-circle me-2"></i>@TempData["Error"]
+    </div>
+}
+
 <div class="row g-5 g-xl-8">
     @foreach (var proj in Model)
     {
@@ -49,9 +62,13 @@
                 <div class="card-body d-flex flex-column pb-10 pb-lg-15">
                     <div class="flex-grow-1">
                         <div class="d-flex align-items-center justify-content-between mb-5">
-                            @if (total > 0 && completed == total && string.IsNullOrEmpty(proj.FinalGrade))
+                            @if (proj.Status == "Failed")
                             {
-                                <span class="badge bg-danger text-white fw-bolder px-3 py-2 rounded-pill shadow-sm"><i class="fas fa-exclamation-circle me-1"></i> Final Grade Pending</span>
+                                <span class="badge bg-danger text-white fw-bolder px-3 py-2 rounded-pill shadow-sm"><i class="fas fa-times-circle me-1"></i> Failed (@proj.FinalGrade)</span>
+                            }
+                            else if (total > 0 && completed == total && string.IsNullOrEmpty(proj.FinalGrade))
+                            {
+                                <span class="badge bg-warning text-dark fw-bolder px-3 py-2 rounded-pill shadow-sm"><i class="fas fa-exclamation-circle me-1"></i> Final Grade Pending</span>
                             }
                             else if (!string.IsNullOrEmpty(proj.FinalGrade))
                             {
@@ -96,7 +113,8 @@
 <div class="modal fade" id="bulkAddMilestoneModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered mw-650px">
         <div class="modal-content">
-            <form asp-action="BulkAddMilestone" asp-controller="Supervisor" method="post" id="bulkAddForm">
+            <form asp-action="BulkAddMilestone" asp-controller="Supervisor" method="post" id="bulkAddForm" onsubmit="return validateBulkAdd()" novalidate>
+                <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSession" />
                 <div class="modal-header">
                     <h2 class="fw-bolder">Add Milestone</h2>
                     <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
@@ -118,22 +136,23 @@
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span class="required">Milestone Title</span>
                         </label>
-                        <input type="text" class="form-control form-control-solid" placeholder="e.g. FYP 1: Final Report" name="title" required />
+                        <input type="text" class="form-control form-control-solid" placeholder="e.g. FYP 1: Final Report" name="title" id="addTitle" oninput="validateBulkAddRealtime()" />
+                        <div id="addTitleError" class="text-danger fw-bold small mt-1 d-none">Title must be at least 5 characters long.</div>
                     </div>
 
                     <div class="d-flex flex-column mb-7 fv-row">
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span class="required">Due Date</span>
                         </label>
-                        <input type="date" class="form-control form-control-solid" name="dueDate" required />
+                        <input type="date" class="form-control form-control-solid" name="dueDate" id="addDueDate" onchange="validateBulkAddRealtime()" />
+                        <div id="addDueDateError" class="text-danger fw-bold small mt-1 d-none">Please select a valid due date.</div>
                     </div>
 
                     <div class="d-flex flex-column mb-7 fv-row">
                         <label class="fs-6 fw-bold form-label mb-2">Description</label>
-                        <textarea class="form-control form-control-solid" rows="3" name="description" placeholder="Instructions for students..."></textarea>
+                        <textarea class="form-control form-control-solid" rows="3" name="description" id="addDescription" placeholder="Instructions for students..." oninput="validateBulkAddRealtime()"></textarea>
+                        <div id="addDescriptionError" class="text-danger fw-bold small mt-1 d-none">Description must be at least 10 characters long.</div>
                     </div>
-
-                    <!-- Checkbox section removed as requested by user -->
                 </div>
                 <div class="modal-footer flex-center">
                     <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
@@ -150,7 +169,8 @@
 <div class="modal fade" id="bulkEditMilestoneModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered mw-650px">
         <div class="modal-content">
-            <form asp-action="BulkEditMilestone" asp-controller="Supervisor" method="post" id="bulkEditForm">
+            <form asp-action="BulkEditMilestone" asp-controller="Supervisor" method="post" id="bulkEditForm" onsubmit="return validateBulkEdit()" novalidate>
+                <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSession" />
                 <div class="modal-header">
                     <h2 class="fw-bolder">Edit Milestone</h2>
                     <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
@@ -172,37 +192,38 @@
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span class="required">Target Milestone to Edit</span>
                         </label>
-                        <select name="targetTitle" class="form-select form-select-solid" required>
+                        <select name="targetTitle" class="form-select form-select-solid" id="editTargetTitle" onchange="validateBulkEditRealtime()" required>
                             <option value="">-- Select Milestone --</option>
                             @foreach(var t in distinctMilestones)
                             {
                                 <option value="@t">@t</option>
                             }
                         </select>
+                        <div id="editTargetError" class="text-danger fw-bold small mt-1 d-none">Please select a milestone to edit.</div>
                     </div>
 
                     <div class="d-flex flex-column mb-7 fv-row">
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span>New Title (Optional)</span>
                         </label>
-                        <input type="text" class="form-control form-control-solid" placeholder="Leave blank to keep same" name="newTitle" id="bulkNewTitle" />
-                        <small id="bulkTitleWarning" class="text-danger mt-1" style="display: none;"><i class="fas fa-lock me-1"></i>Core system milestone titles cannot be renamed.</small>
+                        <input type="text" class="form-control form-control-solid" placeholder="Leave blank to keep same" name="newTitle" id="bulkNewTitle" oninput="validateBulkEditRealtime()" />
+                        <div id="editTitleError" class="text-danger fw-bold small mt-1 d-none">New title must be at least 5 characters long.</div>
+                        <small id="bulkTitleWarning" class="text-danger mt-1 fw-bold" style="display: none;"><i class="fas fa-lock me-1"></i>Core system milestone titles cannot be renamed.</small>
                     </div>
 
                     <div class="d-flex flex-column mb-7 fv-row">
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span>New Due Date (Optional)</span>
                         </label>
-                        <input type="date" class="form-control form-control-solid" name="newDueDate" id="bulkNewDueDate" />
-                        <small id="bulkDateWarning" class="text-danger mt-1" style="display: none;"><i class="fas fa-lock me-1"></i>The IAF deadline is centrally managed by the Admin.</small>
+                        <input type="date" class="form-control form-control-solid" name="newDueDate" id="bulkNewDueDate" onchange="validateBulkEditRealtime()" />
+                        <small id="bulkDateWarning" class="text-danger mt-1 fw-bold" style="display: none;"><i class="fas fa-lock me-1"></i>The IAF deadline is centrally managed by the Admin.</small>
                     </div>
 
                     <div class="d-flex flex-column mb-7 fv-row">
                         <label class="fs-6 fw-bold form-label mb-2">New Description (Optional)</label>
-                        <textarea class="form-control form-control-solid" rows="3" name="newDescription" placeholder="Leave blank to keep same..."></textarea>
+                        <textarea class="form-control form-control-solid" rows="3" name="newDescription" id="bulkNewDescription" placeholder="Leave blank to keep same..." oninput="validateBulkEditRealtime()"></textarea>
+                        <div id="editDescriptionError" class="text-danger fw-bold small mt-1 d-none">New description must be at least 10 characters long.</div>
                     </div>
-
-                    <!-- Checkbox section removed as requested by user -->
                 </div>
                 <div class="modal-footer flex-center">
                     <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
@@ -217,7 +238,8 @@
 <div class="modal fade" id="bulkDeleteMilestoneModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered mw-650px">
         <div class="modal-content">
-            <form asp-action="BulkDeleteMilestone" asp-controller="Supervisor" method="post" id="bulkDeleteForm">
+            <form asp-action="BulkDeleteMilestone" asp-controller="Supervisor" method="post" id="bulkDeleteForm" onsubmit="return validateBulkDelete()" novalidate>
+                <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSession" />
                 <div class="modal-header">
                     <h2 class="fw-bolder">Delete Milestone</h2>
                     <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
@@ -229,16 +251,15 @@
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span class="required text-danger">Target Milestone to Delete</span>
                         </label>
-                        <select name="targetTitle" class="form-select form-select-solid" required>
+                        <select name="targetTitle" class="form-select form-select-solid" id="deleteTargetTitle" onchange="validateBulkDeleteRealtime()" required>
                             <option value="">-- Select Milestone --</option>
                             @foreach(var t in distinctMilestones.Where(m => !m.Contains("IAF", StringComparison.OrdinalIgnoreCase) && !m.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) && !m.Contains("Proposal", StringComparison.OrdinalIgnoreCase) && !m.Contains("Final", StringComparison.OrdinalIgnoreCase)))
                             {
                                 <option value="@t">@t</option>
                             }
                         </select>
+                        <div id="deleteTargetError" class="text-danger fw-bold small mt-1 d-none">Please select a milestone to delete.</div>
                     </div>
-
-                    <!-- Checkbox section removed as requested by user -->
                 </div>
                 <div class="modal-footer flex-center">
                     <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
@@ -349,6 +370,200 @@
             }
         });
 
+        // --- Real-time Validation ---
+        window.validateBulkAddRealtime = function(isSubmit = false) {
+            var title = document.getElementById('addTitle');
+            var titleError = document.getElementById('addTitleError');
+            var date = document.getElementById('addDueDate');
+            var dateError = document.getElementById('addDueDateError');
+            var desc = document.getElementById('addDescription');
+            var descError = document.getElementById('addDescriptionError');
+            var isValid = true;
+
+            if (!title.value.trim() && isSubmit) {
+                title.classList.add('is-invalid');
+                titleError.innerText = "Title is required.";
+                titleError.classList.remove('d-none');
+                isValid = false;
+            } else if (title.value && title.value.trim().length < 5) {
+                title.classList.add('is-invalid');
+                title.classList.remove('is-valid');
+                titleError.innerText = "Title must be at least 5 characters long.";
+                titleError.classList.remove('d-none');
+                isValid = false;
+            } else if (title.value) {
+                title.classList.remove('is-invalid');
+                title.classList.add('is-valid');
+                titleError.classList.add('d-none');
+            } else {
+                title.classList.remove('is-invalid', 'is-valid');
+                titleError.classList.add('d-none');
+            }
+
+            if (!date.value && isSubmit) {
+                date.classList.add('is-invalid');
+                dateError.innerText = "Due date is required.";
+                dateError.classList.remove('d-none');
+                isValid = false;
+            } else if (date.value) {
+                var selectedDate = new Date(date.value);
+                var today = new Date();
+                today.setHours(0,0,0,0);
+                
+                if (isNaN(selectedDate.getTime()) || selectedDate < today) {
+                    date.classList.add('is-invalid');
+                    date.classList.remove('is-valid');
+                    dateError.innerText = selectedDate < today ? "Due date cannot be in the past." : "Please select a valid due date.";
+                    dateError.classList.remove('d-none');
+                    isValid = false;
+                } else {
+                    date.classList.remove('is-invalid');
+                    date.classList.add('is-valid');
+                    dateError.classList.add('d-none');
+                }
+            } else {
+                date.classList.remove('is-invalid', 'is-valid');
+                dateError.classList.add('d-none');
+            }
+
+            if (desc.value && desc.value.trim().length < 10) {
+                desc.classList.add('is-invalid');
+                desc.classList.remove('is-valid');
+                descError.classList.remove('d-none');
+                isValid = false;
+            } else if (desc.value) {
+                desc.classList.remove('is-invalid');
+                desc.classList.add('is-valid');
+                descError.classList.add('d-none');
+            } else {
+                desc.classList.remove('is-invalid', 'is-valid');
+                descError.classList.add('d-none');
+            }
+
+            return isValid;
+        };
+
+        window.validateBulkAdd = function() {
+            var isValid = window.validateBulkAddRealtime(true);
+            if(!isValid) {
+                Swal.fire({ text: "Please fix the validation errors before submitting.", icon: "error", confirmButtonText: "Got it" });
+            }
+            return isValid;
+        };
+
+        window.validateBulkEditRealtime = function(isSubmit = false) {
+            var target = document.getElementById('editTargetTitle');
+            var targetError = document.getElementById('editTargetError');
+            var title = document.getElementById('bulkNewTitle');
+            var titleError = document.getElementById('editTitleError');
+            var date = document.getElementById('bulkNewDueDate');
+            var dateError = document.getElementById('bulkDateWarning');
+            var desc = document.getElementById('bulkNewDescription');
+            var descError = document.getElementById('editDescriptionError');
+            var isValid = true;
+
+            if (!target.value && isSubmit) {
+                target.classList.add('is-invalid');
+                target.classList.remove('is-valid');
+                targetError.classList.remove('d-none');
+                isValid = false;
+            } else if (target.value) {
+                target.classList.remove('is-invalid');
+                target.classList.add('is-valid');
+                targetError.classList.add('d-none');
+            } else {
+                target.classList.remove('is-invalid', 'is-valid');
+                targetError.classList.add('d-none');
+            }
+
+            if (title.value && title.value.trim().length < 5) {
+                title.classList.add('is-invalid');
+                title.classList.remove('is-valid');
+                titleError.classList.remove('d-none');
+                isValid = false;
+            } else if (title.value) {
+                title.classList.remove('is-invalid');
+                title.classList.add('is-valid');
+                titleError.classList.add('d-none');
+            } else {
+                title.classList.remove('is-invalid', 'is-valid');
+                titleError.classList.add('d-none');
+            }
+            
+            if (date.value) {
+                var selectedDate = new Date(date.value);
+                var today = new Date();
+                today.setHours(0,0,0,0);
+                
+                if (isNaN(selectedDate.getTime()) || selectedDate < today) {
+                    date.classList.add('is-invalid');
+                    date.classList.remove('is-valid');
+                    dateError.innerText = selectedDate < today ? "Due date cannot be in the past." : "Please select a valid due date.";
+                    dateError.style.display = 'block';
+                    isValid = false;
+                } else {
+                    date.classList.remove('is-invalid');
+                    date.classList.add('is-valid');
+                    dateError.style.display = 'none';
+                }
+            } else {
+                date.classList.remove('is-invalid', 'is-valid');
+                dateError.style.display = 'none';
+            }
+            
+            if (desc.value && desc.value.trim().length < 10) {
+                desc.classList.add('is-invalid');
+                desc.classList.remove('is-valid');
+                descError.classList.remove('d-none');
+                isValid = false;
+            } else if (desc.value) {
+                desc.classList.remove('is-invalid');
+                desc.classList.add('is-valid');
+                descError.classList.add('d-none');
+            } else {
+                desc.classList.remove('is-invalid', 'is-valid');
+                descError.classList.add('d-none');
+            }
+
+            return isValid;
+        };
+
+        window.validateBulkEdit = function() {
+            var isValid = window.validateBulkEditRealtime(true);
+            if(!isValid) {
+                Swal.fire({ text: "Please fix the validation errors before submitting.", icon: "error", confirmButtonText: "Got it" });
+            }
+            return isValid;
+        };
+
+        window.validateBulkDeleteRealtime = function(isSubmit = false) {
+            var target = document.getElementById('deleteTargetTitle');
+            var targetError = document.getElementById('deleteTargetError');
+            
+            if (!target.value && isSubmit) {
+                target.classList.add('is-invalid');
+                target.classList.remove('is-valid');
+                targetError.classList.remove('d-none');
+                return false;
+            } else if (target.value) {
+                target.classList.remove('is-invalid');
+                target.classList.add('is-valid');
+                targetError.classList.add('d-none');
+                return true;
+            } else {
+                target.classList.remove('is-invalid', 'is-valid');
+                targetError.classList.add('d-none');
+                return true;
+            }
+        };
+
+        window.validateBulkDelete = function() {
+            var isValid = window.validateBulkDeleteRealtime(true);
+            if(!isValid) {
+                Swal.fire({ text: "Please select a milestone before deleting.", icon: "error", confirmButtonText: "Got it" });
+            }
+            return isValid;
+        };
 
     </script>
 }

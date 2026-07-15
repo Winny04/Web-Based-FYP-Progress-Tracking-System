@@ -467,8 +467,33 @@
         </div>
     }
 
+    @if (Model != null && Model.Status == "Failed")
+    {
+        <div class="action-alert" style="border-left-color: #dc2626;">
+            <div class="action-alert-icon text-danger">
+                <i class="fas fa-times-circle"></i>
+            </div>
+            <div class="flex-grow-1">
+                <h6 class="fw-bold mb-1 text-danger">Project Failed (Grade: @Model.FinalGrade)</h6>
+                <div class="text-muted" style="font-size: 0.9rem;">
+                    You have received a failing grade for this project. You must restart the FYP progress by requesting a supervisor for the next academic session.
+                </div>
+            </div>
+            <div class="text-end align-self-center">
+                @if (currentUser?.AcademicSession == Model.AcademicSession)
+                {
+                    <button type="button" class="btn btn-danger btn-sm py-2 px-4 fw-bold" data-bs-toggle="modal" data-bs-target="#sessionModal">Repeat FYP</button>
+                }
+                else
+                {
+                    <a href="/Student/SelectSupervisor" class="btn btn-danger btn-sm py-2 px-4 fw-bold">Select Supervisor</a>
+                }
+            </div>
+        </div>
+    }
+
     @* ── DYNAMIC NEXT STEP INDICATOR ── *@
-    @if (Model != null && milestones.Any() && !string.IsNullOrEmpty(nextStepTitle))
+    @if (Model != null && Model.Status != "Failed" && milestones.Any() && !string.IsNullOrEmpty(nextStepTitle))
     {
         <div class="action-alert">
             <div class="action-alert-icon">
@@ -488,7 +513,7 @@
         
         @* ── PROGRESS & STATS ──────────────────────────────────── *@
         <div class="col-lg-8">
-            @if (Model == null)
+            @if (Model == null || Model.Status == "Failed")
             {
                 <!-- Empty State CTA -->
                 <div class="premium-card p-5 mb-4 text-center">
@@ -499,9 +524,18 @@
                     <p class="text-muted mb-4 mx-auto" style="max-width: 500px;">
                         Your very first step is to secure a supervisor and register your project topic. You won't be able to submit forms or book meetings until this is done!
                     </p>
-                    <a href="/Student/SelectSupervisor" class="btn btn-monochrome px-4 py-2">
-                        <i class="fas fa-user-plus me-2"></i> Select Supervisor
-                    </a>
+                    @if (string.IsNullOrEmpty(currentUser?.AcademicSession) || currentUser?.AcademicSession == Model?.AcademicSession)
+                    {
+                        <button type="button" class="btn btn-monochrome px-4 py-2" data-bs-toggle="modal" data-bs-target="#sessionModal">
+                            <i class="fas fa-user-plus me-2"></i> Select Supervisor
+                        </button>
+                    }
+                    else
+                    {
+                        <a href="/Student/SelectSupervisor" class="btn btn-monochrome px-4 py-2">
+                            <i class="fas fa-user-plus me-2"></i> Select Supervisor
+                        </a>
+                    }
                 </div>
             }
             else
@@ -558,13 +592,10 @@
             <!-- Status Chapter Table -->
             <div class="premium-card p-4">
                 <h5 class="fw-bold text-dark mb-4"><i class="fas fa-folder-open text-warning me-2"></i>Status Chapter Table</h5>
-                @if (Model == null)
+                @if (Model == null || Model.Status == "Failed")
                 {
                     <div class="text-center py-5">
-                        <p class="text-muted">You do not have any project created yet. Please select a supervisor first!</p>
-                        <a href="/Student/SelectSupervisor" class="btn btn-monochrome rounded-3 px-4 mt-2">
-                            <i class="fas fa-user-plus me-1"></i> Choose Supervisor
-                        </a>
+                        <p class="text-muted">You do not have any active project right now. Please select a supervisor first!</p>
                     </div>
                 }
                 else if (!milestones.Any())
@@ -806,8 +837,7 @@
 
         @* ── UPCOMING MEETING & ACTIVITIES (Right Sidebar) ── *@
         <div class="col-lg-4">
-
-            @if (upcomingMeeting != null)
+            @if (upcomingMeeting != null && (Model == null || Model.Status != "Failed"))
             {
                 <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="background-color: #f8fafc; border-left: 6px solid #1e293b !important;">
                     <h5 class="fw-bold text-dark mb-3"><i class="fas fa-calendar-check me-2 text-muted"></i>Upcoming Meeting</h5>
@@ -870,6 +900,53 @@
 
 
 
+</div>
+
+<!-- Session Selection Modal -->
+<div class="modal fade" id="sessionModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <form method="post" action="/Student/RepeatFYP">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-primary text-white border-0 py-3">
+                    <h5 class="fw-bold mb-0"><i class="fas fa-calendar-alt me-2"></i>Select Academic Session</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <p class="text-muted mb-4">Please select your academic session before proceeding to choose a supervisor.</p>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">Academic Session</label>
+                        <select name="newSession" class="form-select border-1" required>
+                            <option value="">-- Select Session --</option>
+                            @{
+                                int currentYear = DateTime.Now.Year;
+                                int currentMonth = DateTime.Now.Month;
+                                string[] months = { "Jan", "April", "Aug" };
+                                
+                                for (int y = currentYear; y <= currentYear + 2; y++)
+                                {
+                                    foreach (var m in months)
+                                    {
+                                        int monthNum = m == "Jan" ? 1 : m == "April" ? 4 : 8;
+                                        if (y > currentYear || (y == currentYear && monthNum >= currentMonth - 2)) 
+                                        {
+                                            string sessionName = $"{y} {m}";
+                                            <option value="@sessionName">@sessionName</option>
+                                        }
+                                    }
+                                }
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 bg-light pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary fw-bold">Confirm & Continue</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <script>

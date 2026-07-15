@@ -370,6 +370,9 @@ namespace FYPTracker.Migrations
                         .HasMaxLength(5)
                         .HasColumnType("nvarchar(5)");
 
+                    b.Property<bool>("IsGradingLocked")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Objective1")
                         .HasColumnType("nvarchar(max)");
 

@@ -54,6 +54,8 @@ namespace FYPTracker.Models
 
         [Column(TypeName = "datetime")]
         public DateTime? UpdatedDate { get; set; }
+        
+        public bool IsGradingLocked { get; set; } = false;
 
         // Navigation
         [ForeignKey(nameof(StudentId))]

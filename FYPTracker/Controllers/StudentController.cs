@@ -40,7 +40,7 @@ namespace FYPTracker.Controllers
                 .Include(p => p.Student)
                 .Include(p => p.Supervisor)
                 .Include(p => p.Milestones)
-                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+                .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
             // Fetch recent activities
             var activities = await _context.FYPActivities
@@ -137,7 +137,7 @@ namespace FYPTracker.Controllers
                     .ThenInclude(m => m.Feedbacks)
                 .Include(p => p.Milestones)
                     .ThenInclude(m => m.SubmissionFiles)
-                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+                .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
             return View(project);
         }
@@ -190,10 +190,10 @@ namespace FYPTracker.Controllers
                 .Select(g => new { SupervisorId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.SupervisorId, x => x.Count);
 
-            // 5. Get Student's Requests
+            // 5. Get Student's Requests (exclude Failed so they can re-apply)
             var myRequests = await _context.SupervisorRequests
                 .Include(r => r.Supervisor)
-                .Where(r => r.StudentId == user.Id)
+                .Where(r => r.StudentId == user.Id && r.Status != "Failed")
                 .OrderBy(r => r.Priority)
                 .ToListAsync();
 
@@ -210,12 +210,38 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RepeatFYP(string newSession)
+        {
+            try 
+            {
+                var user = await GetCurrentUserAsync();
+                if (user == null) return RedirectToAction("Login", "Authentication");
+
+                if (!string.IsNullOrEmpty(newSession))
+                {
+                    user.AcademicSession = newSession;
+                    // Intentionally NOT calling _context.Update(user) because user is already tracked
+                    await _context.SaveChangesAsync();
+                    TempData["Success"] = $"Academic Session updated to {newSession}. You may now select a new supervisor.";
+                }
+
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "Error updating session: " + ex.Message + (ex.InnerException != null ? " | Inner: " + ex.InnerException.Message : "");
+                return RedirectToAction("Index");
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> SubmitSupervisorRequest(int supervisorId, string matricNumber, string program, string phoneNumber, string sessionSemester, string projectTopic, string? requestMessage)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
 
-            var myRequests = await _context.SupervisorRequests.Where(r => r.StudentId == user.Id).ToListAsync();
+            var myRequests = await _context.SupervisorRequests.Where(r => r.StudentId == user.Id && r.Status != "Failed").ToListAsync();
             
             if (myRequests.Any(r => r.Status == "Approved"))
             {
@@ -550,38 +576,44 @@ namespace FYPTracker.Controllers
 
             ViewBag.CurrentUser = user;
 
-            var globalIaf = await _context.FYPMilestones
-                .Where(m => m.Title == "Initial Project Allocation Form (IAF)" && m.DueDate != null)
-                .OrderByDescending(m => m.DueDate)
-                .FirstOrDefaultAsync();
-
-            if (globalIaf != null && globalIaf.DueDate.HasValue)
-            {
-                ViewBag.IAFDeadline = globalIaf.DueDate.Value.ToString("dd MMMM yyyy") + " before 11.59pm";
-            }
-            else
-            {
-                ViewBag.IAFDeadline = "No deadline set yet.";
-            }
-
             var project = await _context.FYPProjects
                 .Include(p => p.Supervisor)
                 .Include(p => p.Milestones)
                     .ThenInclude(m => m.SubmissionFiles)
-                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+                .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
             if (project != null)
             {
+                var sessionIaf = await _context.FYPMilestones
+                    .Include(m => m.Project)
+                    .Where(m => m.Project.AcademicSession == project.AcademicSession && (m.Title == "Initial Project Allocation Form (IAF)" || m.Title.Contains("IAF")) && m.DueDate != null)
+                    .OrderByDescending(m => m.DueDate)
+                    .FirstOrDefaultAsync();
+
+                if (sessionIaf != null && sessionIaf.DueDate.HasValue)
+                {
+                    ViewBag.IAFDeadline = sessionIaf.DueDate.Value.ToString("dd MMMM yyyy") + " before 11.59pm";
+                }
+                else
+                {
+                    ViewBag.IAFDeadline = "No deadline set yet.";
+                }
+
                 var hasIaf = project.Milestones.Any(m => (m.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) && !m.Title.Contains("Industrial", StringComparison.OrdinalIgnoreCase));
                 if (!hasIaf)
                 {
                     bool shouldAutoApprove = project.Milestones.Any(m => m.Status == "Approved" || m.Status == "Submitted");
+                    
+                    var newDeadline = sessionIaf != null && sessionIaf.DueDate.HasValue 
+                        ? sessionIaf.DueDate.Value 
+                        : DateTime.Now.AddDays(14);
+                        
                     var iaf = new FYPMilestone
                     {
                         FYPProjectId = project.Id,
                         Title = "Initial Project Allocation Form (IAF)",
                         Description = "Prerequisite Form for FYP Registration and allocation.",
-                        DueDate = DateTime.Now.AddDays(14),
+                        DueDate = newDeadline,
                         Status = shouldAutoApprove ? "Approved" : "Pending",
                         Remarks = shouldAutoApprove ? "Auto-approved for existing active project" : null,
                         CreatedDate = DateTime.Now
@@ -593,8 +625,12 @@ namespace FYPTracker.Controllers
                     project = await _context.FYPProjects
                         .Include(p => p.Milestones)
                             .ThenInclude(m => m.SubmissionFiles)
-                        .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+                        .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
                 }
+            }
+            else
+            {
+                ViewBag.IAFDeadline = "Please wait for project allocation.";
             }
 
             return View(project);
@@ -1083,7 +1119,7 @@ namespace FYPTracker.Controllers
             if (!string.IsNullOrEmpty(log.PdfLogbookPath))
                 return Redirect(log.PdfLogbookPath);
 
-            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == log.MeetingBooking.StudentId);
+            var project = await _context.FYPProjects.OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == log.MeetingBooking.StudentId);
             ViewBag.ProjectName = project?.Title ?? "FYP Project";
 
             return View("~/Views/Shared/MeetingLogPrintable.cshtml", log);
@@ -1173,7 +1209,7 @@ namespace FYPTracker.Controllers
             if (file == null || string.IsNullOrEmpty(file.FilePath)) return NotFound();
 
             // Security check: ensure the file belongs to this student's project
-            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == user.Id);
+            var project = await _context.FYPProjects.OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
             if (project == null) return Unauthorized();
             
             var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
@@ -1201,7 +1237,7 @@ namespace FYPTracker.Controllers
 
             var project = await _context.FYPProjects
                 .Include(p => p.Supervisor)
-                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+                .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
             using var ms = new System.IO.MemoryStream();
 
@@ -1402,7 +1438,7 @@ namespace FYPTracker.Controllers
 
             var project = await _context.FYPProjects
                 .Include(p => p.Supervisor)
-                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+                .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
             string milestoneTitle = "PROGRESS REPORT";
             if (milestoneId.HasValue)
@@ -1545,7 +1581,7 @@ namespace FYPTracker.Controllers
 
             var project = await _context.FYPProjects
                 .Include(p => p.Supervisor)
-                .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+                .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
             using var ms = new System.IO.MemoryStream();
             var doc = new NPOI.XWPF.UserModel.XWPFDocument();

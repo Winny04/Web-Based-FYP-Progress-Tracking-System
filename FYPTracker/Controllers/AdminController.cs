@@ -643,13 +643,31 @@ public ActionResult ManageUsersData()
                 return false;
             }
         }
-        public async Task<IActionResult> Settings()
+        public async Task<IActionResult> Settings(string sessionFilter = null)
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             ViewBag.CurrentUser = user;
 
+            // Fetch distinct academic sessions
+            var distinctSessions = await _context.FYPProjects
+                .Where(p => !string.IsNullOrEmpty(p.AcademicSession))
+                .Select(p => p.AcademicSession)
+                .Distinct()
+                .OrderByDescending(s => s)
+                .ToListAsync();
+
+            ViewBag.DistinctSessions = distinctSessions;
+
+            if (string.IsNullOrEmpty(sessionFilter))
+            {
+                sessionFilter = distinctSessions.FirstOrDefault() ?? "2024/2025";
+            }
+            
+            ViewBag.CurrentSessionFilter = sessionFilter;
+
             var existingIaf = await _context.FYPMilestones
-                .Where(m => m.Title == "Initial Project Allocation Form (IAF)" && m.DueDate != null)
+                .Include(m => m.Project)
+                .Where(m => m.Project.AcademicSession == sessionFilter && (m.Title == "Initial Project Allocation Form (IAF)" || m.Title.Contains("IAF")) && m.DueDate != null)
                 .OrderByDescending(m => m.DueDate)
                 .FirstOrDefaultAsync();
                 
@@ -662,18 +680,43 @@ public ActionResult ManageUsersData()
                 ViewBag.IAFDeadline = "";
             }
 
+            // Grade Lock Status
+            bool isSessionLocked = false;
+            bool isSessionPartiallyLocked = false;
+            var projectsInSession = await _context.FYPProjects.Where(p => p.AcademicSession == sessionFilter).ToListAsync();
+            if (projectsInSession.Any())
+            {
+                if (projectsInSession.All(p => p.IsGradingLocked))
+                {
+                    isSessionLocked = true;
+                }
+                else if (projectsInSession.Any(p => p.IsGradingLocked))
+                {
+                    isSessionPartiallyLocked = true;
+                }
+            }
+            ViewBag.IsSessionLocked = isSessionLocked;
+            ViewBag.IsSessionPartiallyLocked = isSessionPartiallyLocked;
+            ViewBag.SessionProjectCount = projectsInSession.Count;
+
             return View();
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UpdateIAFDeadline(DateTime? deadline)
+        public async Task<IActionResult> UpdateIAFDeadline(DateTime? deadline, string sessionFilter)
         {
             try 
             {
                 if (!deadline.HasValue)
                 {
                     TempData["Error"] = "The date provided was invalid or empty.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+                
+                if (string.IsNullOrEmpty(sessionFilter))
+                {
+                    TempData["Error"] = "An academic session must be selected.";
                     return RedirectToAction(nameof(Settings));
                 }
 
@@ -681,7 +724,8 @@ public ActionResult ManageUsersData()
                 var endOfDayDeadline = new DateTime(deadline.Value.Year, deadline.Value.Month, deadline.Value.Day, 23, 59, 59);
 
                 var milestones = await _context.FYPMilestones
-                    .Where(m => m.Title == "Initial Project Allocation Form (IAF)" || m.Title.Contains("IAF"))
+                    .Include(m => m.Project)
+                    .Where(m => m.Project.AcademicSession == sessionFilter && (m.Title == "Initial Project Allocation Form (IAF)" || m.Title.Contains("IAF")))
                     .ToListAsync();
 
                 int count = 0;
@@ -694,19 +738,56 @@ public ActionResult ManageUsersData()
                 if (count > 0)
                 {
                     await _context.SaveChangesAsync();
-                    TempData["Success"] = $"Successfully updated the IAF deadline for {count} student project(s).";
+                    TempData["Success"] = $"Successfully updated the IAF deadline for {count} student project(s) in {sessionFilter}.";
                 }
                 else
                 {
-                    TempData["Info"] = "No IAF milestones found to update.";
+                    TempData["Info"] = $"No IAF milestones found in {sessionFilter} to update.";
                 }
 
-                return RedirectToAction(nameof(Settings));
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
             }
             catch (Exception ex)
             {
                 TempData["Error"] = $"Crash Details: {ex.Message} | Inner: {ex.InnerException?.Message}";
-                return RedirectToAction(nameof(Settings));
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleGradeLock(string sessionFilter, bool lockState)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(sessionFilter))
+                {
+                    TempData["Error"] = "An academic session must be selected.";
+                    return RedirectToAction(nameof(Settings));
+                }
+
+                var projects = await _context.FYPProjects.Where(p => p.AcademicSession == sessionFilter).ToListAsync();
+                foreach(var p in projects)
+                {
+                    p.IsGradingLocked = lockState;
+                }
+
+                if (projects.Any())
+                {
+                    await _context.SaveChangesAsync();
+                    TempData["Success"] = $"Successfully {(lockState ? "locked" : "unlocked")} grading for {projects.Count} project(s) in {sessionFilter}.";
+                }
+                else
+                {
+                    TempData["Info"] = $"No projects found in {sessionFilter} to {(lockState ? "lock" : "unlock")}.";
+                }
+
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"Crash Details: {ex.Message} | Inner: {ex.InnerException?.Message}";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
             }
         }
 

@@ -99,13 +99,18 @@
                 
                 @{
                     var pendingCount = Model.Milestones.Count(m => m.Status != "Approved");
-                    var isGradingLocked = pendingCount > 0;
+                    var isGradingLockedByAdmin = Model.IsGradingLocked;
+                    var isGradingLocked = pendingCount > 0 || isGradingLockedByAdmin;
                 }
                 <div class="d-flex justify-content-between align-items-center mb-3 pt-2 border-top">
                     <h6 class="fw-bold text-dark mb-0"><i class="fas fa-graduation-cap text-primary me-2"></i>Final Grading</h6>
-                    @if (isGradingLocked)
+                    @if (isGradingLockedByAdmin)
                     {
-                        <span class="badge bg-danger rounded-pill"><i class="fas fa-lock me-1"></i> Locked</span>
+                        <span class="badge bg-danger rounded-pill"><i class="fas fa-lock me-1"></i> Locked by Admin</span>
+                    }
+                    else if (pendingCount > 0)
+                    {
+                        <span class="badge bg-warning text-dark rounded-pill"><i class="fas fa-clock me-1"></i> Pending Approval</span>
                     }
                     else
                     {
@@ -113,12 +118,22 @@
                     }
                 </div>
                 
-                @if (isGradingLocked)
+                @if (isGradingLockedByAdmin)
                 {
                     <div class="alert alert-light-danger border-danger border border-dashed rounded-3 p-3 mb-3 d-flex align-items-center">
-                        <i class="fas fa-exclamation-circle text-danger fs-4 me-3"></i>
+                        <i class="fas fa-lock text-danger fs-4 me-3"></i>
                         <div>
-                            <p class="mb-0 fw-bold text-danger" style="font-size: 0.8rem;">Action Required</p>
+                            <p class="mb-0 fw-bold text-danger" style="font-size: 0.8rem;">Grading Closed</p>
+                            <span class="text-dark" style="font-size: 0.75rem;">The grading period for this session has been locked by the Administrator. Grades are read-only.</span>
+                        </div>
+                    </div>
+                }
+                else if (pendingCount > 0)
+                {
+                    <div class="alert alert-light-warning border-warning border border-dashed rounded-3 p-3 mb-3 d-flex align-items-center">
+                        <i class="fas fa-exclamation-circle text-warning fs-4 me-3"></i>
+                        <div>
+                            <p class="mb-0 fw-bold text-warning" style="font-size: 0.8rem;">Action Required</p>
                             <span class="text-dark" style="font-size: 0.75rem;">@pendingCount milestone(s) are pending approval before you can assign a Final Grade.</span>
                         </div>
                     </div>

@@ -182,7 +182,15 @@ namespace FYPTracker.Controllers
 
                 if (status == "Approved")
                 {
-                    var proj = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == req.StudentId);
+                    // Ignore Completed or Failed projects so we create a new one for a restarting student
+                    var proj = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == req.StudentId && p.Status != "Failed" && p.Status != "Completed");
+                    
+                    // Update student's academic session based on their request
+                    if (!string.IsNullOrWhiteSpace(req.SessionSemester))
+                    {
+                        req.Student.AcademicSession = req.SessionSemester;
+                    }
+
                     if (proj == null)
                     {
                         proj = new FYPProject
@@ -213,6 +221,7 @@ namespace FYPTracker.Controllers
                     {
                         proj.SupervisorId = req.SupervisorId;
                         proj.Status = "Approved";
+                        proj.AcademicSession = req.Student.AcademicSession; // Sync session just in case
                     }
 
                     // --- NEW: Reject all other pending requests for this student ---
@@ -313,7 +322,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkAddMilestone(string title, string description, DateTime? dueDate)
+        public async Task<IActionResult> BulkAddMilestone(string title, string description, DateTime? dueDate, string sessionFilter)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
@@ -321,23 +330,25 @@ namespace FYPTracker.Controllers
             if (string.IsNullOrWhiteSpace(title))
             {
                 TempData["Error"] = "Milestone title cannot be empty.";
-                return RedirectToAction(nameof(MyProjects));
+                return RedirectToAction(nameof(MyProjects), new { sessionFilter });
             }
 
-            // Check for duplicate milestone titles across this supervisor's projects
+            var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
+
+            // Check for duplicate milestone titles across this supervisor's projects in the active session
             bool isDuplicate = await _context.FYPMilestones
                 .Include(m => m.Project)
-                .AnyAsync(m => m.Project.SupervisorId == user.Id && m.Title.ToLower() == title.ToLower());
+                .AnyAsync(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (activeSession == null || m.Project.AcademicSession == activeSession) && m.Title.ToLower() == title.ToLower());
 
             if (isDuplicate)
             {
-                TempData["AddModalError"] = $"A milestone with the title '{title}' already exists for your students. Please choose a different name or edit the existing one.";
+                TempData["AddModalError"] = $"A milestone with the title '{title}' already exists for your students in the current session. Please choose a different name or edit the existing one.";
                 return Redirect($"/Supervisor/MyProjects?action=bulk-add");
             }
 
             if (dueDate.HasValue)
             {
-                var firstProject = await _context.FYPProjects.FirstOrDefaultAsync(p => p.SupervisorId == user.Id && !p.Student.IsResign);
+                var firstProject = await _context.FYPProjects.FirstOrDefaultAsync(p => p.SupervisorId == user.Id && !p.Student.IsResign && (activeSession == null || p.AcademicSession == activeSession));
                 if (firstProject != null)
                 {
                     var existingMilestones = await _context.FYPMilestones.Where(m => m.FYPProjectId == firstProject.Id).ToListAsync();
@@ -352,7 +363,7 @@ namespace FYPTracker.Controllers
 
             var projects = await _context.FYPProjects
                 .Include(p => p.Student)
-                .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign)
+                .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign && (activeSession == null || p.AcademicSession == activeSession))
                 .ToListAsync();
 
             if (projects.Any())
@@ -383,12 +394,12 @@ namespace FYPTracker.Controllers
                 TempData["Error"] = "No active projects found under your supervision.";
             }
 
-            return RedirectToAction(nameof(MyProjects));
+            return RedirectToAction(nameof(MyProjects), new { sessionFilter });
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkEditMilestone(string targetTitle, string newTitle, string newDescription, DateTime? newDueDate)
+        public async Task<IActionResult> BulkEditMilestone(string targetTitle, string? newTitle, DateTime? newDueDate, string? newDescription, string sessionFilter)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
@@ -399,22 +410,24 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(MyProjects));
             }
 
+            var activeSession = await GetAndSetSessionFilterAsync(user.Id, null);
+
             if (!string.IsNullOrWhiteSpace(newTitle) && newTitle.ToLower() != targetTitle.ToLower())
             {
                 bool isDuplicate = await _context.FYPMilestones
                     .Include(m => m.Project)
-                    .AnyAsync(m => m.Project.SupervisorId == user.Id && m.Title.ToLower() == newTitle.ToLower());
+                    .AnyAsync(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (activeSession == null || m.Project.AcademicSession == activeSession) && m.Title.ToLower() == newTitle.ToLower());
 
                 if (isDuplicate)
                 {
-                    TempData["EditModalError"] = $"Cannot rename to '{newTitle}' because a milestone with that name already exists.";
+                    TempData["EditModalError"] = $"Cannot rename to '{newTitle}' because a milestone with that name already exists in the current session.";
                     return Redirect($"/Supervisor/MyProjects?action=bulk-edit&target={Uri.EscapeDataString(targetTitle)}");
                 }
             }
 
             if (newDueDate.HasValue)
             {
-                var firstProject = await _context.FYPProjects.FirstOrDefaultAsync(p => p.SupervisorId == user.Id && !p.Student.IsResign);
+                var firstProject = await _context.FYPProjects.FirstOrDefaultAsync(p => p.SupervisorId == user.Id && !p.Student.IsResign && (activeSession == null || p.AcademicSession == activeSession));
                 if (firstProject != null)
                 {
                     var existingMilestones = await _context.FYPMilestones.Where(m => m.FYPProjectId == firstProject.Id).ToListAsync();
@@ -431,7 +444,7 @@ namespace FYPTracker.Controllers
             var milestones = await _context.FYPMilestones
                 .Include(m => m.Project)
                 .ThenInclude(p => p.Student)
-                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && m.Title == targetTitle)
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (activeSession == null || m.Project.AcademicSession == activeSession) && m.Title == targetTitle)
                 .ToListAsync();
 
             if (milestones.Any())
@@ -498,12 +511,12 @@ namespace FYPTracker.Controllers
                 TempData["Error"] = "No active student projects have this milestone.";
             }
 
-            return RedirectToAction(nameof(MyProjects));
+            return RedirectToAction(nameof(MyProjects), new { sessionFilter });
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkDeleteMilestone(string targetTitle)
+        public async Task<IActionResult> BulkDeleteMilestone(string targetTitle, string sessionFilter)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
@@ -511,13 +524,15 @@ namespace FYPTracker.Controllers
             if (string.IsNullOrEmpty(targetTitle))
             {
                 TempData["Error"] = "Invalid request.";
-                return RedirectToAction(nameof(MyProjects));
+                return RedirectToAction(nameof(MyProjects), new { sessionFilter });
             }
+
+            var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
 
             var milestones = await _context.FYPMilestones
                 .Include(m => m.Project)
                 .ThenInclude(p => p.Student)
-                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && m.Title == targetTitle)
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (activeSession == null || m.Project.AcademicSession == activeSession) && m.Title == targetTitle)
                 .ToListAsync();
 
             if (milestones.Any())
@@ -557,7 +572,7 @@ namespace FYPTracker.Controllers
                 TempData["Error"] = "No active student projects have this milestone.";
             }
 
-            return RedirectToAction(nameof(MyProjects));
+            return RedirectToAction(nameof(MyProjects), new { sessionFilter });
         }
 
         [HttpPost]
@@ -1219,8 +1234,40 @@ namespace FYPTracker.Controllers
                 TempData["Error"] = "Project not found or unauthorized.";
                 return RedirectToAction("MyProjects");
             }
+            
+            if (project.IsGradingLocked)
+            {
+                TempData["Error"] = "Grading for this session has been locked by the Administrator. You can no longer edit this grade.";
+                return RedirectToAction("ProjectDetails", new { id = projectId });
+            }
 
             project.FinalGrade = finalGrade;
+            
+            if (!string.IsNullOrEmpty(finalGrade))
+            {
+                if (finalGrade == "C-" || finalGrade == "D" || finalGrade == "F")
+                {
+                    project.Status = "Failed";
+                    // Change the latest approved request to "Failed" so the student can apply again
+                    var prevRequest = await _context.SupervisorRequests
+                        .OrderByDescending(r => r.RequestedDate)
+                        .FirstOrDefaultAsync(r => r.StudentId == project.StudentId && r.Status == "Approved");
+                    if (prevRequest != null)
+                    {
+                        prevRequest.Status = "Failed";
+                    }
+                }
+                else
+                {
+                    project.Status = "Completed";
+                }
+            }
+            else
+            {
+                // If the grade is cleared out (which the UI might not allow, but just in case)
+                project.Status = "InProgress";
+            }
+
             await _context.SaveChangesAsync();
             await LogActivityAsync(user.Id, "Grading", $"Updated Final Grade", $"Assigned Final Grade {finalGrade ?? "Pending"} to project {project.Title}.");
 
