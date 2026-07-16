@@ -9,6 +9,7 @@ using FYPTracker.Hubs;
 namespace FYPTracker.Controllers
 {
     [Authorize]
+    [FYPTracker.Filters.AuthorizeUserType("Supervisor")]
     public class SupervisorController : Controller
     {
         private readonly FYPTrackerContext _context;
@@ -76,9 +77,23 @@ namespace FYPTracker.Controllers
 
             if (!allSessions.Any()) return null;
 
-            string selectedSession = !string.IsNullOrEmpty(sessionFilter) && allSessions.Contains(sessionFilter) 
-                ? sessionFilter 
-                : allSessions.First()!;
+            string selectedSession;
+            var sessionCookie = HttpContext.Request.Cookies["SupervisorSessionFilter"];
+
+            if (!string.IsNullOrEmpty(sessionFilter) && allSessions.Contains(sessionFilter))
+            {
+                selectedSession = sessionFilter;
+                HttpContext.Response.Cookies.Append("SupervisorSessionFilter", selectedSession, new Microsoft.AspNetCore.Http.CookieOptions { Expires = DateTime.Now.AddDays(7) });
+            }
+            else if (!string.IsNullOrEmpty(sessionCookie) && allSessions.Contains(sessionCookie))
+            {
+                selectedSession = sessionCookie;
+            }
+            else
+            {
+                selectedSession = allSessions.First()!;
+                HttpContext.Response.Cookies.Append("SupervisorSessionFilter", selectedSession, new Microsoft.AspNetCore.Http.CookieOptions { Expires = DateTime.Now.AddDays(7) });
+            }
             
             ViewBag.AllSessions = allSessions;
             ViewBag.CurrentSession = selectedSession;

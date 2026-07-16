@@ -20,6 +20,7 @@ using FYPTracker.Common;
 namespace FYPTracker.Controllers
 {
     [Microsoft.AspNetCore.Authorization.Authorize]
+    [FYPTracker.Filters.AuthorizeUserType("Admin", "SuperAdmin")]
     public class AdminController : Controller
     {
         private readonly FYPTrackerContext _context;

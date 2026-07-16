@@ -126,13 +126,11 @@ CommonHelpers.SetHttpContextAccessor(accessor,serviceProvider.GetService<IWebHos
 app.UseStatusCodePages(async context => {
     var response = context.HttpContext.Response;
 
-    if (response.StatusCode == (int)HttpStatusCode.Unauthorized ||
-        response.StatusCode == (int)HttpStatusCode.Forbidden ||
-        response.StatusCode == (int)HttpStatusCode.NotFound)
+    if (response.StatusCode == (int)HttpStatusCode.NotFound)
         response.Redirect("/Home/Error404");
-
-    if (response.StatusCode == (int)HttpStatusCode.Unauthorized ||
-            response.StatusCode == (int)HttpStatusCode.Forbidden)
+    else if (response.StatusCode == (int)HttpStatusCode.Forbidden)
+        response.Redirect("/Home/AccessDenied");
+    else if (response.StatusCode == (int)HttpStatusCode.Unauthorized)
         response.Redirect("/User/login");
 
 });

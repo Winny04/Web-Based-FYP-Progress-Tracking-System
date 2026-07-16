@@ -10,6 +10,7 @@ using FYPTracker.Hubs;
 namespace FYPTracker.Controllers
 {
     [Authorize]
+    [FYPTracker.Filters.AuthorizeUserType("Student")]
     public class StudentController : Controller
     {
         private readonly FYPTrackerContext _context;
