@@ -216,6 +216,42 @@
             if(msFilter) msFilter.addEventListener('change', applyFilters);
             if(stFilter) stFilter.addEventListener('change', applyFilters);
             if(stStatus) stStatus.addEventListener('change', applyFilters);
+
+            document.addEventListener('MilestoneUpdateEvent', function(e) {
+                const p = e.detail;
+                let currentSession = document.querySelector('select[name="sessionFilter"]')?.value || '';
+                
+                if (currentSession && p.session && currentSession !== p.session) {
+                    p._handled = true;
+                    Swal.fire({
+                        title: 'New Submission (' + p.session + ')',
+                        text: `Student ${p.studentName || 'A student'} submitted a milestone in another session. Switch to ${p.session} to view?`,
+                        icon: 'info',
+                        showCancelButton: true,
+                        confirmButtonText: 'Switch Session',
+                        cancelButtonText: 'Stay Here'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            window.location.href = '/Supervisor/ReviewSubmissions?sessionFilter=' + encodeURIComponent(p.session);
+                        }
+                    });
+                    return;
+                }
+
+                p._handled = true;
+                Swal.fire({
+                    title: p.title,
+                    text: p.message,
+                    icon: 'info',
+                    showCancelButton: true,
+                    confirmButtonText: 'Refresh Page',
+                    cancelButtonText: 'Later'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.reload();
+                    }
+                });
+            });
         });
     </script>
 }

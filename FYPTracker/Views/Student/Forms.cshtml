@@ -1368,6 +1368,23 @@
 
             return isValid;
         }
+
+        document.addEventListener('MilestoneUpdateEvent', function(e) {
+            const payload = e.detail;
+            payload._handled = true;
+            Swal.fire({
+                title: payload.title,
+                text: payload.message,
+                icon: (payload.status === 'Approved') ? 'success' : 'info',
+                showCancelButton: true,
+                confirmButtonText: 'Refresh Page',
+                cancelButtonText: 'Later'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.reload();
+                }
+            });
+        });
     </script>
 }
 

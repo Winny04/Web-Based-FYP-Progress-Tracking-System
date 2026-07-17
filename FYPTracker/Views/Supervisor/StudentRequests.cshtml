@@ -292,5 +292,67 @@
         if(reqStudentFilter) reqStudentFilter.addEventListener('change', applyReqFilters);
         if(reqStatusFilter) reqStatusFilter.addEventListener('change', applyReqFilters);
     });
+    document.addEventListener('NewSupervisorRequestEvent', function(e) {
+        const d = e.detail;
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        const tokenHtml = token ? `<input type="hidden" name="__RequestVerificationToken" value="${token}" />` : '';
+        
+        var newRow = `
+            <tr class="request-item" data-student-name="${d.studentName}" data-status="Pending">
+                <td>
+                    <div class="fw-bold text-dark">${d.studentName}</div>
+                    <div class="text-muted small">Matric: ${d.matric}</div>
+                </td>
+                <td>
+                    <div class="fw-bold text-primary">${d.topic}</div>
+                    <div class="text-muted small">${d.message.length > 50 ? d.message.substring(0, 47) + "..." : d.message}</div>
+                </td>
+                <td>${d.date}</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-light-warning rounded-3 me-1" onclick="viewFullForm(${d.id}, true)">
+                        <i class="fas fa-file-alt me-1"></i> Review
+                    </button>
+                    
+                    <div class="d-inline-flex gap-1">
+                        <form action="/Supervisor/RespondRequest" method="post" id="acceptForm_${d.id}">
+                            ${tokenHtml}
+                            <input type="hidden" name="requestId" value="${d.id}" />
+                            <input type="hidden" name="status" value="Approved" />
+                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3" onclick="confirmAccept(${d.id}, '${d.studentName}')">Accept</button>
+                        </form>
+                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3" onclick="openRejectModal(${d.id}, '${d.studentName}')">Reject</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+        
+        var formDataDiv = `
+            <div id="formData_${d.id}" style="display:none;" 
+                 data-name="${d.studentName}" 
+                 data-matric="${d.matric}" 
+                 data-program="${d.program}" 
+                 data-phone="${d.phone}" 
+                 data-session="${d.session}" 
+                 data-topic="${d.topic}" 
+                 data-desc="${d.message}"
+                 data-status="Pending">
+            </div>
+        `;
+        
+        var tbody = document.querySelector('table tbody');
+        if (tbody) {
+            tbody.insertAdjacentHTML('afterbegin', formDataDiv);
+            tbody.insertAdjacentHTML('afterbegin', newRow);
+        }
+        
+        var badge = document.querySelector('.badge.bg-white');
+        if (badge) {
+            var currentText = badge.innerText;
+            var num = parseInt(currentText);
+            if (!isNaN(num)) {
+                badge.innerText = (num + 1) + " Pending Applications";
+            }
+        }
+    });
 </script>
 }

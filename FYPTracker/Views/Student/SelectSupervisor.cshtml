@@ -223,7 +223,7 @@
                                         <td class="text-end">
                                             @if (existing != null)
                                             {
-                                                <span class="status-badge @(existing.Status == "Approved" ? "badge-approved" : existing.Status == "Rejected" ? "badge-rejected" : "badge-pending")">@existing.Status</span>
+                                                <span class="status-badge @(existing.Status == "Approved" ? "badge-approved" : existing.Status == "Rejected" ? "badge-rejected" : "badge-pending")" id="table-status-@existing.Id">@existing.Status</span>
                                             }
                                             else if (slotsLeft > 0 && activeCount < 1)
                                             {
@@ -253,17 +253,17 @@
                     @{ int reqCounter = 1; }
                     @foreach (var req in myRequests)
                     {
-                        <div class="p-3 border rounded-3 mb-3 bg-light">
+                        <div class="p-3 border rounded-3 mb-3 bg-light" id="side-req-box-@req.Id">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <span class="badge bg-white text-dark rounded-pill border" style="font-size:10px;">#@(reqCounter++)</span>
-                                <span class="status-badge @(req.Status == "Approved" ? "badge-approved" : req.Status == "Rejected" ? "badge-rejected" : "badge-pending")" style="font-size:9px; padding:2px 8px;">@req.Status</span>
+                                <span class="status-badge @(req.Status == "Approved" ? "badge-approved" : req.Status == "Rejected" ? "badge-rejected" : "badge-pending")" id="side-status-@req.Id" style="font-size:9px; padding:2px 8px;">@req.Status</span>
                             </div>
                             <div class="fw-bold text-dark" style="font-size:0.85rem;">@req.Supervisor?.FullName</div>
                             <div class="text-muted mb-2" style="font-size:11px; font-weight: 500;">Topic: @req.ProjectTopic</div>
                             
                             @if (req.Status == "Pending")
                             {
-                                <div class="countdown-box mt-2 w-100 justify-content-center">
+                                <div class="countdown-box mt-2 w-100 justify-content-center" id="side-countdown-@req.Id">
                                     <i class="far fa-clock"></i>
                                     <span class="countdown-timer" data-expiry="@req.ExpiryDate.ToString("o")">7 Days</span>
                                 </div>
@@ -469,6 +469,34 @@
         var submitBtn = this.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Requesting...';
+    });
+
+    document.addEventListener('RequestStatusUpdateEvent', function(e) {
+        var d = e.detail;
+        var tableBadge = document.getElementById('table-status-' + d.requestId);
+        var sideBadge = document.getElementById('side-status-' + d.requestId);
+        var sideBox = document.getElementById('side-req-box-' + d.requestId);
+        var countdown = document.getElementById('side-countdown-' + d.requestId);
+
+        var newClass = d.status === 'Approved' ? 'badge-approved' : d.status === 'Rejected' ? 'badge-rejected' : 'badge-pending';
+        
+        if (tableBadge) {
+            tableBadge.className = 'status-badge ' + newClass;
+            tableBadge.innerText = d.status;
+        }
+        if (sideBadge) {
+            sideBadge.className = 'status-badge ' + newClass;
+            sideBadge.innerText = d.status;
+        }
+        if (countdown && d.status !== 'Pending') {
+            countdown.remove();
+        }
+        if (d.status === 'Approved') {
+            // Show a big success message or reload fully so they can go to dashboard
+            Swal.fire('Congratulations!', 'Your request was approved. Refreshing dashboard...', 'success').then(() => {
+                window.location.reload();
+            });
+        }
     });
 </script>
 }

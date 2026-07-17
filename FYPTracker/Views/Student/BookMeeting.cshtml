@@ -229,7 +229,7 @@
                             }
                         } catch {}
 
-                        <tr>
+                        <tr id="meetingRow_@m.Id">
                             <td class="ps-3 fw-bold text-muted">@(number++)</td>
                             <td>@m.MeetingDate.ToString("dd/MM/yyyy")</td>
                             <td>@m.MeetingDay</td>
@@ -849,6 +849,82 @@
                     meetingCalendar.render();
                 }
             });
+        }
+    });
+
+    document.addEventListener('MeetingUpdateEvent', function(e) {
+        const payload = e.detail;
+        const row = document.getElementById('meetingRow_' + payload.meetingId);
+        if (!row) return;
+
+        if (payload.type === 'MeetingStatusUpdate') {
+            // Update Status Badge
+            const statusCell = row.cells[5]; // Status is 6th column
+            let badgeCls = 'badge-pending';
+            if (payload.status === 'Approved') badgeCls = 'badge-approved';
+            else if (payload.status === 'Rejected') badgeCls = 'badge-rejected';
+            else if (payload.status === 'Postponed') badgeCls = 'badge-postponed';
+            statusCell.innerHTML = `<span class="status-badge ${badgeCls}">${payload.status}</span>`;
+            
+            // Update action buttons (7th column)
+            const actionCell = row.cells[6];
+            let actionsHtml = '';
+            if (payload.status === 'Approved') {
+                actionsHtml = `
+                    <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" 
+                            data-id="${payload.meetingId}"
+                            data-pdf=""
+                            onclick="openStudentLogModal(this)">
+                        <i class="fas fa-edit"></i> Upload Logbook
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary border-0 fw-semibold" 
+                            data-status="Approved" 
+                            data-note="${payload.message.includes('Note:') ? payload.message.split('Note: ')[1] : 'None'}"
+                            data-date="${payload.meetingDateFormatted || payload.meetingDate}"
+                            data-proposed-date=""
+                            data-proposed-iso=""
+                            onclick="viewMeetingDetails(this)">
+                        Details
+                    </button>
+                `;
+            } else if (payload.status === 'Postponed') {
+                actionsHtml = `
+                    <form action="/Student/AcceptPostponedMeeting" method="post" class="d-inline" id="acceptForm_${payload.meetingId}">
+                        <input name="__RequestVerificationToken" type="hidden" value="${document.querySelector('input[name="__RequestVerificationToken"]')?.value || ''}" />
+                        <input type="hidden" name="meetingId" value="${payload.meetingId}" />
+                        <button type="submit" class="btn btn-sm btn-outline-success border-0 fw-semibold me-1">Accept</button>
+                    </form>
+                    <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" onclick="openRescheduleModal(${payload.meetingId}, '${payload.meetingDate}')">
+                        Reschedule
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary border-0 fw-semibold" 
+                            data-status="Postponed" 
+                            data-note="${payload.message.includes('Note:') ? payload.message.split('Note: ')[1] : 'None'}"
+                            data-date="${payload.meetingDateFormatted || payload.meetingDate}"
+                            onclick="viewMeetingDetails(this)">
+                        Details
+                    </button>
+                `;
+            } else {
+                actionsHtml = `
+                    <button type="button" class="btn btn-sm btn-outline-secondary border-0 fw-semibold" 
+                            data-status="${payload.status}" 
+                            data-note="${payload.message.includes('Note:') ? payload.message.split('Note: ')[1] : 'None'}"
+                            data-date="${payload.meetingDateFormatted || payload.meetingDate}"
+                            onclick="viewMeetingDetails(this)">
+                        Details
+                    </button>
+                `;
+            }
+            actionCell.innerHTML = actionsHtml;
+            
+        } else if (payload.type === 'MeetingLogSigned') {
+            const actionCell = row.cells[6];
+            actionCell.innerHTML = `
+                <button type="button" class="btn btn-sm btn-outline-success border-0 fw-semibold me-1" onclick="Swal.fire('Signed', 'Your supervisor has signed this logbook. Refresh page to view PDF.', 'success')">
+                    <i class="fas fa-file-contract"></i> Log Signed
+                </button>
+            `;
         }
     });
 </script>

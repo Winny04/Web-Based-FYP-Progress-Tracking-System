@@ -351,7 +351,18 @@ namespace FYPTracker.Controllers
                 }
 
                 // --- NEW: SignalR Real-Time Notification to Supervisor ---
-                await _hubContext.Clients.Group($"User_{supervisorId}").SendAsync("ReceiveNewSupervisorRequest", user.FullName, projectTopic);
+                var reqData = new {
+                    Id = request.Id,
+                    StudentName = user.FullName,
+                    Matric = user.EmployeeId,
+                    Program = user.Programme,
+                    Phone = user.Phone,
+                    Session = user.AcademicSession,
+                    Topic = projectTopic,
+                    Message = request.RequestMessage ?? "",
+                    Date = request.RequestedDate.ToString("dd MMM yyyy")
+                };
+                await _hubContext.Clients.Group($"User_{supervisorId}").SendAsync("ReceiveNewSupervisorRequest", reqData);
             }
 
             TempData["Success"] = "Your supervisor request has been submitted successfully! Please wait for their approval.";
@@ -524,7 +535,16 @@ namespace FYPTracker.Controllers
                     await AddNotificationAsync(milestone.Project.SupervisorId.Value, "Submission", "Form Submitted", $"Student {user.FullName} submitted {formType} for {milestone.Title}", milestoneId);
                     
                     // --- SignalR Real-Time Notification ---
-                    await _hubContext.Clients.Group($"User_{milestone.Project.SupervisorId.Value}").SendAsync("ReceiveMilestoneUpdate", "New Milestone Submission", $"Student {user.FullName} submitted {formType} for {milestone.Title}.");
+                    var submissionPayload = new {
+                        Type = "NewMilestoneSubmission",
+                        MilestoneId = milestoneId,
+                        StudentName = user.FullName,
+                        Session = user.AcademicSession,
+                        FormType = formType,
+                        Title = "New Milestone Submission",
+                        Message = $"Student {user.FullName} submitted {formType} for {milestone.Title}."
+                    };
+                    await _hubContext.Clients.Group($"User_{milestone.Project.SupervisorId.Value}").SendAsync("ReceiveMilestoneUpdate", submissionPayload);
                 }
             }
 
@@ -797,7 +817,22 @@ namespace FYPTracker.Controllers
             }
             
             // --- SignalR Real-Time Notification ---
-            await _hubContext.Clients.Group($"User_{supervisorId}").SendAsync("ReceiveMeetingUpdate", "New Meeting Request", $"Student {user.FullName} requested a meeting on {parsedDate:dd MMM yyyy} at {meetingTime}.");
+            var meetingPayload = new {
+                Type = "NewMeetingRequest",
+                MeetingId = booking.Id,
+                StudentId = user.Id,
+                StudentName = user.FullName,
+                StudentMatric = user.EmployeeId,
+                MeetingDate = booking.MeetingDate.ToString("yyyy-MM-dd"),
+                MeetingDateFormatted = booking.MeetingDate.ToString("dd MMM yyyy"),
+                MeetingTime = booking.MeetingTime,
+                Reason = booking.Reason,
+                Session = user.AcademicSession,
+                Status = "Pending",
+                Title = "New Meeting Request",
+                Message = $"Student {user.FullName} requested a meeting on {parsedDate:dd MMM yyyy} at {meetingTime}."
+            };
+            await _hubContext.Clients.Group($"User_{supervisorId}").SendAsync("ReceiveMeetingUpdate", meetingPayload);
 
             if (!string.IsNullOrEmpty(user.Email))
             {
@@ -848,6 +883,22 @@ namespace FYPTracker.Controllers
             await LogActivityAsync(user.Id, "General", "Meeting Cancelled",
                 $"Meeting on {meeting.MeetingDate:dd MMM yyyy} was cancelled.");
 
+            if (meeting.SupervisorId > 0)
+            {
+                await AddNotificationAsync(meeting.SupervisorId, "Meeting", "Meeting Cancelled",
+                    $"Student {user.FullName} cancelled their meeting request on {meeting.MeetingDate:dd MMM}.");
+
+                var cancelPayload = new {
+                    Type = "MeetingCancelled",
+                    MeetingId = meeting.Id,
+                    Session = user.AcademicSession,
+                    StudentName = user.FullName,
+                    Title = "Meeting Cancelled",
+                    Message = $"Student {user.FullName} cancelled their meeting request on {meeting.MeetingDate:dd MMM}."
+                };
+                await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", cancelPayload);
+            }
+
             TempData["Success"] = "Meeting request cancelled.";
             return RedirectToAction(nameof(BookMeeting));
         }
@@ -875,6 +926,22 @@ namespace FYPTracker.Controllers
                 await LogActivityAsync(user.Id, "MeetingUpdate", "Meeting Date Accepted", 
                     $"You accepted the suggested date for the meeting on {meeting.MeetingDate:dd MMM}.");
                 
+                if (meeting.SupervisorId > 0)
+                {
+                    await AddNotificationAsync(meeting.SupervisorId, "Meeting", "Meeting Date Accepted",
+                        $"Student {user.FullName} accepted your proposed new date for the meeting on {meeting.MeetingDate:dd MMM}.");
+
+                    var acceptPayload = new {
+                        Type = "MeetingAccepted",
+                        MeetingId = meeting.Id,
+                        Session = user.AcademicSession,
+                        StudentName = user.FullName,
+                        Title = "Meeting Accepted",
+                        Message = $"Student {user.FullName} accepted your proposed date."
+                    };
+                    await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", acceptPayload);
+                }
+
                 TempData["Success"] = "New meeting date accepted and confirmed!";
             }
 
@@ -984,7 +1051,21 @@ namespace FYPTracker.Controllers
                 }
                 
                 // --- SignalR Real-Time Notification ---
-                await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", "Meeting Rescheduled", $"Student {user.FullName} rescheduled a meeting to {parsedDate:dd MMM yyyy} at {meetingTime}.");
+                var reschedulePayload = new {
+                    Type = "MeetingRescheduled",
+                    MeetingId = targetBooking.Id,
+                    StudentId = user.Id,
+                    StudentName = user.FullName,
+                    StudentMatric = user.EmployeeId,
+                    MeetingDate = targetBooking.MeetingDate.ToString("yyyy-MM-dd"),
+                    MeetingDateFormatted = targetBooking.MeetingDate.ToString("dd MMM yyyy"),
+                    MeetingTime = targetBooking.MeetingTime,
+                    Session = user.AcademicSession,
+                    Status = "Pending",
+                    Title = "Meeting Rescheduled",
+                    Message = $"Student {user.FullName} rescheduled a meeting to {parsedDate:dd MMM yyyy} at {meetingTime}."
+                };
+                await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", reschedulePayload);
 
                 if (!string.IsNullOrEmpty(user.Email))
                 {
@@ -1095,7 +1176,14 @@ namespace FYPTracker.Controllers
             await LogActivityAsync(user.Id, "MeetingLog", "Progress Logbook Drafted", $"You submitted a progress logbook draft for the meeting on {meeting.MeetingDate:dd MMM}.");
             
             // --- SignalR Real-Time Notification ---
-            await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", "Meeting Log Submitted", $"Student {user.FullName} submitted a progress logbook for review.");
+            var logbookPayload = new {
+                Type = "MeetingLogSubmitted",
+                MeetingId = meeting.Id,
+                StudentName = user.FullName,
+                Title = "Meeting Log Submitted",
+                Message = $"Student {user.FullName} submitted a progress logbook for review."
+            };
+            await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", logbookPayload);
             
             TempData["Success"] = "Progress logbook successfully submitted to supervisor for review!";
             return RedirectToAction(nameof(BookMeeting));

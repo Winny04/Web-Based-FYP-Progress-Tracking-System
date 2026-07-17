@@ -190,7 +190,7 @@
                         {
                             var feedbackState = (m.Status == "Approved" && m.MeetingLog != null && m.MeetingLog.LogStatus == "Draft") ? "NeedFeedback" : (m.MeetingLog != null && m.MeetingLog.LogStatus == "Signed" ? "Done" : "");
 
-                            <tr class="meeting-item" data-student-id="@student?.Id" data-student-name="@student?.FullName" data-status="@m.Status" data-feedback="@feedbackState">
+                            <tr class="meeting-item" id="meetingRow_@m.Id" data-student-id="@student?.Id" data-student-name="@student?.FullName" data-status="@m.Status" data-feedback="@feedbackState">
                                 <td class="ps-4">
                                     <div class="fw-bold">@m.MeetingDate.ToString("dd MMM yyyy")</div>
                                     <div class="text-muted small">@m.MeetingTime</div>
@@ -709,6 +709,186 @@
     function validateRespondModal(id) {
         return validateRespondModalRealtime(id);
     }
+
+    document.addEventListener('MeetingUpdateEvent', function(e) {
+        const p = e.detail;
+        
+        if (p.type === 'MeetingCancelled') {
+            let row = document.getElementById('meetingRow_' + p.meetingId);
+            if (row) {
+                row.remove();
+                // We let _Layout show the Toast normally by NOT setting p._handled = true
+            }
+            return;
+        }
+
+        if (p.type === 'MeetingAccepted') {
+            let row = document.getElementById('meetingRow_' + p.meetingId);
+            if (row) {
+                const statusBadge = row.querySelector('.status-badge');
+                if (statusBadge) {
+                    statusBadge.className = 'status-badge badge-approved';
+                    statusBadge.textContent = 'Approved';
+                }
+            }
+            return;
+        }
+
+        if (p.type === 'NewMeetingRequest' || p.type === 'MeetingRescheduled') {
+            let currentSession = document.querySelector('select[name="sessionFilter"]')?.value || '';
+            
+            if (!p.session) {
+                p._handled = true;
+                Swal.fire({
+                    title: 'System Error',
+                    text: 'The backend is still running old code! It did not send the student Academic Session. Please completely stop the app and rebuild it without errors.',
+                    icon: 'error'
+                });
+                return;
+            }
+
+            if (currentSession && p.session && currentSession !== p.session) {
+                p._handled = true; // Prevent default Toast from _Layout
+                // Ignore injecting row, but show a popup to navigate to the correct session!
+                Swal.fire({
+                    title: 'New Request (' + p.session + ')',
+                    text: `Student ${p.studentName} booked a meeting in another session. Switch to ${p.session} to view?`,
+                    icon: 'info',
+                    showCancelButton: true,
+                    confirmButtonText: 'Switch Session',
+                    cancelButtonText: 'Stay Here'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = '/Supervisor/ManageMeetings?sessionFilter=' + encodeURIComponent(p.session);
+                    }
+                });
+                return;
+            }
+
+            let tbody = document.querySelector('table tbody');
+            if (!tbody) return;
+
+            // Optional: check if row already exists (reschedule), remove it
+            let existingRow = document.getElementById('meetingRow_' + p.meetingId);
+            if (existingRow) existingRow.remove();
+
+            let token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            let rowHtml = `
+                <tr class="meeting-item bg-light-info" id="meetingRow_${p.meetingId}">
+                    <td class="ps-4">
+                        <div class="fw-bold text-dark"><i class="fas fa-exclamation-circle text-info me-1"></i>${p.meetingDateFormatted || p.meetingDate}</div>
+                        <div class="text-muted small">${p.meetingTime}</div>
+                    </td>
+                    <td><span class="status-badge badge-pending">Pending</span></td>
+                    <td><span class="text-muted small">-</span></td>
+                    <td class="text-end pe-4">
+                        <button type="button" class="btn btn-sm btn-light-primary rounded-3" 
+                                onclick="showMeetingDetails(${p.meetingId}, '${p.meetingDate}', '${p.meetingTime}', '${p.studentName}', 'View Agenda in DB', 'None', 'Pending', '', '')">
+                            <i class="fas fa-info-circle"></i> Details
+                        </button>
+                        <button type="button" class="btn btn-sm btn-primary rounded-3 ms-1" data-bs-toggle="modal" data-bs-target="#respondModal_${p.meetingId}">
+                            Respond
+                        </button>
+                        
+                        <!-- Quick Respond Modal (Injected) -->
+                        <div class="modal fade" id="respondModal_${p.meetingId}" tabindex="-1">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content border-0 shadow-lg">
+                                    <form action="/Supervisor/RespondMeeting" method="post" id="respondForm_${p.meetingId}" onsubmit="return validateRespondModal(${p.meetingId})">
+                                        <input name="__RequestVerificationToken" type="hidden" value="${token}" />
+                                        <div class="modal-header">
+                                            <h5 class="fw-bold">Respond to ${p.studentName}</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body text-start">
+                                            <input type="hidden" name="meetingId" value="${p.meetingId}" />
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold">Decision <span class="text-danger">*</span></label>
+                                                <select name="status" class="form-select form-select-solid" id="respondSelect_${p.meetingId}" onchange="toggleRespondFields(${p.meetingId})" required>
+                                                    <option value="">Select an action...</option>
+                                                    <option value="Approved">Approve Meeting</option>
+                                                    <option value="Postponed">Postpone & Suggest New Date</option>
+                                                    <option value="Rejected">Reject Meeting</option>
+                                                </select>
+                                            </div>
+                                            <div id="locationGroup_${p.meetingId}" class="mb-3 d-none">
+                                                <label class="form-label fw-bold">Location / Link <span class="text-danger">*</span></label>
+                                                <input type="text" name="location" id="location_${p.meetingId}" class="form-control" placeholder="e.g. Room 302 or Zoom Link" />
+                                                <div class="text-danger small mt-1 d-none" id="locationError_${p.meetingId}">Required for Approved meetings.</div>
+                                            </div>
+                                            <div id="postponeGroup_${p.meetingId}" class="mb-3 d-none row g-3">
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold">New Date <span class="text-danger">*</span></label>
+                                                    <input type="date" name="proposedDate" id="proposedDate_${p.meetingId}" class="form-control" min="${new Date().toISOString().split('T')[0]}" />
+                                                    <div class="text-danger small mt-1 d-none" id="proposedDateError_${p.meetingId}">Required.</div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label fw-bold">New Time</label>
+                                                    <input type="time" name="newMeetingTime" class="form-control" />
+                                                </div>
+                                            </div>
+                                            <div id="noteGroup_${p.meetingId}" class="mb-3 d-none">
+                                                <label class="form-label fw-bold">Note <span class="text-danger" id="noteRequired_${p.meetingId}">*</span></label>
+                                                <textarea name="note" id="note_${p.meetingId}" class="form-control" rows="3"></textarea>
+                                                <div class="text-danger small mt-1 d-none" id="noteError_${p.meetingId}">Please provide a reason (min 10 chars).</div>
+                                            </div>
+                                            <div class="text-end mt-4">
+                                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-primary fw-bold px-4">Submit</button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            `;
+
+            let studentHeader = document.querySelector('.student-group[data-student-id="' + p.studentId + '"]');
+            if (studentHeader) {
+                // Insert directly under this student's header
+                studentHeader.insertAdjacentHTML('afterend', rowHtml);
+            } else {
+                // Generate a new student header since they have no existing meetings
+                let headerHtml = `
+                    <tr class="bg-light-primary student-group" data-student-id="${p.studentId}">
+                        <td colspan="4" class="ps-4 py-3 border-bottom border-primary">
+                            <div class="d-flex align-items-center">
+                                <div class="symbol symbol-40px me-3">
+                                    <span class="symbol-label bg-primary text-inverse-primary fw-bolder">${p.studentName ? p.studentName.charAt(0).toUpperCase() : '?'}</span>
+                                </div>
+                                <div class="d-flex flex-column">
+                                    <span class="text-dark fw-bolder fs-5">${p.studentName}</span>
+                                    <span class="text-muted fw-bold fs-7">${p.studentMatric || ''}</span>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                // Insert both at the top of the table
+                tbody.insertAdjacentHTML('afterbegin', rowHtml);
+                tbody.insertAdjacentHTML('afterbegin', headerHtml);
+            }
+            
+        } else if (p.type === 'MeetingLogSubmitted') {
+            let existingRow = document.getElementById('meetingRow_' + p.meetingId);
+            if (existingRow) {
+                const feedbackCell = existingRow.cells[2];
+                feedbackCell.innerHTML = `<span class="badge badge-light-warning">Needs Feedback</span>`;
+                // To safely update buttons without rewriting everything, just reload for this specific logbook case
+                // Or just show toast and let them click 'View Details' which will fetch latest data
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 4000,
+                    icon: 'info',
+                    title: `Logbook submitted by ${p.studentName}. Refresh to sign.`
+                });
+            }
+        }
+    });
 </script>
 }
 
