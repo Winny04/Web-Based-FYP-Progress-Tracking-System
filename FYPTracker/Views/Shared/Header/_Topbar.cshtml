@@ -5,30 +5,30 @@
     @using System.Net;
     @using Microsoft.AspNetCore.Mvc.Rendering;
     @using Microsoft.Data.SqlClient;
+    @{
+        var dbContext = Context.RequestServices.GetService(typeof(FYPTrackerContext)) as FYPTrackerContext;
+        var currentUserName = Context.User.Identity?.Name;
+        var currentUserObj = currentUserName != null ? dbContext?.ApplicationUsers.FirstOrDefault(u => u.UserName == currentUserName) : null;
+        var avatarImg = !string.IsNullOrEmpty(currentUserObj?.Image) ? currentUserObj.Image : "/assets/media/avatars/blank.png";
+        var userType = currentUserObj?.UserType ?? "";
+        
+        string notifUrl = "/User/Notification";
+        if (userType == "Student") {
+            notifUrl = "/Student/Notifications";
+        } else if (userType == "Supervisor") {
+            notifUrl = "/Supervisor/Notifications";
+        }
+        
+        int unreadCount = 0;
+        if (currentUserObj != null && dbContext != null) {
+            unreadCount = dbContext.FYPNotifications.Count(n => n.RecipientId == currentUserObj.Id && !n.IsRead);
+        }
+    }
     <div class="d-flex align-items-center me-n3 ms-1 ms-lg-3">
     </div>
     <div class="d-flex align-items-center me-n3 ms-1 ms-lg-3" id="kt_header_user_menu_toggle">
         <!--begin::Menu wrapper-->
         <div class="btn btn-icon btn-active-light-primary btn btn-icon btn-active-light-primary btn-custom w-30px h-30px w-md-40px h-md-40px" data-kt-menu-trigger="click" data-kt-menu-attach="parent" data-kt-menu-placement="bottom-end">
-            @{
-                var dbContext = Context.RequestServices.GetService(typeof(FYPTrackerContext)) as FYPTrackerContext;
-                var currentUserName = Context.User.Identity?.Name;
-                var currentUserObj = currentUserName != null ? dbContext?.ApplicationUsers.FirstOrDefault(u => u.UserName == currentUserName) : null;
-                var avatarImg = !string.IsNullOrEmpty(currentUserObj?.Image) ? currentUserObj.Image : "/assets/media/avatars/blank.png";
-                var userType = currentUserObj?.UserType ?? "";
-                
-                string notifUrl = "/User/Notification";
-                if (userType == "Student") {
-                    notifUrl = "/Student/Notifications";
-                } else if (userType == "Supervisor") {
-                    notifUrl = "/Supervisor/Notifications";
-                }
-                
-                int unreadCount = 0;
-                if (currentUserObj != null && dbContext != null) {
-                    unreadCount = dbContext.FYPNotifications.Count(n => n.RecipientId == currentUserObj.Id && !n.IsRead);
-                }
-            }
             <img class="h-30px w-30px rounded-circle" style="object-fit: cover;" src="@avatarImg" alt="Profile Image" onerror="this.onerror=null; this.src='/assets/media/avatars/blank.png';" />
         </div>
         <!--begin::User account menu-->
@@ -39,7 +39,7 @@
                     <!--begin::Username-->
                     <div class="d-flex flex-column">
                         <div class="fw-bolder d-flex align-items-center fs-5">
-                            @(Context.User.Claims.FirstOrDefault(c => c.Type == "FullName")?.Value ?? Context.User.Identity?.Name ?? "")
+                            @(!string.IsNullOrEmpty(currentUserObj?.Title) && currentUserObj.Title != "Not Assigned" ? currentUserObj.Title + " " : "")@(currentUserObj?.FullName ?? Context.User.Identity?.Name ?? "")
                         </div>
                     </div>
                     <!--end::Username-->

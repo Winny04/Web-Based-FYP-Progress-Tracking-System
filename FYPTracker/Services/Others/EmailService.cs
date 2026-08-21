@@ -66,9 +66,9 @@ namespace FYPTracker.Services.Others
                     smtp.Dispose();
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                throw;
+                Console.WriteLine($"Email sending failed: {ex.Message}");
             }
         }
 
@@ -133,9 +133,9 @@ namespace FYPTracker.Services.Others
                    
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                throw;
+                Console.WriteLine($"Email sending failed: {ex.Message}");
             }
         }
     }

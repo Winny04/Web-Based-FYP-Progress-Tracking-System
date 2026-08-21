@@ -347,7 +347,15 @@ namespace FYPTracker.Controllers
                 {
                     string subject = "New FYP Supervision Request";
                     string body = $"<p>Dear {supervisor.FullName},</p><p>You have received a new FYP supervision request from <b>{user.FullName}</b>.</p><p><b>Topic:</b> {projectTopic}</p><p>Please log in to the FYP Tracker portal to approve or reject this request.</p>";
-                    _emailService.Send(supervisor.Email, subject, body);
+                    try 
+                    {
+                        _emailService.Send(supervisor.Email, subject, body);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log or ignore email sending failures so the main process still succeeds.
+                        Console.WriteLine($"Failed to send email to {supervisor.Email}: {ex.Message}");
+                    }
                 }
 
                 // --- NEW: SignalR Real-Time Notification to Supervisor ---
