@@ -282,7 +282,7 @@
             { name: 'April', month: 4 },
             { name: 'Aug', month: 8 }
         ];
-        var sessionSelect = $('#createAcademicSession');
+        var sessionSelect = $('#createAcademicSession'); // populated if a create modal is added
         var editSessionSelect = $('#editAcademicSession');
         for (var y = currentYear - 1; y <= currentYear + 2; y++) {
             intakes.forEach(function(intake) {
@@ -450,12 +450,13 @@
                         },
                         {
                             render: function (data, type, row, meta) {
-                                let buttonComponent = '<a id="' + row.id + '" onclick="Edit(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm me-1" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit"><i class="bi bi-pencil-fill fs-4"></i></a>';
+                                let buttonComponent = '<a id="edit_' + row.id + '" onclick="Edit(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm me-1" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit"><i class="bi bi-pencil-fill fs-4"></i></a>';
                                 if (row.isResign) {
-                                    buttonComponent += '<a id="' + row.id + '" onclick="Activate(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-success btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Activate"><i class="bi bi-check-circle-fill fs-4 text-success"></i></a>';
+                                    buttonComponent += '<a id="activate_' + row.id + '" onclick="Activate(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-success btn-sm me-1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Activate"><i class="bi bi-check-circle-fill fs-4 text-success"></i></a>';
                                 } else {
-                                    buttonComponent += '<a id="' + row.id + '" onclick="Delete(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-danger btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Deactivate"><i class="bi bi-trash-fill fs-4 text-danger"></i></a>';
+                                    buttonComponent += '<a id="deactivate_' + row.id + '" onclick="Delete(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-danger btn-sm me-1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Deactivate"><i class="bi bi-slash-circle-fill fs-4 text-warning"></i></a>';
                                 }
+                                buttonComponent += '<a id="harddelete_' + row.id + '" onclick="HardDeleteUser(' + row.id + ', \'' + row.fullName + '\')" class="btn btn-icon btn-bg-light btn-active-color-danger btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Permanently Delete"><i class="bi bi-trash-fill fs-4 text-danger"></i></a>';
                                 return buttonComponent;
                             }
                         }
@@ -497,10 +498,10 @@
     function Delete(employeeId) {
         Swal.fire({
             title: 'Confirm Deactivation',
-            text: "Are you sure you want to deactivate this user?",
+            text: "Are you sure you want to deactivate this user? They will no longer be able to log in.",
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#f1416c',
+            confirmButtonColor: '#f59e0b',
             cancelButtonColor: '#a1a5b7',
             confirmButtonText: 'Yes, deactivate!'
         }).then((result) => {
@@ -510,11 +511,63 @@
                     url: '/Admin/Delete',
                     data: { id: employeeId },
                     success: function (data) {
-                        Swal.fire({ text: "User deactivated successfully", icon: "success", confirmButtonText: "Ok, got it!" });
+                        Swal.fire({ text: "User deactivated successfully.", icon: "success", confirmButtonText: "Ok, got it!" });
                         LoadTable();
                     },
                     error: function (data) {
                         LoadTable();
+                    }
+                });
+            }
+        });
+    }
+
+    function HardDeleteUser(employeeId, fullName) {
+        Swal.fire({
+            title: '⚠️ Permanently Delete User?',
+            html: '<p>You are about to <strong>permanently delete</strong> <strong>' + fullName + '</strong>.</p>' +
+                  '<p class="text-danger mt-2 mb-0"><strong>This will also delete all their FYP project data, milestones, files, meeting records, and cannot be undone.</strong></p>',
+            icon: 'error',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, permanently delete!',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Second confirmation
+                Swal.fire({
+                    title: 'Are you absolutely sure?',
+                    text: 'This action CANNOT be undone. Type "DELETE" to confirm.',
+                    input: 'text',
+                    inputPlaceholder: 'Type DELETE to confirm',
+                    showCancelButton: true,
+                    confirmButtonColor: '#ef4444',
+                    cancelButtonColor: '#6b7280',
+                    confirmButtonText: 'Permanently Delete',
+                    preConfirm: (val) => {
+                        if (val !== 'DELETE') {
+                            Swal.showValidationMessage('You must type DELETE to confirm.');
+                        }
+                    }
+                }).then((result2) => {
+                    if (result2.isConfirmed) {
+                        $.ajax({
+                            type: "POST",
+                            url: '/Admin/HardDelete',
+                            data: { id: employeeId },
+                            success: function (data) {
+                                if (data.status) {
+                                    Swal.fire({ title: 'Deleted!', text: data.msg, icon: 'success', confirmButtonText: 'Ok' });
+                                    LoadTable();
+                                } else {
+                                    Swal.fire({ title: 'Error', text: data.msg, icon: 'error', confirmButtonText: 'Ok' });
+                                }
+                            },
+                            error: function () {
+                                Swal.fire({ title: 'Error', text: 'An unexpected error occurred.', icon: 'error' });
+                            }
+                        });
                     }
                 });
             }

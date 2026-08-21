@@ -555,7 +555,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                             Console.WriteLine($"Failed to send email: {ex.Message}");
                         }
 
-                        return Json(new { status = true , msg = "User created successfully!"});
+                        return Json(new { status = true, msg = "User created successfully!", generatedPassword = generatedPassword, userName = model.UserName });
                     }
                     else
                     {
@@ -644,6 +644,68 @@ public ActionResult ManageUsersData()
                 return false;
             }
         }
+        [HttpPost]
+        public async Task<IActionResult> HardDelete(int id)
+        {
+            try
+            {
+                var user = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.Id == id);
+                if (user == null) return Json(new { status = false, msg = "User not found." });
+
+                // 1. ChatMessages — Restrict FK, must delete manually
+                var chatMessages = await _context.ChatMessages
+                    .Where(m => m.SenderId == id || m.ReceiverId == id).ToListAsync();
+                _context.ChatMessages.RemoveRange(chatMessages);
+
+                // 2. SupervisorRequests — Restrict FK
+                var requests = await _context.SupervisorRequests
+                    .Where(r => r.StudentId == id || r.SupervisorId == id).ToListAsync();
+                _context.SupervisorRequests.RemoveRange(requests);
+
+                // 3. MeetingBookings — Restrict FK (MeetingLogs cascade automatically)
+                var meetings = await _context.MeetingBookings
+                    .Where(b => b.StudentId == id || b.SupervisorId == id).ToListAsync();
+                _context.MeetingBookings.RemoveRange(meetings);
+
+                if (user.UserType == "Student")
+                {
+                    // Student's project: Milestones → Feedbacks/Files cascade automatically
+                    var project = await _context.FYPProjects
+                        .FirstOrDefaultAsync(p => p.StudentId == id);
+                    if (project != null)
+                        _context.FYPProjects.Remove(project);
+                }
+                else if (user.UserType == "Supervisor")
+                {
+                    // Nullify supervisor on students' projects (preserve students' data)
+                    var supervisorProjects = await _context.FYPProjects
+                        .Where(p => p.SupervisorId == id).ToListAsync();
+                    foreach (var p in supervisorProjects)
+                        p.SupervisorId = null;
+
+                    // Remove supervisor's feedbacks — Restrict FK
+                    var feedbacks = await _context.FYPFeedbacks
+                        .Where(f => f.SupervisorId == id).ToListAsync();
+                    _context.FYPFeedbacks.RemoveRange(feedbacks);
+                }
+
+                // 4. Submission files uploaded by this user — Restrict FK
+                var uploadedFiles = await _context.FYPSubmissionFiles
+                    .Where(f => f.UploadedBy == id).ToListAsync();
+                _context.FYPSubmissionFiles.RemoveRange(uploadedFiles);
+
+                // 5. Remove user (FYPNotifications + FYPActivities cascade automatically)
+                _context.ApplicationUsers.Remove(user);
+                await _context.SaveChangesAsync();
+
+                return Json(new { status = true, msg = "User permanently deleted." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { status = false, msg = "Error: " + ex.Message });
+            }
+        }
+
         public async Task<IActionResult> Settings(string sessionFilter = null)
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
@@ -1014,24 +1076,14 @@ public ActionResult ManageUsersData()
                 }
 
                 string newId;
-                if (email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) || 
+                if (bulkUserType == "Student" || 
+                    email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) || 
                     email.EndsWith("@newinti.edu.my", StringComparison.OrdinalIgnoreCase))
                 {
                     newId = email.Split('@')[0];
                 }
                 else
                 {
-                    if (bulkUserType == "Student")
-                    {
-                        var random = new Random();
-                        string randomId;
-                        do
-                        {
-                            randomId = "P" + random.Next(10000000, 99999999).ToString();
-                        } while (await _context.ApplicationUsers.AnyAsync(u => u.UserName == randomId || u.EmployeeId == randomId));
-                        newId = randomId;
-                    }
-                    else
                     {
                         newId = $"{prefix}{nextIdNum:D3}";
                         nextIdNum++;

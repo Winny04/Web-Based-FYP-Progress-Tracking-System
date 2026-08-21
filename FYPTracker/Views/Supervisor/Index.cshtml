@@ -201,7 +201,7 @@
         <div>
             <h1 class="display-6 fw-bold mb-2">Welcome Back, @(!string.IsNullOrEmpty(user?.Title) && user.Title != "Not Assigned" ? user.Title + " " : "")@(user?.FullName ?? "Supervisor")</h1>
             <div class="d-flex align-items-center gap-3 flex-wrap opacity-75" style="font-size: 0.95rem;">
-                <span><strong>Staff ID:</strong> @(user?.EmployeeId ?? "—")</span>
+                <!-- <span><strong>Staff ID:</strong> @(user?.EmployeeId ?? "—")</span> -->
                 <span class="text-white-50">|</span>
                 <span><strong>Supervising:</strong> @ViewBag.TotalProjects Active Projects</span>
             </div>
