@@ -249,11 +249,19 @@
 
                                                             <div class="mb-3">
                                                                 <label class="form-label fw-bold">Decision</label>
-                                                                <select name="status" class="form-select rounded-3 border-primary" id="decisionSelect_@m.Id" onchange="toggleProposedDate(@m.Id)">
+                                                                <select name="status" class="form-select rounded-3 border-primary" id="decisionSelect_@m.Id" onchange="toggleProposedDate(@m.Id); toggleRecurringWeeks(@m.Id)">
                                                                     <option value="Approved">Approve Meeting</option>
                                                                     <option value="Rejected">Decline Meeting</option>
                                                                     <option value="Postponed">Postpone Meeting</option>
                                                                 </select>
+                                                            </div>
+                                                            <div class="mb-3" id="recurringWeeksContainer_@m.Id">
+                                                                <label class="form-label fw-bold text-success">Auto-Generate Recurring Meetings?</label>
+                                                                <div class="input-group">
+                                                                    <span class="input-group-text bg-light border-success text-success fw-bold">Weeks</span>
+                                                                    <input type="number" name="recurringWeeks" id="recurringWeeks_@m.Id" class="form-control border-success" value="14" min="1" max="52" title="Set to 1 for just this meeting, or up to 52 to automatically book the rest of the semester." />
+                                                                </div>
+                                                                <small class="text-muted mt-1 d-block">If greater than 1, we will automatically generate weekly meetings at this same time.</small>
                                                             </div>
                                                             <div class="mb-3" id="proposedDateContainer_@m.Id" style="display: none;">
                                                                 <label class="form-label fw-bold text-primary">Proposed New Date</label>
@@ -275,7 +283,7 @@
                                                                 <div id="locationError_@m.Id" class="text-danger fw-bold small mt-1 d-none">Location is required when approving.</div>
                                                             </div>
                                                             <div class="mb-3">
-                                                                <label class="form-label fw-bold">Message to Student</label>
+                                                                <label class="form-label fw-bold">Message to Student <span class="text-danger">*</span></label>
                                                                 <textarea name="note" id="note_@m.Id" class="form-control rounded-3" rows="3" placeholder="Add instructions or feedback..." oninput="validateRespondModalRealtime(@m.Id)"></textarea>
                                                                 <div class="mt-2 d-flex flex-wrap gap-2">
                                                                     <button type="button" class="btn btn-sm btn-light border text-dark fw-semibold" onclick="document.getElementById('note_@m.Id').value = 'Approved! Please bring your updated logbook.'; validateRespondModalRealtime(@m.Id)">Bring Logbook</button>
@@ -609,6 +617,18 @@
         new bootstrap.Modal(document.getElementById('reviewLogModal')).show();
     }
 
+    function toggleRecurringWeeks(id) {
+        var select = document.getElementById('decisionSelect_' + id);
+        var recurringContainer = document.getElementById('recurringWeeksContainer_' + id);
+        if (recurringContainer) {
+            if (select.value === 'Approved') {
+                recurringContainer.style.display = 'block';
+            } else {
+                recurringContainer.style.display = 'none';
+            }
+        }
+    }
+
     function viewFinalLog(logId) {
         window.open('/Supervisor/ViewMeetingLog/' + logId, '_blank');
     }
@@ -665,9 +685,16 @@
                 locationError.classList.add('d-none');
             }
             
-            // Note is optional when Approving
-            note.classList.remove('is-invalid', 'is-valid');
-            noteError.classList.add('d-none');
+            if (note.value.trim().length < 10) {
+                note.classList.remove('is-valid');
+                note.classList.add('is-invalid');
+                noteError.classList.remove('d-none');
+                isValid = false;
+            } else {
+                note.classList.remove('is-invalid');
+                note.classList.add('is-valid');
+                noteError.classList.add('d-none');
+            }
             
         } else if (select.value === 'Rejected') {
             if (note.value.trim().length < 10) {
@@ -828,7 +855,7 @@
                                                 </div>
                                             </div>
                                             <div id="noteGroup_${p.meetingId}" class="mb-3 d-none">
-                                                <label class="form-label fw-bold">Note <span class="text-danger" id="noteRequired_${p.meetingId}">*</span></label>
+                                                <label class="form-label fw-bold">Note <span class="text-danger">*</span></label>
                                                 <textarea name="note" id="note_${p.meetingId}" class="form-control" rows="3"></textarea>
                                                 <div class="text-danger small mt-1 d-none" id="noteError_${p.meetingId}">Please provide a reason (min 10 chars).</div>
                                             </div>

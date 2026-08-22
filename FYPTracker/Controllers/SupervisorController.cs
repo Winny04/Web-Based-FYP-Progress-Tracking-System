@@ -996,10 +996,10 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> RespondMeeting(int meetingId, string status, string? note, DateTime? proposedDate, string? newMeetingTime, string? location)
+        public async Task<IActionResult> RespondMeeting(int meetingId, string status, string? note, DateTime? proposedDate, string? newMeetingTime, string? location, int recurringWeeks = 1)
         {
             var user = await GetCurrentUserAsync();
-            var meeting = await _context.MeetingBookings.FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
+            var meeting = await _context.MeetingBookings.Include(m => m.Student).FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
             
             if (meeting != null && meeting.Status == "Pending")
             {
@@ -1013,6 +1013,57 @@ namespace FYPTracker.Controllers
                 meeting.Location = location;
                 meeting.RespondedDate = DateTime.Now;
                 await _context.SaveChangesAsync();
+
+                if (status == "Approved" && recurringWeeks > 1)
+                {
+                    // Check if it's the first meeting by looking at how many approved meetings exist before we auto-generate
+                    var existingApprovedCount = await _context.MeetingBookings
+                        .CountAsync(m => m.StudentId == meeting.StudentId && m.Status == "Approved");
+
+                    if (existingApprovedCount <= 1) // Only this current one is approved
+                    {
+                        var newMeetings = new List<MeetingBooking>();
+                        for (int i = 1; i < recurringWeeks; i++)
+                        {
+                            var nextDate = meeting.MeetingDate.AddDays(7 * i);
+                            newMeetings.Add(new MeetingBooking
+                            {
+                                StudentId = meeting.StudentId,
+                                SupervisorId = meeting.SupervisorId,
+                                MeetingDate = nextDate,
+                                MeetingDay = nextDate.DayOfWeek.ToString(),
+                                MeetingTime = meeting.MeetingTime,
+                                Reason = "Auto-generated weekly recurring meeting.",
+                                Status = "Approved",
+                                Location = location,
+                                CreatedDate = DateTime.Now,
+                                RespondedDate = DateTime.Now
+                            });
+                        }
+                        _context.MeetingBookings.AddRange(newMeetings);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+
+                // Send email notification to student
+                if (meeting.Student != null && !string.IsNullOrEmpty(meeting.Student.Email))
+                {
+                    string subject = $"FYP Meeting {status}";
+                    string body = $@"
+                        <div style='font-family: Arial, sans-serif;'>
+                            <h3>FYP Meeting Update</h3>
+                            <p>Your supervisor <strong>{user?.FullName}</strong> has <strong>{status.ToLower()}</strong> your meeting request.</p>
+                            <ul>
+                                <li><strong>Date:</strong> {meeting.MeetingDate:dd MMM yyyy}</li>
+                                <li><strong>Time:</strong> {meeting.MeetingTime}</li>
+                                {(status == "Approved" && !string.IsNullOrEmpty(location) ? $"<li><strong>Location:</strong> {location}</li>" : "")}
+                                {(status == "Approved" && recurringWeeks > 1 ? $"<li><strong>Note:</strong> Auto-generated for the next {recurringWeeks - 1} weeks.</li>" : "")}
+                            </ul>
+                            {(string.IsNullOrEmpty(note) ? "" : $"<p><strong>Message from Supervisor:</strong> {note}</p>")}
+                            <p>Please log in to the FYP Tracker system for more details.</p>
+                        </div>";
+                    _emailService.Send(meeting.Student.Email, subject, body);
+                }
 
                 await AddNotificationAsync(meeting.StudentId, "MeetingUpdate", $"Meeting {status}", note);
                 await LogActivityAsync(meeting.StudentId, "MeetingBooked", $"Meeting {status}");
@@ -1029,7 +1080,7 @@ namespace FYPTracker.Controllers
                 };
                 await _hubContext.Clients.Group($"User_{meeting.StudentId}").SendAsync("ReceiveMeetingUpdate", responsePayload);
 
-                TempData["Success"] = $"Meeting {status.ToLower()}.";
+                TempData["Success"] = $"Meeting {status.ToLower()}." + (recurringWeeks > 1 && status == "Approved" ? $" Auto-generated for {recurringWeeks} weeks." : "");
             }
             return RedirectToAction(nameof(ManageMeetings));
         }

@@ -1049,11 +1049,20 @@ public ActionResult ManageUsersData()
                 }
 
                 string newId;
-                if (bulkUserType == "Student" || 
-                    email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) || 
+                if (email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) || 
                     email.EndsWith("@newinti.edu.my", StringComparison.OrdinalIgnoreCase))
                 {
                     newId = email.Split('@')[0];
+                }
+                else if (bulkUserType == "Student")
+                {
+                    var random = new Random();
+                    string randomId;
+                    do
+                    {
+                        randomId = "P" + random.Next(10000000, 99999999).ToString();
+                    } while (await _context.ApplicationUsers.AnyAsync(u => u.UserName == randomId || u.EmployeeId == randomId));
+                    newId = randomId;
                 }
                 else
                 {

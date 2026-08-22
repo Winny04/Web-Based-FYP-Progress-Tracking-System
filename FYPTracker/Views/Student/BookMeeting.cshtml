@@ -196,7 +196,7 @@
             }
         </div>
         <div class="table-responsive">
-            <table class="table align-middle table-hover">
+            <table id="meetingTable" class="table align-middle table-hover">
                 <thead>
                     <tr>
                         <th class="ps-3" style="width: 50px;">No</th>
@@ -254,12 +254,22 @@
                                     {
                                         if (m.MeetingLog == null || m.MeetingLog.LogStatus == "Draft")
                                         {
-                                            <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" 
-                                                    data-id="@m.Id"
-                                                    data-pdf="@(m.MeetingLog?.PdfLogbookPath)"
-                                                    onclick="openStudentLogModal(this)">
-                                                <i class="fas fa-edit"></i> @(m.MeetingLog == null ? "Upload Logbook" : "View/Re-upload Logbook")
-                                            </button>
+                                            var daysUntilMeeting = (m.MeetingDate.Date - DateTime.Today).TotalDays;
+                                            if (daysUntilMeeting <= 7)
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" 
+                                                        data-id="@m.Id"
+                                                        data-pdf="@(m.MeetingLog?.PdfLogbookPath)"
+                                                        onclick="openStudentLogModal(this)">
+                                                    <i class="fas fa-edit"></i> @(m.MeetingLog == null ? "Upload Logbook" : "View/Re-upload Logbook")
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="btn btn-sm btn-outline-secondary border-0 fw-semibold me-1" disabled title="Available 7 days before meeting">
+                                                    <i class="fas fa-clock"></i> Available closer to date
+                                                </button>
+                                            }
                                         }
                                         else if (m.MeetingLog.LogStatus == "Signed")
                                         {
@@ -866,6 +876,26 @@
                 </button>
             `;
         }
+    });
+
+    $(document).ready(function () {
+        $('#meetingTable').DataTable({
+            "pageLength": 10,
+            "ordering": true,
+            "searching": true,
+            "info": true,
+            "lengthChange": true,
+            "language": {
+                "search": "Search Meetings:",
+                "lengthMenu": "Show _MENU_ meetings per page",
+                "info": "Showing _START_ to _END_ of _TOTAL_ meetings",
+                "infoEmpty": "No meetings found",
+                "infoFiltered": "(filtered from _MAX_ total meetings)"
+            },
+            "columnDefs": [
+                { "orderable": false, "targets": [6] } // Disable sorting on Action column
+            ]
+        });
     });
 </script>
 }

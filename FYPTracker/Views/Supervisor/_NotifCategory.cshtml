@@ -89,7 +89,7 @@
                                             @Html.AntiForgeryToken()
                                             <input type="hidden" name="meetingId" value="@n.RelatedRecordId" />
                                             <input type="hidden" name="notificationId" value="@n.Id" />
-                                            <input type="text" name="note" class="form-control form-control-sm" placeholder="Note to student (optional)..." style="max-width:220px;border-radius:8px;" />
+                                            <input type="text" name="note" class="form-control form-control-sm" placeholder="Note to student (required)..." style="max-width:220px;border-radius:8px;" required minlength="10" />
                                             <button type="submit" name="status" value="Approved" class="btn btn-sm btn-success fw-bold px-3" style="border-radius:8px;">Approve</button>
                                             <button type="submit" name="status" value="Rejected" class="btn btn-sm btn-danger fw-bold px-3" style="border-radius:8px;">Reject</button>
                                         </form>

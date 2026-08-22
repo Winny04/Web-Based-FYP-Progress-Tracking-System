@@ -51,11 +51,13 @@ namespace FYPTracker.Services.BackgroundTasks
 
             var now = DateTime.Now;
 
-            // Fetch Approved meetings that haven't sent a reminder yet and are today
+            var tomorrow = now.AddDays(1).Date;
+
+            // Fetch Approved meetings that haven't sent a reminder yet and are tomorrow
             var upcomingMeetings = await dbContext.MeetingBookings
                 .Include(m => m.Student)
                 .Include(m => m.Supervisor)
-                .Where(m => m.Status == "Approved" && !m.ReminderSent && m.MeetingDate.Date == now.Date)
+                .Where(m => m.Status == "Approved" && !m.ReminderSent && m.MeetingDate.Date == tomorrow)
                 .ToListAsync();
 
             foreach (var meeting in upcomingMeetings)
@@ -66,15 +68,15 @@ namespace FYPTracker.Services.BackgroundTasks
                 {
                     var timeDifference = meetingStart - now;
 
-                    // If the meeting starts in 15 minutes or less (but hasn't started yet)
-                    if (timeDifference.TotalMinutes <= 15 && timeDifference.TotalMinutes > 0)
+                    // If the meeting starts in 24 hours or less (but hasn't started yet)
+                    if (timeDifference.TotalHours <= 24 && timeDifference.TotalHours > 0)
                     {
                         // 1. Send Email to Student
                         if (!string.IsNullOrEmpty(meeting.Student?.Email))
                         {
-                            string subject = "FYP Meeting Reminder: Starting in 15 Minutes";
+                            string subject = "FYP Meeting Reminder: Tomorrow";
                             string html = $"<p>Dear {meeting.Student.FullName},</p>" +
-                                          $"<p>This is a reminder that your FYP meeting with your supervisor, {meeting.Supervisor?.FullName}, will start in 15 minutes.</p>" +
+                                          $"<p>This is a reminder that your FYP meeting with your supervisor, {meeting.Supervisor?.FullName}, is scheduled for tomorrow.</p>" +
                                           $"<p><strong>Time:</strong> {meetingStart:dd MMM yyyy, hh:mm tt}<br/>" +
                                           $"<strong>Location:</strong> {meeting.Location ?? "TBA"}</p>" +
                                           $"<p>Please be prepared.</p>";
@@ -84,9 +86,9 @@ namespace FYPTracker.Services.BackgroundTasks
                         // 2. Send Email to Supervisor
                         if (!string.IsNullOrEmpty(meeting.Supervisor?.Email))
                         {
-                            string subject = "FYP Meeting Reminder: Starting in 15 Minutes";
+                            string subject = "FYP Meeting Reminder: Tomorrow";
                             string html = $"<p>Dear {meeting.Supervisor.FullName},</p>" +
-                                          $"<p>This is a reminder that your FYP meeting with your student, {meeting.Student?.FullName}, will start in 15 minutes.</p>" +
+                                          $"<p>This is a reminder that your FYP meeting with your student, {meeting.Student?.FullName}, is scheduled for tomorrow.</p>" +
                                           $"<p><strong>Time:</strong> {meetingStart:dd MMM yyyy, hh:mm tt}<br/>" +
                                           $"<strong>Location:</strong> {meeting.Location ?? "TBA"}</p>";
                             await emailService.Send(new System.Collections.Generic.List<string> { meeting.Supervisor.Email }, subject, html);
@@ -99,7 +101,7 @@ namespace FYPTracker.Services.BackgroundTasks
                             {
                                 RecipientId = meeting.Student.Id,
                                 Title = "Meeting Reminder",
-                                Message = $"Your meeting with {meeting.Supervisor?.FullName} starts in 15 mins at {meeting.Location ?? "TBA"}.",
+                                Message = $"Your meeting with {meeting.Supervisor?.FullName} is tomorrow at {meeting.Location ?? "TBA"}.",
                                 CreatedDate = now,
                                 IsRead = false,
                                 Type = "Info"
@@ -112,7 +114,7 @@ namespace FYPTracker.Services.BackgroundTasks
                             {
                                 RecipientId = meeting.Supervisor.Id,
                                 Title = "Meeting Reminder",
-                                Message = $"Your meeting with {meeting.Student?.FullName} starts in 15 mins at {meeting.Location ?? "TBA"}.",
+                                Message = $"Your meeting with {meeting.Student?.FullName} is tomorrow at {meeting.Location ?? "TBA"}.",
                                 CreatedDate = now,
                                 IsRead = false,
                                 Type = "Info"

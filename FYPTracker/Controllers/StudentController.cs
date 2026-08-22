@@ -1768,23 +1768,19 @@ namespace FYPTracker.Controllers
             // Title Page
             addBlankLine("");
             addBlankLine("");
-            addPara(project?.Title?.ToUpper() ?? "FINAL YEAR PROJECT TITLE", true, 18, "000000", true);
-            for (int i = 0; i < 5; i++) addBlankLine("");
-            addPara("by", false, 14, "000000", true);
-            addBlankLine("");
-            addPara(user.FullName?.ToUpper() ?? "STUDENT NAME", true, 14, "000000", true);
-            addPara(user.EmployeeId ?? "STUDENT ID", false, 14, "000000", true);
-            for (int i = 0; i < 5; i++) addBlankLine("");
-            addPara("A thesis submitted in partial fulfillment", false, 12, "000000", true);
-            addPara("of the requirements for the degree of", false, 12, "000000", true);
-            addBlankLine("");
-            addPara(!string.IsNullOrEmpty(user.Programme) ? user.Programme.ToUpper() : "BACHELOR OF SCIENCE", true, 14, "000000", true);
-            addBlankLine("");
-            addPara("FACULTY OF COMPUTING AND INFORMATICS", true, 14, "000000", true);
-            addPara("COVENTRY UNIVERSITY", true, 14, "000000", true);
+            addPara(project?.Title ?? "[YOUR THESIS TITLE]", true, 24, "000000", true);
             for (int i = 0; i < 4; i++) addBlankLine("");
-            addPara(DateTime.Now.ToString("MMMM yyyy"), false, 12, "000000", true);
-            addPara("ACADEMIC SESSION: " + (!string.IsNullOrEmpty(project?.AcademicSession) ? project.AcademicSession : (!string.IsNullOrEmpty(user.AcademicSession) ? user.AcademicSession : (DateTime.Now.Year + "/" + (DateTime.Now.Year + 1)))), false, 12, "000000", true);
+            addPara("Name: " + (user.FullName ?? "[STUDENT NAME]"), false, 18, "000000", true);
+            addBlankLine("");
+            addPara("Coventry Student ID: " + (user.EmployeeId ?? "[COVENTRY STUDENT ID]"), false, 18, "000000", true);
+            addBlankLine("");
+            addPara("Supervisor Name: " + (project?.Supervisor?.FullName ?? "[Supervisor Name]"), false, 18, "000000", true);
+            for (int i = 0; i < 4; i++) addBlankLine("");
+            addPara(!string.IsNullOrEmpty(user.Programme) ? user.Programme : "[Program Name]", true, 18, "000000", true);
+            addBlankLine("");
+            addPara(user.EmpDepartment?.Name ?? "School of Computing", true, 18, "000000", true);
+            addBlankLine("");
+            addPara(DateTime.Now.ToString("dd MMMM yyyy"), false, 18, "000000", true);
 
             // Page Break
             var pb = doc.CreateParagraph();

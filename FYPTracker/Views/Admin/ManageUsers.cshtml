@@ -136,7 +136,7 @@
                     </div>
 
                     <div id="editLookupFields" style="display:none;">
-                        <div class="fv-row mb-5">
+                        <div class="fv-row mb-5" id="editDeptContainer">
                             <label class="form-label fw-bolder text-dark fs-6">Department <span class="text-danger">*</span></label>
                             <select id="editDepartment" class="form-select form-select-solid form-select-lg fw-bold">
                                 <option value="">-- Select Department --</option>
@@ -156,7 +156,7 @@
                                 }
                             </select>
                         </div>
-                        <div class="fv-row mb-5">
+                        <div class="fv-row mb-5" id="editSpecContainer">
                             <label class="form-label fw-bolder text-dark fs-6">Specialization</label>
                             <select id="editSpecialization" class="form-select form-select-solid form-select-lg fw-bold" multiple="multiple" data-control="select2" data-placeholder="-- Select Specialization(s) --">
                                 <option value=""></option>
@@ -630,6 +630,15 @@
                         data.userType === 'Supervisor' || data.userType === 'SUPERVISOR' ||
                         data.userType === 'Examiner' || data.userType === 'EXAMINER') {
                         $('#editLookupFields').show();
+
+                        if (data.userType === 'Student' || data.userType === 'STUDENT') {
+                            $('#editDeptContainer').show();
+                            $('#editSpecContainer').hide();
+                        } else {
+                            $('#editDeptContainer').show();
+                            $('#editSpecContainer').show();
+                        }
+
                         $('#editDepartment').val(data.department);
                         
                         var progArray = data.programme ? data.programme.split(',').map(s => s.trim()) : [];

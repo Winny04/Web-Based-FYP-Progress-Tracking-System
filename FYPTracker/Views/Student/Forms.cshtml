@@ -766,12 +766,6 @@
                                     </div>
                                 }
 
-                                @if (!isFinLocked)
-                                {
-                                <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
-                                    <input type="hidden" name="formType" value="Final Submission Form" />
-                                    <input type="hidden" name="milestoneId" value="@finalMilestoneId" />
-
                                 <div class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1;">
                                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
                                         <div>
@@ -785,6 +779,13 @@
                                         </a>
                                     </div>
                                 </div>
+
+                                @if (!isFinLocked)
+                                {
+                                <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+                                    <input type="hidden" name="formType" value="Final Submission Form" />
+                                    <input type="hidden" name="milestoneId" value="@finalMilestoneId" />
+
 
                                 <div class="form-section-title">Part 1: Thesis Metadata</div>
                                 <div class="mb-3">

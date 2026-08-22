@@ -171,7 +171,8 @@
                                     <th style="width: 50px;">No</th>
                                     <th>Name</th>
                                     <th>Department</th>
-                                    <th>Expertise</th>
+                                    <th>Programme</th>
+                                    <th>Specialization</th>
                                     <th>Available Slots</th>
                                     <th>Status</th>
                                     <th class="text-end">Action</th>
@@ -189,17 +190,19 @@
                                     // Dynamically read MaxStudentSlots from the DB
                                     int maxSlots = sup.MaxStudentSlots ?? 5;
                                     int slotsLeft = Math.Max(0, maxSlots - appCount);
-                                    string deptLabel = sup.EmpDepartment?.Name ?? "General";
-                                    string expertise = !string.IsNullOrEmpty(sup.Programme) ? sup.Programme : "General";
+                                    string deptLabel = sup.EmpDepartment?.Name ?? "-";
+                                    string programme = !string.IsNullOrEmpty(sup.Programme) ? sup.Programme : "-";
+                                    string specialization = !string.IsNullOrEmpty(sup.Specialization) ? sup.Specialization : "-";
                                     
-                                    <tr class="sup-row" data-dept="@deptLabel" data-name="@sup.FullName" data-exp="@expertise">
+                                    <tr class="sup-row" data-dept="@deptLabel" data-name="@sup.FullName" data-prog="@programme" data-spec="@specialization">
                                         <td class="text-muted fw-bold">@(num++)</td>
                                         <td>
                                             <div class="fw-bold text-dark">@sup.FullName</div>
                                             <div class="text-muted small">@sup.Email</div>
                                         </td>
                                         <td>@deptLabel</td>
-                                        <td>@expertise</td>
+                                        <td>@programme</td>
+                                        <td>@specialization</td>
                                         <td>
                                             @if (slotsLeft > 0)
                                             {
@@ -383,10 +386,11 @@
 
         rows.forEach(function(row) {
             var name = row.getAttribute('data-name').toLowerCase();
-            var exp = row.getAttribute('data-exp').toLowerCase();
+            var prog = row.getAttribute('data-prog').toLowerCase();
+            var spec = row.getAttribute('data-spec').toLowerCase();
             var rowDept = row.getAttribute('data-dept').toLowerCase();
 
-            var matchesSearch = name.includes(query) || exp.includes(query);
+            var matchesSearch = name.includes(query) || prog.includes(query) || spec.includes(query);
             var matchesDept = dept === "" || rowDept.includes(dept);
 
             if (matchesSearch && matchesDept) {
