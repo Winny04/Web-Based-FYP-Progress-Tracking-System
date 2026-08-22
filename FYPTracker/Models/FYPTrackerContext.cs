@@ -17,8 +17,9 @@ namespace FYPTracker.Models
         // ── Shared / Auth ──────────────────────────────────────────
         public virtual DbSet<ApplicationUser>   ApplicationUsers   { get; set; } = null!;
         public virtual DbSet<Department>        Department         { get; set; } = null!;
-
-
+        public virtual DbSet<Programme>         Programme          { get; set; } = null!;
+        public virtual DbSet<Specialization>    Specialization     { get; set; } = null!;
+        public virtual DbSet<SupervisorAvailability> SupervisorAvailabilities { get; set; } = null!;
 
         // ── FYP Core ───────────────────────────────────────────────
         public virtual DbSet<FYPProject>        FYPProjects        { get; set; } = null!;
@@ -33,6 +34,8 @@ namespace FYPTracker.Models
         public virtual DbSet<FYPNotification>   FYPNotifications   { get; set; } = null!;
         public virtual DbSet<FYPActivity>       FYPActivities      { get; set; } = null!;
         public virtual DbSet<ChatMessage>       ChatMessages       { get; set; } = null!;
+        public virtual DbSet<ChatGroup>         ChatGroups         { get; set; } = null!;
+        public virtual DbSet<ChatGroupMember>   ChatGroupMembers   { get; set; } = null!;
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -67,6 +70,11 @@ namespace FYPTracker.Models
                 entity.HasOne(e => e.Supervisor)
                       .WithMany()
                       .HasForeignKey(e => e.SupervisorId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Examiner)
+                      .WithMany()
+                      .HasForeignKey(e => e.ExaminerId)
                       .OnDelete(DeleteBehavior.Restrict);
             });
 
@@ -209,6 +217,40 @@ namespace FYPTracker.Models
                 entity.HasOne(e => e.Receiver)
                       .WithMany()
                       .HasForeignKey(e => e.ReceiverId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Group)
+                      .WithMany(g => g.Messages)
+                      .HasForeignKey(e => e.GroupId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ChatGroup
+            modelBuilder.Entity<ChatGroup>(entity =>
+            {
+                entity.ToTable("ChatGroup");
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Supervisor)
+                      .WithMany()
+                      .HasForeignKey(e => e.SupervisorId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ChatGroupMember
+            modelBuilder.Entity<ChatGroupMember>(entity =>
+            {
+                entity.ToTable("ChatGroupMember");
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Group)
+                      .WithMany(g => g.Members)
+                      .HasForeignKey(e => e.GroupId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Student)
+                      .WithMany()
+                      .HasForeignKey(e => e.StudentId)
                       .OnDelete(DeleteBehavior.Restrict);
             });
 

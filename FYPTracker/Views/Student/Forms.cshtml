@@ -679,6 +679,7 @@
                                     </div>
                                 </div>
 
+
                                 <div class="form-section-title">Part 1: Reporting Period</div>
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-6">
@@ -823,16 +824,46 @@
 
                                 <div class="form-section-title">Part 3: Final File Upload</div>
                                 <div class="mb-4">
-                                    <label class="form-label fw-semibold mb-2">Upload Final Thesis (PDF, Max 20MB)</label>
-                                    <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="finalDropZone" onclick="document.getElementById('finalDocument').click()">
-                                        <i class="fas fa-cloud-upload-alt fs-1 mb-3" style="color: #ef4444 !important;"></i>
-                                        <h6 class="fw-bold mb-1">Drag & Drop your final thesis here</h6>
-                                        <p class="text-muted small mb-0">or click to browse files (PDF ONLY)</p>
-                                        <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
-                                        <input type="file" name="attachedFile" id="finalDocument" class="d-none" accept=".pdf" onchange="updateFileNameForFinal(this)" />
-                                        <div id="finalFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please upload your final thesis PDF.</div>
-                                        <div id="finalFileNameDisplay" class="mt-3 fw-bold text-danger" style="display:none;">
-                                            <i class="fas fa-file-pdf me-2"></i><span id="fFinalName"></span>
+                                    <div class="alert alert-info d-flex align-items-center mb-4 border-0 shadow-sm">
+                                        <i class="fas fa-info-circle fs-3 me-3 text-info"></i>
+                                        <div>
+                                            <strong>Ethics Form Required:</strong> You must complete the Ethics Form and upload it as a PDF along with your Final Thesis.
+                                            <div class="mt-2">
+                                                <a href="/documents/Ethics Form_6000CEM.docx" class="btn btn-sm btn-outline-info bg-white fw-bold" download>
+                                                    <i class="fas fa-download me-1"></i> Download Ethics Form Template
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="row g-4">
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold mb-2">Upload Final Thesis (PDF, Max 20MB)</label>
+                                            <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="finalDropZone" onclick="document.getElementById('finalDocument').click()">
+                                                <i class="fas fa-cloud-upload-alt fs-1 mb-3" style="color: #ef4444 !important;"></i>
+                                                <h6 class="fw-bold mb-1">Drag & Drop your final thesis here</h6>
+                                                <p class="text-muted small mb-0">or click to browse files (PDF ONLY)</p>
+                                                <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
+                                                <input type="file" name="attachedFile" id="finalDocument" class="d-none" accept=".pdf" onchange="updateFileNameForFinal(this)" />
+                                                <div id="finalFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please upload your final thesis PDF.</div>
+                                                <div id="finalFileNameDisplay" class="mt-3 fw-bold text-danger" style="display:none;">
+                                                    <i class="fas fa-file-pdf me-2"></i><span id="fFinalName"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold mb-2">Upload Completed Ethics Form (PDF)</label>
+                                            <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="ethicsDropZone" onclick="document.getElementById('ethicsDocument').click()">
+                                                <i class="fas fa-file-signature fs-1 mb-3" style="color: #3b82f6 !important;"></i>
+                                                <h6 class="fw-bold mb-1">Drag & Drop Ethics Form here</h6>
+                                                <p class="text-muted small mb-0">or click to browse files (PDF ONLY)</p>
+                                                <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
+                                                <input type="file" name="attachedFiles" id="ethicsDocument" class="d-none" accept=".pdf" onchange="updateFileNameForEthics(this)" />
+                                                <div id="ethicsFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please upload your completed Ethics Form PDF.</div>
+                                                <div id="ethicsFileNameDisplay" class="mt-3 fw-bold text-primary" style="display:none;">
+                                                    <i class="fas fa-file-pdf me-2"></i><span id="fEthicsName"></span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -946,6 +977,28 @@
             }
         }
         
+        function updateFileNameForEthics(input) {
+            const display = document.getElementById('ethicsFileNameDisplay');
+            const fName = document.getElementById('fEthicsName');
+            const errorLabel = document.getElementById('ethicsFileError');
+            if (input.files && input.files.length > 0) {
+                const file = input.files[0];
+                if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+                    errorLabel.textContent = "Only PDF files are allowed.";
+                    errorLabel.style.display = 'block';
+                    input.value = "";
+                    display.style.display = 'none';
+                    return;
+                }
+                
+                errorLabel.style.display = 'none';
+                fName.textContent = file.name;
+                display.style.display = 'block';
+            } else {
+                display.style.display = 'none';
+            }
+        }
+        
         function updateMultiFileNames(input, listId) {
             const display = document.getElementById(listId);
             display.innerHTML = '';
@@ -997,6 +1050,25 @@
             finalDropZone.addEventListener('drop', (e) => {
                 finalFileInput.files = e.dataTransfer.files;
                 updateFileNameForFinal(finalFileInput);
+            }, false);
+        }
+        
+        // Setup Ethics Drop Zone
+        const ethicsDropZone = document.getElementById('ethicsDropZone');
+        const ethicsFileInput = document.getElementById('ethicsDocument');
+        if (ethicsDropZone && ethicsFileInput) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                ethicsDropZone.addEventListener(eventName, preventDefaults, false);
+            });
+            ['dragenter', 'dragover'].forEach(eventName => {
+                ethicsDropZone.addEventListener(eventName, () => ethicsDropZone.style.borderColor = '#3b82f6', false);
+            });
+            ['dragleave', 'drop'].forEach(eventName => {
+                ethicsDropZone.addEventListener(eventName, () => ethicsDropZone.style.borderColor = '#cbd5e1', false);
+            });
+            ethicsDropZone.addEventListener('drop', (e) => {
+                ethicsFileInput.files = e.dataTransfer.files;
+                updateFileNameForEthics(ethicsFileInput);
             }, false);
         }
         
@@ -1336,6 +1408,15 @@
                 isValid = false;
             } else {
                 errorDiv.classList.add('d-none');
+            }
+
+            var ethicsInput = document.getElementById('ethicsDocument');
+            var ethicsErrorDiv = document.getElementById('ethicsFileError');
+            if (ethicsInput && ethicsInput.files.length === 0) {
+                ethicsErrorDiv.classList.remove('d-none');
+                isValid = false;
+            } else {
+                ethicsErrorDiv.classList.add('d-none');
             }
 
             const abstract = document.getElementById('finalAbstract');

@@ -298,10 +298,15 @@ namespace FYPTracker.Controllers
 
             var project = await _context.FYPProjects
                 .Include(p => p.Student)
+                .Include(p => p.Examiner)
                 .Include(p => p.Milestones)
                 .FirstOrDefaultAsync(p => p.Id == id && p.SupervisorId == user.Id);
 
             if (project == null) return NotFound();
+
+            ViewBag.AvailableExaminers = await _context.ApplicationUsers
+                .Where(u => u.UserType == "Examiner" && !u.IsResign)
+                .ToListAsync();
 
             return View(project);
         }
@@ -852,6 +857,93 @@ namespace FYPTracker.Controllers
         }
 
         // ────────────────────────────────────────────────────────
+        // Manage Availability
+        [HttpGet]
+        public async Task<IActionResult> ManageAvailability()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            ViewBag.CurrentUser = user;
+
+            var availabilities = await _context.SupervisorAvailabilities
+                .Where(a => a.SupervisorId == user.Id)
+                .ToListAsync();
+
+            return View(availabilities);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SaveAvailability(SupervisorAvailability model, List<string> SelectedDays)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+
+            model.SupervisorId = user.Id;
+            
+            if (model.Id == 0)
+            {
+                if (model.ScheduleType == "WeeklyDefault" && SelectedDays != null && SelectedDays.Any())
+                {
+                    foreach (var day in SelectedDays)
+                    {
+                        var newModel = new SupervisorAvailability
+                        {
+                            SupervisorId = user.Id,
+                            ScheduleType = model.ScheduleType,
+                            DayOfWeek = day,
+                            SpecificDate = model.SpecificDate,
+                            StartTime = model.StartTime,
+                            EndTime = model.EndTime,
+                            IsAvailable = model.IsAvailable
+                        };
+                        _context.SupervisorAvailabilities.Add(newModel);
+                    }
+                }
+                else
+                {
+                    _context.SupervisorAvailabilities.Add(model);
+                }
+            }
+            else
+            {
+                var existing = await _context.SupervisorAvailabilities.FindAsync(model.Id);
+                if (existing != null && existing.SupervisorId == user.Id)
+                {
+                    existing.ScheduleType = model.ScheduleType;
+                    existing.DayOfWeek = model.DayOfWeek;
+                    existing.SpecificDate = model.SpecificDate;
+                    existing.StartTime = model.StartTime;
+                    existing.EndTime = model.EndTime;
+                    existing.IsAvailable = model.IsAvailable;
+                    _context.SupervisorAvailabilities.Update(existing);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = "Availability saved successfully!";
+            return RedirectToAction(nameof(ManageAvailability));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteAvailability(int id)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+
+            var availability = await _context.SupervisorAvailabilities.FindAsync(id);
+            if (availability != null && availability.SupervisorId == user.Id)
+            {
+                _context.SupervisorAvailabilities.Remove(availability);
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Availability removed.";
+            }
+
+            return RedirectToAction(nameof(ManageAvailability));
+        }
+
+        // ────────────────────────────────────────────────────────
         // Manage Meetings
         [HttpGet]
         public async Task<IActionResult> GetBookedSlots(int supervisorId, string date)
@@ -1267,59 +1359,7 @@ namespace FYPTracker.Controllers
             return View();
         }
 
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UpdateFinalGrade(int projectId, string? finalGrade)
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Account");
 
-            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user.Id);
-            if (project == null)
-            {
-                TempData["Error"] = "Project not found or unauthorized.";
-                return RedirectToAction("MyProjects");
-            }
-            
-            if (project.IsGradingLocked)
-            {
-                TempData["Error"] = "Grading for this session has been locked by the Administrator. You can no longer edit this grade.";
-                return RedirectToAction("ProjectDetails", new { id = projectId });
-            }
-
-            project.FinalGrade = finalGrade;
-            
-            if (!string.IsNullOrEmpty(finalGrade))
-            {
-                if (finalGrade == "C-" || finalGrade == "D" || finalGrade == "F")
-                {
-                    project.Status = "Failed";
-                    // Change the latest approved request to "Failed" so the student can apply again
-                    var prevRequest = await _context.SupervisorRequests
-                        .OrderByDescending(r => r.RequestedDate)
-                        .FirstOrDefaultAsync(r => r.StudentId == project.StudentId && r.Status == "Approved");
-                    if (prevRequest != null)
-                    {
-                        prevRequest.Status = "Failed";
-                    }
-                }
-                else
-                {
-                    project.Status = "Completed";
-                }
-            }
-            else
-            {
-                // If the grade is cleared out (which the UI might not allow, but just in case)
-                project.Status = "InProgress";
-            }
-
-            await _context.SaveChangesAsync();
-            await LogActivityAsync(user.Id, "Grading", $"Updated Final Grade", $"Assigned Final Grade {finalGrade ?? "Pending"} to project {project.Title}.");
-
-            TempData["Success"] = "Final grade updated successfully!";
-            return RedirectToAction("ProjectDetails", new { id = projectId });
-        }
 
         // ── Get Calendar Data API ──────────────────────────────────────────
         [HttpGet]
@@ -1354,6 +1394,49 @@ namespace FYPTracker.Controllers
             }).ToList();
 
             return Json(events);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> InviteExaminer(int projectId, int examinerId)
+        {
+            var currentUser = await GetCurrentUserAsync();
+            if (currentUser == null) return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == currentUser.Id);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found or you are not authorized to manage it.";
+                return RedirectToAction("MyProjects");
+            }
+
+            var examiner = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == examinerId && u.UserType == "Examiner");
+            if (examiner == null)
+            {
+                TempData["Error"] = "Invalid Examiner selected.";
+                return RedirectToAction("ProjectDetails", new { id = projectId });
+            }
+
+            project.ExaminerId = examinerId;
+            await _context.SaveChangesAsync();
+
+            // Send Email to Examiner
+            if (!string.IsNullOrEmpty(examiner.Email))
+            {
+                string subject = "FYP Tracking System - New Evaluation Assignment";
+                string content = $"<p>Dear {examiner.FullName},</p><p>You have been assigned as the Examiner for the project <strong>{project.Title}</strong> by student <strong>{project.Student?.FullName ?? "Unknown"}</strong>.</p><p>Please log in to the FYP Tracking System to view details and evaluate the project.</p>";
+                try
+                {
+                    _emailService.Send(examiner.Email, subject, content);
+                }
+                catch (Exception) { /* Log error, continue */ }
+            }
+
+            TempData["Success"] = $"Examiner {examiner.FullName} successfully assigned to this project!";
+            return RedirectToAction("ProjectDetails", new { id = projectId });
         }
     }
 }

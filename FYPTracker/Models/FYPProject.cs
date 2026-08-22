@@ -34,6 +34,8 @@ namespace FYPTracker.Models
 
         public int? SupervisorId { get; set; }
 
+        public int? ExaminerId { get; set; }
+
         /// <summary>Values: Proposed, Approved, InProgress, Completed, Rejected</summary>
         [StringLength(50)]
         public string Status { get; set; } = "Proposed";
@@ -46,8 +48,11 @@ namespace FYPTracker.Models
 
         public string? AcademicSession { get; set; }
 
-        [StringLength(5)]
+        [StringLength(50)]
         public string? FinalGrade { get; set; }
+
+        [StringLength(255)]
+        public string? ExaminerMarksheetPath { get; set; }
 
         [Column(TypeName = "datetime")]
         public DateTime CreatedDate { get; set; } = DateTime.Now;
@@ -63,6 +68,9 @@ namespace FYPTracker.Models
 
         [ForeignKey(nameof(SupervisorId))]
         public virtual ApplicationUser? Supervisor { get; set; }
+
+        [ForeignKey(nameof(ExaminerId))]
+        public virtual ApplicationUser? Examiner { get; set; }
 
         public virtual ICollection<FYPMilestone> Milestones { get; set; }
     }

@@ -1,0 +1,252 @@
+@model FYPTracker.Models.FYPProject
+@{
+    ViewData["Title"] = "Evaluate Student";
+    var meetingLogs = ViewBag.MeetingLogs as IEnumerable<FYPTracker.Models.MeetingLog>;
+}
+
+<div class="row gy-5 g-xl-8">
+    <div class="col-xl-4">
+        <!-- Project Details Card -->
+        <div class="card mb-5 mb-xl-8">
+            <div class="card-header border-0 pt-5">
+                <h3 class="card-title align-items-start flex-column">
+                    <span class="card-label fw-bolder fs-3 mb-1">Student Details</span>
+                </h3>
+            </div>
+            <div class="card-body py-3">
+                <div class="d-flex flex-column mb-8">
+                    <span class="text-gray-400 fw-bold fs-7">Student Name</span>
+                    <span class="text-dark fw-bolder fs-5">@Model.Student?.FullName</span>
+                    <span class="text-gray-400 fw-bold fs-7 mt-1">@Model.Student?.EmployeeId</span>
+                </div>
+                <div class="d-flex flex-column mb-8">
+                    <span class="text-gray-400 fw-bold fs-7">Project Title</span>
+                    <span class="text-dark fw-bolder fs-5">@Model.Title</span>
+                </div>
+                <div class="d-flex flex-column mb-8">
+                    <span class="text-gray-400 fw-bold fs-7">Supervisor</span>
+                    <span class="text-dark fw-bolder fs-5">@Model.Supervisor?.FullName</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Evaluation Actions Card -->
+        <div class="card mb-5 mb-xl-8">
+            <div class="card-header border-0 pt-5">
+                <h3 class="card-title align-items-start flex-column">
+                    <span class="card-label fw-bolder fs-3 mb-1">Marksheet</span>
+                </h3>
+            </div>
+            <div class="card-body py-3">
+                <div class="mb-5">
+                    <p class="text-muted fs-6">
+                        Please download the marksheet template (once provided in the project folder), fill it out, and upload it back here.
+                    </p>
+                    <a href="/Examiner/DownloadMarksheet?projectId=@Model.Id" class="btn btn-primary w-100 mb-3">
+                        <i class="bi bi-download fs-4 me-2"></i> Download Template
+                    </a>
+                </div>
+                
+                <div class="separator mb-5"></div>
+                
+                @{
+                    var finalMilestone = Model.Milestones.FirstOrDefault(m => m.Title.Contains("Final"));
+                    bool isFinalApproved = finalMilestone != null && finalMilestone.Status == "Approved";
+                }
+
+                @if (isFinalApproved)
+                {
+                    <form action="/Examiner/UploadMarksheet" method="post" enctype="multipart/form-data">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="projectId" value="@Model.Id" />
+                        
+                        <div class="mb-3">
+                            <label for="marksheetFile" class="form-label">Upload Completed Marksheet (Excel)</label>
+                            <input class="form-control" type="file" id="marksheetFile" name="marksheetFile" accept=".xls,.xlsx" required>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-upload fs-4 me-2"></i> Submit Marksheet
+                        </button>
+                    </form>
+                }
+                else
+                {
+                    <div class="alert alert-warning d-flex align-items-center p-4">
+                        <i class="bi bi-exclamation-triangle fs-2 text-warning me-3"></i>
+                        <div class="d-flex flex-column">
+                            <h4 class="fw-bolder text-dark mb-1">Upload Locked</h4>
+                            <span class="text-dark">The supervisor must approve the Final Report before you can submit your marksheet.</span>
+                        </div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(Model.ExaminerMarksheetPath))
+                {
+                    <div class="alert alert-success mt-5 p-3 d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill text-success fs-3 me-3"></i>
+                        <div class="d-flex flex-column">
+                            <span class="fw-bolder">Evaluation Submitted</span>
+                            <a href="@Model.ExaminerMarksheetPath" target="_blank" class="text-hover-primary text-decoration-underline text-success fw-bold">View Uploaded File</a>
+                        </div>
+                    </div>
+                    
+                    @if (!string.IsNullOrEmpty(Model.FinalGrade))
+                    {
+                        <div class="alert alert-primary mt-3 p-3 d-flex align-items-center">
+                            <i class="bi bi-award-fill text-primary fs-3 me-3"></i>
+                            <div class="d-flex flex-column">
+                                <span class="fw-bolder fs-6">Auto-Graded Result</span>
+                                <span class="text-dark fs-4 fw-bold">Final Grade: <span class="text-primary">@Model.FinalGrade</span></span>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-8">
+        <!-- Milestones Card -->
+        <div class="card mb-5 mb-xl-8">
+            <div class="card-header border-0 pt-5">
+                <h3 class="card-title align-items-start flex-column">
+                    <span class="card-label fw-bolder fs-3 mb-1">Milestones & Reports</span>
+                </h3>
+            </div>
+            <div class="card-body py-3">
+                <div class="table-responsive">
+                    <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
+                        <thead>
+                            <tr class="fw-bolder text-muted">
+                                <th class="min-w-150px">Milestone</th>
+                                <th class="min-w-100px">Status</th>
+                                <th class="min-w-100px">Date Submitted</th>
+                                <th class="min-w-100px text-end">Files</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach(var milestone in Model.Milestones.OrderBy(m => m.DueDate ?? m.CreatedDate))
+                            {
+                                <tr>
+                                    <td><span class="text-dark fw-bolder fs-6">@milestone.Title</span></td>
+                                    <td>
+                                        @{
+                                            var badgeClass = "badge-light-primary";
+                                            if (milestone.Status == "Approved") badgeClass = "badge-light-success";
+                                            if (milestone.Status == "Rejected") badgeClass = "badge-light-danger";
+                                            if (milestone.Status == "Pending") badgeClass = "badge-light-warning";
+                                        }
+                                        <span class="badge @badgeClass">@milestone.Status</span>
+                                    </td>
+                                    <td>@milestone.SubmittedDate?.ToString("dd MMM yyyy")</td>
+                                    <td class="text-end">
+                                        @if(milestone.SubmissionFiles != null && milestone.SubmissionFiles.Any())
+                                        {
+                                            @foreach(var file in milestone.SubmissionFiles)
+                                            {
+                                                <a href="@file.FilePath" class="btn btn-sm btn-light btn-active-light-primary me-2 mb-2 d-inline-flex align-items-center" target="_blank" title="Download @file.FileName">
+                                                    <i class="bi bi-file-earmark-arrow-down fs-4 me-2"></i> @file.FileName
+                                                </a>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted fs-7">No files</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Meeting Logs Card -->
+        <div class="card mb-5 mb-xl-8">
+            <div class="card-header border-0 pt-5">
+                <h3 class="card-title align-items-start flex-column">
+                    <span class="card-label fw-bolder fs-3 mb-1">Weekly Meeting Logs</span>
+                </h3>
+            </div>
+            <div class="card-body py-3">
+                <div class="table-responsive">
+                    <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
+                        <thead>
+                            <tr class="fw-bolder text-muted">
+                                <th class="min-w-100px">Date</th>
+                                <th class="min-w-200px">Topics Discussed</th>
+                                <th class="min-w-150px">Supervisor Comments</th>
+                                <th class="min-w-100px text-end">Logbook</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if(meetingLogs != null && meetingLogs.Any())
+                            {
+                                foreach(var log in meetingLogs)
+                                {
+                                    <tr>
+                                        <td>@log.CreatedDate.ToString("dd MMM yyyy")</td>
+                                        <td>@log.KeyTopicsDiscussed</td>
+                                        <td>@log.SupervisorComments</td>
+                                        <td class="text-end">
+                                            @if(!string.IsNullOrEmpty(log.PdfLogbookPath))
+                                            {
+                                                <a href="@log.PdfLogbookPath" class="btn btn-sm btn-icon btn-light btn-active-light-primary" target="_blank">
+                                                    <i class="bi bi-file-pdf fs-4"></i>
+                                                </a>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-5">
+                                        No meeting logs found.
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            @if (TempData["Success"] != null)
+            {
+                <text>
+                Swal.fire({
+                    text: "@TempData["Success"]",
+                    icon: "success",
+                    buttonsStyling: false,
+                    confirmButtonText: "Ok, got it!",
+                    customClass: {
+                        confirmButton: "btn btn-primary"
+                    }
+                });
+                </text>
+            }
+            @if (TempData["Error"] != null)
+            {
+                <text>
+                Swal.fire({
+                    text: "@TempData["Error"]",
+                    icon: "error",
+                    buttonsStyling: false,
+                    confirmButtonText: "Ok, got it!",
+                    customClass: {
+                        confirmButton: "btn btn-danger"
+                    }
+                });
+                </text>
+            }
+        });
+    </script>
+}

@@ -4,6 +4,8 @@
 @inject FYPTrackerContext DbContext
 @{
     var departmentList = Departments.DepartmentListFromDb(DbContext);
+    var programmeList = Departments.ProgrammeListFromDb(DbContext);
+    var specializationList = Departments.SpecializationListFromDb(DbContext);
     var userTypeList = UserTypes.UserTypeList();
 }
 <div id="kt_content_container" class="d-flex flex-column-fluid align-items-start container-xxl">
@@ -181,7 +183,7 @@
                         </div>
                     </div>
 
-                    <div class="row mb-6">
+                    <div class="row mb-6" id="departmentRow" style="display: @(Model.UserType == "Student" || Model.UserType == "Supervisor" || Model.UserType == "Examiner" || Model.UserType == "Admin" ? "flex" : "none")">
                         @Html.LabelFor(model => model.Department, "Department", htmlAttributes: new { @class = "col-lg-4 col-form-label required fw-bold fs-6" })
                         <div class="col-lg-8">
                             <div class="row">
@@ -189,6 +191,28 @@
                                     @Html.DropDownListFor(model => model.Department, departmentList, new {@class = "form-select form-select-solid form-select-lg fw-bold"})
                                 </div>
 
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-6" id="programmeRow" style="display: @(Model.UserType == "Student" || Model.UserType == "Supervisor" || Model.UserType == "Examiner" || Model.UserType == "Admin" ? "flex" : "none")">
+                        @Html.LabelFor(model => model.SelectedProgrammes, "Programme", htmlAttributes: new { @class = "col-lg-4 col-form-label required fw-bold fs-6" })
+                        <div class="col-lg-8">
+                            <div class="row">
+                                <div class="col-lg-6 fv-row">
+                                    @Html.ListBoxFor(model => model.SelectedProgrammes, programmeList, new {@class = "form-select form-select-solid form-select-lg fw-bold", multiple = "multiple", data_control = "select2", data_placeholder = "-- Select Programme(s) --"})
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-6" id="specializationRow" style="display: @(Model.UserType == "Student" || Model.UserType == "Supervisor" || Model.UserType == "Examiner" || Model.UserType == "Admin" ? "flex" : "none")">
+                        @Html.LabelFor(model => model.SelectedSpecializations, "Specialization", htmlAttributes: new { @class = "col-lg-4 col-form-label fw-bold fs-6" })
+                        <div class="col-lg-8">
+                            <div class="row">
+                                <div class="col-lg-6 fv-row">
+                                    @Html.ListBoxFor(model => model.SelectedSpecializations, specializationList, new {@class = "form-select form-select-solid form-select-lg fw-bold", multiple = "multiple", data_control = "select2", data_placeholder = "-- Select Specialization(s) --"})
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -29,13 +29,45 @@ namespace FYPTracker.Common
                 var defaultDepts = new[] { "IT", "Computer Science", "Business", "Engineering", "Arts", "Science", "Software Engineering" };
                 foreach (var d in defaultDepts)
                 {
-                    context.Department.Add(new Department { Name = d });
+                    context.Department.Add(new Department { Name = d, IsActive = true });
                 }
                 context.SaveChanges();
                 depts = context.Department.OrderBy(d => d.Name).ToList();
             }
 
-            return depts.Select(x => new SelectListItem { Text = x.Name, Value = x.Name }).ToList();
+            return depts.Where(x => x.IsActive).Select(x => new SelectListItem { Text = x.Name, Value = x.Name }).ToList();
+        }
+
+        public static List<SelectListItem> ProgrammeListFromDb(FYPTrackerContext context)
+        {
+            var progs = context.Programme.OrderBy(p => p.Name).ToList();
+            if (!progs.Any())
+            {
+                var defaults = new[] { "Software Engineering", "Computer Science", "Information Systems", "Business Administration", "Accounting", "Mechanical Engineering" };
+                foreach (var p in defaults)
+                {
+                    context.Programme.Add(new Programme { Name = p, IsActive = true });
+                }
+                context.SaveChanges();
+                progs = context.Programme.OrderBy(p => p.Name).ToList();
+            }
+            return progs.Where(p => p.IsActive).Select(p => new SelectListItem { Text = p.Name, Value = p.Name }).ToList();
+        }
+
+        public static List<SelectListItem> SpecializationListFromDb(FYPTrackerContext context)
+        {
+            var specs = context.Specialization.OrderBy(s => s.Name).ToList();
+            if (!specs.Any())
+            {
+                var defaults = new[] { "Artificial Intelligence", "Cybersecurity", "Data Science", "Web Development", "Mobile Computing", "Network Engineering" };
+                foreach (var s in defaults)
+                {
+                    context.Specialization.Add(new Specialization { Name = s, IsActive = true });
+                }
+                context.SaveChanges();
+                specs = context.Specialization.OrderBy(s => s.Name).ToList();
+            }
+            return specs.Where(s => s.IsActive).Select(s => new SelectListItem { Text = s.Name, Value = s.Name }).ToList();
         }
     }
 }

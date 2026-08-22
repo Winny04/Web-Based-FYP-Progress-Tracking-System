@@ -14,7 +14,8 @@ namespace FYPTracker.Models
         [Column("DepartmentCode")]
         public string? DepartmentCode { get; set; }
 
+        public bool IsActive { get; set; } = true;
+
         public List<ApplicationUser> ApplicationUsers { get; set; } = new List<ApplicationUser>();
     }
 }
-

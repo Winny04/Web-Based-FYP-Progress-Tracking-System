@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.SignalR;
 using FYPTracker.Hubs;
 using System.IO;
 using Microsoft.AspNetCore.Http;
+using System.Collections.Generic;
 
 namespace FYPTracker.Controllers
 {
@@ -37,7 +38,7 @@ namespace FYPTracker.Controllers
         }
 
         // GET: /Chat
-        public async Task<IActionResult> Index(int? partnerId)
+        public async Task<IActionResult> Index(int? partnerId, int? groupId)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "User");
@@ -46,42 +47,75 @@ namespace FYPTracker.Controllers
             ViewBag.CurrentUserType = user.UserType;
             ViewBag.IsStudent = user.UserType == "Student";
             ViewBag.MyName = user.FullName ?? user.UserName;
+            ViewBag.ActiveGroupId = groupId;
 
             if (user.UserType == "Student")
             {
-                // Student: always chat with their assigned supervisor
-                var project = await _context.FYPProjects
-                    .Include(p => p.Supervisor)
-                    .FirstOrDefaultAsync(p => p.StudentId == user.Id);
+                // Student: chat with assigned supervisor or in groups
+                var req = await _context.SupervisorRequests
+                    .Include(r => r.Supervisor)
+                    .FirstOrDefaultAsync(r => r.StudentId == user.Id && r.Status == "Approved");
 
-                if (project?.Supervisor != null)
+                if (req?.Supervisor != null)
                 {
-                    ViewBag.DefaultPartnerId = project.SupervisorId;
-                    ViewBag.PartnerName = (string.IsNullOrEmpty(project.Supervisor.Title) ? "" : project.Supervisor.Title + " ") + project.Supervisor.FullName;
+                    ViewBag.DefaultPartnerId = req.SupervisorId;
+                    ViewBag.PartnerName = (string.IsNullOrEmpty(req.Supervisor.Title) ? "" : req.Supervisor.Title + " ") + req.Supervisor.FullName;
                 }
                 else
                 {
                     ViewBag.NoSupervisor = true;
                 }
+
+                // Load groups the student is part of
+                var studentGroups = await _context.ChatGroups
+                    .Include(g => g.Members)
+                    .Where(g => g.Members.Any(m => m.StudentId == user.Id))
+                    .ToListAsync();
+                ViewBag.Groups = studentGroups;
+                
+
+                if (groupId.HasValue)
+                {
+                    var grp = studentGroups.FirstOrDefault(g => g.Id == groupId.Value);
+                    if (grp != null) 
+                    {
+                        ViewBag.GroupName = grp.Name;
+                        var supervisor = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == grp.SupervisorId);
+                        var members = await _context.ChatGroupMembers
+                            .Include(m => m.Student)
+                            .Where(m => m.GroupId == grp.Id)
+                            .Select(m => new { Id = m.StudentId, Name = m.Student.FullName })
+                            .ToListAsync();
+                        
+                        if (supervisor != null)
+                        {
+                            members.Add(new { Id = supervisor.Id, Name = supervisor.FullName });
+                        }
+                        
+                        ViewBag.GroupMembers = members;
+                    }
+                }
+
             }
             else if (user.UserType == "Supervisor")
             {
-                // Supervisor: list of active assigned students
-                var projectStudents = await _context.FYPProjects
-                    .Include(p => p.Student)
-                    .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign)
-                    .Select(p => new ChatStudentItem {
-                        Id = p.StudentId,
-                        Name = p.Student.FullName,
-                        Programme = p.Student.Programme
+                // Supervisor: list of active assigned students and groups
+                var projectStudents = await _context.SupervisorRequests
+                    .Include(r => r.Student)
+                    .Where(r => r.SupervisorId == user.Id && r.Status == "Approved" && !r.Student.IsResign)
+                    .Select(r => new ChatStudentItem {
+                        Id = r.StudentId,
+                        Name = r.Student.FullName,
+                        Programme = r.Student.Programme
                     })
                     .ToListAsync();
 
                 var studentIds = projectStudents.Select(s => s.Id).ToList();
                 var chatData = await _context.ChatMessages
-                    .Where(m => (m.ReceiverId == user.Id && studentIds.Contains(m.SenderId)) ||
-                                (m.SenderId == user.Id && studentIds.Contains(m.ReceiverId)))
-                    .GroupBy(m => m.SenderId == user.Id ? m.ReceiverId : m.SenderId)
+                    .Where(m => m.GroupId == null && 
+                                ((m.ReceiverId == user.Id && studentIds.Contains(m.SenderId)) ||
+                                 (m.SenderId == user.Id && m.ReceiverId.HasValue && studentIds.Contains(m.ReceiverId.Value))))
+                    .GroupBy(m => m.SenderId == user.Id ? m.ReceiverId!.Value : m.SenderId)
                     .Select(g => new {
                         StudentId = g.Key,
                         UnreadCount = g.Count(m => m.ReceiverId == user.Id && !m.IsRead),
@@ -106,20 +140,38 @@ namespace FYPTracker.Controllers
 
                 ViewBag.AssignedStudents = students;
 
-                // Determine active chat partner
-                if (partnerId.HasValue && partnerId.Value > 0)
+                var supervisorGroups = await _context.ChatGroups
+                    .Include(g => g.Members)
+                    .Where(g => g.SupervisorId == user.Id)
+                    .ToListAsync();
+                ViewBag.Groups = supervisorGroups;
+
+
+                if (groupId.HasValue && groupId.Value > 0)
+                {
+                    var selectedGrp = supervisorGroups.FirstOrDefault(g => g.Id == groupId.Value);
+                    if (selectedGrp != null)
+                    {
+                        ViewBag.GroupName = selectedGrp.Name;
+                        var members = await _context.ChatGroupMembers
+                            .Include(m => m.Student)
+                            .Where(m => m.GroupId == selectedGrp.Id)
+                            .Select(m => new { Id = m.StudentId, Name = m.Student.FullName })
+                            .ToListAsync();
+                        
+                        members.Add(new { Id = user.Id, Name = user.FullName });
+                        
+                        ViewBag.GroupMembers = members;
+                    }
+                }
+
+                else if (partnerId.HasValue && partnerId.Value > 0)
                 {
                     var selectedStudent = students.FirstOrDefault(s => s.Id == partnerId.Value);
                     if (selectedStudent != null)
                     {
                         ViewBag.DefaultPartnerId = selectedStudent.Id;
                         ViewBag.PartnerName = selectedStudent.Name;
-                    }
-                    else if (students.Any())
-                    {
-                        // Fall back to first student if partnerId invalid
-                        ViewBag.DefaultPartnerId = students.First().Id;
-                        ViewBag.PartnerName = students.First().Name;
                     }
                 }
                 else if (students.Any())
@@ -130,31 +182,198 @@ namespace FYPTracker.Controllers
             }
             else
             {
-                // Admin or unknown role: redirect away
                 return RedirectToAction("Index", "Home");
             }
 
             return View();
         }
 
-        // GET: /Chat/GetHistory?partnerId=xxx
+        [HttpPost]
+        public async Task<IActionResult> CreateGroup(string name, List<int> memberIds)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return Unauthorized();
+
+            if (string.IsNullOrWhiteSpace(name) || memberIds == null || !memberIds.Any())
+            {
+                return BadRequest("Invalid group data");
+            }
+
+            var grp = new ChatGroup
+            {
+                Name = name.Trim(),
+                SupervisorId = user.Id,
+                CreatedAt = DateTime.Now
+            };
+
+            foreach (var sId in memberIds)
+            {
+                grp.Members.Add(new ChatGroupMember { StudentId = sId });
+            }
+
+            _context.ChatGroups.Add(grp);
+            await _context.SaveChangesAsync();
+
+            return Json(new { success = true, id = grp.Id });
+        }
+
         [HttpGet]
-        public async Task<IActionResult> GetHistory(int partnerId, int skip = 0, int take = 20)
+        public async Task<IActionResult> GetGroupMembers(int groupId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return Unauthorized();
+
+            var group = await _context.ChatGroups
+                .Include(g => g.Members)
+                .ThenInclude(m => m.Student)
+                .FirstOrDefaultAsync(g => g.Id == groupId && g.SupervisorId == user.Id);
+
+            if (group == null) return NotFound("Group not found or access denied.");
+
+            var members = group.Members.Select(m => new
+            {
+                studentId = m.StudentId,
+                name = m.Student.FullName,
+                joinedAt = m.JoinedAt.ToString("dd MMM yyyy")
+            }).ToList();
+
+            return Json(members);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAvailableStudents(int groupId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return Unauthorized();
+
+            var group = await _context.ChatGroups
+                .Include(g => g.Members)
+                .FirstOrDefaultAsync(g => g.Id == groupId && g.SupervisorId == user.Id);
+
+            if (group == null) return NotFound("Group not found or access denied.");
+
+            var existingMemberIds = group.Members.Select(m => m.StudentId).ToList();
+
+            var availableStudents = await _context.SupervisorRequests
+                .Include(ss => ss.Student)
+                .Where(ss => ss.SupervisorId == user.Id && ss.Status == "Approved" && !ss.Student.IsResign && !existingMemberIds.Contains(ss.StudentId))
+                .Select(ss => new
+                {
+                    id = ss.StudentId,
+                    name = ss.Student.FullName
+                })
+                .ToListAsync();
+
+            return Json(availableStudents);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> AddGroupMember(int groupId, int studentId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return Unauthorized();
+
+            var group = await _context.ChatGroups
+                .Include(g => g.Members)
+                .FirstOrDefaultAsync(g => g.Id == groupId && g.SupervisorId == user.Id);
+
+            if (group == null) return NotFound("Group not found or access denied.");
+
+            if (group.Members.Any(m => m.StudentId == studentId))
+            {
+                return BadRequest("Student is already in the group.");
+            }
+
+            var isAssigned = await _context.SupervisorRequests
+                .Include(ss => ss.Student)
+                .AnyAsync(ss => ss.SupervisorId == user.Id && ss.StudentId == studentId && ss.Status == "Approved" && !ss.Student.IsResign);
+
+            if (!isAssigned) return BadRequest("Student is not assigned to you.");
+
+            group.Members.Add(new ChatGroupMember { GroupId = groupId, StudentId = studentId, JoinedAt = DateTime.Now });
+            await _context.SaveChangesAsync();
+
+            return Json(new { success = true });
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> RemoveGroupMember(int groupId, int studentId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return Unauthorized();
+
+            var group = await _context.ChatGroups
+                .Include(g => g.Members)
+                .FirstOrDefaultAsync(g => g.Id == groupId && g.SupervisorId == user.Id);
+
+            if (group == null) return NotFound("Group not found or access denied.");
+
+            var member = group.Members.FirstOrDefault(m => m.StudentId == studentId);
+            if (member == null)
+            {
+                return BadRequest("Student is not in the group.");
+            }
+
+            _context.ChatGroupMembers.Remove(member);
+            await _context.SaveChangesAsync();
+
+            return Json(new { success = true });
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> DeleteGroup(int groupId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return Unauthorized(new { success = false, message = "Unauthorized" });
+
+            var group = await _context.ChatGroups
+                .FirstOrDefaultAsync(g => g.Id == groupId && g.SupervisorId == user.Id);
+
+            if (group == null) return NotFound(new { success = false, message = "Group not found or access denied." });
+
+            _context.ChatGroups.Remove(group);
+            await _context.SaveChangesAsync();
+
+            return Json(new { success = true });
+        }
+
+        // GET: /Chat/GetHistory
+        [HttpGet]
+        public async Task<IActionResult> GetHistory(int partnerId = 0, int groupId = 0, int skip = 0, int take = 20)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return Unauthorized();
-            if (partnerId <= 0) return BadRequest("Invalid partner ID");
+            
+            IQueryable<ChatMessage> query;
 
-            var messagesQuery = await _context.ChatMessages
-                .Where(m => (m.SenderId == user.Id && m.ReceiverId == partnerId) ||
-                            (m.SenderId == partnerId && m.ReceiverId == user.Id))
+            if (groupId > 0)
+            {
+                query = _context.ChatMessages
+                    .Include(m => m.Sender)
+                    .Include(m => m.ReplyToMessage)
+                    .Where(m => m.GroupId == groupId);
+            }
+            else
+            {
+                if (partnerId <= 0) return BadRequest("Invalid partner ID");
+                query = _context.ChatMessages
+                    .Include(m => m.Sender)
+                    .Include(m => m.ReplyToMessage)
+                    .Where(m => m.GroupId == null && 
+                                ((m.SenderId == user.Id && m.ReceiverId == partnerId) ||
+                                 (m.SenderId == partnerId && m.ReceiverId == user.Id)));
+            }
+
+            var messagesQuery = await query
                 .OrderByDescending(m => m.SentAt)
                 .Skip(skip)
                 .Take(take)
                 .Select(m => new {
                     id = m.Id,
                     senderId = m.SenderId,
+                    senderName = m.Sender.FullName,
                     receiverId = m.ReceiverId,
+                    groupId = m.GroupId,
                     messageText = m.IsDeleted ? null : m.MessageText,
                     attachmentUrl = m.IsDeleted ? null : m.AttachmentUrl,
                     attachmentName = m.IsDeleted ? null : m.AttachmentName,
@@ -170,17 +389,20 @@ namespace FYPTracker.Controllers
                 .ToListAsync();
 
             var messages = messagesQuery.ToList();
-            messages.Reverse(); // So oldest in this batch comes first in the DOM
+            messages.Reverse();
 
-            // Mark unread messages as read
-            var unread = await _context.ChatMessages
-                .Where(m => m.ReceiverId == user.Id && m.SenderId == partnerId && !m.IsRead)
-                .ToListAsync();
-
-            if (unread.Any())
+            if (groupId == 0)
             {
-                unread.ForEach(m => m.IsRead = true);
-                await _context.SaveChangesAsync();
+                // Mark unread private messages as read
+                var unread = await _context.ChatMessages
+                    .Where(m => m.GroupId == null && m.ReceiverId == user.Id && m.SenderId == partnerId && !m.IsRead)
+                    .ToListAsync();
+
+                if (unread.Any())
+                {
+                    unread.ForEach(m => m.IsRead = true);
+                    await _context.SaveChangesAsync();
+                }
             }
 
             return Json(messages);
@@ -188,11 +410,15 @@ namespace FYPTracker.Controllers
 
         // POST: /Chat/SendMessage
         [HttpPost]
-        public async Task<IActionResult> SendMessage([FromForm] int receiverId, [FromForm] string? messageText, [FromForm] IFormFile? attachment, [FromForm] int? replyToId)
+        public async Task<IActionResult> SendMessage([FromForm] int receiverId, [FromForm] int? groupId, [FromForm] string? messageText, [FromForm] IFormFile? attachment, [FromForm] int? replyToId)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return Unauthorized();
-            if (receiverId <= 0 || (string.IsNullOrWhiteSpace(messageText) && attachment == null))
+            
+            if (!groupId.HasValue && receiverId <= 0)
+                return BadRequest("Invalid input");
+
+            if (string.IsNullOrWhiteSpace(messageText) && attachment == null)
                 return BadRequest("Invalid input");
 
             string? attachmentUrl = null;
@@ -219,7 +445,8 @@ namespace FYPTracker.Controllers
             var chatMsg = new ChatMessage
             {
                 SenderId = user.Id,
-                ReceiverId = receiverId,
+                ReceiverId = groupId.HasValue ? null : receiverId,
+                GroupId = groupId,
                 MessageText = string.IsNullOrWhiteSpace(messageText) ? null : messageText.Trim(),
                 AttachmentUrl = attachmentUrl,
                 AttachmentName = attachmentName,
@@ -238,37 +465,13 @@ namespace FYPTracker.Controllers
                 var replyMsg = await _context.ChatMessages.FindAsync(replyToId.Value);
                 replyText = replyMsg?.MessageText ?? replyMsg?.AttachmentName;
             }
-
-            // --- Send Email Notification ---
-            var receiver = await _context.ApplicationUsers.FindAsync(receiverId);
-            if (receiver != null && !string.IsNullOrEmpty(receiver.Email))
-            {
-                    string subject = $"New message from {user.FullName} on FYP Tracker";
-                    string body = $@"
-                        <div style='font-family: sans-serif; color: #333;'>
-                            <h3 style='color: #0d6efd;'>New Chat Message</h3>
-                            <p>Hi <strong>{receiver.FullName}</strong>,</p>
-                            <p>You have received a new message from <strong>{user.FullName}</strong>:</p>
-                            <blockquote style='border-left: 4px solid #0d6efd; padding-left: 15px; margin-left: 0; color: #555; background: #f8f9fa; padding: 15px; border-radius: 4px;'>
-                                {messageText}
-                            </blockquote>
-                            <p>Please log in to the FYP Progress Tracking System to reply.</p>
-                            <hr style='border: 0; border-top: 1px solid #eee; margin-top: 30px;' />
-                            <p style='font-size: 12px; color: #999;'>This is an automated notification. Please do not reply to this email.</p>
-                        </div>";
-                    
-                    try {
-                        await _emailService.Send(new System.Collections.Generic.List<string> { receiver.Email }, subject, body);
-                    } catch {
-                        // Ignore email errors to prevent chat from failing
-                    }
-                }
-            // -------------------------------
             
             var chatMsgDto = new {
                 id = chatMsg.Id,
                 senderId = chatMsg.SenderId,
+                senderName = user.FullName,
                 receiverId = chatMsg.ReceiverId,
+                groupId = chatMsg.GroupId,
                 messageText = chatMsg.MessageText,
                 attachmentUrl = chatMsg.AttachmentUrl,
                 attachmentName = chatMsg.AttachmentName,
@@ -282,27 +485,35 @@ namespace FYPTracker.Controllers
                 replyToMessageText = replyText
             };
             
-            await _hubContext.Clients.Group($"User_{receiverId}").SendAsync("ReceiveChatMessage", chatMsgDto);
+            if (groupId.HasValue)
+            {
+                await _hubContext.Clients.Group($"GroupChat_{groupId.Value}").SendAsync("ReceiveChatMessage", chatMsgDto);
+            }
+            else
+            {
+                await _hubContext.Clients.Group($"User_{receiverId}").SendAsync("ReceiveChatMessage", chatMsgDto);
+            }
 
-            return Json(new {
-                success = true,
-                message = new {
-                    id = chatMsg.Id,
-                    senderId = chatMsg.SenderId,
-                    receiverId = chatMsg.ReceiverId,
-                    messageText = chatMsg.MessageText,
-                    attachmentUrl = chatMsg.AttachmentUrl,
-                    attachmentName = chatMsg.AttachmentName,
-                    sentAtStr = chatMsg.SentAt.ToString("dd MMM, HH:mm"),
-                    isMine = true,
-                    isRead = false,
-                    isPinned = false,
-                    isEdited = false,
-                    isDeleted = false,
-                    replyToId = chatMsg.ReplyToId,
-                    replyToMessageText = replyText
-                }
-            });
+            var returnObj = new {
+                id = chatMsg.Id,
+                senderId = chatMsg.SenderId,
+                senderName = user.FullName,
+                receiverId = chatMsg.ReceiverId,
+                groupId = chatMsg.GroupId,
+                messageText = chatMsg.MessageText,
+                attachmentUrl = chatMsg.AttachmentUrl,
+                attachmentName = chatMsg.AttachmentName,
+                sentAtStr = chatMsg.SentAt.ToString("dd MMM, HH:mm"),
+                isMine = true,
+                isRead = false,
+                isPinned = false,
+                isEdited = false,
+                isDeleted = false,
+                replyToId = chatMsg.ReplyToId,
+                replyToMessageText = replyText
+            };
+
+            return Json(new { success = true, message = returnObj });
         }
         
         [HttpPost]
@@ -312,7 +523,7 @@ namespace FYPTracker.Controllers
             if (user == null) return Unauthorized();
 
             var unread = await _context.ChatMessages
-                .Where(m => m.ReceiverId == user.Id && m.SenderId == senderId && !m.IsRead)
+                .Where(m => m.GroupId == null && m.ReceiverId == user.Id && m.SenderId == senderId && !m.IsRead)
                 .ToListAsync();
 
             if (unread.Any())
@@ -332,13 +543,22 @@ namespace FYPTracker.Controllers
             if (user == null) return Unauthorized();
 
             var msg = await _context.ChatMessages.FindAsync(messageId);
-            if (msg == null || (msg.SenderId != user.Id && msg.ReceiverId != user.Id)) return NotFound();
+            if (msg == null) return NotFound();
+
+            if (msg.GroupId == null && msg.SenderId != user.Id && msg.ReceiverId != user.Id) return NotFound();
 
             msg.IsPinned = !msg.IsPinned;
             await _context.SaveChangesAsync();
 
-            int otherUserId = msg.SenderId == user.Id ? msg.ReceiverId : msg.SenderId;
-            await _hubContext.Clients.Group($"User_{otherUserId}").SendAsync("MessagePinnedToggled", msg.Id, msg.IsPinned);
+            if (msg.GroupId.HasValue)
+            {
+                await _hubContext.Clients.Group($"GroupChat_{msg.GroupId.Value}").SendAsync("MessagePinnedToggled", msg.Id, msg.IsPinned);
+            }
+            else
+            {
+                int otherUserId = msg.SenderId == user.Id ? msg.ReceiverId!.Value : msg.SenderId;
+                await _hubContext.Clients.Group($"User_{otherUserId}").SendAsync("MessagePinnedToggled", msg.Id, msg.IsPinned);
+            }
 
             return Json(new { success = true, isPinned = msg.IsPinned });
         }
@@ -357,7 +577,14 @@ namespace FYPTracker.Controllers
             msg.IsEdited = true;
             await _context.SaveChangesAsync();
 
-            await _hubContext.Clients.Group($"User_{msg.ReceiverId}").SendAsync("MessageEdited", msg.Id, msg.MessageText);
+            if (msg.GroupId.HasValue)
+            {
+                await _hubContext.Clients.Group($"GroupChat_{msg.GroupId.Value}").SendAsync("MessageEdited", msg.Id, msg.MessageText);
+            }
+            else
+            {
+                await _hubContext.Clients.Group($"User_{msg.ReceiverId!.Value}").SendAsync("MessageEdited", msg.Id, msg.MessageText);
+            }
 
             return Json(new { success = true, newText = msg.MessageText });
         }
@@ -377,7 +604,14 @@ namespace FYPTracker.Controllers
             msg.AttachmentName = null;
             await _context.SaveChangesAsync();
 
-            await _hubContext.Clients.Group($"User_{msg.ReceiverId}").SendAsync("MessageDeleted", msg.Id);
+            if (msg.GroupId.HasValue)
+            {
+                await _hubContext.Clients.Group($"GroupChat_{msg.GroupId.Value}").SendAsync("MessageDeleted", msg.Id);
+            }
+            else
+            {
+                await _hubContext.Clients.Group($"User_{msg.ReceiverId!.Value}").SendAsync("MessageDeleted", msg.Id);
+            }
 
             return Json(new { success = true });
         }

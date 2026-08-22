@@ -12,8 +12,9 @@ namespace FYPTracker.Models
         [Required]
         public int SenderId { get; set; }
 
-        [Required]
-        public int ReceiverId { get; set; }
+        public int? ReceiverId { get; set; }
+
+        public int? GroupId { get; set; }
 
         public string? MessageText { get; set; }
 
@@ -41,6 +42,9 @@ namespace FYPTracker.Models
         public virtual ApplicationUser Sender { get; set; } = null!;
 
         [ForeignKey("ReceiverId")]
-        public virtual ApplicationUser Receiver { get; set; } = null!;
+        public virtual ApplicationUser? Receiver { get; set; }
+
+        [ForeignKey("GroupId")]
+        public virtual ChatGroup? Group { get; set; }
     }
 }

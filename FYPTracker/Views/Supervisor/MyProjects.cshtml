@@ -64,15 +64,11 @@
                         <div class="d-flex align-items-center justify-content-between mb-5">
                             @if (proj.Status == "Failed")
                             {
-                                <span class="badge bg-danger text-white fw-bolder px-3 py-2 rounded-pill shadow-sm"><i class="fas fa-times-circle me-1"></i> Failed (@proj.FinalGrade)</span>
+                                <span class="badge bg-danger text-white fw-bolder px-3 py-2 rounded-pill shadow-sm"><i class="fas fa-times-circle me-1"></i> Failed</span>
                             }
-                            else if (total > 0 && completed == total && string.IsNullOrEmpty(proj.FinalGrade))
+                            else if (total > 0 && completed == total)
                             {
-                                <span class="badge bg-warning text-dark fw-bolder px-3 py-2 rounded-pill shadow-sm"><i class="fas fa-exclamation-circle me-1"></i> Final Grade Pending</span>
-                            }
-                            else if (!string.IsNullOrEmpty(proj.FinalGrade))
-                            {
-                                <span class="badge bg-success text-white fw-bolder px-3 py-2 rounded-pill shadow-sm"><i class="fas fa-check-circle me-1"></i> Graded: @proj.FinalGrade</span>
+                                <span class="badge bg-success text-white fw-bolder px-3 py-2 rounded-pill shadow-sm"><i class="fas fa-check-circle me-1"></i> Completed</span>
                             }
                             else
                             {

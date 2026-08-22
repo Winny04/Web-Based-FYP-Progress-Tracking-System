@@ -42,6 +42,11 @@ namespace FYPTracker.Hubs
             }
         }
 
+        public async Task JoinGroupChat(int groupId)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"GroupChat_{groupId}");
+        }
+
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
             if (_connectionUserMap.TryRemove(Context.ConnectionId, out int userId))

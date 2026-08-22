@@ -280,6 +280,7 @@
   <ItemGroup>
     <Folder Include="wwwroot\documents\" />
     <Folder Include="wwwroot\documents\" />
+    <Folder Include="wwwroot\documents\" />
     <Folder Include="wwwroot\temp\" />
   </ItemGroup>
 

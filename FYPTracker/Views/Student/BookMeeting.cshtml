@@ -363,24 +363,7 @@
                             {
                                 <input type="hidden" name="meetingTime" id="meetingTimeInput" required />
                                 <div class="row g-2" id="timeSlotsContainer">
-                                    @{
-                                        int startHr = ViewBag.StartHour ?? 8;
-                                        int endHr = ViewBag.EndHour ?? 17;
-                                    }
-                                    @for (int i = startHr; i <= endHr; i++)
-                                    {
-                                        string slot1 = $"{i:00}:00";
-                                        <div class="col-4">
-                                            <div class="time-slot" data-time="@slot1" onclick="selectTime(this, 'timeSlotsContainer', 'meetingTimeInput', 'timeError')">@slot1</div>
-                                        </div>
-                                        if (i != endHr)
-                                        {
-                                            string slot2 = $"{i:00}:30";
-                                            <div class="col-4">
-                                                <div class="time-slot" data-time="@slot2" onclick="selectTime(this, 'timeSlotsContainer', 'meetingTimeInput', 'timeError')">@slot2</div>
-                                            </div>
-                                        }
-                                    }
+                                    <div class="col-12 text-muted small"><i class="fas fa-arrow-up"></i> Please pick a date first to see available slots.</div>
                                 </div>
                                 <div id="timeError" class="text-danger mt-2 small" style="display:none;">Please pick an available time slot.</div>
                             }
@@ -436,24 +419,7 @@
                         else
                         {
                             <div class="row g-2" id="reschedTimeSlots">
-                                @{
-                                    int rStartHr = ViewBag.StartHour ?? 8;
-                                    int rEndHr = ViewBag.EndHour ?? 17;
-                                }
-                                @for (int i = rStartHr; i <= rEndHr; i++)
-                                {
-                                    string slot1 = $"{i:00}:00";
-                                    <div class="col-4">
-                                        <div class="time-slot" data-time="@slot1" onclick="selectTime(this, 'reschedTimeSlots', 'reschedTimeInput', 'reschedTimeError')">@slot1</div>
-                                    </div>
-                                    if (i != rEndHr)
-                                    {
-                                        string slot2 = $"{i:00}:30";
-                                        <div class="col-4">
-                                            <div class="time-slot" data-time="@slot2" onclick="selectTime(this, 'reschedTimeSlots', 'reschedTimeInput', 'reschedTimeError')">@slot2</div>
-                                        </div>
-                                    }
-                                }
+                                <div class="col-12 text-muted small"><i class="fas fa-arrow-up"></i> Please pick a date first to see available slots.</div>
                             </div>
                             <div id="reschedTimeError" class="text-danger mt-2 small" style="display:none;">Please select a time slot.</div>
                         }
@@ -533,42 +499,29 @@
         const container = document.getElementById('timeSlotsContainer');
         if (!container) return;
 
-        container.querySelectorAll('.time-slot').forEach(s => {
-            s.classList.remove('booked', 'selected');
-            s.title = '';
-        });
+        container.innerHTML = '<div class="col-12 text-center text-muted py-2"><div class="spinner-border spinner-border-sm me-2"></div>Loading slots...</div>';
         if (timeInput) timeInput.value = '';
 
         try {
-            const resp = await fetch(`/Student/GetBookedSlots?supervisorId=${supervisorId}&date=${dateVal}`);
-            const booked = await resp.json();
+            const resp = await fetch(`/Student/GetAvailableSlots?supervisorId=${supervisorId}&date=${dateVal}`);
+            const data = await resp.json();
             
-            const today = new Date();
-            const selectedDate = new Date(dateVal + 'T00:00:00');
-            const isToday = today.toDateString() === selectedDate.toDateString();
-            const currentHour = today.getHours();
-            const currentMinutes = today.getMinutes();
-
-            container.querySelectorAll('.time-slot').forEach(slot => {
-                let isPast = false;
-                if (isToday) {
-                    const parts = slot.dataset.time.split(':');
-                    const slotHr = parseInt(parts[0], 10);
-                    const slotMin = parseInt(parts[1], 10);
-                    if (slotHr < currentHour || (slotHr === currentHour && slotMin <= currentMinutes)) {
-                        isPast = true;
-                    }
-                }
-
-                if (booked.includes(slot.dataset.time)) {
-                    slot.classList.add('booked');
-                    slot.title = 'Already booked';
-                } else if (isPast) {
-                    slot.classList.add('booked');
-                    slot.title = 'Time has passed';
-                }
-            });
-        } catch (err) { console.error(err); }
+            container.innerHTML = '';
+            
+            if (data.slots && data.slots.length > 0) {
+                data.slots.forEach(slotTime => {
+                    const col = document.createElement('div');
+                    col.className = 'col-4';
+                    col.innerHTML = `<div class="time-slot" data-time="${slotTime}" onclick="selectTime(this, 'timeSlotsContainer', 'meetingTimeInput', 'timeError')">${slotTime}</div>`;
+                    container.appendChild(col);
+                });
+            } else {
+                container.innerHTML = `<div class="col-12 text-center text-danger fw-bold"><i class="fas fa-exclamation-circle me-1"></i>${data.message || 'No available slots on this date.'}</div>`;
+            }
+        } catch (err) { 
+            console.error(err); 
+            container.innerHTML = '<div class="col-12 text-center text-danger">Error loading slots.</div>';
+        }
     }
 
     // ── Generic slot selector ───────────────────────────────────
@@ -648,42 +601,29 @@
         const container = document.getElementById('reschedTimeSlots');
         if (!container) return;
 
-        container.querySelectorAll('.time-slot').forEach(s => {
-            s.classList.remove('booked', 'selected');
-            s.title = '';
-        });
+        container.innerHTML = '<div class="col-12 text-center text-muted py-2"><div class="spinner-border spinner-border-sm me-2"></div>Loading slots...</div>';
         if (reschedTimeInput && document.getElementById('reschedTimeSlots')) reschedTimeInput.value = '';
 
         try {
-            const resp = await fetch(`/Student/GetBookedSlots?supervisorId=${supervisorId}&date=${dateVal}`);
-            const booked = await resp.json();
+            const resp = await fetch(`/Student/GetAvailableSlots?supervisorId=${supervisorId}&date=${dateVal}`);
+            const data = await resp.json();
             
-            const today = new Date();
-            const selectedDate = new Date(dateVal + 'T00:00:00');
-            const isToday = today.toDateString() === selectedDate.toDateString();
-            const currentHour = today.getHours();
-            const currentMinutes = today.getMinutes();
-
-            container.querySelectorAll('.time-slot').forEach(slot => {
-                let isPast = false;
-                if (isToday) {
-                    const parts = slot.dataset.time.split(':');
-                    const slotHr = parseInt(parts[0], 10);
-                    const slotMin = parseInt(parts[1], 10);
-                    if (slotHr < currentHour || (slotHr === currentHour && slotMin <= currentMinutes)) {
-                        isPast = true;
-                    }
-                }
-
-                if (booked.includes(slot.dataset.time)) {
-                    slot.classList.add('booked');
-                    slot.title = 'Already booked';
-                } else if (isPast) {
-                    slot.classList.add('booked');
-                    slot.title = 'Time has passed';
-                }
-            });
-        } catch (err) { console.error(err); }
+            container.innerHTML = '';
+            
+            if (data.slots && data.slots.length > 0) {
+                data.slots.forEach(slotTime => {
+                    const col = document.createElement('div');
+                    col.className = 'col-4';
+                    col.innerHTML = `<div class="time-slot" data-time="${slotTime}" onclick="selectTime(this, 'reschedTimeSlots', 'reschedTimeInput', 'reschedTimeError')">${slotTime}</div>`;
+                    container.appendChild(col);
+                });
+            } else {
+                container.innerHTML = `<div class="col-12 text-center text-danger fw-bold"><i class="fas fa-exclamation-circle me-1"></i>${data.message || 'No available slots on this date.'}</div>`;
+            }
+        } catch (err) { 
+            console.error(err); 
+            container.innerHTML = '<div class="col-12 text-center text-danger">Error loading slots.</div>';
+        }
     }
 
     document.getElementById('studentRescheduleForm')?.addEventListener('submit', function(e) {

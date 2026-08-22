@@ -268,6 +268,12 @@
                                     <span class="countdown-timer" data-expiry="@req.ExpiryDate.ToString("o")">7 Days</span>
                                 </div>
                             }
+                            else if (!string.IsNullOrEmpty(req.ResponseNote))
+                            {
+                                <div class="mt-2 text-muted small p-2 rounded" style="background:#f1f5f9; border-left: 3px solid #6b7280;">
+                                    <strong>Supervisor's Note:</strong> @req.ResponseNote
+                                </div>
+                            }
                         </div>
                     }
                 </div>

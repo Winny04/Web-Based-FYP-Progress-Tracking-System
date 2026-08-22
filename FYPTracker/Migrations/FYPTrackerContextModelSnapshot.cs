@@ -85,6 +85,9 @@ namespace FYPTracker.Migrations
                     b.Property<DateTime?>("ResetTokenExpiry")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Specialization")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Title")
                         .HasColumnType("nvarchar(max)");
 
@@ -101,6 +104,57 @@ namespace FYPTracker.Migrations
                     b.ToTable("ApplicationUser", (string)null);
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.ChatGroup", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("SupervisorId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SupervisorId");
+
+                    b.ToTable("ChatGroup", (string)null);
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.ChatGroupMember", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<int>("GroupId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("JoinedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("StudentId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("StudentId");
+
+                    b.ToTable("ChatGroupMember", (string)null);
+                });
+
             modelBuilder.Entity("FYPTracker.Models.ChatMessage", b =>
                 {
                     b.Property<int>("Id")
@@ -114,6 +168,9 @@ namespace FYPTracker.Migrations
 
                     b.Property<string>("AttachmentUrl")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("GroupId")
+                        .HasColumnType("int");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
@@ -130,7 +187,7 @@ namespace FYPTracker.Migrations
                     b.Property<string>("MessageText")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("ReceiverId")
+                    b.Property<int?>("ReceiverId")
                         .HasColumnType("int");
 
                     b.Property<int?>("ReplyToId")
@@ -143,6 +200,8 @@ namespace FYPTracker.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("GroupId");
 
                     b.HasIndex("ReceiverId");
 
@@ -164,6 +223,9 @@ namespace FYPTracker.Migrations
                     b.Property<string>("DepartmentCode")
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("DepartmentCode");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -363,12 +425,19 @@ namespace FYPTracker.Migrations
                     b.Property<DateTime?>("EndDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("ExaminerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ExaminerMarksheetPath")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.Property<string>("ExpectedOutcome")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FinalGrade")
-                        .HasMaxLength(5)
-                        .HasColumnType("nvarchar(5)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<bool>("IsGradingLocked")
                         .HasColumnType("bit");
@@ -417,6 +486,8 @@ namespace FYPTracker.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ExaminerId");
 
                     b.HasIndex("StudentId");
 
@@ -578,6 +649,87 @@ namespace FYPTracker.Migrations
                     b.ToTable("MeetingLog", (string)null);
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.Programme", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("ProgrammeName");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Programme");
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.Specialization", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("SpecializationName");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Specialization");
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.SupervisorAvailability", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<string>("DayOfWeek")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<TimeSpan>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<bool>("IsAvailable")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ScheduleType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("SpecificDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<TimeSpan>("StartTime")
+                        .HasColumnType("time");
+
+                    b.Property<int>("SupervisorId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SupervisorId");
+
+                    b.ToTable("SupervisorAvailabilities");
+                });
+
             modelBuilder.Entity("FYPTracker.Models.SupervisorRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -652,13 +804,47 @@ namespace FYPTracker.Migrations
                     b.Navigation("EmpDepartment");
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.ChatGroup", b =>
+                {
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "Supervisor")
+                        .WithMany()
+                        .HasForeignKey("SupervisorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Supervisor");
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.ChatGroupMember", b =>
+                {
+                    b.HasOne("FYPTracker.Models.ChatGroup", "Group")
+                        .WithMany("Members")
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Group");
+
+                    b.Navigation("Student");
+                });
+
             modelBuilder.Entity("FYPTracker.Models.ChatMessage", b =>
                 {
+                    b.HasOne("FYPTracker.Models.ChatGroup", "Group")
+                        .WithMany("Messages")
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("FYPTracker.Models.ApplicationUser", "Receiver")
                         .WithMany()
                         .HasForeignKey("ReceiverId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("FYPTracker.Models.ChatMessage", "ReplyToMessage")
                         .WithMany()
@@ -669,6 +855,8 @@ namespace FYPTracker.Migrations
                         .HasForeignKey("SenderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Group");
 
                     b.Navigation("Receiver");
 
@@ -731,6 +919,11 @@ namespace FYPTracker.Migrations
 
             modelBuilder.Entity("FYPTracker.Models.FYPProject", b =>
                 {
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "Examiner")
+                        .WithMany()
+                        .HasForeignKey("ExaminerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("FYPTracker.Models.ApplicationUser", "Student")
                         .WithMany()
                         .HasForeignKey("StudentId")
@@ -741,6 +934,8 @@ namespace FYPTracker.Migrations
                         .WithMany()
                         .HasForeignKey("SupervisorId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Examiner");
 
                     b.Navigation("Student");
 
@@ -795,6 +990,17 @@ namespace FYPTracker.Migrations
                     b.Navigation("MeetingBooking");
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.SupervisorAvailability", b =>
+                {
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "Supervisor")
+                        .WithMany()
+                        .HasForeignKey("SupervisorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Supervisor");
+                });
+
             modelBuilder.Entity("FYPTracker.Models.SupervisorRequest", b =>
                 {
                     b.HasOne("FYPTracker.Models.ApplicationUser", "Student")
@@ -812,6 +1018,13 @@ namespace FYPTracker.Migrations
                     b.Navigation("Student");
 
                     b.Navigation("Supervisor");
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.ChatGroup", b =>
+                {
+                    b.Navigation("Members");
+
+                    b.Navigation("Messages");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.Department", b =>

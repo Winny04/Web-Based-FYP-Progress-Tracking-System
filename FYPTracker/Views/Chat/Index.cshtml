@@ -3,6 +3,8 @@
     ViewData["Title"] = "Messages";
     var isStudent = ViewBag.IsStudent != null && (bool)ViewBag.IsStudent;
     var partnerId = ViewBag.DefaultPartnerId as int?;
+    var activeGroupId = ViewBag.ActiveGroupId as int?;
+    var groupName = ViewBag.GroupName as string;
     var partnerName = ViewBag.PartnerName as string ?? "Your Supervisor";
     var noSupervisor = ViewBag.NoSupervisor != null && (bool)ViewBag.NoSupervisor;
 }
@@ -10,14 +12,19 @@
 <div class="container-fluid py-4">
     <div class="row g-0" style="height: 78vh; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.07);">
 
-        @if (!isStudent)
+        @if (true)
         {
-            <!-- Supervisor Sidebar: List of Students -->
+            <!-- Sidebar: List of Students and Groups -->
             <div class="col-lg-3 border-end d-flex flex-column bg-white h-100">
                 <!-- Sidebar Header -->
                 <div class="p-4 border-bottom">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h4 class="fw-bold text-dark mb-0">Chats</h4>
+                        @if (!isStudent) {
+                            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createGroupModal">
+                                <i class="fas fa-plus"></i> Group
+                            </button>
+                        }
                     </div>
                     <!-- Search Bar -->
                     <div class="position-relative">
@@ -29,6 +36,72 @@
                         <span class="badge rounded-pill bg-dark text-white px-3 py-2 fw-normal">All</span>
                     </div>
                 </div>
+
+                
+                <!-- Group List -->
+                <div class="p-3 border-bottom bg-light">
+                    <h6 class="text-muted fw-bold mb-0 small text-uppercase">Groups</h6>
+                </div>
+                <div class="overflow-auto border-bottom" style="max-height: 30vh;">
+                    @if (ViewBag.Groups != null)
+                    {
+                        var groups = (List<FYPTracker.Models.ChatGroup>)ViewBag.Groups;
+                        <ul class="list-group list-group-flush">
+                            @foreach (var g in groups)
+                            {
+                                var isActive = activeGroupId.HasValue && activeGroupId.Value == g.Id;
+                                var activeBg = isActive ? "background: linear-gradient(135deg, #10b981, #059669);" : "";
+                                var textCls = isActive ? "text-white" : "text-dark";
+                                var initBg = isActive ? "background: rgba(255,255,255,0.25);" : "background:#f1f5f9;";
+                                var initColor = isActive ? "color:white;" : "color:#1e293b;";
+                                
+                                <a href="@Url.Action("Index", "Chat", new { groupId = g.Id })"
+                                   class="list-group-item list-group-item-action border-0 py-3 px-4"
+                                   style="transition: background 0.15s; @activeBg">
+                                    <div class="d-flex align-items-center">
+                                        <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold me-3 shadow-sm flex-shrink-0"
+                                             style="width:44px;height:44px;font-size:1rem;@initBg @initColor">
+                                            <i class="fas fa-users"></i>
+                                        </div>
+                                        <div class="overflow-hidden flex-grow-1">
+                                            <h6 class="mb-0 fw-bold @textCls text-truncate">@g.Name</h6>
+                                        </div>
+                                    </div>
+                                </a>
+                            }
+                        </ul>
+                    }
+                </div>
+                
+                @if (isStudent && ViewBag.PartnerName != null) {
+                    <!-- Student's private chat link to supervisor -->
+                    <div class="p-3 border-bottom bg-light">
+                        <h6 class="text-muted fw-bold mb-0 small text-uppercase">Direct Messages</h6>
+                    </div>
+                    <ul class="list-group list-group-flush">
+                        @{
+                            var isActive = partnerId.HasValue && !activeGroupId.HasValue;
+                            var activeBg = isActive ? "background: linear-gradient(135deg, #2563eb, #0ea5e9);" : "";
+                            var textCls = isActive ? "text-white" : "text-dark";
+                            var initBg = isActive ? "background: rgba(255,255,255,0.25);" : "background:#f1f5f9;";
+                            var initColor = isActive ? "color:white;" : "color:#1e293b;";
+                            string pn = ViewBag.PartnerName;
+                        }
+                        <a href="@Url.Action("Index", "Chat", new { partnerId = ViewBag.DefaultPartnerId })"
+                           class="list-group-item list-group-item-action border-0 py-3 px-4"
+                           style="transition: background 0.15s; @activeBg">
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold me-3 shadow-sm flex-shrink-0"
+                                     style="width:44px;height:44px;font-size:1rem;@initBg @initColor">
+                                    @(pn.Substring(0, 1))
+                                </div>
+                                <div class="overflow-hidden flex-grow-1">
+                                    <h6 class="mb-0 fw-bold @textCls text-truncate">@pn</h6>
+                                </div>
+                            </div>
+                        </a>
+                    </ul>
+                }
 
                 <!-- Student List -->
                 <div class="overflow-auto flex-grow-1">
@@ -83,7 +156,7 @@
         }
 
         <!-- Chat Window -->
-        <div class="col-lg-@(isStudent ? "12" : "9") d-flex flex-column bg-white h-100">
+        <div class="col-lg-9 d-flex flex-column bg-white h-100">
 
             @if (noSupervisor)
             {
@@ -97,24 +170,36 @@
                     <a href="/Student/SelectSupervisor" class="btn btn-primary rounded-pill px-4 mt-2">Find a Supervisor</a>
                 </div>
             }
-            else if (partnerId.HasValue)
+            else if (partnerId.HasValue || activeGroupId.HasValue)
             {
                 <!-- Chat Header -->
                 <div class="p-4 border-bottom d-flex align-items-center" style="background: rgba(248,250,252,0.8);">
-                    <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold shadow-sm me-3 flex-shrink-0"
-                         style="width:48px;height:48px;font-size:1.1rem;background:linear-gradient(135deg,#2563eb,#0ea5e9);color:white;">
-                        @partnerName.Substring(0, 1)
-                    </div>
-                    <div>
-                        <h5 class="fw-bold text-dark mb-0">@partnerName</h5>
+                    <div class="d-flex align-items-center w-100">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center fw-bold shadow-sm me-3 flex-shrink-0"
+                             style="width:48px;height:48px;font-size:1.1rem;background:linear-gradient(135deg,#2563eb,#0ea5e9);color:white;">
+                            @partnerName.Substring(0, 1)
+                        </div>
+                        <div class="flex-grow-1">
+                            <h5 class="fw-bold text-dark mb-0">
+                                @(activeGroupId.HasValue ? groupName : partnerName)
+                                @if (activeGroupId.HasValue && !isStudent)
+                                {
+                                    <button class="btn btn-sm btn-light ms-2 text-primary shadow-sm rounded-circle" onclick="openManageGroupModal(@activeGroupId)" title="Manage Group Members" style="width: 32px; height: 32px;">
+                                        <i class="fas fa-cog"></i>
+                                    </button>
+                                }
+                            </h5>
+                        @if(!activeGroupId.HasValue) {
                         <span id="partner-online-status" class="text-success small fw-semibold d-none">
                             <i class="fas fa-circle me-1" style="font-size:0.45rem;"></i>Online
                         </span>
                         <span id="partner-offline-status" class="text-muted small fw-semibold">
                             <i class="fas fa-circle me-1" style="font-size:0.45rem;"></i>Offline
                         </span>
+                        }
                     </div>
                     <input type="text" id="chat-history-search" class="form-control form-control-sm rounded-pill w-auto ms-auto d-none d-md-block" placeholder="Search in chat..." onkeyup="searchChatHistory()">
+                    </div>
                 </div>
                 
                 <!-- Pinned Messages Area -->
@@ -129,7 +214,7 @@
                 <!-- Messages Area -->
                 <div id="chat-messages" class="p-4" style="flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 20px 20px; scroll-behavior: smooth;">
                     <div class="text-center text-muted small mb-3">
-                        <i class="fas fa-lock me-1"></i> Conversation is private
+                        <i class="fas fa-lock me-1"></i> @(activeGroupId.HasValue ? "Group Conversation" : "Conversation is private")
                     </div>
                     <!-- Messages injected by JS -->
                 </div>
@@ -159,6 +244,9 @@
                         <button type="button" class="btn-close btn-close-white btn-sm ms-2 flex-shrink-0" onclick="clearReply()"></button>
                     </div>
 
+                    <!-- Tag Autocomplete -->
+                    <ul id="tag-autocomplete" class="dropdown-menu shadow-lg position-fixed" style="display: none; max-height: 200px; overflow-y: auto; z-index: 1060; margin-bottom: 5px;">
+                    </ul>
                     <emoji-picker id="emojiPicker" class="d-none shadow" style="position: absolute; bottom: 100%; left: 1rem; z-index: 1050; margin-bottom: 10px;"></emoji-picker>
                     
                     <form id="chat-form" class="d-flex align-items-center gap-2" onsubmit="event.preventDefault(); sendMessage(event); return false;">
@@ -181,6 +269,7 @@
                         <input type="text" id="chat-input"
                                class="form-control form-control-lg border-0 shadow-none bg-light rounded-pill px-4"
                                placeholder="Type a message or attach a file..."
+                               data-group-members="@System.Text.Json.JsonSerializer.Serialize(ViewBag.GroupMembers ?? new object[0])"
                                autocomplete="off" />
                         <button type="submit"
                                 class="btn btn-primary rounded-circle d-flex align-items-center justify-content-center shadow flex-shrink-0"
@@ -207,9 +296,203 @@
     </div>
 </div>
 
+
+@if (!isStudent) {
+<!-- Create Group Modal -->
+<div class="modal fade" id="createGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Create Chat Group</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Group Name</label>
+                    <input type="text" id="groupNameInput" class="form-control" placeholder="e.g. Project Alpha Team" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Select Students</label>
+                    <div style="max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; border-radius: 4px;">
+                        @if (ViewBag.AssignedStudents != null) {
+                            var sts = (List<ChatStudentItem>)ViewBag.AssignedStudents;
+                            foreach (var s in sts) {
+                                <div class="form-check">
+                                    <input class="form-check-input group-student-checkbox" type="checkbox" value="@s.Id" id="student_@s.Id">
+                                    <label class="form-check-label" for="student_@s.Id">@s.Name</label>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="createGroup()">Create Group</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Manage Group Modal -->
+<div class="modal fade" id="manageGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Manage Group Members</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="manageGroupId" />
+                <h6 class="fw-bold">Current Members</h6>
+                <div id="currentMembersList" class="mb-4" style="max-height: 150px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 4px;">
+                    <!-- Populated via JS -->
+                </div>
+                
+                <h6 class="fw-bold">Add Member</h6>
+                <div class="input-group">
+                    <select class="form-select" id="availableStudentsSelect">
+                        <option value="">Select a student...</option>
+                    </select>
+                    <button class="btn btn-outline-primary" type="button" onclick="addGroupMember()">Add</button>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <button type="button" class="btn btn-outline-danger" onclick="deleteGroup()">Delete Group</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    function createGroup() {
+        var name = document.getElementById('groupNameInput').value;
+        var checkboxes = document.querySelectorAll('.group-student-checkbox:checked');
+        var memberIds = Array.from(checkboxes).map(c => c.value);
+        if(!name) { alert("Please enter group name"); return; }
+        if(memberIds.length === 0) { alert("Please select at least one student"); return; }
+        
+        var fd = new FormData();
+        fd.append('name', name);
+        memberIds.forEach(id => fd.append('memberIds', id));
+        
+        fetch('/Chat/CreateGroup', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(d => {
+            if(d.success) window.location.href = '/Chat/Index?groupId=' + d.id;
+            else alert("Error creating group");
+        });
+    }
+
+    function openManageGroupModal(groupId) {
+        document.getElementById('manageGroupId').value = groupId;
+        loadGroupMembers(groupId);
+        loadAvailableStudents(groupId);
+        var modal = new bootstrap.Modal(document.getElementById('manageGroupModal'));
+        modal.show();
+    }
+
+    function loadGroupMembers(groupId) {
+        fetch('/Chat/GetGroupMembers?groupId=' + groupId)
+            .then(r => r.json())
+            .then(data => {
+                var list = document.getElementById('currentMembersList');
+                list.innerHTML = '';
+                if(data.length === 0) {
+                    list.innerHTML = '<div class="text-muted small">No members.</div>';
+                    return;
+                }
+                data.forEach(m => {
+                    list.innerHTML += `
+                        <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
+                            <div>
+                                <span class="fw-bold">${m.name}</span><br>
+                                <small class="text-muted">Joined: ${m.joinedAt}</small>
+                            </div>
+                            <button class="btn btn-sm btn-outline-danger" onclick="removeGroupMember(${groupId}, ${m.studentId})">Remove</button>
+                        </div>
+                    `;
+                });
+            });
+    }
+
+    function loadAvailableStudents(groupId) {
+        fetch('/Chat/GetAvailableStudents?groupId=' + groupId)
+            .then(r => r.json())
+            .then(data => {
+                var select = document.getElementById('availableStudentsSelect');
+                select.innerHTML = '<option value="">Select a student...</option>';
+                data.forEach(s => {
+                    select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+                });
+            });
+    }
+
+    function addGroupMember() {
+        var groupId = document.getElementById('manageGroupId').value;
+        var studentId = document.getElementById('availableStudentsSelect').value;
+        if (!studentId) { alert("Please select a student"); return; }
+
+        var fd = new FormData();
+        fd.append('groupId', groupId);
+        fd.append('studentId', studentId);
+
+        fetch('/Chat/AddGroupMember', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                if(d.success) {
+                    loadGroupMembers(groupId);
+                    loadAvailableStudents(groupId);
+                } else {
+                    alert(d.error || "Error adding member");
+                }
+            });
+    }
+
+    function removeGroupMember(groupId, studentId) {
+        if(!confirm("Are you sure you want to remove this member?")) return;
+
+        var fd = new FormData();
+        fd.append('groupId', groupId);
+        fd.append('studentId', studentId);
+
+        fetch('/Chat/RemoveGroupMember', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                if(d.success) {
+                    loadGroupMembers(groupId);
+                    loadAvailableStudents(groupId);
+                } else {
+                    alert(d.error || "Error removing member");
+                }
+            });
+    }
+    function deleteGroup() {
+        var groupId = document.getElementById('manageGroupId').value;
+        if (!groupId) return;
+
+        if (!confirm("Are you sure you want to completely delete this group? All chat history for this group will be permanently lost.")) return;
+
+        var fd = new FormData();
+        fd.append('groupId', groupId);
+
+        fetch('/Chat/DeleteGroup', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    window.location.href = '/Chat';
+                } else {
+                    alert(d.message || d.error || "Error deleting group");
+                }
+            });
+    }
+</script>
+}
+
 @section Scripts {
     <script>
         const partnerId = @(partnerId.HasValue ? partnerId.Value.ToString() : "0");
+        const activeGroupId = @(activeGroupId.HasValue ? activeGroupId.Value.ToString() : "0");
         const messagesContainer = document.getElementById('chat-messages');
         const chatInput = document.getElementById('chat-input');
         let lastMessageCount = 0;
@@ -261,7 +544,11 @@
                 safeText = '<span class="text-white-50 fst-italic" style="opacity: 0.8;">🚫 This message was deleted.</span>';
                 if (!isMine) safeText = '<span class="text-muted fst-italic">🚫 This message was deleted.</span>';
             } else if (msg.messageText) {
-                safeText = msg.messageText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+                let text = msg.messageText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                text = text.replace(/@@([A-Za-z0-9_]+)/g, function(match, p1) {
+                    return `<span class="badge bg-primary text-white p-1" style="font-size: 0.8rem;">@@${p1}</span>`;
+                });
+                safeText = text.replace(/\n/g,'<br>');
             }
 
             let attachmentHtml = '';
@@ -327,6 +614,7 @@
             
             let bubbleContent = `
                 <div style="max-width:75%;">
+                    ${!isMine && msg.groupId ? `<div class="small fw-bold text-muted mb-1" style="font-size: 0.75rem;">${msg.senderName}</div>` : ''}
                     <div class="position-relative" style="${bubbleStyle}${radius}padding:10px 16px;font-size:0.95rem;line-height:1.4;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,0.08);">
                         ${replyHtml}
                         ${safeText}
@@ -392,7 +680,7 @@
 
         // Fetch history with Pagination
         async function fetchHistory(reset = true) {
-            if (!partnerId || partnerId <= 0) return;
+            if ((!partnerId || partnerId <= 0) && (!activeGroupId || activeGroupId <= 0)) return;
             if (isFetching) return;
             
             if (reset) {
@@ -410,7 +698,7 @@
                 // Save current scroll height to prevent jumping when prepending
                 const oldScrollHeight = messagesContainer.scrollHeight;
                 
-                const res = await fetch(`/Chat/GetHistory?partnerId=${partnerId}&skip=${currentSkip}&take=${takeCount}`);
+                const res = await fetch(`/Chat/GetHistory?partnerId=${partnerId}&groupId=${activeGroupId}&skip=${currentSkip}&take=${takeCount}`);
                 if (!res.ok) { isFetching = false; return; }
                 
                 const messages = await res.json();
@@ -597,7 +885,7 @@
         // Send a message
         async function sendMessage(e) {
             e.preventDefault();
-            if (!partnerId || partnerId <= 0) return;
+            if ((!partnerId || partnerId <= 0) && (!activeGroupId || activeGroupId <= 0)) return;
             const text = chatInput.value.trim();
             const fileInput = document.getElementById('chat-attachment');
             const file = fileInput.files[0];
@@ -624,6 +912,7 @@
 
             const formData = new FormData();
             formData.append('receiverId', partnerId);
+            if (activeGroupId > 0) formData.append('groupId', activeGroupId);
             if (text) formData.append('messageText', text);
             if (file) formData.append('attachment', file);
             if (replyToId) formData.append('replyToId', replyToId);
@@ -645,25 +934,141 @@
             }
         }
 
+        // Autocomplete Tag Logic
+        const tagAutocomplete = document.getElementById('tag-autocomplete');
+        let currentTagSearch = '';
+        let tagSearchActive = false;
+
+        document.addEventListener('keyup', function(e) {
+            if (e.target && e.target.id === 'chat-input') {
+                const input = e.target;
+                const val = input.value;
+                const caretPos = input.selectionStart;
+                
+                const textBefore = val.substring(0, caretPos);
+                const lastAt = textBefore.lastIndexOf(String.fromCharCode(64));
+                
+                if (lastAt !== -1 && (lastAt === 0 || textBefore[lastAt - 1] === ' ' || textBefore[lastAt - 1] === '\n')) {
+                    const searchStr = textBefore.substring(lastAt + 1).toLowerCase();
+                    
+                    if (searchStr.includes(' ')) {
+                        closeTagAutocomplete();
+                        return;
+                    }
+                    
+                    tagSearchActive = true;
+                    currentTagSearch = searchStr;
+                    renderTagAutocomplete(lastAt);
+                } else {
+                    closeTagAutocomplete();
+                }
+            }
+        });
+
+        function closeTagAutocomplete() {
+            tagSearchActive = false;
+            const tagAutocomplete = document.getElementById('tag-autocomplete');
+            if (tagAutocomplete) {
+                tagAutocomplete.classList.remove('show');
+                tagAutocomplete.style.display = 'none';
+            }
+        }
+
+        function renderTagAutocomplete(atIndex) {
+            if (!tagSearchActive) return;
+            
+            const tagAutocomplete = document.getElementById('tag-autocomplete');
+            const chatInput = document.getElementById('chat-input');
+            if (!tagAutocomplete || !chatInput) return;
+            
+            let html = '';
+            const addOption = (name, displayName) => {
+                if (name && name.toLowerCase().includes(currentTagSearch)) {
+                    html += `<li><a class="dropdown-item" href="#" onclick="selectTag('${name}', ${atIndex}); return false;"><i class="fas fa-at me-2 text-primary"></i>${displayName || name}</a></li>`;
+                }
+            };
+            
+            addOption('all', 'all');
+            
+            let groupMembers = [];
+            try {
+                const gmData = chatInput.getAttribute('data-group-members');
+                if (gmData) groupMembers = JSON.parse(gmData);
+            } catch (e) { console.error('Failed to parse group members:', e); }
+            
+            if (groupMembers && groupMembers.length > 0) {
+                groupMembers.forEach(m => {
+                    const n = m.Name || m.name || 'Unknown';
+                    addOption(n.replace(/\s+/g, ''), n);
+                });
+            }
+            
+            if (html === '') {
+                closeTagAutocomplete();
+            } else {
+                tagAutocomplete.innerHTML = html;
+                
+                // Position perfectly above input using fixed coordinates
+                const rect = chatInput.getBoundingClientRect();
+                tagAutocomplete.style.position = 'fixed';
+                tagAutocomplete.style.left = rect.left + 'px';
+                tagAutocomplete.style.bottom = (window.innerHeight - rect.top + 5) + 'px';
+                tagAutocomplete.style.top = 'auto'; // ensure top is not conflicting
+                
+                tagAutocomplete.classList.add('show');
+                tagAutocomplete.style.display = 'block';
+            }
+        }
+
+        window.selectTag = function(tagName, atIndex) {
+            const chatInput = document.getElementById('chat-input');
+            if (!chatInput) return;
+            
+            const val = chatInput.value;
+            const before = val.substring(0, atIndex);
+            let endPos = atIndex + 1;
+            while(endPos < val.length && val[endPos] !== ' ' && val[endPos] !== '\n') {
+                endPos++;
+            }
+            const after = val.substring(endPos);
+            
+            chatInput.value = before + String.fromCharCode(64) + tagName + ' ' + after;
+            closeTagAutocomplete();
+            chatInput.focus();
+        };
+        
         // Enter key sends message (Shift+Enter for newline)
         let typingTimeout;
         const myName = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.MyName ?? "User"));
-        document.getElementById('chat-input')?.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage(e);
-            } else {
-                // Throttle typing indicator
-                if (!typingTimeout && window.signalRConnection && partnerId) {
-                    window.signalRConnection.invoke("SendTypingIndicator", partnerId, myName).catch(err => console.error(err));
-                    typingTimeout = setTimeout(() => { typingTimeout = null; }, 2000);
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.target && e.target.id === 'chat-input') {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage(e);
+                } else {
+                    // Throttle typing indicator
+                    if (!typingTimeout && window.signalRConnection && partnerId) {
+                        window.signalRConnection.invoke("SendTypingIndicator", partnerId, myName).catch(err => console.error(err));
+                        typingTimeout = setTimeout(() => { typingTimeout = null; }, 2000);
+                    }
                 }
             }
         });
 
         // Init
-        if (partnerId && partnerId > 0) {
+        if ((partnerId && partnerId > 0) || (activeGroupId && activeGroupId > 0)) {
             fetchHistory();
+            
+            if (activeGroupId && activeGroupId > 0) {
+                // Ensure the connection is established before joining
+                const checkConnection = setInterval(() => {
+                    if (window.signalRConnection && window.signalRConnection.state === signalR.HubConnectionState.Connected) {
+                        clearInterval(checkConnection);
+                        window.signalRConnection.invoke("JoinGroupChat", activeGroupId).catch(err => console.error(err));
+                    }
+                }, 500);
+            }
             
             // Listen for incoming messages in real-time
             if (window.signalRConnection) {

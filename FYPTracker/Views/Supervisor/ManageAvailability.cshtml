@@ -1,0 +1,230 @@
+@model IEnumerable<FYPTracker.Models.SupervisorAvailability>
+@{
+    ViewData["Title"] = "My Availability";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var user = ViewBag.CurrentUser as FYPTracker.Models.ApplicationUser;
+}
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">My Availability</h2>
+            <p class="text-muted">Configure your weekly schedule and date-specific overrides.</p>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addAvailabilityModal">
+            <i class="fas fa-plus me-2"></i> Add Availability
+        </button>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle me-2"></i>@TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="row g-4">
+        <!-- Weekly Defaults -->
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                    <h5 class="fw-bold"><i class="fas fa-calendar-week text-primary me-2"></i>Weekly Default Schedule</h5>
+                </div>
+                <div class="card-body">
+                    @{
+                        var weekly = Model.Where(m => m.ScheduleType == "WeeklyDefault").OrderBy(m => m.DayOfWeek).ToList();
+                    }
+                    @if (!weekly.Any())
+                    {
+                        <p class="text-muted">No weekly defaults set. Students will see the default 8:00 AM - 5:00 PM availability until you add your own.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Day</th>
+                                        <th>Time</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach(var w in weekly)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">@w.DayOfWeek</td>
+                                            <td>@w.StartTime.ToString(@"hh\:mm") - @w.EndTime.ToString(@"hh\:mm")</td>
+                                            <td>
+                                                @if(w.IsAvailable) { <span class="badge bg-success">Available</span> }
+                                                else { <span class="badge bg-danger">Unavailable</span> }
+                                            </td>
+                                            <td class="text-end">
+                                                <form asp-action="DeleteAvailability" method="post" class="d-inline" onsubmit="return confirm('Delete this availability?');">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="id" value="@w.Id" />
+                                                    <button type="submit" class="btn btn-sm btn-icon btn-light-danger"><i class="fas fa-trash"></i></button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Date Overrides -->
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+                    <h5 class="fw-bold"><i class="fas fa-calendar-day text-warning me-2"></i>Date Overrides</h5>
+                </div>
+                <div class="card-body">
+                    @{
+                        var overrides = Model.Where(m => m.ScheduleType == "DateOverride" && m.SpecificDate >= DateTime.Today).OrderBy(m => m.SpecificDate).ToList();
+                    }
+                    @if (!overrides.Any())
+                    {
+                        <p class="text-muted">No future date overrides set. Use overrides to block out specific days (e.g. holidays) or change your hours for a specific week.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Time</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach(var o in overrides)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">@o.SpecificDate?.ToString("dd MMM yyyy (ddd)")</td>
+                                            <td>
+                                                @if(o.IsAvailable) { 
+                                                    <span>@o.StartTime.ToString(@"hh\:mm") - @o.EndTime.ToString(@"hh\:mm")</span>
+                                                } else {
+                                                    <span class="text-muted">-</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if(o.IsAvailable) { <span class="badge bg-success">Available</span> }
+                                                else { <span class="badge bg-danger">Unavailable</span> }
+                                            </td>
+                                            <td class="text-end">
+                                                <form asp-action="DeleteAvailability" method="post" class="d-inline" onsubmit="return confirm('Delete this override?');">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="id" value="@o.Id" />
+                                                    <button type="submit" class="btn btn-sm btn-icon btn-light-danger"><i class="fas fa-trash"></i></button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Availability Modal -->
+<div class="modal fade" id="addAvailabilityModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
+            <form asp-action="SaveAvailability" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="fw-bold">Add Availability</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Schedule Type</label>
+                        <select class="form-select" name="ScheduleType" id="scheduleTypeSelect" onchange="toggleScheduleType()">
+                            <option value="WeeklyDefault">Weekly Default (e.g. Every Monday)</option>
+                            <option value="DateOverride">Specific Date Override</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-4" id="dayOfWeekDiv">
+                        <label class="form-label fw-bold d-block mb-2">Days of the Week</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach(var day in new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" })
+                            {
+                                <input type="checkbox" class="btn-check" name="SelectedDays" id="day_@day" value="@day" autocomplete="off">
+                                <label class="btn btn-outline-primary rounded-pill px-3 py-1" for="day_@day">@day</label>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="mb-4 d-none" id="specificDateDiv">
+                        <label class="form-label fw-bold">Specific Date</label>
+                        <input type="date" class="form-control" name="SpecificDate" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Status</label>
+                        <select class="form-select" name="IsAvailable" id="isAvailableSelect" onchange="toggleTimeInputs()">
+                            <option value="true">Available</option>
+                            <option value="false">Unavailable (Block out entire day)</option>
+                        </select>
+                    </div>
+
+                    <div class="row g-3" id="timeInputsDiv">
+                        <div class="col-6">
+                            <label class="form-label fw-bold">Start Time</label>
+                            <input type="time" class="form-control" name="StartTime" value="08:00" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold">End Time</label>
+                            <input type="time" class="form-control" name="EndTime" value="17:00" />
+                        </div>
+                        <small class="text-muted mt-2">Time is in 24-hour format.</small>
+                    </div>
+
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Schedule</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function toggleScheduleType() {
+            var type = document.getElementById('scheduleTypeSelect').value;
+            if (type === 'WeeklyDefault') {
+                document.getElementById('dayOfWeekDiv').classList.remove('d-none');
+                document.getElementById('specificDateDiv').classList.add('d-none');
+            } else {
+                document.getElementById('dayOfWeekDiv').classList.add('d-none');
+                document.getElementById('specificDateDiv').classList.remove('d-none');
+            }
+        }
+
+        function toggleTimeInputs() {
+            var isAvail = document.getElementById('isAvailableSelect').value;
+            if (isAvail === 'true') {
+                document.getElementById('timeInputsDiv').classList.remove('d-none');
+            } else {
+                document.getElementById('timeInputsDiv').classList.add('d-none');
+            }
+        }
+    </script>
+}

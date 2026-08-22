@@ -7,6 +7,8 @@
     //ViewBag.Title = "Configuration>Users";
     ViewBag.Title = "Manage Users";
     var departmentList = Departments.DepartmentListFromDb(DbContext);
+    var programmeList = Departments.ProgrammeListFromDb(DbContext);
+    var specializationList = Departments.SpecializationListFromDb(DbContext);
     var userTypeList = new List<SelectListItem>();
     userTypeList = UserTypes.UserTypeFilterList();
     var createUserTypeList = new List<SelectListItem>
@@ -68,6 +70,9 @@
             <li class="nav-item">
                 <a class="nav-link text-muted" data-bs-toggle="tab" href="#supervisors" onclick="filterUserType(event, 'Supervisor')">Supervisors</a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link text-muted" data-bs-toggle="tab" href="#examiners" onclick="filterUserType(event, 'Examiner')">Examiners</a>
+            </li>
         </ul>
         @* <label>@Html.ValidationMessageFor(model => model.EmplooyeeInfoID, "", new { @class = "text-danger" })</label>*@
         <div class="table-responsive">
@@ -79,6 +84,7 @@
                         <th class="min-w-100px">User Type</th>
                         <th class="min-w-150px">Supervisor</th>
                         <th class="min-w-150px">Assigned Students</th>
+                        <th class="min-w-100px">Student Count</th>
                         <th class="min-w-150px">Date Created</th>
                         <th class="min-w-100px">Status</th>
                         <th class="min-w-100px text-end">Action</th>
@@ -129,22 +135,40 @@
                         <div id="editEmailError" class="text-danger mt-1 fs-7 fw-bold"></div>
                     </div>
 
-                    <div id="editStudentFields" style="display:none;">
+                    <div id="editLookupFields" style="display:none;">
                         <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Programme</label>
-                            <select id="editProgramme" class="form-select form-select-solid form-select-lg fw-bold">
-                                <option value="">-- Select Programme --</option>
-                                <option value="BCSCUNP (Bachelor of Computer Science)">BCSCUNP (Bachelor of Computer Science)</option>
-                                <option value="BIT (Bachelor of Information Technology)">BIT (Bachelor of Information Technology)</option>
-                                <option value="BSE (Bachelor of Software Engineering)">BSE (Bachelor of Software Engineering)</option>
-                                <option value="DIT (Diploma in Information Technology)">DIT (Diploma in Information Technology)</option>
-                                <option value="FIC (Foundation in Computing)">FIC (Foundation in Computing)</option>
-                                <option value="BCSC-CC (BSc Cloud Computing)">BCSC-CC (BSc Cloud Computing)</option>
-                                <option value="BCSC-MC (BSc Mobile Computing)">BCSC-MC (BSc Mobile Computing)</option>
-                                <option value="BCSC-BA (BSc Business Analytics)">BCSC-BA (BSc Business Analytics)</option>
-                                <option value="BCSC-CS (BSc Cyber Security)">BCSC-CS (BSc Cyber Security)</option>
+                            <label class="form-label fw-bolder text-dark fs-6">Department <span class="text-danger">*</span></label>
+                            <select id="editDepartment" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Department --</option>
+                                @foreach (var dept in departmentList)
+                                {
+                                    <option value="@dept.Value">@dept.Text</option>
+                                }
                             </select>
                         </div>
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Programme</label>
+                            <select id="editProgramme" class="form-select form-select-solid form-select-lg fw-bold" multiple="multiple" data-control="select2" data-placeholder="-- Select Programme(s) --">
+                                <option value=""></option>
+                                @foreach (var prog in programmeList)
+                                {
+                                    <option value="@prog.Value">@prog.Text</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Specialization</label>
+                            <select id="editSpecialization" class="form-select form-select-solid form-select-lg fw-bold" multiple="multiple" data-control="select2" data-placeholder="-- Select Specialization(s) --">
+                                <option value=""></option>
+                                @foreach (var spec in specializationList)
+                                {
+                                    <option value="@spec.Value">@spec.Text</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="editStudentFields" style="display:none;">
                         <div class="fv-row mb-5">
                             <label class="form-label fw-bolder text-dark fs-6">Academic Session</label>
                             <select id="editAcademicSession" class="form-select form-select-solid form-select-lg fw-bold">
@@ -166,17 +190,6 @@
                                 <option value="Assoc. Prof.">Assoc. Prof.</option>
                                 <option value="Ts.">Ts.</option>
                                 <option value="Ir.">Ir.</option>
-                            </select>
-                        </div>
-
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Department <span class="text-danger">*</span></label>
-                            <select id="editDepartment" class="form-select form-select-solid form-select-lg fw-bold">
-                                <option value="">-- Select Department --</option>
-                                @foreach (var dept in departmentList)
-                                {
-                                    <option value="@dept.Value">@dept.Text</option>
-                                }
                             </select>
                         </div>
                     </div>
@@ -210,9 +223,26 @@
                 </div>
                 <div class="modal-body p-5">
                     <div class="fv-row mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">Emails (comma or newline separated) <span class="text-danger">*</span></label>
-                        <textarea name="bulkEmails" class="form-control form-control-solid" rows="5" placeholder="e.g. email1@gmail.com, email2@student.newinti.edu.my" required></textarea>
-                        <div class="form-text mt-2">Default password 'defaultpassword' will be assigned and users will be forced to complete their profile and change it on first login.</div>
+                        <label class="form-label fw-bolder text-dark fs-6">Users to Invite <span class="text-danger">*</span></label>
+                        <div id="inviteesList">
+                            <div class="row mb-2 invitee-row">
+                                <div class="col-5">
+                                    <input type="text" name="inviteNames[]" class="form-control form-control-solid" placeholder="Full Name (Optional)">
+                                </div>
+                                <div class="col-6">
+                                    <input type="email" name="inviteEmails[]" class="form-control form-control-solid email-input" placeholder="Email Address *" required>
+                                </div>
+                                <div class="col-1 text-end">
+                                    <button type="button" class="btn btn-icon btn-light-danger btn-sm remove-invitee" disabled><i class="bi bi-trash fs-5"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-light-primary btn-sm mt-2" id="addInviteeBtn">
+                            <i class="bi bi-plus fs-4"></i> Add Another User
+                        </button>
+                        <div class="form-text mt-3">
+                            <strong>Pro Tip:</strong> You can paste a list of comma or newline separated emails into the first Email box to automatically generate rows!
+                        </div>
                     </div>
                     <div class="fv-row mb-5">
                         <label class="form-label fw-bolder text-dark fs-6">User Type <span class="text-danger">*</span></label>
@@ -220,6 +250,7 @@
                             <option value="">-- Select Type --</option>
                             <option value="Student">Student</option>
                             <option value="Supervisor">Supervisor</option>
+                            <option value="Examiner">Examiner</option>
                         </select>
                     </div>
                     <div class="text-center mt-4">
@@ -385,23 +416,23 @@
                             }
                         },
                         {
-                            targets: [2, 3, 4, 5, 6],
+                            targets: [2, 3, 4, 5, 6, 7],
                             createdCell: function (td, cellData, rowData, row, col) {
                                 // Default styling
                             }
                         },
                         {
-                            targets: 7,
+                            targets: 8,
                             createdCell: function (td, cellData, rowData, row, col) {
                                 $(td).addClass('text-end');
                             }
                         },
                         {
-                            "targets": 5, "render": function (data, type, row, meta) {
+                            "targets": 6, "render": function (data, type, row, meta) {
                                 return data ? moment(data.toString()).format('DD MMM YYYY HHmm') : '-';
                             }
                         }],
-                    order: [[5, 'desc']],// order by date desc
+                    order: [[6, 'desc']],// order by date desc
                     aoColumns: [
                         { mData: "id", visible: false },
                         {
@@ -433,6 +464,14 @@
                             render: function (data, type, row, meta) {
                                 if(row.userType === 'Supervisor') {
                                     return '<span class="text-dark fw-bold">' + (row.assignedStudents || 'No Students') + '</span>';
+                                }
+                                return '-';
+                            }
+                        },
+                        { 
+                            render: function (data, type, row, meta) {
+                                if(row.userType === 'Supervisor') {
+                                    return '<span class="text-dark fw-bold">' + (row.assignedStudentCount || '0') + '</span>';
                                 }
                                 return '-';
                             }
@@ -587,10 +626,24 @@
                     $('#editEmail').val(data.email);
                     $('#editPhone').val(data.phone);
 
+                    if (data.userType === 'Student' || data.userType === 'STUDENT' ||
+                        data.userType === 'Supervisor' || data.userType === 'SUPERVISOR' ||
+                        data.userType === 'Examiner' || data.userType === 'EXAMINER') {
+                        $('#editLookupFields').show();
+                        $('#editDepartment').val(data.department);
+                        
+                        var progArray = data.programme ? data.programme.split(',').map(s => s.trim()) : [];
+                        $('#editProgramme').val(progArray).trigger('change');
+                        
+                        var specArray = data.specialization ? data.specialization.split(',').map(s => s.trim()) : [];
+                        $('#editSpecialization').val(specArray).trigger('change');
+                    } else {
+                        $('#editLookupFields').hide();
+                    }
+
                     if (data.userType === 'Student' || data.userType === 'STUDENT') {
                         $('#editStudentFields').show();
                         $('#editSupervisorFields').hide();
-                        $('#editProgramme').val(data.programme);
                         if (data.academicSession && $('#editAcademicSession option[value="' + data.academicSession + '"]').length === 0) {
                             $('#editAcademicSession').append(new Option(data.academicSession, data.academicSession));
                         }
@@ -599,7 +652,6 @@
                         $('#editStudentFields').hide();
                         $('#editSupervisorFields').show();
                         $('#editTitle').val(data.title);
-                        $('#editDepartment').val(data.department);
                     } else {
                         $('#editStudentFields').hide();
                         $('#editSupervisorFields').hide();
@@ -627,7 +679,13 @@
         var email = $('#editEmail').val().trim();
         var phone = $('#editPhone').val().trim();
         var department = $('#editDepartment').val();
-        var programme = $('#editProgramme').val();
+        
+        var progVal = $('#editProgramme').val();
+        var programme = Array.isArray(progVal) ? progVal.join(', ') : (progVal || '');
+        
+        var specVal = $('#editSpecialization').val();
+        var specialization = Array.isArray(specVal) ? specVal.join(', ') : (specVal || '');
+        
         var academicSession = $('#editAcademicSession').val();
         var title = $('#editTitle').val().trim();
 
@@ -671,7 +729,16 @@
 
         $.ajax({
             url: "/Admin/UpdateUserModal", method: "POST",
-            data: { id: id, email: email, phone: phone, department: department, programme: programme, academicSession: academicSession, title: title },
+            data: { 
+                id: id, 
+                email: email, 
+                phone: phone, 
+                department: department, 
+                programme: programme, 
+                specialization: specialization, 
+                academicSession: academicSession, 
+                title: title 
+            },
             success: function (r) {
                 if (r.status) {
                     $('#editAccModal').modal('hide');
@@ -729,22 +796,105 @@
         table.column(2).search(type ? '^' + type + '$' : '', true, false).draw();
         
         // Dynamically hide/show columns based on the role
-        // Column 3 is Supervisor (for Students), Column 4 is Assigned Students (for Supervisors)
+        // Column 3 is Supervisor (for Students), Column 4 is Assigned Students (for Supervisors), Column 5 is Student Count
         if (type === 'Student') {
             table.column(3).visible(true);
             table.column(4).visible(false);
+            table.column(5).visible(false);
         } else if (type === 'Supervisor') {
             table.column(3).visible(false);
             table.column(4).visible(true);
+            table.column(5).visible(true);
+        } else if (type === 'Examiner') {
+            table.column(3).visible(false);
+            table.column(4).visible(false);
+            table.column(5).visible(false);
         } else {
             table.column(3).visible(true);
             table.column(4).visible(true);
+            table.column(5).visible(true);
         }
 
         // Update active tab styling
         $('#userRoleTabs .nav-link').removeClass('active text-primary').addClass('text-muted');
         $(e.target).removeClass('text-muted').addClass('active text-primary');
     }
+
+    $(document).ready(function () {
+        // Add Invitee Row
+        $('#addInviteeBtn').click(function () {
+            addInviteeRow();
+        });
+
+        // Remove Invitee Row
+        $(document).on('click', '.remove-invitee', function () {
+            if ($('.invitee-row').length > 1) {
+                $(this).closest('.invitee-row').remove();
+                updateRemoveButtons();
+            }
+        });
+
+        // Smart Paste logic on email input
+        $(document).on('paste', '.email-input', function (e) {
+            e.preventDefault();
+            let pasteData = (e.originalEvent || e).clipboardData.getData('text/plain');
+            if (!pasteData) return;
+
+            let rawItems = pasteData.split(/[\n\r,]+/).map(s => s.trim()).filter(s => s.length > 0);
+            
+            let emailRegex = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
+            let extractedEmails = [];
+            
+            rawItems.forEach(item => {
+                let match = item.match(/([a-zA-Z0-9._-]+@@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi);
+                if (match && match.length > 0) {
+                    extractedEmails.push(...match);
+                }
+            });
+
+            if (extractedEmails.length > 0) {
+                let inputEl = $(this);
+                // Fill the current input
+                inputEl.val(extractedEmails[0]);
+                
+                // Add new rows for the rest
+                for (let i = 1; i < extractedEmails.length; i++) {
+                    let newRow = addInviteeRow();
+                    newRow.find('.email-input').val(extractedEmails[i]);
+                }
+            } else {
+                $(this).val(pasteData);
+            }
+        });
+
+        function addInviteeRow() {
+            let rowHtml = `
+                <div class="row mb-2 invitee-row">
+                    <div class="col-5">
+                        <input type="text" name="inviteNames[]" class="form-control form-control-solid" placeholder="Full Name (Optional)">
+                    </div>
+                    <div class="col-6">
+                        <input type="email" name="inviteEmails[]" class="form-control form-control-solid email-input" placeholder="Email Address *" required>
+                    </div>
+                    <div class="col-1 text-end">
+                        <button type="button" class="btn btn-icon btn-light-danger btn-sm remove-invitee"><i class="bi bi-trash fs-5"></i></button>
+                    </div>
+                </div>
+            `;
+            let newRow = $(rowHtml);
+            $('#inviteesList').append(newRow);
+            updateRemoveButtons();
+            return newRow;
+        }
+
+        function updateRemoveButtons() {
+            if ($('.invitee-row').length === 1) {
+                $('.remove-invitee').prop('disabled', true);
+            } else {
+                $('.remove-invitee').prop('disabled', false);
+            }
+        }
+    });
 </script>
 }
 

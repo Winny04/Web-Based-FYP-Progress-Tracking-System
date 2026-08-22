@@ -64,7 +64,7 @@
     <!--begin::Menu-->
     <div class="menu menu-lg-rounded menu-column menu-lg-row menu-state-bg menu-title-gray-700 menu-state-icon-primary menu-state-bullet-primary menu-arrow-gray-400 fw-bold my-5 my-lg-0 align-items-stretch" id="kt_header_menu" data-kt-menu="true">
         
-        @if (userType != "Admin" && userType != "SuperAdmin")
+        @if (userType != "Admin" && userType != "SuperAdmin" && userType != "Examiner")
         {
             <div class="menu-item @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "here show" : "")">
                 <a class="menu-link py-3 @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "active border-bottom border-3 border-primary" : "")" href="/Home">
@@ -153,6 +153,11 @@
                     </span>
                 </a>
             </div>
+            <div class="menu-item @(pageTitle == "My Availability" ? "here show" : "")">
+                <a class="menu-link py-3 @(pageTitle == "My Availability" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ManageAvailability">
+                    <span class="menu-title">My Availability</span>
+                </a>
+            </div>
             <div class="menu-item @(pageTitle == "Reports & Analytics" ? "here show" : "")">
                 <a class="menu-link py-3 @(pageTitle == "Reports & Analytics" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/Reporting">
                     <span class="menu-title">Reporting</span>
@@ -175,6 +180,7 @@
             bool isProjects = currentPath.StartsWith("/Admin/ManageProjects", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/ProjectDetails", StringComparison.OrdinalIgnoreCase);
             bool isReporting = currentPath.StartsWith("/Admin/Reporting", StringComparison.OrdinalIgnoreCase);
             bool isSettings = currentPath.StartsWith("/Admin/Settings", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/DefenseList", StringComparison.OrdinalIgnoreCase);
+            bool isLookups = currentPath.StartsWith("/Admin/ManageLookups", StringComparison.OrdinalIgnoreCase);
 
             <div class="menu-item @(isDashboard ? "here show" : "")">
                 <a class="menu-link py-3 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Admin">
@@ -187,6 +193,11 @@
             <div class="menu-item @(isUsers ? "here show" : "")">
                 <a class="menu-link py-3 @(isUsers ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageUsers">
                     <span class="menu-title">Manage Users</span>
+                </a>
+            </div>
+            <div class="menu-item @(isLookups ? "here show" : "")">
+                <a class="menu-link py-3 @(isLookups ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageLookups">
+                    <span class="menu-title">Manage Lookups</span>
                 </a>
             </div>
             <div class="menu-item @(isProjects ? "here show" : "")">
@@ -205,7 +216,18 @@
                 </a>
             </div>
         }
+        else if (userType == "Examiner")
+        {
+            bool isDashboard = currentPath == "/Examiner" || currentPath == "/Examiner/" || currentPath.StartsWith("/Examiner/Index", StringComparison.OrdinalIgnoreCase);
 
+            <div class="menu-item @(isDashboard ? "here show" : "")">
+                <a class="menu-link py-3 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Examiner">
+                    <span class="menu-title d-flex align-items-center">
+                        Dashboard
+                    </span>
+                </a>
+            </div>
+        }
     </div>
     <!--end::Menu-->
 </div>

@@ -814,6 +814,7 @@ namespace FYPTracker.Controllers
             });
             await _context.SaveChangesAsync();
 
+
             var supervisor = await _context.ApplicationUsers.FindAsync(supervisorId);
             string supName = supervisor?.FullName ?? "your supervisor";
 
@@ -854,19 +855,79 @@ namespace FYPTracker.Controllers
         }
 
         [HttpGet]
-        public async Task<JsonResult> GetBookedSlots(int supervisorId, string date)
+        public async Task<JsonResult> GetAvailableSlots(int supervisorId, string date)
         {
             if (!DateTime.TryParse(date, out var parsedDate))
-                return Json(new List<string>());
+                return Json(new { slots = new List<string>(), message = "Invalid date" });
 
+            // 1. Get supervisor's schedule logic
+            var availabilities = await _context.SupervisorAvailabilities
+                .Where(a => a.SupervisorId == supervisorId)
+                .ToListAsync();
+
+            // 2. Find specific date override
+            var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == parsedDate.Date);
+            
+            // 3. Fallback to weekly default
+            var weeklyAvail = overrideAvail == null 
+                ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == parsedDate.DayOfWeek.ToString()) 
+                : null;
+
+            var activeAvail = overrideAvail ?? weeklyAvail;
+
+            // If there's no configuration, fallback to 8 AM - 5 PM
+            TimeSpan start = new TimeSpan(8, 0, 0);
+            TimeSpan end = new TimeSpan(17, 0, 0);
+            bool isAvailable = true;
+
+            if (activeAvail != null)
+            {
+                start = activeAvail.StartTime;
+                end = activeAvail.EndTime;
+                isAvailable = activeAvail.IsAvailable;
+            }
+
+            if (!isAvailable)
+            {
+                return Json(new { slots = new List<string>(), message = "Supervisor is not available on this date." });
+            }
+
+            // 4. Generate all 30-min slots
+            var allSlots = new List<string>();
+            var current = start;
+            while (current < end)
+            {
+                allSlots.Add(current.ToString(@"hh\:mm"));
+                current = current.Add(TimeSpan.FromMinutes(30));
+            }
+
+            // 5. Get booked slots
             var bookedTimes = await _context.MeetingBookings
                 .Where(m => m.SupervisorId == supervisorId 
                          && m.MeetingDate.Date == parsedDate.Date 
-                         && m.Status != "Rejected")
+                         && m.Status != "Rejected" && m.Status != "Cancelled")
                 .Select(m => m.MeetingTime)
                 .ToListAsync();
 
-            return Json(bookedTimes);
+            // 6. Return only slots that aren't booked and aren't in the past (if today)
+            var finalSlots = new List<string>();
+            var now = DateTime.Now;
+            bool isToday = parsedDate.Date == now.Date;
+
+            foreach (var slot in allSlots)
+            {
+                if (bookedTimes.Contains(slot)) continue;
+
+                if (isToday)
+                {
+                    var slotTime = TimeSpan.Parse(slot);
+                    if (now.TimeOfDay > slotTime) continue;
+                }
+
+                finalSlots.Add(slot);
+            }
+
+            return Json(new { slots = finalSlots, message = "Success" });
         }
 
         [HttpPost]

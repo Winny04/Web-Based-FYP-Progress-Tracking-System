@@ -283,9 +283,11 @@ namespace FYPTracker.Controllers
                 
                 model.Phone = check.Phone;
                 model.Programme = check.Programme;
+                model.SelectedProgrammes = !string.IsNullOrEmpty(check.Programme) ? check.Programme.Split(',').Select(s => s.Trim()).ToList() : new List<string>();
                 model.AcademicSession = check.AcademicSession;
                 model.Title = check.Title;
-
+                model.Specialization = check.Specialization;
+                model.SelectedSpecializations = !string.IsNullOrEmpty(check.Specialization) ? check.Specialization.Split(',').Select(s => s.Trim()).ToList() : new List<string>();
                 
                 if (model.UserType == "SUPERVISOR")
                 {
@@ -372,6 +374,19 @@ namespace FYPTracker.Controllers
                 model.Phone = ApplicationUser.Phone;
                 // Use null-guard: only overwrite if submitted value is non-empty
                 // This prevents readonly display fields from wiping existing data
+                if (model.UserType == "Student" || model.UserType == "Supervisor" || model.UserType == "Examiner" || model.UserType == "Admin")
+                {
+                    if (ApplicationUser.SelectedProgrammes != null && ApplicationUser.SelectedProgrammes.Any())
+                        model.Programme = string.Join(", ", ApplicationUser.SelectedProgrammes);
+                    else
+                        model.Programme = ApplicationUser.Programme; // fallback if single select used
+                        
+                    if (ApplicationUser.SelectedSpecializations != null && ApplicationUser.SelectedSpecializations.Any())
+                        model.Specialization = string.Join(", ", ApplicationUser.SelectedSpecializations);
+                    else
+                        model.Specialization = ApplicationUser.Specialization; // fallback if single select used
+                }
+
                 if (model.UserType == "Supervisor")
                 {
                     if (!string.IsNullOrEmpty(ApplicationUser.Title))
@@ -383,8 +398,6 @@ namespace FYPTracker.Controllers
                 }
                 else if (model.UserType == "Student")
                 {
-                    if (!string.IsNullOrEmpty(ApplicationUser.Programme))
-                        model.Programme = ApplicationUser.Programme;
                     if (!string.IsNullOrEmpty(ApplicationUser.AcademicSession))
                         model.AcademicSession = ApplicationUser.AcademicSession;
                 }
@@ -466,6 +479,8 @@ namespace FYPTracker.Controllers
                 return RedirectToAction("Index", "Supervisor");
             else if (emp.UserType == "SuperAdmin" || emp.UserType == "Admin")
                 return RedirectToAction("Index", "Admin");
+            else if (emp.UserType == "Examiner")
+                return RedirectToAction("Index", "Examiner");
 
             return RedirectToAction("Index", "Home");
         }
@@ -490,12 +505,14 @@ namespace FYPTracker.Controllers
 
             ViewBag.User = user;
             ViewBag.Departments = await _context.Department.ToListAsync();
+            ViewBag.Programmes = await _context.Programme.ToListAsync();
+            ViewBag.Specializations = await _context.Specialization.ToListAsync();
             return View();
         }
 
         [Authorize]
         [HttpPost]
-        public async Task<IActionResult> ForceChangePassword(string newPassword, string confirmPassword, string fullName, string phone, string programme, string academicSession, string title, int? departmentId)
+        public async Task<IActionResult> ForceChangePassword(string newPassword, string confirmPassword, string fullName, string phone, string programme, string academicSession, string title, int? departmentId, List<string> selectedProgrammes, List<string> selectedSpecializations)
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             if (user == null) return RedirectToAction("Login");
@@ -507,6 +524,8 @@ namespace FYPTracker.Controllers
             {
                 ViewBag.Error = "Passwords do not match or are empty.";
                 ViewBag.Departments = await _context.Department.ToListAsync();
+                ViewBag.Programmes = await _context.Programme.ToListAsync();
+                ViewBag.Specializations = await _context.Specialization.ToListAsync();
                 return View();
             }
 
@@ -514,6 +533,8 @@ namespace FYPTracker.Controllers
             {
                 ViewBag.Error = "Full Name is required.";
                 ViewBag.Departments = await _context.Department.ToListAsync();
+                ViewBag.Programmes = await _context.Programme.ToListAsync();
+                ViewBag.Specializations = await _context.Specialization.ToListAsync();
                 return View();
             }
 
@@ -527,10 +548,28 @@ namespace FYPTracker.Controllers
                 user.Programme = programme;
                 user.AcademicSession = academicSession;
             }
-            else if (user.UserType == "Supervisor")
+            else if (user.UserType == "Supervisor" || user.UserType == "Examiner")
             {
                 user.Title = title;
                 user.DepartmentId = departmentId;
+                
+                if (selectedProgrammes != null && selectedProgrammes.Any())
+                {
+                    user.Programme = string.Join(", ", selectedProgrammes);
+                }
+                else
+                {
+                    user.Programme = null;
+                }
+
+                if (selectedSpecializations != null && selectedSpecializations.Any())
+                {
+                    user.Specialization = string.Join(", ", selectedSpecializations);
+                }
+                else
+                {
+                    user.Specialization = null;
+                }
             }
             
             _context.ApplicationUsers.Update(user);
@@ -542,6 +581,8 @@ namespace FYPTracker.Controllers
                 return RedirectToAction("Index", "Supervisor");
             else if (user.UserType == "SuperAdmin" || user.UserType == "Admin")
                 return RedirectToAction("Index", "Admin");
+            else if (user.UserType == "Examiner")
+                return RedirectToAction("Index", "Examiner");
 
             return RedirectToAction("Index", "Home");
         }
@@ -762,6 +803,9 @@ namespace FYPTracker.Controllers
         // New Profile Fields
         public string? Phone { get; set; }
         public string? Programme { get; set; }
+        public List<string>? SelectedProgrammes { get; set; }
+        public string? Specialization { get; set; }
+        public List<string>? SelectedSpecializations { get; set; }
         public string? AcademicSession { get; set; }
         public string? Title { get; set; }
         public int? MaxStudentSlots { get; set; }

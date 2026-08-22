@@ -41,6 +41,7 @@ namespace FYPTracker.Models
         // --- NEW FIELDS ---
         // Student Specific
         public string? Programme { get; set; }
+        public string? Specialization { get; set; }
         public string? AcademicSession { get; set; }
 
         // Supervisor Specific

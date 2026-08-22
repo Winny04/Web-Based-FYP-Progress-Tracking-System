@@ -1,0 +1,200 @@
+@{
+    ViewData["Title"] = "Manage Lookups";
+}
+
+<div class="card shadow-sm">
+    <div class="card-header border-0 pt-5">
+        <h3 class="card-title align-items-start flex-column">
+            <span class="card-label fw-bolder fs-3 mb-1">Lookup Data Maintenance</span>
+            <span class="text-muted fw-bold fs-7">Manage Departments, Programmes, and Specializations</span>
+        </h3>
+    </div>
+    <div class="card-body">
+        <ul class="nav nav-tabs nav-line-tabs mb-5 fs-6">
+            <li class="nav-item">
+                <a class="nav-link active" data-bs-toggle="tab" href="#tab_departments" onclick="loadData('Department')">Departments</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#tab_programmes" onclick="loadData('Programme')">Programmes</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#tab_specializations" onclick="loadData('Specialization')">Specializations</a>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="myTabContent">
+            <!-- Dynamic Content Area -->
+            <div class="d-flex justify-content-between mb-4">
+                <div class="d-flex align-items-center position-relative my-1">
+                    <i class="bi bi-search fs-3 position-absolute ms-4"></i>
+                    <input type="text" id="searchInput" class="form-control form-control-solid w-250px ps-12" placeholder="Search...">
+                </div>
+                <button type="button" class="btn btn-primary" onclick="showAddModal()">
+                    <i class="bi bi-plus fs-4 me-2"></i> Add New <span id="addTypeLabel">Department</span>
+                </button>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4" id="lookupTable">
+                    <thead>
+                        <tr class="fw-bolder text-muted">
+                            <th class="w-50px">ID</th>
+                            <th class="min-w-200px">Name</th>
+                            <th class="min-w-100px">Status</th>
+                            <th class="min-w-150px text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lookupTableBody">
+                        <!-- Data injected via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal fade" id="lookupModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-500px">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="fw-bolder" id="modalTitle">Add Lookup</h2>
+                <div class="btn btn-icon btn-sm btn-active-light-primary ms-2" data-bs-dismiss="modal">
+                    <i class="bi bi-x fs-2"></i>
+                </div>
+            </div>
+            <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
+                <form id="lookupForm" class="form">
+                    <input type="hidden" id="lookupId" value="0" />
+                    <div class="fv-row mb-7">
+                        <label class="required fs-6 fw-bold form-label mb-2">Name</label>
+                        <input type="text" class="form-control form-control-solid" id="lookupName" placeholder="Enter name" required />
+                    </div>
+                    <div class="text-center pt-15">
+                        <button type="reset" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">
+                            <span class="indicator-label">Submit</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let currentType = 'Department';
+
+        $(document).ready(function () {
+            loadData(currentType);
+            
+            $('#searchInput').on('keyup', function () {
+                if ($.fn.DataTable.isDataTable('#lookupTable')) {
+                    $('#lookupTable').DataTable().search($(this).val()).draw();
+                }
+            });
+
+            $('#lookupForm').submit(function (e) {
+                e.preventDefault();
+                let id = $('#lookupId').val();
+                let name = $('#lookupName').val();
+                let url = id == "0" ? '@Url.Action("AddLookup", "Admin")' : '@Url.Action("EditLookup", "Admin")';
+                
+                $.post(url, { type: currentType, id: id, name: name }, function (res) {
+                    if (res.status) {
+                        $('#lookupModal').modal('hide');
+                        Swal.fire("Success", "Saved successfully!", "success");
+                        loadData(currentType);
+                    } else {
+                        Swal.fire("Error", res.msg, "error");
+                    }
+                });
+            });
+        });
+
+        function loadData(type) {
+            currentType = type;
+            $('#addTypeLabel').text(type);
+            $('#searchInput').val(''); // clear search on tab change
+            
+            $.post('@Url.Action("LookupData", "Admin")', { type: type }, function (res) {
+                
+                if ($.fn.DataTable.isDataTable('#lookupTable')) {
+                    $('#lookupTable').DataTable().destroy();
+                }
+
+                let html = '';
+                if(res.data && res.data.length > 0) {
+                    res.data.forEach(function (item) {
+                        let statusBadge = item.isActive ? '<span class="badge badge-light-success">Active</span>' : '<span class="badge badge-light-danger">Inactive</span>';
+                        let toggleBtnClass = item.isActive ? 'btn-light-danger' : 'btn-light-success';
+                        let toggleIcon = item.isActive ? 'bi-x-circle' : 'bi-check-circle';
+                        let toggleTitle = item.isActive ? 'Deactivate' : 'Activate';
+
+                        html += `
+                            <tr>
+                                <td>${item.id}</td>
+                                <td class="fw-bolder">${item.name}</td>
+                                <td>${statusBadge}</td>
+                                <td class="text-end">
+                                    <button class="btn btn-icon btn-light-primary btn-sm me-1" onclick="showEditModal(${item.id}, '${item.name.replace(/'/g, "\\'")}')" title="Edit">
+                                        <i class="bi bi-pencil fs-4"></i>
+                                    </button>
+                                    <button class="btn btn-icon ${toggleBtnClass} btn-sm" onclick="toggleStatus(${item.id})" title="${toggleTitle}">
+                                        <i class="bi ${toggleIcon} fs-4"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                } 
+                $('#lookupTableBody').html(html);
+
+                $('#lookupTable').DataTable({
+                    "info": false,
+                    "order": [],
+                    "pageLength": 10,
+                    "lengthChange": false,
+                    "columnDefs": [
+                        { "orderable": false, "targets": 3 }
+                    ]
+                });
+            });
+        }
+
+        function showAddModal() {
+            $('#modalTitle').text('Add ' + currentType);
+            $('#lookupId').val(0);
+            $('#lookupName').val('');
+            $('#lookupModal').modal('show');
+        }
+
+        function showEditModal(id, name) {
+            $('#modalTitle').text('Edit ' + currentType);
+            $('#lookupId').val(id);
+            $('#lookupName').val(name);
+            $('#lookupModal').modal('show');
+        }
+
+        function toggleStatus(id) {
+            Swal.fire({
+                title: "Are you sure?",
+                text: "This will toggle the active status of this record.",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "Yes, proceed!"
+            }).then(function (result) {
+                if (result.isConfirmed) {
+                    $.post('@Url.Action("ToggleLookupStatus", "Admin")', { type: currentType, id: id }, function (res) {
+                        if (res.status) {
+                            loadData(currentType);
+                        } else {
+                            Swal.fire("Error", res.msg, "error");
+                        }
+                    });
+                }
+            });
+        }
+    </script>
+}

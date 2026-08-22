@@ -1,0 +1,60 @@
+@model IEnumerable<FYPTracker.Models.FYPProject>
+@{
+    ViewData["Title"] = "Examiner Dashboard";
+}
+
+<div class="card mb-5 mb-xl-8">
+    <div class="card-header border-0 pt-5">
+        <h3 class="card-title align-items-start flex-column">
+            <span class="card-label fw-bolder fs-3 mb-1">Final Reports for Evaluation</span>
+            <span class="text-muted mt-1 fw-bold fs-7">Students assigned to you who have submitted their final report</span>
+        </h3>
+    </div>
+    <div class="card-body py-3">
+        <div class="table-responsive">
+            <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
+                <thead>
+                    <tr class="fw-bolder text-muted bg-light">
+                        <th class="ps-4 min-w-200px rounded-start">Project Title</th>
+                        <th class="min-w-150px">Student</th>
+                        <th class="min-w-150px">Supervisor</th>
+                        <th class="min-w-100px text-end rounded-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        foreach (var project in Model)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <span class="text-dark fw-bolder text-hover-primary mb-1 fs-6">@project.Title</span>
+                                </td>
+                                <td>
+                                    <span class="text-dark fw-bolder d-block mb-1 fs-6">@project.Student?.FullName</span>
+                                    <span class="text-muted fw-bold text-muted d-block fs-7">@project.Student?.EmployeeId</span>
+                                </td>
+                                <td>
+                                    <span class="text-dark fw-bolder d-block mb-1 fs-6">@project.Supervisor?.FullName</span>
+                                </td>
+                                <td class="text-end">
+                                    <a href="/Examiner/StudentDetails?projectId=@project.Id" class="btn btn-bg-light btn-color-muted btn-active-color-primary btn-sm px-4">
+                                        Evaluate
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-5">
+                                No final reports available for evaluation at this time.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

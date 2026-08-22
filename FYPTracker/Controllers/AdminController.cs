@@ -121,6 +121,7 @@ namespace FYPTracker.Controllers
             // System-wide stats for Admin
             ViewBag.TotalStudents    = await _context.ApplicationUsers.CountAsync(u => u.UserType == "Student");
             ViewBag.TotalSupervisors = await _context.ApplicationUsers.CountAsync(u => u.UserType == "Supervisor");
+            ViewBag.TotalExaminers   = await _context.ApplicationUsers.CountAsync(u => u.UserType == "Examiner");
             ViewBag.TotalProjects    = await _context.FYPProjects.CountAsync();
             ViewBag.PendingRequests  = await _context.SupervisorRequests.CountAsync(r => r.Status == "Pending");
 
@@ -264,13 +265,14 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 userType = user.UserType,
                 department = user.EmpDepartment?.Name,
                 programme = user.Programme,
+                specialization = user.Specialization,
                 academicSession = user.AcademicSession,
                 title = user.Title
             });
         }
 
         [HttpPost]
-        public async Task<IActionResult> UpdateUserModal(int id, string email, string phone, string department, string programme, string academicSession, string title)
+        public async Task<IActionResult> UpdateUserModal(int id, string email, string phone, string department, string programme, string academicSession, string title, string specialization)
         {
             try
             {
@@ -287,15 +289,22 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 user.Email = email;
                 user.Phone = phone;
                 
-                if (user.UserType == "Supervisor" || user.UserType == "SUPERVISOR")
+                if (user.UserType == "Student" || user.UserType == "STUDENT" || 
+                    user.UserType == "Supervisor" || user.UserType == "SUPERVISOR" || 
+                    user.UserType == "Examiner" || user.UserType == "EXAMINER")
                 {
                     var deptId = await _context.Department.Where(x => x.Name == department).Select(x => x.Id).FirstOrDefaultAsync();
                     user.DepartmentId = deptId > 0 ? deptId : user.DepartmentId;
+                    user.Programme = programme;
+                    user.Specialization = specialization;
+                }
+
+                if (user.UserType == "Supervisor" || user.UserType == "SUPERVISOR")
+                {
                     user.Title = title;
                 }
                 else if (user.UserType == "Student" || user.UserType == "STUDENT")
                 {
-                    user.Programme = programme;
                     user.AcademicSession = academicSession;
                 }
 
@@ -601,7 +610,11 @@ public ActionResult ManageUsersData()
                     : "-",
                 assignedStudents = u.UserType == "Supervisor"
                     ? string.Join(", ", projects.Where(p => p.SupervisorId == u.Id && p.Student != null).Select(p => p.Student.FullName).DefaultIfEmpty("No Students"))
-                    : "-"
+                    : "-",
+                assignedStudentCount = u.UserType == "Supervisor"
+                    ? projects.Count(p => p.SupervisorId == u.Id && p.Student != null).ToString()
+                    : "-",
+                specialization = u.Specialization
             }).ToList();
 
             return Json(new { data = empList, recordsTotal = empList.Count(), recordsFiltered = empList.Count() });
@@ -743,25 +756,6 @@ public ActionResult ManageUsersData()
                 ViewBag.IAFDeadline = "";
             }
 
-            // Grade Lock Status
-            bool isSessionLocked = false;
-            bool isSessionPartiallyLocked = false;
-            var projectsInSession = await _context.FYPProjects.Where(p => p.AcademicSession == sessionFilter).ToListAsync();
-            if (projectsInSession.Any())
-            {
-                if (projectsInSession.All(p => p.IsGradingLocked))
-                {
-                    isSessionLocked = true;
-                }
-                else if (projectsInSession.Any(p => p.IsGradingLocked))
-                {
-                    isSessionPartiallyLocked = true;
-                }
-            }
-            ViewBag.IsSessionLocked = isSessionLocked;
-            ViewBag.IsSessionPartiallyLocked = isSessionPartiallyLocked;
-            ViewBag.SessionProjectCount = projectsInSession.Count;
-
             return View();
         }
 
@@ -817,42 +811,7 @@ public ActionResult ManageUsersData()
             }
         }
 
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ToggleGradeLock(string sessionFilter, bool lockState)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(sessionFilter))
-                {
-                    TempData["Error"] = "An academic session must be selected.";
-                    return RedirectToAction(nameof(Settings));
-                }
 
-                var projects = await _context.FYPProjects.Where(p => p.AcademicSession == sessionFilter).ToListAsync();
-                foreach(var p in projects)
-                {
-                    p.IsGradingLocked = lockState;
-                }
-
-                if (projects.Any())
-                {
-                    await _context.SaveChangesAsync();
-                    TempData["Success"] = $"Successfully {(lockState ? "locked" : "unlocked")} grading for {projects.Count} project(s) in {sessionFilter}.";
-                }
-                else
-                {
-                    TempData["Info"] = $"No projects found in {sessionFilter} to {(lockState ? "lock" : "unlock")}.";
-                }
-
-                return RedirectToAction(nameof(Settings), new { sessionFilter });
-            }
-            catch (Exception ex)
-            {
-                TempData["Error"] = $"Crash Details: {ex.Message} | Inner: {ex.InnerException?.Message}";
-                return RedirectToAction(nameof(Settings), new { sessionFilter });
-            }
-        }
 
         public async Task<IActionResult> DefenseList()
         {
@@ -1027,21 +986,34 @@ public ActionResult ManageUsersData()
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkInvite(string bulkEmails, string bulkUserType)
+        public async Task<IActionResult> BulkInvite(List<string> inviteNames, List<string> inviteEmails, string bulkUserType)
         {
-            if (string.IsNullOrWhiteSpace(bulkEmails) || string.IsNullOrWhiteSpace(bulkUserType))
+            if (inviteEmails == null || !inviteEmails.Any() || string.IsNullOrWhiteSpace(bulkUserType))
             {
                 TempData["Error"] = "Please provide emails and select a user type.";
                 return RedirectToAction(nameof(ManageUsers));
             }
 
-            var emails = bulkEmails.Split(new[] { ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                                   .Select(e => e.Trim())
-                                   .Where(e => !string.IsNullOrEmpty(e) && new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$").IsMatch(e))
-                                   .Distinct()
-                                   .ToList();
+            var invites = new List<(string Name, string Email)>();
+            var emailRegex = new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$");
 
-            if (!emails.Any())
+            for (int i = 0; i < inviteEmails.Count; i++)
+            {
+                var email = inviteEmails[i]?.Trim();
+                if (!string.IsNullOrEmpty(email) && emailRegex.IsMatch(email))
+                {
+                    string name = "";
+                    if (inviteNames != null && i < inviteNames.Count && !string.IsNullOrWhiteSpace(inviteNames[i]))
+                    {
+                        name = inviteNames[i].Trim();
+                    }
+                    invites.Add((name, email));
+                }
+            }
+
+            invites = invites.GroupBy(x => x.Email).Select(g => g.First()).ToList();
+
+            if (!invites.Any())
             {
                 TempData["Error"] = "No valid emails found.";
                 return RedirectToAction(nameof(ManageUsers));
@@ -1050,7 +1022,7 @@ public ActionResult ManageUsersData()
             int successCount = 0;
             int duplicateCount = 0;
             
-            string prefix = "SUP-";
+            string prefix = bulkUserType == "Examiner" ? "EXM-" : "SUP-";
             var maxNums = await _context.ApplicationUsers
                 .Where(u => u.UserName != null && u.UserName.StartsWith(prefix))
                 .Select(u => u.UserName.Substring(prefix.Length))
@@ -1066,8 +1038,9 @@ public ActionResult ManageUsersData()
             var request = HttpContext.Request;
             var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
 
-            foreach (var email in emails)
+            foreach (var invite in invites)
             {
+                var email = invite.Email;
                 var exists = await _context.ApplicationUsers.AnyAsync(u => u.Email == email || u.UserName == email);
                 if (exists)
                 {
@@ -1084,16 +1057,14 @@ public ActionResult ManageUsersData()
                 }
                 else
                 {
-                    {
-                        newId = $"{prefix}{nextIdNum:D3}";
-                        nextIdNum++;
-                    }
+                    newId = $"{prefix}{nextIdNum:D3}";
+                    nextIdNum++;
                 }
 
                 var newUser = new ApplicationUser
                 {
                     UserName = newId,
-                    FullName = newId, // Placeholder until they set it
+                    FullName = !string.IsNullOrWhiteSpace(invite.Name) ? invite.Name : email.Split('@')[0],
                     Email = email,
                     PassCode = FYPTracker.Common.Encryption.GetHash("defaultpassword"),
                     EmployeeId = newId,
@@ -1211,6 +1182,132 @@ public ActionResult ManageUsersData()
             ViewBag.MilestoneBottlenecksJson = System.Text.Json.JsonSerializer.Serialize(milestoneStatusData);
 
             return View();
+        }
+
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> ManageLookups()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+            return View();
+        }
+
+        [HttpPost]
+        public IActionResult LookupData(string type)
+        {
+            try
+            {
+                if (type == "Department")
+                {
+                    var data = _context.Department.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive }).ToList();
+                    return Json(new { data = data });
+                }
+                else if (type == "Programme")
+                {
+                    var data = _context.Programme.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive }).ToList();
+                    return Json(new { data = data });
+                }
+                else if (type == "Specialization")
+                {
+                    var data = _context.Specialization.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive }).ToList();
+                    return Json(new { data = data });
+                }
+                return Json(new { data = new List<object>() });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { status = false, msg = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        public IActionResult AddLookup(string type, string name)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(name)) return Json(new { status = false, msg = "Name cannot be empty." });
+
+                if (type == "Department")
+                {
+                    if (_context.Department.Any(x => x.Name.ToLower() == name.ToLower())) return Json(new { status = false, msg = "Exists!" });
+                    _context.Department.Add(new Department { Name = name, IsActive = true });
+                }
+                else if (type == "Programme")
+                {
+                    if (_context.Programme.Any(x => x.Name.ToLower() == name.ToLower())) return Json(new { status = false, msg = "Exists!" });
+                    _context.Programme.Add(new Programme { Name = name, IsActive = true });
+                }
+                else if (type == "Specialization")
+                {
+                    if (_context.Specialization.Any(x => x.Name.ToLower() == name.ToLower())) return Json(new { status = false, msg = "Exists!" });
+                    _context.Specialization.Add(new Specialization { Name = name, IsActive = true });
+                }
+                _context.SaveChanges();
+                return Json(new { status = true });
+            }
+            catch(Exception ex)
+            {
+                return Json(new { status = false, msg = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        public IActionResult EditLookup(string type, int id, string name)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(name)) return Json(new { status = false, msg = "Name cannot be empty." });
+
+                if (type == "Department")
+                {
+                    var entity = _context.Department.Find(id);
+                    if (entity != null) { entity.Name = name; _context.SaveChanges(); }
+                }
+                else if (type == "Programme")
+                {
+                    var entity = _context.Programme.Find(id);
+                    if (entity != null) { entity.Name = name; _context.SaveChanges(); }
+                }
+                else if (type == "Specialization")
+                {
+                    var entity = _context.Specialization.Find(id);
+                    if (entity != null) { entity.Name = name; _context.SaveChanges(); }
+                }
+                return Json(new { status = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { status = false, msg = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        public IActionResult ToggleLookupStatus(string type, int id)
+        {
+            try
+            {
+                if (type == "Department")
+                {
+                    var entity = _context.Department.Find(id);
+                    if (entity != null) { entity.IsActive = !entity.IsActive; _context.SaveChanges(); }
+                }
+                else if (type == "Programme")
+                {
+                    var entity = _context.Programme.Find(id);
+                    if (entity != null) { entity.IsActive = !entity.IsActive; _context.SaveChanges(); }
+                }
+                else if (type == "Specialization")
+                {
+                    var entity = _context.Specialization.Find(id);
+                    if (entity != null) { entity.IsActive = !entity.IsActive; _context.SaveChanges(); }
+                }
+                return Json(new { status = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { status = false, msg = ex.Message });
+            }
         }
     }
 }
