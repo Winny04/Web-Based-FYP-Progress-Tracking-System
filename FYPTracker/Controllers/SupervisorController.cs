@@ -753,7 +753,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks, string? supervisorSignature, string? pctComplete, DateTime? vivaDate, IFormFile? gradedFile)
+        public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks, string? supervisorSignature, string? pctComplete, DateTime? vivaDate, int? turnitinScore, IFormFile? gradedFile)
         {
             var user = await GetCurrentUserAsync();
             var milestone = await _context.FYPMilestones.Include(m => m.Project).FirstOrDefaultAsync(m => m.Id == milestoneId);
@@ -807,9 +807,33 @@ namespace FYPTracker.Controllers
                     }
                 }
 
-                if ((milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase)) && vivaDate.HasValue)
+                if (milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase))
                 {
-                    milestone.Project.VivaDate = vivaDate.Value;
+                    if (vivaDate.HasValue)
+                    {
+                        milestone.Project.VivaDate = vivaDate.Value;
+                    }
+                    
+                    if (turnitinScore.HasValue)
+                    {
+                        milestone.Project.TurnitinScore = turnitinScore.Value;
+                        if (status == "Approved")
+                        {
+                            if (turnitinScore.Value <= 20)
+                            {
+                                milestone.Project.IsTurnitinApproved = true;
+                            }
+                            else
+                            {
+                                TempData["Error"] = $"Turnitin score ({turnitinScore.Value}%) exceeds the 20% limit. You cannot approve this submission.";
+                                return RedirectToAction(nameof(GradeSubmission), new { id = milestone.Id });
+                            }
+                        }
+                        else
+                        {
+                            milestone.Project.IsTurnitinApproved = false;
+                        }
+                    }
                 }
 
                 if (gradedFile != null && gradedFile.Length > 0)
@@ -1508,6 +1532,32 @@ namespace FYPTracker.Controllers
 
             TempData["Success"] = $"Examiner {examiner.FullName} successfully assigned to this project!";
             return RedirectToAction("ProjectDetails", new { id = projectId });
+        }
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateTurnitinStatus(int projectId, int score)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user.Id);
+            if (project == null) return NotFound();
+
+            if (score > 20)
+            {
+                TempData["Error"] = $"Similarity index ({score}%) exceeds the 20% limit. You cannot approve this. Please reject the Final Submission milestone instead.";
+                return RedirectToAction("ProjectDetails", new { projectId = projectId });
+            }
+
+            project.TurnitinScore = score;
+            project.IsTurnitinApproved = true;
+            await _context.SaveChangesAsync();
+
+            await AddNotificationAsync(project.StudentId, "SubmissionFeedback", "Turnitin Approved", $"Your supervisor has approved your Turnitin score ({score}%).");
+            await LogActivityAsync(project.StudentId, "MilestoneApproved", $"Turnitin Score Approved ({score}%)");
+
+            TempData["Success"] = $"Turnitin score ({score}%) approved successfully! The examiner can now upload the final grade.";
+            return RedirectToAction("ProjectDetails", new { projectId = projectId });
         }
     }
 }

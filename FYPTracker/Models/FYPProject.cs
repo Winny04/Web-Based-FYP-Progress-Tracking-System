@@ -66,7 +66,12 @@ namespace FYPTracker.Models
         
         public bool IsGradingLocked { get; set; } = false;
 
+        [Display(Name = "Marksheet Upload Count")]
         public int MarksheetUploadCount { get; set; } = 0;
+
+        // --- Turnitin & Plagiarism ---
+        public int? TurnitinScore { get; set; }
+        public bool IsTurnitinApproved { get; set; } = false;
 
         // Navigation
         [ForeignKey(nameof(StudentId))]

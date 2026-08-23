@@ -228,6 +228,15 @@
                 </a>
             </div>
         }
+        
+        @{
+            bool isLibrary = currentPath.StartsWith("/Library", StringComparison.OrdinalIgnoreCase);
+        }
+        <div class="menu-item @(isLibrary ? "here show" : "")">
+            <a class="menu-link py-3 @(isLibrary ? "active border-bottom border-3 border-primary" : "")" href="/Library">
+                <span class="menu-title"><i class="fas fa-book me-2"></i>Digital Library</span>
+            </a>
+        </div>
     </div>
     <!--end::Menu-->
 </div>

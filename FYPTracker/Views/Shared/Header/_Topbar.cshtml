@@ -58,14 +58,16 @@
             <!--end::Menu item-->
             <!--begin::Menu separator-->
             <div class="separator my-2"></div>
-             <div class="menu-item px-5">
-                <a href="@notifUrl" class="menu-link px-5">
-                    <i class="fas fa-bell me-2 text-muted"></i>
-                    <span class="flex-grow-1">Notification</span>
-                    <span id="header_notification_badge" class="badge badge-sm badge-circle badge-danger @(unreadCount > 0 ? "" : "d-none")" style="width: 18px; height: 18px; font-size: 0.75rem; transition: transform 0.2s;">@unreadCount</span>
-                </a>
-            </div>
-             <div class="separator my-2"></div>
+            @if (userType != "Admin") {
+                <div class="menu-item px-5">
+                    <a href="@notifUrl" class="menu-link px-5">
+                        <i class="fas fa-bell me-2 text-muted"></i>
+                        <span class="flex-grow-1">Notification</span>
+                        <span id="header_notification_badge" class="badge badge-sm badge-circle badge-danger @(unreadCount > 0 ? "" : "d-none")" style="width: 18px; height: 18px; font-size: 0.75rem; transition: transform 0.2s;">@unreadCount</span>
+                    </a>
+                </div>
+                <div class="separator my-2"></div>
+            }
             <div class="menu-item px-5">
                 <a href="/User/Logout" class="menu-link px-5"><i class="fas fa-sign-out-alt me-2 text-muted"></i> Sign Out</a>
             </div>

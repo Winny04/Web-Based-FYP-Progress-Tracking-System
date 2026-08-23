@@ -1,0 +1,127 @@
+@model IEnumerable<FYPTracker.Models.FYPProject>
+
+@{
+    ViewData["Title"] = "Digital Library";
+}
+
+<div class="container-fluid py-4">
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-header border-0 pt-4 px-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h3 class="fw-bolder text-dark mb-0"><i class="fas fa-book text-primary me-2"></i>Past FYP Repository</h3>
+                <p class="text-muted small mb-0">Browse and search excellent completed Final Year Projects.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <div class="d-flex align-items-center position-relative my-1">
+                    <span class="svg-icon svg-icon-1 position-absolute ms-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="17.0365" y="15.1223" width="8.15546" height="2" rx="1" transform="rotate(45 17.0365 15.1223)" fill="black"></rect>
+                            <path d="M11 19C6.55556 19 3 15.4444 3 11C3 6.55556 6.55556 3 11 3C15.4444 3 19 6.55556 19 11C19 15.4444 15.4444 19 11 19ZM11 5C7.68629 5 5 7.68629 5 11C5 14.3137 7.68629 17 11 17C14.3137 17 17 14.3137 17 11C17 7.68629 14.3137 5 11 5Z" fill="black"></path>
+                        </svg>
+                    </span>
+                    <input type="text" id="librarySearch" class="form-control form-control-solid w-250px" style="padding-left: 2.8rem !important;" placeholder="Search projects...">
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            @if (TempData["Error"] != null)
+            {
+                <div class="alert alert-danger mb-4 rounded-3 border-danger shadow-sm">
+                    <i class="fas fa-exclamation-circle me-2"></i>@TempData["Error"]
+                </div>
+            }
+
+            <div class="table-responsive">
+                <table id="libraryTable" class="table table-hover align-middle">
+                    <thead class="bg-light text-muted text-uppercase fs-7 fw-bold">
+                        <tr>
+                            <th style="min-width: 250px;">Project Title</th>
+                            <th>Student</th>
+                            <th>Supervisor</th>
+                            <th>Session</th>
+                            <th class="text-center">Grade</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-bold text-dark fs-6">@item.Title</div>
+                                    <div class="text-muted small text-truncate" style="max-width: 300px;">@(item.Description ?? "No abstract provided.")</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold">@(item.Student?.FullName ?? "Unknown")</div>
+                                </td>
+                                <td>
+                                    <div class="badge badge-light-primary">@((!string.IsNullOrEmpty(item.Supervisor?.Title) ? item.Supervisor.Title + " " : "") + (item.Supervisor?.FullName ?? "Unknown"))</div>
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(item.AcademicSession))
+                                    {
+                                        <span class="badge badge-light-dark">@item.AcademicSession</span>
+                                    }
+                                    else
+                                    {
+                                        <span>-</span>
+                                    }
+                                </td>
+                                <td class="text-center">
+                                    @if (item.FinalGrade != null && item.FinalGrade.Contains("Excellent"))
+                                    {
+                                        <span class="badge bg-success rounded-pill px-3">Excellent</span>
+                                    }
+                                    else if (item.FinalGrade != null && item.FinalGrade.Contains("Good"))
+                                    {
+                                        <span class="badge bg-primary rounded-pill px-3">Good</span>
+                                    }
+                                    else if (item.FinalGrade != null && item.FinalGrade.Contains("Average"))
+                                    {
+                                        <span class="badge bg-info rounded-pill px-3">Average</span>
+                                    }
+                                    else 
+                                    {
+                                        <span class="badge bg-secondary rounded-pill px-3">@item.FinalGrade</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <a href="@Url.Action("Details", "Library", new { id = item.Id })" class="btn btn-sm btn-light-primary rounded-3 fw-bold">
+                                        Read <i class="fas fa-arrow-right ms-1"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#libraryTable').DataTable({
+                "pageLength": 10,
+                "ordering": true,
+                "info": true,
+                "autoWidth": false,
+                "language": {
+                    "search": "",
+                    "searchPlaceholder": "Search projects..."
+                },
+                "columnDefs": [
+                    { "orderable": false, "targets": 5 }
+                ]
+            });
+
+            $('#librarySearch').keyup(function () {
+                $('#libraryTable').DataTable().search($(this).val()).draw();
+            });
+            
+            $('.dataTables_filter').hide();
+            $('.dataTables_length select').addClass('form-select form-select-solid');
+        });
+    </script>
+}

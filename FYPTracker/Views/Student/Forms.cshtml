@@ -838,12 +838,12 @@
                                     </div>
                                     
                                     <div class="row g-4">
-                                        <div class="col-md-6">
-                                            <label class="form-label fw-semibold mb-2">Upload Final Thesis (PDF, Max 20MB)</label>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold mb-2">Upload Final Thesis (PDF)</label>
                                             <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="finalDropZone" onclick="document.getElementById('finalDocument').click()">
                                                 <i class="fas fa-cloud-upload-alt fs-1 mb-3" style="color: #ef4444 !important;"></i>
-                                                <h6 class="fw-bold mb-1">Drag & Drop your final thesis here</h6>
-                                                <p class="text-muted small mb-0">or click to browse files (PDF ONLY)</p>
+                                                <h6 class="fw-bold mb-1">Drag & Drop thesis</h6>
+                                                <p class="text-muted small mb-0">or click to browse</p>
                                                 <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
                                                 <input type="file" name="attachedFile" id="finalDocument" class="d-none" accept=".pdf" onchange="updateFileNameForFinal(this)" />
                                                 <div id="finalFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please upload your final thesis PDF.</div>
@@ -852,7 +852,21 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold mb-2">Upload Turnitin Report (PDF)</label>
+                                            <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="turnitinDropZone" onclick="document.getElementById('turnitinDocument').click()">
+                                                <i class="fas fa-search fs-1 mb-3" style="color: #10b981 !important;"></i>
+                                                <h6 class="fw-bold mb-1">Drag & Drop report</h6>
+                                                <p class="text-muted small mb-0">or click to browse</p>
+                                                <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
+                                                <input type="file" name="attachedFiles" id="turnitinDocument" class="d-none" accept=".pdf" onchange="updateFileNameForTurnitin(this)" />
+                                                <div id="turnitinFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please upload your Turnitin Report PDF.</div>
+                                                <div id="turnitinFileNameDisplay" class="mt-3 fw-bold text-success" style="display:none;">
+                                                    <i class="fas fa-file-pdf me-2"></i><span id="fTurnitinName"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
                                             <label class="form-label fw-semibold mb-2">Upload Completed Ethics Form (PDF)</label>
                                             <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="ethicsDropZone" onclick="document.getElementById('ethicsDocument').click()">
                                                 <i class="fas fa-file-signature fs-1 mb-3" style="color: #3b82f6 !important;"></i>
@@ -978,6 +992,19 @@
             }
         }
         
+        function updateFileNameForTurnitin(input) {
+            const display = document.getElementById('turnitinFileNameDisplay');
+            const fName = document.getElementById('fTurnitinName');
+            const errorLabel = document.getElementById('turnitinFileError');
+            if (input.files && input.files.length > 0) {
+                fName.textContent = input.files[0].name;
+                display.style.display = 'block';
+                if (errorLabel) errorLabel.classList.add('d-none');
+            } else {
+                display.style.display = 'none';
+            }
+        }
+
         function updateFileNameForEthics(input) {
             const display = document.getElementById('ethicsFileNameDisplay');
             const fName = document.getElementById('fEthicsName');
@@ -1054,6 +1081,25 @@
             }, false);
         }
         
+        // Setup Turnitin Drop Zone
+        const turnitinDropZone = document.getElementById('turnitinDropZone');
+        const turnitinFileInput = document.getElementById('turnitinDocument');
+        if (turnitinDropZone && turnitinFileInput) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                turnitinDropZone.addEventListener(eventName, preventDefaults, false);
+            });
+            ['dragenter', 'dragover'].forEach(eventName => {
+                turnitinDropZone.addEventListener(eventName, () => turnitinDropZone.style.borderColor = '#10b981', false);
+            });
+            ['dragleave', 'drop'].forEach(eventName => {
+                turnitinDropZone.addEventListener(eventName, () => turnitinDropZone.style.borderColor = '#cbd5e1', false);
+            });
+            turnitinDropZone.addEventListener('drop', (e) => {
+                turnitinFileInput.files = e.dataTransfer.files;
+                updateFileNameForTurnitin(turnitinFileInput);
+            }, false);
+        }
+
         // Setup Ethics Drop Zone
         const ethicsDropZone = document.getElementById('ethicsDropZone');
         const ethicsFileInput = document.getElementById('ethicsDocument');
@@ -1409,6 +1455,15 @@
                 isValid = false;
             } else {
                 errorDiv.classList.add('d-none');
+            }
+
+            var turnitinInput = document.getElementById('turnitinDocument');
+            var turnitinErrorDiv = document.getElementById('turnitinFileError');
+            if (turnitinInput && turnitinInput.files.length === 0) {
+                turnitinErrorDiv.classList.remove('d-none');
+                isValid = false;
+            } else if (turnitinErrorDiv) {
+                turnitinErrorDiv.classList.add('d-none');
             }
 
             var ethicsInput = document.getElementById('ethicsDocument');

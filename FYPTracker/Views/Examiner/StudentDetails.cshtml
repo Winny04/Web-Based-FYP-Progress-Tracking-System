@@ -52,9 +52,10 @@
                 @{
                     var finalMilestone = Model.Milestones.FirstOrDefault(m => m.Title.Contains("Final"));
                     bool isFinalApproved = finalMilestone != null && finalMilestone.Status == "Approved";
+                    bool isTurnitinApproved = Model.IsTurnitinApproved;
                 }
 
-                @if (isFinalApproved)
+                @if (isFinalApproved && isTurnitinApproved)
                 {
                     if (Model.MarksheetUploadCount >= 5)
                     {
@@ -94,7 +95,14 @@
                         <i class="bi bi-exclamation-triangle fs-2 text-warning me-3"></i>
                         <div class="d-flex flex-column">
                             <h4 class="fw-bolder text-dark mb-1">Upload Locked</h4>
-                            <span class="text-dark">The supervisor must approve the Final Report before you can submit your marksheet.</span>
+                            @if (!isFinalApproved)
+                            {
+                                <span class="text-dark">The supervisor must approve the Final Report before you can submit your marksheet.</span>
+                            }
+                            else if (!isTurnitinApproved)
+                            {
+                                <span class="text-dark">The supervisor must verify and approve the Turnitin similarity score before you can submit your marksheet.</span>
+                            }
                         </div>
                     </div>
                 }

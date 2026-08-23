@@ -234,7 +234,7 @@ namespace FYPTracker.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Department");
+                    b.ToTable("Department", (string)null);
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPActivity", b =>
@@ -670,7 +670,7 @@ namespace FYPTracker.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Programme");
+                    b.ToTable("Programme", (string)null);
                 });
 
             modelBuilder.Entity("FYPTracker.Models.Specialization", b =>
@@ -691,7 +691,7 @@ namespace FYPTracker.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Specialization");
+                    b.ToTable("Specialization", (string)null);
                 });
 
             modelBuilder.Entity("FYPTracker.Models.SupervisorAvailability", b =>
@@ -730,7 +730,7 @@ namespace FYPTracker.Migrations
 
                     b.HasIndex("SupervisorId");
 
-                    b.ToTable("SupervisorAvailabilities");
+                    b.ToTable("SupervisorAvailabilities", (string)null);
                 });
 
             modelBuilder.Entity("FYPTracker.Models.SupervisorRequest", b =>

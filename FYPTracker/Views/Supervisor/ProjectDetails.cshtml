@@ -121,6 +121,34 @@
                 }
 
             </div>
+
+            <!-- Turnitin & Plagiarism Card -->
+            <div class="glass-card mt-3">
+                <h6 class="fw-bold text-dark mb-4"><i class="fas fa-search text-success me-2"></i>Plagiarism & Turnitin</h6>
+                
+                @if (Model.IsTurnitinApproved)
+                {
+                    <div class="alert alert-success d-flex align-items-center mb-0 p-3 border-0 shadow-sm">
+                        <i class="fas fa-check-circle fs-4 me-3 text-success"></i>
+                        <div>
+                            <div class="fw-bold text-success mb-1">Approved (@Model.TurnitinScore%)</div>
+                            <div class="small">The examiner can now proceed to grade.</div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-warning p-3 border-0 shadow-sm mb-3">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-exclamation-triangle fs-4 me-3 text-warning"></i>
+                            <div>
+                                <div class="fw-bold text-warning mb-1">Approval Required</div>
+                                <div class="small">Pending approval. You can verify and approve the Turnitin score when grading the student's Final Report submission.</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
         </div>
 
         <!-- Invite Examiner Modal -->

@@ -206,6 +206,12 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(StudentDetails), new { projectId });
             }
 
+            if (!project.IsTurnitinApproved)
+            {
+                TempData["Error"] = "The Supervisor must approve the Turnitin similarity score before you can upload the final grade.";
+                return RedirectToAction(nameof(StudentDetails), new { projectId });
+            }
+
             if (project.MarksheetUploadCount >= 5)
             {
                 TempData["Error"] = "You have reached the maximum allowed number of marksheet uploads (5) for this project.";
