@@ -123,6 +123,7 @@
                     <input type="hidden" name="isImgChanged" id="isImgChanged" value="false" />
                     @* Preserve readonly fields so they are not wiped on save *@
                     <input type="hidden" name="Programme" value="@Model.Programme" />
+                    <input type="hidden" name="Specialization" value="@Model.Specialization" />
                     <input type="hidden" name="AcademicSession" value="@Model.AcademicSession" />
                     <input type="hidden" name="Title" value="@Model.Title" />
 
@@ -155,7 +156,11 @@
                                 <input type="text" class="form-control bg-light border-0" value="@Model.EmployeeId" readonly />
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Programme / Course</label>
+                                <label class="form-label fw-semibold">Department</label>
+                                <input type="text" class="form-control bg-light border-0" value="@(Model.EmpDepartment?.Name ?? "Not Assigned")" readonly />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Programme</label>
                                 <input type="text" class="form-control bg-light border-0" value="@(Model.Programme ?? "Not Assigned")" readonly />
                             </div>
                             <div class="col-md-6">
@@ -167,7 +172,7 @@
                                 <input type="text" class="form-control bg-light border-0" value="@supervisorName" readonly />
                             </div>
                         }
-                        else if (Model.UserType == "Supervisor")
+                        else if (Model.UserType == "Supervisor" || Model.UserType == "Examiner")
                         {
                             var currentStudents = ViewBag.FilledSlots ?? 0;
                             <div class="col-md-6">
@@ -178,12 +183,23 @@
                                 <label class="form-label fw-semibold">Department</label>
                                 <input type="text" class="form-control bg-light border-0" value="@(Model.EmpDepartment?.Name ?? "Not Assigned")" readonly />
                             </div>
-
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Current Student Slots</label>
-                                <input type="number" name="MaxStudentSlots" class="form-control" value="@Model.MaxStudentSlots" min="1" max="10" />
-                                <small class="text-muted d-block mt-1">Currently @currentStudents slots are filled. (@Math.Max(0, (Model.MaxStudentSlots ?? 5) - (int)currentStudents)) available left)</small>
+                                <label class="form-label fw-semibold">Programme</label>
+                                <input type="text" class="form-control bg-light border-0" value="@(Model.Programme ?? "Not Assigned")" readonly />
                             </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Specialization</label>
+                                <input type="text" class="form-control bg-light border-0" value="@(Model.Specialization ?? "Not Assigned")" readonly />
+                            </div>
+
+                            @if (Model.UserType == "Supervisor")
+                            {
+                                <div class="col-md-12">
+                                    <label class="form-label fw-semibold">Current Student Slots</label>
+                                    <input type="number" name="MaxStudentSlots" class="form-control" value="@Model.MaxStudentSlots" min="1" max="10" />
+                                    <small class="text-muted d-block mt-1">Currently @currentStudents slots are filled. (@Math.Max(0, (Model.MaxStudentSlots ?? 5) - (int)currentStudents)) available left)</small>
+                                </div>
+                            }
                         }
                     </div>
 

@@ -442,6 +442,9 @@ namespace FYPTracker.Migrations
                     b.Property<bool>("IsGradingLocked")
                         .HasColumnType("bit");
 
+                    b.Property<int>("MarksheetUploadCount")
+                        .HasColumnType("int");
+
                     b.Property<string>("Objective1")
                         .HasColumnType("nvarchar(max)");
 

@@ -451,7 +451,18 @@
                                                                                                 return '<div class="d-flex align-items-center">' + imageComponent + detailComponent + '</div>';
                             }
                         },
-                        { mData: "userType" },
+                        { 
+                            render: function (data, type, row, meta) {
+                                if (type === 'display') {
+                                    let badge = '<span class="fw-bold">' + row.userType + '</span>';
+                                    if (row.isProfileIncomplete) {
+                                        badge += '<br><span class="badge badge-light-warning fs-8 mt-1 border border-warning" data-bs-toggle="tooltip" title="Missing required profile configuration"><i class="bi bi-exclamation-triangle-fill text-warning me-1"></i> Pending Config</span>';
+                                    }
+                                    return badge;
+                                }
+                                return row.userType;
+                            }
+                        },
                         { 
                             render: function (data, type, row, meta) {
                                 if(row.userType === 'Student') {
@@ -462,7 +473,7 @@
                         },
                         { 
                             render: function (data, type, row, meta) {
-                                if(row.userType === 'Supervisor') {
+                                if(row.userType === 'Supervisor' || row.userType === 'Examiner') {
                                     return '<span class="text-dark fw-bold">' + (row.assignedStudents || 'No Students') + '</span>';
                                 }
                                 return '-';
@@ -470,7 +481,7 @@
                         },
                         { 
                             render: function (data, type, row, meta) {
-                                if(row.userType === 'Supervisor') {
+                                if(row.userType === 'Supervisor' || row.userType === 'Examiner') {
                                     return '<span class="text-dark fw-bold">' + (row.assignedStudentCount || '0') + '</span>';
                                 }
                                 return '-';
@@ -805,19 +816,15 @@
         table.column(2).search(type ? '^' + type + '$' : '', true, false).draw();
         
         // Dynamically hide/show columns based on the role
-        // Column 3 is Supervisor (for Students), Column 4 is Assigned Students (for Supervisors), Column 5 is Student Count
+        // Column 3 is Supervisor (for Students), Column 4 is Assigned Students (for Supervisors/Examiners), Column 5 is Student Count
         if (type === 'Student') {
             table.column(3).visible(true);
             table.column(4).visible(false);
             table.column(5).visible(false);
-        } else if (type === 'Supervisor') {
+        } else if (type === 'Supervisor' || type === 'Examiner') {
             table.column(3).visible(false);
             table.column(4).visible(true);
             table.column(5).visible(true);
-        } else if (type === 'Examiner') {
-            table.column(3).visible(false);
-            table.column(4).visible(false);
-            table.column(5).visible(false);
         } else {
             table.column(3).visible(true);
             table.column(4).visible(true);

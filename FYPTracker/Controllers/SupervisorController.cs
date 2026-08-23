@@ -1486,6 +1486,24 @@ namespace FYPTracker.Controllers
                 catch (Exception) { /* Log error, continue */ }
             }
 
+            // Create Notification
+            var notification = new FYPNotification
+            {
+                RecipientId = examinerId,
+                Title = "New Project Assignment",
+                Message = $"You have been assigned as the Examiner for the project: {project.Title}.",
+                Type = "ExaminerAssignment",
+                RelatedRecordId = projectId,
+                CreatedDate = DateTime.Now,
+                IsRead = false
+            };
+            _context.FYPNotifications.Add(notification);
+            await _context.SaveChangesAsync();
+
+            // Push Notification via SignalR
+            await _hubContext.Clients.User(examinerId.ToString())
+                .SendAsync("ReceiveNotification", notification.Title, notification.Message);
+
             TempData["Success"] = $"Examiner {examiner.FullName} successfully assigned to this project!";
             return RedirectToAction("ProjectDetails", new { id = projectId });
         }

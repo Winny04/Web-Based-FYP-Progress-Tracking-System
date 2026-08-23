@@ -371,8 +371,14 @@
                     {
                         displayGrade = displayGrade.Split('-').Last().Trim();
                     }
+                    
+                    var badgeBg = "bg-success";
+                    if (displayGrade.Contains("Fail", StringComparison.OrdinalIgnoreCase) || displayGrade.Contains("Poor", StringComparison.OrdinalIgnoreCase)) badgeBg = "bg-danger";
+                    else if (displayGrade.Contains("Average", StringComparison.OrdinalIgnoreCase)) badgeBg = "bg-warning";
+                    else if (displayGrade.Contains("Good", StringComparison.OrdinalIgnoreCase)) badgeBg = "bg-primary";
+
                     <span class="text-white-50">|</span>
-                    <span class="d-flex align-items-center"><strong>Final Grade:</strong> <span class="badge bg-success ms-2 fs-7 px-3 py-1 border border-white border-opacity-25 rounded-pill shadow-sm">@displayGrade</span></span>
+                    <span class="d-flex align-items-center"><strong>Final Grade:</strong> <span class="badge @badgeBg ms-2 fs-7 px-3 py-1 border border-white border-opacity-25 rounded-pill shadow-sm">@displayGrade</span></span>
                 }
             </div>
         </div>
@@ -492,8 +498,58 @@
         </div>
     }
 
-    <div class="row g-4">
+    @* ── EXAMINER FEEDBACK ── *@
+    @if (Model != null && !string.IsNullOrEmpty(Model.FinalGrade) && (!string.IsNullOrEmpty(Model.ExaminerStrengths) || !string.IsNullOrEmpty(Model.ExaminerImprovements) || !string.IsNullOrEmpty(Model.ExaminerComments)))
+    {
+        var gradeColorHex = "#16a34a"; // Default Green
+        var gradeTextColor = "text-success";
         
+        if (Model.FinalGrade.Contains("Fail", StringComparison.OrdinalIgnoreCase) || Model.FinalGrade.Contains("Poor", StringComparison.OrdinalIgnoreCase))
+        {
+            gradeColorHex = "#dc2626"; // Red
+            gradeTextColor = "text-danger";
+        }
+        else if (Model.FinalGrade.Contains("Average", StringComparison.OrdinalIgnoreCase))
+        {
+            gradeColorHex = "#d97706"; // Orange
+            gradeTextColor = "text-warning";
+        }
+        else if (Model.FinalGrade.Contains("Good", StringComparison.OrdinalIgnoreCase))
+        {
+            gradeColorHex = "#2563eb"; // Blue
+            gradeTextColor = "text-primary";
+        }
+
+        <div class="premium-card p-4 mb-4" style="border-left: 5px solid @gradeColorHex;">
+            <h5 class="fw-bold @gradeTextColor mb-3"><i class="fas fa-award me-2"></i> Examiner Feedback & Results</h5>
+            
+            <div class="row gy-4">
+                @if (!string.IsNullOrEmpty(Model.ExaminerStrengths))
+                {
+                    <div class="col-md-12">
+                        <h6 class="fw-bold text-dark">Strengths of Report</h6>
+                        <div class="p-3 bg-light rounded text-muted" style="font-size: 0.95rem; white-space: pre-wrap;">@Model.ExaminerStrengths</div>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(Model.ExaminerImprovements))
+                {
+                    <div class="col-md-12">
+                        <h6 class="fw-bold text-dark">Areas for Improvement</h6>
+                        <div class="p-3 bg-light rounded text-muted" style="font-size: 0.95rem; white-space: pre-wrap;">@Model.ExaminerImprovements</div>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(Model.ExaminerComments))
+                {
+                    <div class="col-md-12">
+                        <h6 class="fw-bold text-dark">Additional Comments</h6>
+                        <div class="p-3 bg-light rounded text-muted" style="font-size: 0.95rem; white-space: pre-wrap;">@Model.ExaminerComments</div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="row g-4">
         @* ── PROGRESS & STATS ──────────────────────────────────── *@
         <div class="col-lg-8">
             @if (Model == null || Model.Status == "Failed")

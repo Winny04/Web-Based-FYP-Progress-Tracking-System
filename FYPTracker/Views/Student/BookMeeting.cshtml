@@ -744,7 +744,7 @@
     document.getElementById('logbookPdf')?.addEventListener('change', function(e) {
         const file = this.files[0];
         if (file && file.type !== 'application/pdf') {
-            Swal.fire({
+            Swal.fire({ 
                 icon: 'error',
                 title: 'Invalid File Format',
                 text: 'Only PDF files are allowed for the weekly meeting logbook.',

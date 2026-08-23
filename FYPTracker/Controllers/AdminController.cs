@@ -610,11 +610,24 @@ public ActionResult ManageUsersData()
                     : "-",
                 assignedStudents = u.UserType == "Supervisor"
                     ? string.Join(", ", projects.Where(p => p.SupervisorId == u.Id && p.Student != null).Select(p => p.Student.FullName).DefaultIfEmpty("No Students"))
-                    : "-",
+                    : u.UserType == "Examiner" 
+                        ? string.Join(", ", projects.Where(p => p.ExaminerId == u.Id && p.Student != null).Select(p => p.Student.FullName).DefaultIfEmpty("No Students"))
+                        : "-",
                 assignedStudentCount = u.UserType == "Supervisor"
                     ? projects.Count(p => p.SupervisorId == u.Id && p.Student != null).ToString()
-                    : "-",
-                specialization = u.Specialization
+                    : u.UserType == "Examiner"
+                        ? projects.Count(p => p.ExaminerId == u.Id && p.Student != null).ToString()
+                        : "-",
+                specialization = u.Specialization,
+                isProfileIncomplete = (u.UserType == "Student" && 
+                                      (u.DepartmentId == null || 
+                                       string.IsNullOrWhiteSpace(u.Programme) || 
+                                       string.IsNullOrWhiteSpace(u.AcademicSession))) ||
+                                      ((u.UserType == "Supervisor" || u.UserType == "Examiner") && 
+                                      (u.DepartmentId == null || 
+                                       string.IsNullOrWhiteSpace(u.Programme) || 
+                                       string.IsNullOrWhiteSpace(u.Specialization) || 
+                                       string.IsNullOrWhiteSpace(u.Title)))
             }).ToList();
 
             return Json(new { data = empList, recordsTotal = empList.Count(), recordsFiltered = empList.Count() });

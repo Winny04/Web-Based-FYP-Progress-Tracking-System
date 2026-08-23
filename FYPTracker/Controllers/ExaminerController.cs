@@ -108,16 +108,52 @@ namespace FYPTracker.Controllers
 
             ViewBag.CurrentUser = user;
 
-            // Find all projects where this examiner is assigned AND they have a submitted/approved Final Report
             var projects = await _context.FYPProjects
                 .Include(p => p.Student)
                 .Include(p => p.Supervisor)
-                .Include(p => p.Milestones)
-                .Where(p => p.ExaminerId == user.Id && 
-                            p.Milestones.Any(m => m.Title.Contains("Final") && (m.Status == "Submitted" || m.Status == "Approved" || m.Status == "UnderReview")))
+                .Where(p => p.ExaminerId == user.Id)
                 .ToListAsync();
 
             return View(projects);
+        }
+
+        public async Task<IActionResult> Notifications()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+            ViewBag.CurrentUser = user;
+
+            var notifications = await _context.FYPNotifications
+                .Where(n => n.RecipientId == user.Id)
+                .OrderByDescending(n => n.CreatedDate)
+                .ToListAsync();
+
+            return View(notifications);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> MarkNotificationAsRead(int notificationId)
+        {
+            var notif = await _context.FYPNotifications.FindAsync(notificationId);
+            if (notif != null)
+            {
+                notif.IsRead = true;
+                await _context.SaveChangesAsync();
+            }
+            return RedirectToAction(nameof(Notifications));
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> MarkAllNotificationsAsRead()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user != null)
+            {
+                var unread = await _context.FYPNotifications.Where(n => n.RecipientId == user.Id && !n.IsRead).ToListAsync();
+                foreach(var n in unread) n.IsRead = true;
+                await _context.SaveChangesAsync();
+            }
+            return RedirectToAction(nameof(Notifications));
         }
 
         public async Task<IActionResult> StudentDetails(int projectId)
@@ -170,6 +206,12 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(StudentDetails), new { projectId });
             }
 
+            if (project.MarksheetUploadCount >= 5)
+            {
+                TempData["Error"] = "You have reached the maximum allowed number of marksheet uploads (5) for this project.";
+                return RedirectToAction(nameof(StudentDetails), new { projectId });
+            }
+
             if (marksheetFile != null && marksheetFile.Length > 0)
             {
                 var extension = Path.GetExtension(marksheetFile.FileName).ToLower();
@@ -178,6 +220,8 @@ namespace FYPTracker.Controllers
                     TempData["Error"] = "Only Excel files (.xls, .xlsx) are allowed.";
                     return RedirectToAction(nameof(StudentDetails), new { projectId });
                 }
+
+                project.MarksheetUploadCount++;
 
                 string uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "marksheets");
                 if (!Directory.Exists(uploadsFolder))
@@ -221,6 +265,16 @@ namespace FYPTracker.Controllers
                                     }
                                 }
                             }
+                            
+                            // Read feedback text from C19, C22, and C25
+                            var strengthsCell = worksheet.Cell("C19").Value;
+                            if (strengthsCell != null) project.ExaminerStrengths = strengthsCell.ToString().Trim();
+                            
+                            var improvementsCell = worksheet.Cell("C22").Value;
+                            if (improvementsCell != null) project.ExaminerImprovements = improvementsCell.ToString().Trim();
+                            
+                            var commentsCell = worksheet.Cell("C25").Value;
+                            if (commentsCell != null) project.ExaminerComments = commentsCell.ToString().Trim();
                         }
                     }
                 }

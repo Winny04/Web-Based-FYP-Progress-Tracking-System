@@ -200,11 +200,16 @@ namespace FYPTracker.Controllers
 
             var departments = await _context.Department.Select(d => d.Name).Distinct().ToListAsync();
 
+            bool isProfileIncomplete = user.DepartmentId == null || 
+                                       string.IsNullOrWhiteSpace(user.Programme) || 
+                                       string.IsNullOrWhiteSpace(user.AcademicSession);
+
             ViewBag.Supervisors     = supervisors;
             ViewBag.ApplicantCounts = applicantCounts;
             ViewBag.MyRequests      = myRequests;
             ViewBag.CurrentUser     = user;
             ViewBag.Departments     = departments;
+            ViewBag.IsProfileIncomplete = isProfileIncomplete;
 
             return View();
         }

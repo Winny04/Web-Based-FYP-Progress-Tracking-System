@@ -139,7 +139,20 @@
         </div>
     </div>
 
-    @if (!hasApproved)
+    @if (ViewBag.IsProfileIncomplete == true)
+    {
+        <div class="alert alert-warning border-0 rounded-3 shadow-sm p-5 mb-4 d-flex align-items-center gap-4" style="background-color: #fff3cd;">
+            <span class="fs-1 text-warning"><i class="fas fa-exclamation-triangle"></i></span>
+            <div>
+                <h4 class="fw-bold mb-2 text-dark">Profile Configuration Pending</h4>
+                <div class="text-dark fs-6">
+                    Your account is missing essential academic information (Department, Programme, or Academic Session).<br/>
+                    <strong>Please contact your FYP Coordinator or Administrator to configure your profile before you can select a supervisor.</strong>
+                </div>
+            </div>
+        </div>
+    }
+    else if (!hasApproved)
     {
         <div class="row g-4">
             @* ── Table and Search ──────────────────────────────── *@

@@ -54,6 +54,10 @@ namespace FYPTracker.Models
         [StringLength(255)]
         public string? ExaminerMarksheetPath { get; set; }
 
+        public string? ExaminerStrengths { get; set; }
+        public string? ExaminerImprovements { get; set; }
+        public string? ExaminerComments { get; set; }
+
         [Column(TypeName = "datetime")]
         public DateTime CreatedDate { get; set; } = DateTime.Now;
 
@@ -61,6 +65,8 @@ namespace FYPTracker.Models
         public DateTime? UpdatedDate { get; set; }
         
         public bool IsGradingLocked { get; set; } = false;
+
+        public int MarksheetUploadCount { get; set; } = 0;
 
         // Navigation
         [ForeignKey(nameof(StudentId))]
