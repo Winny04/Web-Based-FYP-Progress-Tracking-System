@@ -289,9 +289,9 @@
                         </div>
 
                         <div class="mb-4">
-                            <label class="form-label fw-bold text-dark"><i class="fas fa-file-pdf text-danger me-2"></i>Upload Graded File (Optional)</label>
+                            <label class="form-label fw-bold text-dark"><i class="fas fa-file-pdf text-danger me-2"></i>Upload Feedback File (Optional)</label>
                             <input type="file" name="gradedFile" accept=".pdf" class="form-control form-control-solid form-control-lg" @(isLocked ? "disabled" : "") />
-                            <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Upload a marked/graded version of the student's submission.</div>
+                            <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Upload a marked/feedback version of the student's submission.</div>
                         </div>
 
                         @if (isLocked)
