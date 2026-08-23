@@ -118,9 +118,9 @@
                     <input type="hidden" id="editUserType" />
 
                     <div class="fv-row mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">Full Name</label>
-                        <input type="text" id="editFullName" class="form-control form-control-lg form-control-solid bg-light text-muted" readonly />
-                        <div class="form-text mt-2"><i class="fas fa-lock me-1"></i> Name cannot be modified.</div>
+                        <label class="form-label fw-bolder text-dark fs-6">Full Name <span class="text-danger">*</span></label>
+                        <input type="text" id="editFullName" class="form-control form-control-lg form-control-solid" placeholder="Enter full name" />
+                        <div id="editFullNameError" class="text-danger mt-1 fs-7 fw-bold"></div>
                     </div>
 
                     <div class="fv-row mb-5">
@@ -696,6 +696,7 @@
 
     $('#btn_edit_submit').click(function () {
         var id = $('#editUserId').val();
+        var fullName = $('#editFullName').val().trim();
         var email = $('#editEmail').val().trim();
         var phone = $('#editPhone').val().trim();
         var department = $('#editDepartment').val();
@@ -708,6 +709,11 @@
         
         var academicSession = $('#editAcademicSession').val();
         var title = $('#editTitle').val().trim();
+
+        if (!fullName) {
+            Swal.fire({ text: "Please enter a full name.", icon: "warning", confirmButtonText: "Ok, got it!" });
+            return;
+        }
 
         if (!email) {
             Swal.fire({ text: "Please enter an email.", icon: "warning", confirmButtonText: "Ok, got it!" });
@@ -751,6 +757,7 @@
             url: "/Admin/UpdateUserModal", method: "POST",
             data: { 
                 id: id, 
+                fullName: fullName,
                 email: email, 
                 phone: phone, 
                 department: department, 

@@ -117,6 +117,7 @@ namespace FYPTracker.Controllers
             ViewBag.PendingRequests   = await _context.SupervisorRequests.CountAsync(r => r.SupervisorId == user.Id && r.Status == "Pending" && (activeSession == null || r.Student.AcademicSession == activeSession));
             ViewBag.PendingReviews    = await _context.FYPMilestones.CountAsync(m => m.Project.SupervisorId == user.Id && m.Status == "Submitted" && (activeSession == null || m.Project.AcademicSession == activeSession));
             ViewBag.UpcomingMeetings  = await _context.MeetingBookings.CountAsync(m => m.SupervisorId == user.Id && m.MeetingDate >= DateTime.Today && m.Status == "Approved" && (activeSession == null || m.Student.AcademicSession == activeSession));
+            ViewBag.PendingExaminers  = await _context.FYPProjects.CountAsync(p => p.SupervisorId == user.Id && p.ExaminerId == null && p.Status != "Failed" && (activeSession == null || p.AcademicSession == activeSession));
 
             // Recent Requests (Top 5)
             var recentRequests = await _context.SupervisorRequests
@@ -305,6 +306,7 @@ namespace FYPTracker.Controllers
             if (project == null) return NotFound();
 
             ViewBag.AvailableExaminers = await _context.ApplicationUsers
+                .Include(u => u.EmpDepartment)
                 .Where(u => u.UserType == "Examiner" && !u.IsResign)
                 .ToListAsync();
 

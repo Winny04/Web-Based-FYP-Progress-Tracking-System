@@ -272,7 +272,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         }
 
         [HttpPost]
-        public async Task<IActionResult> UpdateUserModal(int id, string email, string phone, string department, string programme, string academicSession, string title, string specialization)
+        public async Task<IActionResult> UpdateUserModal(int id, string fullName, string email, string phone, string department, string programme, string academicSession, string title, string specialization)
         {
             try
             {
@@ -286,6 +286,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     if (emailExists) return Json(new { status = false, msg = "Email already in use by another account." });
                 }
 
+                user.FullName = fullName;
                 user.Email = email;
                 user.Phone = phone;
                 

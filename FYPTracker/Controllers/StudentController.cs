@@ -40,6 +40,7 @@ namespace FYPTracker.Controllers
             var project = await _context.FYPProjects
                 .Include(p => p.Student)
                 .Include(p => p.Supervisor)
+                .Include(p => p.Examiner)
                 .Include(p => p.Milestones)
                 .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 

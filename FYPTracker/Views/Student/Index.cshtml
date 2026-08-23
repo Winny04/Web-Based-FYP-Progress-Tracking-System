@@ -6,6 +6,7 @@
     var name = currentUser?.FullName ?? "Student";
     var studentId = currentUser?.EmployeeId ?? "S12345678";
     var supervisorName = Model?.Supervisor?.FullName ?? "Not Assigned";
+    var examinerName = Model?.Examiner?.FullName ?? "Not Assigned";
     var session = !string.IsNullOrEmpty(currentUser?.AcademicSession) ? currentUser.AcademicSession : "—";
     
     var milestones = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
@@ -362,6 +363,8 @@
                 <span><strong>Matric ID:</strong> @studentId</span>
                 <span class="text-white-50">|</span>
                 <span><strong>Supervisor:</strong> @supervisorName</span>
+                <span class="text-white-50">|</span>
+                <span><strong>Examiner:</strong> @examinerName</span>
                 <span class="text-white-50">|</span>
                 <span><strong>Session:</strong> @session</span>
                 @if (!string.IsNullOrEmpty(Model?.FinalGrade))
