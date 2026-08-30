@@ -643,7 +643,8 @@
                         $('#editLookupFields').show();
 
                         if (data.userType === 'Student' || data.userType === 'STUDENT') {
-                            $('#editDeptContainer').show();
+                            $('#editDeptContainer').hide();
+                            $('#editDepartment').val('');
                             $('#editSpecContainer').hide();
                         } else {
                             $('#editDeptContainer').show();

@@ -30,6 +30,49 @@
             </div>
         </div>
         
+        <!-- Schedule Viva Date Card -->
+        <div class="card mb-5 mb-xl-8">
+            <div class="card-header border-0 pt-5">
+                <h3 class="card-title align-items-start flex-column">
+                    <span class="card-label fw-bolder fs-3 mb-1"><i class="fas fa-calendar-check text-success me-2"></i>Schedule Viva Date</span>
+                </h3>
+            </div>
+            <div class="card-body py-3">
+                @if (Model.VivaDate.HasValue)
+                {
+                    <div class="alert alert-success d-flex align-items-center p-4 mb-4">
+                        <i class="fas fa-calendar-alt fs-2 text-success me-3"></i>
+                        <div>
+                            <span class="fw-bolder d-block">Current Viva Date</span>
+                            <span class="fs-5 fw-bold text-success">@Model.VivaDate.Value.ToString("dd MMMM yyyy, hh:mm tt")</span>
+                        </div>
+                    </div>
+                }
+                <form action="/Examiner/SetVivaDate" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="projectId" value="@Model.Id" />
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">
+                            @(Model.VivaDate.HasValue ? "Change Viva Date & Time" : "Set Viva Date & Time")
+                        </label>
+                        <input type="datetime-local"
+                               name="vivaDate"
+                               class="form-control form-control-solid form-control-lg border-success"
+                               value="@(Model.VivaDate?.ToString("yyyy-MM-ddTHH:mm"))"
+                               required />
+                        <div class="form-text text-muted mt-2">
+                            <i class="fas fa-info-circle me-1"></i>
+                            The student and supervisor will be notified by email and in-app notification.
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="fas fa-calendar-check me-2"></i>
+                        @(Model.VivaDate.HasValue ? "Update Viva Date" : "Schedule Viva")
+                    </button>
+                </form>
+            </div>
+        </div>
+
         <!-- Evaluation Actions Card -->
         <div class="card mb-5 mb-xl-8">
             <div class="card-header border-0 pt-5">

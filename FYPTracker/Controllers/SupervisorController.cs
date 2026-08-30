@@ -753,7 +753,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks, string? supervisorSignature, string? pctComplete, DateTime? vivaDate, int? turnitinScore, IFormFile? gradedFile)
+        public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks, string? supervisorSignature, string? pctComplete, int? turnitinScore, IFormFile? gradedFile)
         {
             var user = await GetCurrentUserAsync();
             var milestone = await _context.FYPMilestones.Include(m => m.Project).FirstOrDefaultAsync(m => m.Id == milestoneId);
@@ -809,10 +809,6 @@ namespace FYPTracker.Controllers
 
                 if (milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (vivaDate.HasValue)
-                    {
-                        milestone.Project.VivaDate = vivaDate.Value;
-                    }
                     
                     if (turnitinScore.HasValue)
                     {

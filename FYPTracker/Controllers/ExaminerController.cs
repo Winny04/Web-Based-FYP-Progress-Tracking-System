@@ -9,6 +9,9 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ClosedXML.Excel;
+using FYPTracker.Services.Others.Interfaces;
+using Microsoft.AspNetCore.SignalR;
+using FYPTracker.Hubs;
 
 namespace FYPTracker.Controllers
 {
@@ -18,11 +21,15 @@ namespace FYPTracker.Controllers
     {
         private readonly FYPTrackerContext _context;
         private readonly IWebHostEnvironment _env;
+        private readonly IEmailService _emailService;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
-        public ExaminerController(FYPTrackerContext context, IWebHostEnvironment env)
+        public ExaminerController(FYPTrackerContext context, IWebHostEnvironment env, IEmailService emailService, IHubContext<NotificationHub> hubContext)
         {
             _context = context;
             _env = env;
+            _emailService = emailService;
+            _hubContext = hubContext;
         }
 
         [AllowAnonymous]
@@ -299,6 +306,106 @@ namespace FYPTracker.Controllers
                 TempData["Error"] = "Please select a file to upload.";
             }
 
+            return RedirectToAction(nameof(StudentDetails), new { projectId });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SetVivaDate(int projectId, DateTime vivaDate)
+        {
+            var user = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.ExaminerId == user.Id);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found or unauthorized.";
+                return RedirectToAction(nameof(StudentDetails), new { projectId });
+            }
+
+            project.VivaDate = vivaDate;
+            await _context.SaveChangesAsync();
+
+            string formattedDate = vivaDate.ToString("dd MMMM yyyy, hh:mm tt");
+
+            // --- In-app notification for Student ---
+            if (project.StudentId > 0)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = project.StudentId,
+                    Type = "VivaScheduled",
+                    Title = "Viva Date Scheduled",
+                    Message = $"Your Viva Oral Examination has been scheduled for {formattedDate}. Please be prepared.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+            }
+
+            // --- In-app notification for Supervisor ---
+            if (project.SupervisorId.HasValue)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = project.SupervisorId.Value,
+                    Type = "VivaScheduled",
+                    Title = "Viva Date Scheduled",
+                    Message = $"Viva for {project.Student?.FullName} ({project.Student?.EmployeeId}) has been scheduled for {formattedDate}.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+            }
+
+            await _context.SaveChangesAsync();
+
+            // --- Email to Student ---
+            if (project.Student != null && !string.IsNullOrEmpty(project.Student.Email))
+            {
+                string subject = "FYP Viva Oral Examination Scheduled";
+                string body = $@"
+                    <div style='font-family: Arial, sans-serif;'>
+                        <h3>Viva Oral Examination Scheduled</h3>
+                        <p>Dear <strong>{project.Student.FullName}</strong>,</p>
+                        <p>Your Final Year Project Viva Oral Examination has been scheduled.</p>
+                        <ul>
+                            <li><strong>Date & Time:</strong> {formattedDate}</li>
+                            <li><strong>Project Title:</strong> {project.Title}</li>
+                            <li><strong>Examiner:</strong> {user.FullName}</li>
+                        </ul>
+                        <p>Please ensure you are fully prepared for your presentation. Log in to the FYP Tracker system for more details.</p>
+                    </div>";
+                _emailService.Send(project.Student.Email, subject, body);
+            }
+
+            // --- Email to Supervisor ---
+            if (project.Supervisor != null && !string.IsNullOrEmpty(project.Supervisor.Email))
+            {
+                string subject = "FYP Viva Date Scheduled – Student Notification";
+                string body = $@"
+                    <div style='font-family: Arial, sans-serif;'>
+                        <h3>Viva Date Scheduled</h3>
+                        <p>Dear <strong>{project.Supervisor.FullName}</strong>,</p>
+                        <p>The examiner <strong>{user.FullName}</strong> has scheduled the Viva Oral Examination for your student.</p>
+                        <ul>
+                            <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
+                            <li><strong>Project Title:</strong> {project.Title}</li>
+                            <li><strong>Date & Time:</strong> {formattedDate}</li>
+                        </ul>
+                        <p>Please log in to the FYP Tracker system for more details.</p>
+                    </div>";
+                _emailService.Send(project.Supervisor.Email, subject, body);
+            }
+
+            // --- SignalR real-time push to Student ---
+            var payload = new { Type = "VivaScheduled", Message = $"Your Viva has been scheduled for {formattedDate}." };
+            await _hubContext.Clients.Group($"User_{project.StudentId}").SendAsync("ReceiveMilestoneUpdate", payload);
+
+            TempData["Success"] = $"Viva date set to {formattedDate}. The student and supervisor have been notified.";
             return RedirectToAction(nameof(StudentDetails), new { projectId });
         }
 

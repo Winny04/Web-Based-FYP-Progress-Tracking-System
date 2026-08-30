@@ -248,12 +248,7 @@
 
                         @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase)))
                         {
-                            <div class="mb-4">
-                                <label class="form-label fw-bold text-dark"><i class="fas fa-calendar-alt text-primary me-2"></i>Schedule Viva Examination</label>
-                                <input type="datetime-local" name="vivaDate" class="form-control form-control-solid form-control-lg border-primary bg-light-primary" value="@(Model.Project?.VivaDate?.ToString("yyyy-MM-ddTHH:mm"))" @(isLocked ? "disabled" : "") />
-                                <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Select the date and time for the student's final Viva oral examination.</div>
-                            </div>
-                            
+
                             <div class="mb-4 p-3 bg-light-warning border border-warning border-dashed rounded-3">
                                 <label class="form-label fw-bold text-dark"><i class="fas fa-search text-warning me-2"></i>Turnitin Similarity Index (%)</label>
                                 <input type="number" name="turnitinScore" class="form-control form-control-solid form-control-lg" min="0" max="100" value="@Model.Project?.TurnitinScore" placeholder="e.g. 14" @(isLocked ? "disabled" : "required") />
