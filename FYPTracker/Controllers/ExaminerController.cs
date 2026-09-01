@@ -68,14 +68,18 @@ namespace FYPTracker.Controllers
                 var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Title == "AI Grading System");
                 if (project == null)
                 {
-                    project = new FYPProject { Title = "AI Grading System", Description = "A system to grade students.", StudentId = student.Id, SupervisorId = supervisor.Id, ExaminerId = examiner.Id, Status = "InProgress" };
+                    project = new FYPProject { Title = "AI Grading System", Description = "A system to grade students.", StudentId = student.Id, SupervisorId = supervisor.Id, Status = "InProgress" };
+                    project.AssignedExaminers.Add(new FYPProjectExaminer { ExaminerId = examiner.Id });
                     _context.FYPProjects.Add(project);
                     await _context.SaveChangesAsync();
                 }
                 else
                 {
-                    project.ExaminerId = examiner.Id;
-                    await _context.SaveChangesAsync();
+                    if (!project.AssignedExaminers.Any(ae => ae.ExaminerId == examiner.Id))
+                    {
+                        project.AssignedExaminers.Add(new FYPProjectExaminer { ExaminerId = examiner.Id });
+                        await _context.SaveChangesAsync();
+                    }
                 }
 
                 // Create Final Report milestone
@@ -118,7 +122,7 @@ namespace FYPTracker.Controllers
             var projects = await _context.FYPProjects
                 .Include(p => p.Student)
                 .Include(p => p.Supervisor)
-                .Where(p => p.ExaminerId == user.Id)
+                .Where(p => p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id))
                 .ToListAsync();
 
             return View(projects);
@@ -173,7 +177,7 @@ namespace FYPTracker.Controllers
                 .Include(p => p.Student)
                 .Include(p => p.Supervisor)
                 .Include(p => p.Milestones).ThenInclude(m => m.SubmissionFiles)
-                .FirstOrDefaultAsync(p => p.Id == projectId && p.ExaminerId == user.Id);
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
 
             if (project == null) return NotFound("Project not found or not assigned to you.");
 
@@ -187,19 +191,30 @@ namespace FYPTracker.Controllers
 
             ViewBag.MeetingLogs = meetingLogs;
 
+            string idempotencyToken = Guid.NewGuid().ToString();
+            TempData["IdempotencyToken"] = idempotencyToken;
+            ViewBag.IdempotencyToken = idempotencyToken;
+
             return View(project);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UploadMarksheet(int projectId, IFormFile marksheetFile)
+        public async Task<IActionResult> UploadMarksheet(int projectId, IFormFile marksheetFile, string idempotencyToken)
         {
+            if (string.IsNullOrEmpty(idempotencyToken) || TempData["IdempotencyToken"]?.ToString() != idempotencyToken)
+            {
+                TempData["Error"] = "Duplicate submission detected. Your request has already been processed.";
+                return RedirectToAction(nameof(Index));
+            }
+            TempData.Remove("IdempotencyToken"); // Consume token
+
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             if (user == null) return RedirectToAction("Login", "User");
 
             var project = await _context.FYPProjects
                 .Include(p => p.Milestones)
-                .FirstOrDefaultAsync(p => p.Id == projectId && p.ExaminerId == user.Id);
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
             if (project == null)
             {
                 TempData["Error"] = "Project not found or unauthorized.";
@@ -320,7 +335,7 @@ namespace FYPTracker.Controllers
             var project = await _context.FYPProjects
                 .Include(p => p.Student)
                 .Include(p => p.Supervisor)
-                .FirstOrDefaultAsync(p => p.Id == projectId && p.ExaminerId == user.Id);
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
 
             if (project == null)
             {
@@ -418,7 +433,7 @@ namespace FYPTracker.Controllers
             var project = await _context.FYPProjects
                 .Include(p => p.Student)
                 .Include(p => p.Supervisor)
-                .FirstOrDefaultAsync(p => p.Id == projectId && p.ExaminerId == user.Id);
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
 
             if (project == null) return NotFound();
 

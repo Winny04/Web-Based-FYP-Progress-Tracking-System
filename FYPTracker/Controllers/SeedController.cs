@@ -52,14 +52,18 @@ namespace FYPTracker.Controllers
                 var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Title == "AI Grading System");
                 if (project == null)
                 {
-                    project = new FYPProject { Title = "AI Grading System", Description = "A system to grade students.", StudentId = student.Id, SupervisorId = supervisor.Id, ExaminerId = examiner.Id, Status = "InProgress" };
+                    project = new FYPProject { Title = "AI Grading System", Description = "A system to grade students.", StudentId = student.Id, SupervisorId = supervisor.Id, Status = "InProgress" };
+                    project.AssignedExaminers.Add(new FYPProjectExaminer { ExaminerId = examiner.Id });
                     _context.FYPProjects.Add(project);
                     await _context.SaveChangesAsync();
                 }
                 else
                 {
-                    project.ExaminerId = examiner.Id;
-                    await _context.SaveChangesAsync();
+                    if (!project.AssignedExaminers.Any(ae => ae.ExaminerId == examiner.Id))
+                    {
+                        project.AssignedExaminers.Add(new FYPProjectExaminer { ExaminerId = examiner.Id });
+                        await _context.SaveChangesAsync();
+                    }
                 }
 
                 // Create Final Report milestone

@@ -118,6 +118,59 @@ namespace FYPTracker.Controllers
             return View();
         }
 
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> RespondRepeatRequest(int studentId, string status)
+        {
+            var student = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == studentId);
+            if (student != null)
+            {
+                if (status == "Approved")
+                {
+                    var currentProject = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == studentId && p.Status != "Archived");
+                    if (currentProject != null) {
+                        currentProject.Status = "Archived";
+                    }
+                    var currentRequests = await _context.SupervisorRequests.Where(r => r.StudentId == studentId && r.Status == "Pending").ToListAsync();
+                    foreach (var r in currentRequests) {
+                        r.Status = "Archived";
+                    }
+                }
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Repeat request processed.";
+            }
+            return RedirectToAction(nameof(ManageUsers));
+        }
+
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> ArchiveAcademicSession(string sessionName)
+        {
+            if (string.IsNullOrWhiteSpace(sessionName)) {
+                TempData["Error"] = "Session name cannot be empty.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var projects = await _context.FYPProjects.Include(p => p.Student).Where(p => p.Student.AcademicSession == sessionName && p.Status != "Archived").ToListAsync();
+            foreach (var p in projects)
+            {
+                p.Status = "Archived";
+            }
+
+            var requests = await _context.SupervisorRequests.Include(r => r.Student).Where(r => r.Student.AcademicSession == sessionName && r.Status == "Pending").ToListAsync();
+            foreach (var r in requests)
+            {
+                r.Status = "Archived";
+            }
+
+            await _context.SaveChangesAsync();
+            
+            TempData["Success"] = $"Successfully archived session {sessionName}. {projects.Count} projects archived.";
+            return RedirectToAction(nameof(Index));
+        }
+
         public async Task<IActionResult> ExportSummary()
         {
             var projects = await _context.FYPProjects
@@ -670,12 +723,12 @@ public ActionResult ManageUsersData()
                 assignedStudents = u.UserType == "Supervisor"
                     ? string.Join(", ", projects.Where(p => p.SupervisorId == u.Id && p.Student != null).Select(p => p.Student.FullName).DefaultIfEmpty("No Students"))
                     : u.UserType == "Examiner" 
-                        ? string.Join(", ", projects.Where(p => p.ExaminerId == u.Id && p.Student != null).Select(p => p.Student.FullName).DefaultIfEmpty("No Students"))
+                        ? string.Join(", ", projects.Where(p => p.AssignedExaminers.Any(ae => ae.ExaminerId == u.Id) && p.Student != null).Select(p => p.Student.FullName).DefaultIfEmpty("No Students"))
                         : "-",
                 assignedStudentCount = u.UserType == "Supervisor"
                     ? projects.Count(p => p.SupervisorId == u.Id && p.Student != null).ToString()
                     : u.UserType == "Examiner"
-                        ? projects.Count(p => p.ExaminerId == u.Id && p.Student != null).ToString()
+                        ? projects.Count(p => p.AssignedExaminers.Any(ae => ae.ExaminerId == u.Id) && p.Student != null).ToString()
                         : "-",
                 specialization = u.Specialization,
                 requirePasswordChange = u.RequirePasswordChange,
@@ -803,11 +856,10 @@ public ActionResult ManageUsersData()
                 }
                 else if (user.UserType == "Examiner" || user.UserType == "EXAMINER")
                 {
-                    // Nullify examiner on projects (preserve project data)
-                    var examinerProjects = await _context.FYPProjects
-                        .Where(p => p.ExaminerId == id).ToListAsync();
-                    foreach (var p in examinerProjects)
-                        p.ExaminerId = null;
+                    // Nullify examiner on projects by removing mapping
+                    var examinerAssignments = await _context.FYPProjectExaminers
+                        .Where(pe => pe.ExaminerId == id).ToListAsync();
+                    _context.FYPProjectExaminers.RemoveRange(examinerAssignments);
                 }
 
                 // 8. Submission files uploaded by this user — Restrict FK

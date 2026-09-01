@@ -22,6 +22,10 @@ namespace FYPTracker.Models
 
         public long? FileSize { get; set; }
 
+        public int AttemptNumber { get; set; } = 1;
+
+        public string? RevisionNotes { get; set; }
+
         public int? UploadedBy { get; set; }
 
         [Column(TypeName = "datetime")]

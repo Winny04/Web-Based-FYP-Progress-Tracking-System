@@ -625,6 +625,16 @@
                                     </div>
                                 </div>
 
+                                @if (proposalMilestone?.Status == "Rejected")
+                                {
+                                    <div class="form-section-title text-danger"><i class="fas fa-history me-2"></i>Part 3: Revision Notes</div>
+                                    <div class="mb-4">
+                                        <label class="form-label fw-semibold">What did you change in this version?</label>
+                                        <textarea name="revisionNotes" class="form-control" rows="3" placeholder="I fixed the diagrams on page 4 and updated the literature review..." required></textarea>
+                                        <div class="text-danger fw-bold small mt-1">* Revision Notes are required for resubmissions.</div>
+                                    </div>
+                                }
+
                                 <div class="d-flex gap-3 justify-content-end">
                                     <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
                                     <button type="submit" class="btn-submit" onclick="return validateProposalForm()">Submit Proposal</button>
@@ -731,6 +741,13 @@
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+
+                                <div class="form-section-title text-danger"><i class="fas fa-history me-2"></i>Part 3: Revision Notes (If Resubmitting)</div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold">What did you change in this version?</label>
+                                    <textarea name="revisionNotes" class="form-control" rows="3" placeholder="Explain what was changed based on supervisor feedback..."></textarea>
+                                    <div class="text-muted small mt-1">Leave blank if this is your first attempt.</div>
                                 </div>
 
                                 <div class="d-flex gap-3 justify-content-end">
@@ -901,6 +918,16 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                @if (finalMilestone?.Status == "Rejected")
+                                {
+                                    <div class="form-section-title text-danger"><i class="fas fa-history me-2"></i>Part 3: Revision Notes</div>
+                                    <div class="mb-4">
+                                        <label class="form-label fw-semibold">What did you change in this version?</label>
+                                        <textarea name="revisionNotes" class="form-control" rows="3" placeholder="I fixed the formatting and updated Chapter 5..." required></textarea>
+                                        <div class="text-danger fw-bold small mt-1">* Revision Notes are required for resubmissions.</div>
+                                    </div>
+                                }
 
                                 <div class="d-flex gap-3 justify-content-end">
                                     <button type="submit" class="btn-submit bg-dark border-0" onclick="return validateFinalForm()">

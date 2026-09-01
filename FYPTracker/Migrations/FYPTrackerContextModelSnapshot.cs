@@ -437,9 +437,6 @@ namespace FYPTracker.Migrations
                     b.Property<string>("ExaminerComments")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int?>("ExaminerId")
-                        .HasColumnType("int");
-
                     b.Property<string>("ExaminerImprovements")
                         .HasColumnType("nvarchar(max)");
 
@@ -514,13 +511,37 @@ namespace FYPTracker.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ExaminerId");
-
                     b.HasIndex("StudentId");
 
                     b.HasIndex("SupervisorId");
 
                     b.ToTable("FYPProject", (string)null);
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.FYPProjectExaminer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<DateTime>("AssignedDate")
+                        .HasColumnType("datetime");
+
+                    b.Property<int>("ExaminerId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("FYPProjectId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExaminerId");
+
+                    b.HasIndex("FYPProjectId");
+
+                    b.ToTable("FYPProjectExaminer", (string)null);
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPSetting", b =>
@@ -560,6 +581,9 @@ namespace FYPTracker.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
 
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("int");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -575,6 +599,9 @@ namespace FYPTracker.Migrations
 
                     b.Property<int>("MilestoneId")
                         .HasColumnType("int");
+
+                    b.Property<string>("RevisionNotes")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("UploadedBy")
                         .HasColumnType("int");
@@ -1022,11 +1049,6 @@ namespace FYPTracker.Migrations
 
             modelBuilder.Entity("FYPTracker.Models.FYPProject", b =>
                 {
-                    b.HasOne("FYPTracker.Models.ApplicationUser", "Examiner")
-                        .WithMany()
-                        .HasForeignKey("ExaminerId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("FYPTracker.Models.ApplicationUser", "Student")
                         .WithMany()
                         .HasForeignKey("StudentId")
@@ -1038,11 +1060,28 @@ namespace FYPTracker.Migrations
                         .HasForeignKey("SupervisorId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.Navigation("Examiner");
-
                     b.Navigation("Student");
 
                     b.Navigation("Supervisor");
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.FYPProjectExaminer", b =>
+                {
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "Examiner")
+                        .WithMany()
+                        .HasForeignKey("ExaminerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.FYPProject", "Project")
+                        .WithMany("AssignedExaminers")
+                        .HasForeignKey("FYPProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Examiner");
+
+                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPSubmissionFile", b =>
@@ -1162,6 +1201,8 @@ namespace FYPTracker.Migrations
 
             modelBuilder.Entity("FYPTracker.Models.FYPProject", b =>
                 {
+                    b.Navigation("AssignedExaminers");
+
                     b.Navigation("Milestones");
                 });
 

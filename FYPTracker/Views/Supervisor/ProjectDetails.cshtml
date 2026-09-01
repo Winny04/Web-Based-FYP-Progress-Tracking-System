@@ -98,17 +98,24 @@
                 </div>
                 
                 <h6 class="fw-bold text-dark mb-3 mt-3"><i class="fas fa-chalkboard-teacher text-primary me-2"></i>Examiner Info</h6>
-                @if (Model.Examiner != null)
+                @if (Model.AssignedExaminers.Any())
                 {
-                    <div class="d-flex align-items-center gap-3 mb-4">
-                        <div style="width:50px;height:50px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;color:#15803d;font-weight:700;font-size:18px;">
-                            @(Model.Examiner.FullName?.Substring(0, 1) ?? "E")
-                        </div>
-                        <div>
-                            <div class="fw-bold text-dark fs-5">@Model.Examiner.FullName</div>
-                            <div class="text-muted small">@Model.Examiner.Email</div>
-                        </div>
-                    </div>
+                    @foreach (var examinerAssignment in Model.AssignedExaminers)
+                    {
+                        var examiner = examinerAssignment.Examiner;
+                        if (examiner != null)
+                        {
+                            <div class="d-flex align-items-center gap-3 mb-4">
+                                <div style="width:50px;height:50px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;color:#15803d;font-weight:700;font-size:18px;">
+                                    @(examiner.FullName?.Substring(0, 1) ?? "E")
+                                </div>
+                                <div>
+                                    <div class="fw-bold text-dark fs-5">@examiner.FullName</div>
+                                    <div class="text-muted small">@examiner.Email</div>
+                                </div>
+                            </div>
+                        }
+                    }
                 }
                 else
                 {

@@ -6,7 +6,7 @@
     var name = currentUser?.FullName ?? "Student";
     var studentId = currentUser?.EmployeeId ?? "S12345678";
     var supervisorName = Model?.Supervisor?.FullName ?? "Not Assigned";
-    var examinerName = Model?.Examiner?.FullName ?? "Not Assigned";
+    var examinerName = Model?.AssignedExaminers?.Any() == true ? string.Join(", ", Model.AssignedExaminers.Select(e => e.Examiner?.FullName)) : "Not Assigned";
     var session = !string.IsNullOrEmpty(currentUser?.AcademicSession) ? currentUser.AcademicSession : "—";
     
     var milestones = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();

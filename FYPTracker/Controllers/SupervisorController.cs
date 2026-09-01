@@ -117,7 +117,7 @@ namespace FYPTracker.Controllers
             ViewBag.PendingRequests   = await _context.SupervisorRequests.CountAsync(r => r.SupervisorId == user.Id && r.Status == "Pending" && (activeSession == null || r.Student.AcademicSession == activeSession));
             ViewBag.PendingReviews    = await _context.FYPMilestones.CountAsync(m => m.Project.SupervisorId == user.Id && m.Status == "Submitted" && (activeSession == null || m.Project.AcademicSession == activeSession));
             ViewBag.UpcomingMeetings  = await _context.MeetingBookings.CountAsync(m => m.SupervisorId == user.Id && m.MeetingDate >= DateTime.Today && m.Status == "Approved" && (activeSession == null || m.Student.AcademicSession == activeSession));
-            ViewBag.PendingExaminers  = await _context.FYPProjects.CountAsync(p => p.SupervisorId == user.Id && p.ExaminerId == null && p.Status != "Failed" && (activeSession == null || p.AcademicSession == activeSession));
+            ViewBag.PendingExaminers  = await _context.FYPProjects.CountAsync(p => p.SupervisorId == user.Id && !p.AssignedExaminers.Any() && p.Status != "Failed" && (activeSession == null || p.AcademicSession == activeSession));
 
             // Recent Requests (Top 5)
             var recentRequests = await _context.SupervisorRequests
@@ -299,7 +299,7 @@ namespace FYPTracker.Controllers
 
             var project = await _context.FYPProjects
                 .Include(p => p.Student)
-                .Include(p => p.Examiner)
+                .Include(p => p.AssignedExaminers).ThenInclude(ae => ae.Examiner)
                 .Include(p => p.Milestones)
                 .FirstOrDefaultAsync(p => p.Id == id && p.SupervisorId == user.Id);
 
@@ -1478,6 +1478,7 @@ namespace FYPTracker.Controllers
 
             var project = await _context.FYPProjects
                 .Include(p => p.Student)
+                .Include(p => p.AssignedExaminers)
                 .FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == currentUser.Id);
 
             if (project == null)
@@ -1493,8 +1494,16 @@ namespace FYPTracker.Controllers
                 return RedirectToAction("ProjectDetails", new { id = projectId });
             }
 
-            project.ExaminerId = examinerId;
-            await _context.SaveChangesAsync();
+            if (!project.AssignedExaminers.Any(ae => ae.ExaminerId == examinerId))
+            {
+                _context.FYPProjectExaminers.Add(new FYPProjectExaminer
+                {
+                    FYPProjectId = project.Id,
+                    ExaminerId = examinerId,
+                    AssignedDate = DateTime.Now
+                });
+                await _context.SaveChangesAsync();
+            }
 
             // Send Email to Examiner
             if (!string.IsNullOrEmpty(examiner.Email))

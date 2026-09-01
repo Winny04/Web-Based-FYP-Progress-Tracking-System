@@ -406,7 +406,7 @@
 <div class="modal fade" id="reviewLogModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
-            <form asp-action="ReviewMeetingLogSupervisor" method="post" enctype="multipart/form-data">
+            <form asp-action="ReviewMeetingLogSupervisor" method="post" enctype="multipart/form-data" id="reviewLogForm" onsubmit="return confirmReviewLogSubmission(event)">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="meetingId" id="revMeetingId" />
                 
@@ -450,6 +450,29 @@
 @section Scripts {
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
 <script>
+    var eventsData = [
+        @foreach (var m in Model.Where(x => x.Status == "Approved" || x.Status == "Pending" || x.Status == "Postponed"))
+        {
+            string color = m.Status == "Approved" ? "#10b981" : (m.Status == "Pending" ? "#f59e0b" : "#ef4444");
+            string startTimeStr = m.MeetingTime ?? "09:00 AM";
+            DateTime startDt;
+            if (!DateTime.TryParse($"{m.MeetingDate:yyyy-MM-dd} {startTimeStr}", out startDt)) {
+                startDt = m.MeetingDate;
+            }
+            
+            <text>
+            {
+                id: '@m.Id',
+                title: 'Meeting: @Html.Raw(System.Web.HttpUtility.JavaScriptStringEncode(m.Student?.FullName ?? "Student"))',
+                start: '@startDt.ToString("yyyy-MM-ddTHH:mm:00")',
+                end: '@startDt.AddHours(1).ToString("yyyy-MM-ddTHH:mm:00")',
+                allDay: false,
+                color: '@color'
+            },
+            </text>
+        }
+    ];
+
     var meetingCalendar;
     function initCalendar() {
         var calendarEl = document.getElementById('calendar');
@@ -463,13 +486,7 @@
                     center: 'title',
                     right: 'dayGridMonth,timeGridWeek'
                 },
-                events: '@Url.Action("GetMeetingsCalendarData", "Supervisor")',
-                eventClick: function(info) {
-                    if(info.event.url) {
-                        window.location.href = info.event.url;
-                        info.jsEvent.preventDefault();
-                    }
-                }
+                events: eventsData
             });
             meetingCalendar.render();
         }
@@ -734,7 +751,41 @@
     }
 
     function validateRespondModal(id) {
-        return validateRespondModalRealtime(id);
+        var isValid = validateRespondModalRealtime(id);
+        if (isValid) {
+            Swal.fire({
+                title: 'Confirm Submission',
+                text: "Are you sure you want to submit this response?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes, Submit'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('respondForm_' + id).submit();
+                }
+            });
+        }
+        return false;
+    }
+
+    function confirmReviewLogSubmission(event) {
+        event.preventDefault();
+        Swal.fire({
+            title: 'Confirm Submission',
+            text: "Are you sure you want to submit this reviewed logbook?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Yes, Submit'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById('reviewLogForm').submit();
+            }
+        });
+        return false;
     }
 
     document.addEventListener('MeetingUpdateEvent', function(e) {

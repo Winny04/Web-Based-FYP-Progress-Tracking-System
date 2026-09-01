@@ -115,6 +115,7 @@
                         <form action="/Examiner/UploadMarksheet" method="post" enctype="multipart/form-data">
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="projectId" value="@Model.Id" />
+                            <input type="hidden" name="idempotencyToken" value="@ViewBag.IdempotencyToken" />
                             
                             <div class="mb-3">
                                 <label for="marksheetFile" class="form-label">Upload Completed Marksheet (Excel)</label>

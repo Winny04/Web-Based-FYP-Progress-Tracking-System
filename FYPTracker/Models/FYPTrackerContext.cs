@@ -26,6 +26,7 @@ namespace FYPTracker.Models
         public virtual DbSet<FYPMilestone>      FYPMilestones      { get; set; } = null!;
         public virtual DbSet<FYPFeedback>       FYPFeedbacks       { get; set; } = null!;
         public virtual DbSet<FYPSubmissionFile> FYPSubmissionFiles { get; set; } = null!;
+        public virtual DbSet<FYPProjectExaminer> FYPProjectExaminers { get; set; } = null!;
 
         // ── Student Module ─────────────────────────────────────────
         public virtual DbSet<SupervisorRequest> SupervisorRequests { get; set; } = null!;
@@ -73,11 +74,6 @@ namespace FYPTracker.Models
                       .WithMany()
                       .HasForeignKey(e => e.SupervisorId)
                       .OnDelete(DeleteBehavior.Restrict);
-
-                entity.HasOne(e => e.Examiner)
-                      .WithMany()
-                      .HasForeignKey(e => e.ExaminerId)
-                      .OnDelete(DeleteBehavior.Restrict);
             });
 
             // FYPMilestone: belongs to a FYPProject
@@ -90,6 +86,23 @@ namespace FYPTracker.Models
                       .WithMany(p => p.Milestones)
                       .HasForeignKey(e => e.FYPProjectId)
                       .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // FYPProjectExaminer
+            modelBuilder.Entity<FYPProjectExaminer>(entity =>
+            {
+                entity.ToTable("FYPProjectExaminer");
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Project)
+                      .WithMany(p => p.AssignedExaminers)
+                      .HasForeignKey(e => e.FYPProjectId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Examiner)
+                      .WithMany()
+                      .HasForeignKey(e => e.ExaminerId)
+                      .OnDelete(DeleteBehavior.Restrict);
             });
 
             // FYPFeedback: belongs to a milestone + written by a supervisor

@@ -11,6 +11,7 @@ namespace FYPTracker.Models
         public FYPProject()
         {
             Milestones = new HashSet<FYPMilestone>();
+            AssignedExaminers = new HashSet<FYPProjectExaminer>();
         }
 
         [Key]
@@ -33,8 +34,6 @@ namespace FYPTracker.Models
         public int StudentId { get; set; }
 
         public int? SupervisorId { get; set; }
-
-        public int? ExaminerId { get; set; }
 
         /// <summary>Values: Proposed, Approved, InProgress, Completed, Rejected</summary>
         [StringLength(50)]
@@ -80,10 +79,9 @@ namespace FYPTracker.Models
         [ForeignKey(nameof(SupervisorId))]
         public virtual ApplicationUser? Supervisor { get; set; }
 
-        [ForeignKey(nameof(ExaminerId))]
-        public virtual ApplicationUser? Examiner { get; set; }
-
         public virtual ICollection<FYPMilestone> Milestones { get; set; }
+        
+        public virtual ICollection<FYPProjectExaminer> AssignedExaminers { get; set; }
     }
 }
 

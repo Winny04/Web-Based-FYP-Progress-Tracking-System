@@ -161,21 +161,41 @@
 
                     @if (Model.SubmissionFiles != null && Model.SubmissionFiles.Any())
                     {
-                        var studentFiles = Model.SubmissionFiles.Where(f => f.UploadedBy == Model.Project?.StudentId).ToList();
+                        var studentFiles = Model.SubmissionFiles.Where(f => f.UploadedBy == Model.Project?.StudentId).OrderByDescending(f => f.AttemptNumber).ToList();
                         var supervisorFiles = Model.SubmissionFiles.Where(f => f.UploadedBy != Model.Project?.StudentId).ToList();
 
                         if (studentFiles.Any())
                         {
                             <div class="mb-4">
-                                <h6 class="text-muted text-uppercase fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;">Student Attached Files</h6>
-                                <div class="d-flex flex-column gap-2">
-                                    @foreach (var file in studentFiles)
+                                <h6 class="text-muted text-uppercase fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;">Student Attached Files (Version History)</h6>
+                                <div class="d-flex flex-column gap-3">
+                                    @for (int i = 0; i < studentFiles.Count; i++)
                                     {
-                                        <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = file.Id })" target="_blank" class="btn btn-outline-secondary text-start d-flex align-items-center rounded-3 p-3 text-decoration-none">
-                                            <i class="fas fa-paperclip text-muted me-3"></i>
-                                            <span class="text-dark fw-medium text-truncate flex-grow-1">@file.FileName</span>
-                                            <i class="fas fa-external-link-alt text-primary ms-3"></i>
-                                        </a>
+                                        var file = studentFiles[i];
+                                        var previousFile = (i + 1 < studentFiles.Count) ? studentFiles[i + 1] : null;
+                                        
+                                        <div class="card border-0 shadow-sm rounded-3">
+                                            <div class="card-body p-3 d-flex flex-column gap-2">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = file.Id })" target="_blank" class="text-dark fw-bold text-decoration-none d-flex align-items-center">
+                                                        <i class="fas fa-paperclip text-primary me-2"></i> @file.FileName <span class="badge bg-secondary ms-2">Attempt @file.AttemptNumber</span>
+                                                    </a>
+                                                    @if (previousFile != null)
+                                                    {
+                                                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#compareModal" onclick="setupCompareModal('@Url.Action("ViewFile", "Supervisor", new { fileId = previousFile.Id })', '@Url.Action("ViewFile", "Supervisor", new { fileId = file.Id })')">
+                                                            <i class="fas fa-columns me-1"></i> Compare with Attempt @previousFile.AttemptNumber
+                                                        </button>
+                                                    }
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(file.RevisionNotes))
+                                                {
+                                                    <div class="alert alert-warning m-0 p-2 mt-2 border-0">
+                                                        <div class="fw-bold text-dark" style="font-size:0.85rem;"><i class="fas fa-history text-danger me-1"></i> Revision Notes:</div>
+                                                        <div class="text-dark small">@file.RevisionNotes</div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
                                     }
                                 </div>
                             </div>
@@ -382,12 +402,69 @@
             });
 
             // Validate on submit
-            form.addEventListener('submit', function (event) {
+            form.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                
                 if (!form.checkValidity()) {
-                    event.preventDefault();
                     event.stopPropagation();
+                    form.classList.add('was-validated');
+                    return;
                 }
                 form.classList.add('was-validated');
+                
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn.innerHTML;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Submitting...';
+
+                try {
+                    const formData = new FormData(form);
+                    const actionUrl = form.getAttribute('action') || window.location.href;
+                    
+                    const response = await fetch(actionUrl, {
+                        method: form.getAttribute('method') || 'POST',
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        if (response.redirected) {
+                            window.location.href = response.url;
+                        } else {
+                            window.location.href = '@Url.Action("ReviewSubmissions", "Supervisor")';
+                        }
+                    } else {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnText;
+                        
+                        let errorMsg = "A server error occurred. Please try again.";
+                        try {
+                            const errData = await response.json();
+                            errorMsg = errData.message || errorMsg;
+                        } catch(e) {
+                            if (response.status === 400) errorMsg = "Validation failed. Please check your inputs.";
+                            if (response.status === 500) errorMsg = "A database transaction error occurred. Your input has been saved locally, please try again.";
+                        }
+                        
+                        let errorContainer = document.getElementById('ajax-error-container');
+                        if (!errorContainer) {
+                            errorContainer = document.createElement('div');
+                            errorContainer.id = 'ajax-error-container';
+                            form.insertBefore(errorContainer, form.firstChild);
+                        }
+                        errorContainer.innerHTML = `<div class="alert alert-danger shadow-sm border-danger"><i class="fas fa-exclamation-circle me-2"></i>${errorMsg}</div>`;
+                    }
+                } catch (error) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalBtnText;
+                    
+                    let errorContainer = document.getElementById('ajax-error-container');
+                    if (!errorContainer) {
+                        errorContainer = document.createElement('div');
+                        errorContainer.id = 'ajax-error-container';
+                        form.insertBefore(errorContainer, form.firstChild);
+                    }
+                    errorContainer.innerHTML = `<div class="alert alert-danger shadow-sm border-danger"><i class="fas fa-wifi me-2"></i>Network error occurred. Please check your connection.</div>`;
+                }
             }, false);
         });
 
@@ -404,5 +481,39 @@
             remarks.focus();
             remarks.dispatchEvent(new Event('input'));
         }
+
+        function setupCompareModal(oldFileUrl, newFileUrl) {
+            document.getElementById('compareOldIframe').src = oldFileUrl;
+            document.getElementById('compareNewIframe').src = newFileUrl;
+        }
     </script>
 }
+
+<!-- Compare Versions Modal -->
+<div class="modal fade" id="compareModal" tabindex="-1" aria-labelledby="compareModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content bg-light">
+            <div class="modal-header bg-dark text-white border-0">
+                <h5 class="modal-title fw-bold" id="compareModalLabel"><i class="fas fa-columns text-primary me-2"></i> Document Version Comparison</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="row g-0 h-100">
+                    <div class="col-6 h-100 border-end border-2 border-dark">
+                        <div class="bg-secondary text-white text-center py-2 fw-bold" style="font-size: 0.9rem;">
+                            <i class="fas fa-history me-1"></i> Previous Version
+                        </div>
+                        <iframe id="compareOldIframe" src="" style="width:100%; height:calc(100vh - 100px); border:none;"></iframe>
+                    </div>
+                    <div class="col-6 h-100">
+                        <div class="bg-primary text-white text-center py-2 fw-bold" style="font-size: 0.9rem;">
+                            <i class="fas fa-star me-1"></i> New Version
+                        </div>
+                        <iframe id="compareNewIframe" src="" style="width:100%; height:calc(100vh - 100px); border:none;"></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+

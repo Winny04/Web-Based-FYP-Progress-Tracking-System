@@ -40,7 +40,8 @@ namespace FYPTracker.Controllers
             var project = await _context.FYPProjects
                 .Include(p => p.Student)
                 .Include(p => p.Supervisor)
-                .Include(p => p.Examiner)
+                .Include(p => p.AssignedExaminers)
+                    .ThenInclude(ae => ae.Examiner)
                 .Include(p => p.Milestones)
                 .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
@@ -397,7 +398,81 @@ namespace FYPTracker.Controllers
             return RedirectToAction(nameof(SelectSupervisor));
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditSupervisorRequest(int requestId, string projectTopic, string? requestMessage)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
 
+            var request = await _context.SupervisorRequests.FirstOrDefaultAsync(r => r.Id == requestId && r.StudentId == user.Id);
+            if (request == null)
+            {
+                TempData["Error"] = "Request not found.";
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+
+            if (request.Status != "Rejected")
+            {
+                TempData["Error"] = "Only rejected requests can be edited and resubmitted.";
+                return RedirectToAction(nameof(SelectSupervisor));
+            }
+
+            request.ProjectTopic = projectTopic;
+            request.RequestMessage = requestMessage;
+            request.Status = "Pending";
+            request.RequestedDate = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+
+            await LogActivityAsync(user.Id, "Supervision", "Supervisor Request Resubmitted", $"Resubmitted request to Supervisor ID: {request.SupervisorId}");
+            await AddNotificationAsync(request.SupervisorId, "Supervision", "Supervision Request Resubmitted", $"{user.FullName} has resubmitted their supervision request.", request.Id);
+
+            TempData["Success"] = "Supervisor request resubmitted successfully!";
+            return RedirectToAction(nameof(SelectSupervisor));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteSubmissionFile(int fileId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var file = await _context.FYPSubmissionFiles.Include(f => f.Milestone).FirstOrDefaultAsync(f => f.Id == fileId && f.UploadedBy == user.Id);
+            
+            if (file == null)
+            {
+                return Json(new { success = false, message = "File not found or unauthorized." });
+            }
+
+            if (file.Milestone.Status == "Approved" || file.Milestone.Status == "Rejected")
+            {
+                return Json(new { success = false, message = "Cannot delete file for a graded milestone." });
+            }
+
+            try
+            {
+                if (System.IO.File.Exists(file.FilePath))
+                {
+                    System.IO.File.Delete(file.FilePath);
+                }
+                _context.FYPSubmissionFiles.Remove(file);
+                
+                var remainingFiles = await _context.FYPSubmissionFiles.CountAsync(f => f.MilestoneId == file.MilestoneId && f.Id != fileId);
+                if (remainingFiles == 0)
+                {
+                    file.Milestone.Status = "Pending";
+                }
+
+                await _context.SaveChangesAsync();
+                return Json(new { success = true, message = "File deleted successfully." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = "Failed to delete file. " + ex.Message });
+            }
+        }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -405,7 +480,7 @@ namespace FYPTracker.Controllers
             int milestoneId, string formType, string? title, string? detailsJson, IFormFile? attachedFile, List<IFormFile>? attachedFiles,
             string? problemStatement, string? objective1, string? objective2, string? objective3,
             string? scope, string? outcome, string? references,
-            DateTime? startDate, DateTime? endDate, string? workDone, string? challenges, string? nextPeriodPlan, string? pctComplete, string? coventryId)
+            DateTime? startDate, DateTime? endDate, string? workDone, string? challenges, string? nextPeriodPlan, string? pctComplete, string? coventryId, string? revisionNotes)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "User");
@@ -442,19 +517,13 @@ namespace FYPTracker.Controllers
                     }
                 }
 
-                // Remove existing files for this milestone to prevent confusion
+                // Determine the new AttemptNumber
+                int newAttemptNumber = 1;
                 var existingFiles = await _context.FYPSubmissionFiles.Where(f => f.MilestoneId == milestoneId).ToListAsync();
                 if (existingFiles.Any())
                 {
-                    foreach (var f in existingFiles)
-                    {
-                        var oldFilePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", f.FilePath.TrimStart('/'));
-                        if (System.IO.File.Exists(oldFilePath))
-                        {
-                            try { System.IO.File.Delete(oldFilePath); } catch { /* Ignore locked file errors */ }
-                        }
-                    }
-                    _context.FYPSubmissionFiles.RemoveRange(existingFiles);
+                    newAttemptNumber = existingFiles.Max(f => f.AttemptNumber) + 1;
+                    // Note: We intentionally do NOT delete old files to preserve version history
                 }
 
                 var uploadDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads/submissions");
@@ -476,6 +545,8 @@ namespace FYPTracker.Controllers
                         FileName = file.FileName,
                         FilePath = "/uploads/submissions/" + uniqueName,
                         FileSize = file.Length,
+                        AttemptNumber = newAttemptNumber,
+                        RevisionNotes = revisionNotes,
                         UploadedBy = user.Id,
                         UploadedDate = DateTime.Now
                     });
