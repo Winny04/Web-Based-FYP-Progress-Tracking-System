@@ -23,18 +23,43 @@
         color: black;
         font-size: 15px;
     }
+    #mytable th, #mytable td {
+        vertical-align: middle;
+        padding-top: 0.6rem !important;
+        padding-bottom: 0.6rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+    #mytable .symbol-35px {
+        width: 35px;
+        height: 35px;
+    }
+    #mytable .symbol-35px img, #mytable .symbol-35px .symbol-label {
+        width: 35px;
+        height: 35px;
+        font-size: 0.9rem;
+    }
+    #mytable .action-btn-group {
+        display: inline-flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 3px;
+        white-space: nowrap;
+    }
+    #mytable .action-btn-group .btn-icon.btn-sm {
+        width: 28px;
+        height: 28px;
+    }
+    #mytable .action-btn-group .btn-icon.btn-sm i {
+        font-size: 0.95rem !important;
+    }
 </style>
 
 <div class="container-fluid py-4">
-
     <div class="card shadow-sm border-0 rounded-4">
-        <div class="card-header border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
+        <div class="card-header border-0 pt-4 px-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
             <h4 class="fw-bolder text-dark mb-0"><i class="fas fa-users-cog text-primary me-2"></i>User Management</h4>
-
-    <div class="card-header border-0">
-
-        <div class="card-toolbar">
-            <div class="d-flex flex-stack flex-wrap gap-4">
+            <div class="card-toolbar d-flex align-items-center gap-3">
                 <div class="d-flex align-items-center position-relative my-1">
                     <span class="svg-icon svg-icon-1 position-absolute px-1" style="margin-right:1.5rem !important;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -44,18 +69,14 @@
                     </span>
                     <input type="text" id="searchBar" class="form-control form-control-solid w-250px" placeholder="Search user" style="padding-left:2.8rem !important;" />
                 </div>
+                <!--start:: Btn Bulk Invite-->
+                <a href="#" id="btn-BulkInvite" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#bulkInviteModal"><i class="fas fa-envelope me-1"></i>Invite</a>
+                <!--end:: Btn Bulk Invite-->
+                <!--start:: Btn CSV Upload-->
+                <a href="#" id="btn-CSVUpload" class="btn btn-light-success" data-bs-toggle="modal" data-bs-target="#csvUploadModal"><i class="fas fa-file-csv me-1"></i>CSV Upload</a>
+                <!--end:: Btn CSV Upload-->
             </div>
         </div>
-        <div class="card-toolbar">
-            <div class="d-flex align-items-center py-3 py-md-1">
-                <div class="me-4">
-                    <!--start:: Btn Bulk Invite-->
-                    <a href="#" id="btn-BulkInvite" class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#bulkInviteModal">Invite</a>
-                    <!--end:: Btn Bulk Invite-->
-                </div>
-            </div>
-        </div>
-    </div>
 
     <div class="card-body py-0">
         
@@ -76,18 +97,19 @@
         </ul>
         @* <label>@Html.ValidationMessageFor(model => model.EmplooyeeInfoID, "", new { @class = "text-danger" })</label>*@
         <div class="table-responsive">
-            <table id="mytable" class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
+            <table id="mytable" class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-3 fs-7">
                 <thead>
-                    <tr class="text-start text-muted fw-bolder fs-7 text-uppercase gs-0">
-                        <th class="w-25px">ID</th>
-                        <th class="min-w-250px">User</th>
-                        <th class="min-w-100px">User Type</th>
-                        <th class="min-w-150px">Supervisor</th>
-                        <th class="min-w-150px">Assigned Students</th>
-                        <th class="min-w-100px">Student Count</th>
-                        <th class="min-w-150px">Date Created</th>
-                        <th class="min-w-100px">Status</th>
-                        <th class="min-w-100px text-end">Action</th>
+                    <tr class="text-start text-muted fw-bolder fs-8 text-uppercase gs-0">
+                        <th class="w-20px">ID</th>
+                        <th style="min-width: 180px;">User</th>
+                        <th style="min-width: 80px;">Role</th>
+                        <th style="min-width: 120px;">Supervisor</th>
+                        <th style="min-width: 130px;">Assigned</th>
+                        <th style="min-width: 60px;" class="text-center">Count</th>
+                        <th style="min-width: 110px;">Created</th>
+                        <th style="min-width: 70px;">Status</th>
+                        <th style="min-width: 90px;">Login</th>
+                        <th style="min-width: 120px;" class="text-end">Action</th>
                     </tr>
                 </thead>
             </table>
@@ -145,8 +167,9 @@
                                     <option value="@dept.Value">@dept.Text</option>
                                 }
                             </select>
+                            <div id="editDepartmentError" class="text-danger mt-1 fs-7 fw-bold"></div>
                         </div>
-                        <div class="fv-row mb-5">
+                        <div class="fv-row mb-5" id="editProgContainer">
                             <label class="form-label fw-bolder text-dark fs-6">Programme</label>
                             <select id="editProgramme" class="form-select form-select-solid form-select-lg fw-bold" multiple="multiple" data-control="select2" data-placeholder="-- Select Programme(s) --">
                                 <option value=""></option>
@@ -155,6 +178,7 @@
                                     <option value="@prog.Value">@prog.Text</option>
                                 }
                             </select>
+                            <div id="editProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
                         </div>
                         <div class="fv-row mb-5" id="editSpecContainer">
                             <label class="form-label fw-bolder text-dark fs-6">Specialization</label>
@@ -168,18 +192,32 @@
                         </div>
                     </div>
 
+                    <!-- Student-specific fields in Edit Modal -->
                     <div id="editStudentFields" style="display:none;">
                         <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Academic Session</label>
+                            <label class="form-label fw-bolder text-dark fs-6">Programme <span class="text-danger">*</span></label>
+                            <select id="editStudentProgramme" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Programme --</option>
+                                @foreach (var prog in programmeList)
+                                {
+                                    <option value="@prog.Value">@prog.Text</option>
+                                }
+                            </select>
+                            <div id="editStudentProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                        </div>
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Academic Session <span class="text-danger">*</span></label>
                             <select id="editAcademicSession" class="form-select form-select-solid form-select-lg fw-bold">
                                 <option value="">-- Select Session --</option>
                             </select>
+                            <div id="editAcademicSessionError" class="text-danger mt-1 fs-7 fw-bold"></div>
                         </div>
                     </div>
 
+
                     <div id="editSupervisorFields" style="display:none;">
                         <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Title</label>
+                            <label class="form-label fw-bolder text-dark fs-6">Title <span class="text-danger">*</span></label>
                             <select id="editTitle" class="form-select form-select-solid form-select-lg fw-bold">
                                 <option value="">-- Select Title --</option>
                                 <option value="Mr.">Mr.</option>
@@ -191,6 +229,7 @@
                                 <option value="Ts.">Ts.</option>
                                 <option value="Ir.">Ir.</option>
                             </select>
+                            <div id="editTitleError" class="text-danger mt-1 fs-7 fw-bold"></div>
                         </div>
                     </div>
 
@@ -246,15 +285,42 @@
                     </div>
                     <div class="fv-row mb-5">
                         <label class="form-label fw-bolder text-dark fs-6">User Type <span class="text-danger">*</span></label>
-                        <select name="bulkUserType" class="form-select form-select-solid form-select-lg fw-bold" required>
+                        <select name="bulkUserType" id="bulkUserType" class="form-select form-select-solid form-select-lg fw-bold" required>
                             <option value="">-- Select Type --</option>
                             <option value="Student">Student</option>
                             <option value="Supervisor">Supervisor</option>
                             <option value="Examiner">Examiner</option>
                         </select>
                     </div>
+
+                    <!-- Student-specific required fields -->
+                    <div id="bulkStudentFields" style="display:none;">
+                        <div class="alert alert-warning border-0 rounded-3 d-flex align-items-center gap-3 p-3 mb-4">
+                            <i class="fas fa-exclamation-triangle text-warning fs-4"></i>
+                            <div class="fs-7 text-dark"><strong>Required for Students:</strong> Programme and Academic Session must be set before login credentials can be sent.</div>
+                        </div>
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Programme <span class="text-danger">*</span></label>
+                            <select name="bulkProgramme" id="bulkProgramme" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Programme --</option>
+                                @foreach (var prog in programmeList)
+                                {
+                                    <option value="@prog.Value">@prog.Text</option>
+                                }
+                            </select>
+                            <div id="bulkProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                        </div>
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Academic Session <span class="text-danger">*</span></label>
+                            <select name="bulkAcademicSession" id="bulkAcademicSession" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Session --</option>
+                            </select>
+                            <div id="bulkAcademicSessionError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                        </div>
+                    </div>
+
                     <div class="text-center mt-4">
-                        <button type="submit" class="btn btn-lg btn-primary w-100">Send Invites</button>
+                        <button type="submit" id="bulkInviteSubmitBtn" class="btn btn-lg btn-primary w-100">Send Invites</button>
                     </div>
                 </div>
             </form>
@@ -262,7 +328,86 @@
     </div>
 </div>
 
-@section scripts{
+<!-- CSV Upload Modal -->
+<div class="modal fade" id="csvUploadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-600px">
+        <div class="modal-content">
+            <form method="post" action="/Admin/UploadCSV" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="modal-header" style="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-bottom: 1px solid #6ee7b7;">
+                    <div>
+                        <h2 class="fw-bolder text-dark mb-0"><i class="fas fa-file-csv text-success me-2"></i>Bulk Upload via CSV</h2>
+                        <p class="text-muted mb-0 fs-7 mt-1">Upload a CSV file with columns: <code>Full Name, Email</code></p>
+                    </div>
+                    <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                        <span class="svg-icon svg-icon-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                                <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+                <div class="modal-body p-5">
+                    <div class="alert alert-light-primary border border-primary rounded-3 d-flex align-items-start gap-3 p-3 mb-4">
+                        <i class="fas fa-info-circle text-primary fs-4 mt-1"></i>
+                        <div class="fs-7 text-dark">
+                            <strong>CSV Format:</strong> First row is treated as a header and skipped.<br/>
+                            Expected columns: <code>Full Name</code>, <code>Email</code>
+                        </div>
+                    </div>
+
+                    <div class="fv-row mb-5">
+                        <label class="form-label fw-bolder text-dark fs-6">CSV File <span class="text-danger">*</span></label>
+                        <input type="file" name="csvFile" id="csvFile" class="form-control form-control-solid" accept=".csv" required />
+                        <div class="form-text text-muted">Only <code>.csv</code> files are accepted.</div>
+                    </div>
+
+                    <div class="fv-row mb-5">
+                        <label class="form-label fw-bolder text-dark fs-6">User Type <span class="text-danger">*</span></label>
+                        <select name="csvUserType" id="csvUserType" class="form-select form-select-solid form-select-lg fw-bold" required>
+                            <option value="">-- Select Type --</option>
+                            <option value="Student">Student</option>
+                            <option value="Supervisor">Supervisor</option>
+                            <option value="Examiner">Examiner</option>
+                        </select>
+                    </div>
+
+                    <!-- Student-specific fields (shown only for Student type) -->
+                    <div id="csvStudentFields" style="display:none;">
+                        <div class="alert alert-warning border-0 rounded-3 d-flex align-items-center gap-3 p-3 mb-4">
+                            <i class="fas fa-exclamation-triangle text-warning fs-4"></i>
+                            <div class="fs-7 text-dark"><strong>Required for Students:</strong> Programme and Academic Session will be applied to all imported students.</div>
+                        </div>
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Programme <span class="text-danger">*</span></label>
+                            <select name="csvProgramme" id="csvProgramme" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Programme --</option>
+                                @foreach (var prog in programmeList)
+                                {
+                                    <option value="@prog.Value">@prog.Text</option>
+                                }
+                            </select>
+                            <div id="csvProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                        </div>
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Academic Session <span class="text-danger">*</span></label>
+                            <select name="csvAcademicSession" id="csvAcademicSession" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Session --</option>
+                            </select>
+                            <div id="csvAcademicSessionError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                        </div>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <button type="submit" id="csvUploadSubmitBtn" class="btn btn-lg btn-success w-100"><i class="fas fa-cloud-upload-alt me-2"></i>Upload & Import</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 
@@ -315,6 +460,8 @@
         ];
         var sessionSelect = $('#createAcademicSession'); // populated if a create modal is added
         var editSessionSelect = $('#editAcademicSession');
+        var bulkSessionSelect = $('#bulkAcademicSession');
+        var csvSessionSelect = $('#csvAcademicSession');
         for (var y = currentYear - 1; y <= currentYear + 2; y++) {
             intakes.forEach(function(intake) {
                 // Only allow selecting sessions from the current month onwards
@@ -322,14 +469,119 @@
                     var sessionText = y + ' ' + intake.name;
                     sessionSelect.append(new Option(sessionText, sessionText));
                     editSessionSelect.append(new Option(sessionText, sessionText));
+                    bulkSessionSelect.append(new Option(sessionText, sessionText));
+                    csvSessionSelect.append(new Option(sessionText, sessionText));
                 }
             });
         }
 
+        // Show/hide student-specific fields in bulk invite modal
+        $('#bulkUserType').on('change', function () {
+            if ($(this).val() === 'Student') {
+                $('#bulkStudentFields').slideDown(200);
+                $('#bulkProgramme').prop('required', true);
+                $('#bulkAcademicSession').prop('required', true);
+            } else {
+                $('#bulkStudentFields').slideUp(200);
+                $('#bulkProgramme').prop('required', false).val('');
+                $('#bulkAcademicSession').prop('required', false).val('');
+                $('#bulkProgrammeError').text('');
+                $('#bulkAcademicSessionError').text('');
+            }
+        });
+
+        // Client-side validation before submitting bulk invite
+        $('#bulkInviteSubmitBtn').closest('form').on('submit', function (e) {
+            var userType = $('#bulkUserType').val();
+            var isValid = true;
+
+            if (userType === 'Student') {
+                if (!$('#bulkProgramme').val()) {
+                    $('#bulkProgrammeError').text('Please select a Programme.');
+                    isValid = false;
+                } else {
+                    $('#bulkProgrammeError').text('');
+                }
+                if (!$('#bulkAcademicSession').val()) {
+                    $('#bulkAcademicSessionError').text('Please select an Academic Session.');
+                    isValid = false;
+                } else {
+                    $('#bulkAcademicSessionError').text('');
+                }
+            }
+
+            if (!isValid) {
+                e.preventDefault();
+            }
+        });
+
         LoadTable();
 
+        // ── CSV Upload: show/hide student fields ──
+        $('#csvUserType').on('change', function () {
+            if ($(this).val() === 'Student') {
+                $('#csvStudentFields').slideDown(200);
+                $('#csvProgramme').prop('required', true);
+                $('#csvAcademicSession').prop('required', true);
+            } else {
+                $('#csvStudentFields').slideUp(200);
+                $('#csvProgramme').prop('required', false).val('');
+                $('#csvAcademicSession').prop('required', false).val('');
+                $('#csvProgrammeError').text('');
+                $('#csvAcademicSessionError').text('');
+            }
+        });
+
+        // CSV Upload: client-side validation before submit
+        $('#csvUploadSubmitBtn').closest('form').on('submit', function (e) {
+            var userType = $('#csvUserType').val();
+            var isValid = true;
+            if (userType === 'Student') {
+                if (!$('#csvProgramme').val()) {
+                    $('#csvProgrammeError').text('Please select a Programme.');
+                    isValid = false;
+                } else { $('#csvProgrammeError').text(''); }
+                if (!$('#csvAcademicSession').val()) {
+                    $('#csvAcademicSessionError').text('Please select an Academic Session.');
+                    isValid = false;
+                } else { $('#csvAcademicSessionError').text(''); }
+            }
+            if (!isValid) e.preventDefault();
+        });
 
     });
+
+    // ── Resend Invite ──
+    function ResendInvite(userId, fullName) {
+        Swal.fire({
+            title: 'Resend Login Credentials?',
+            html: '<p>A new temporary password will be generated and emailed to <strong>' + fullName + '</strong>.</p>',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#0ea5e9',
+            cancelButtonColor: '#a1a5b7',
+            confirmButtonText: '<i class="bi bi-send-fill me-1"></i> Yes, Resend!',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    type: 'POST',
+                    url: '/Admin/ResendInvite',
+                    data: { userId: userId },
+                    success: function (data) {
+                        if (data.success) {
+                            Swal.fire({ title: 'Sent!', text: data.message, icon: 'success', confirmButtonText: 'Ok' });
+                        } else {
+                            Swal.fire({ title: 'Error', text: data.message, icon: 'error', confirmButtonText: 'Ok' });
+                        }
+                    },
+                    error: function () {
+                        Swal.fire({ title: 'Error', text: 'An unexpected error occurred.', icon: 'error' });
+                    }
+                });
+            }
+        });
+    }
 
     $('#typeFilter').change(function (e) { $('#mytable').DataTable().columns(2).search(e.target.value).draw(); });
 
@@ -416,13 +668,13 @@
                             }
                         },
                         {
-                            targets: [2, 3, 4, 5, 6, 7],
+                            targets: [2, 3, 4, 5, 6, 7, 8],
                             createdCell: function (td, cellData, rowData, row, col) {
                                 // Default styling
                             }
                         },
                         {
-                            targets: 8,
+                            targets: 9,
                             createdCell: function (td, cellData, rowData, row, col) {
                                 $(td).addClass('text-end');
                             }
@@ -432,7 +684,7 @@
                                 return data ? moment(data.toString()).format('DD MMM YYYY HHmm') : '-';
                             }
                         }],
-                    order: [[6, 'desc']],// order by date desc
+                    order: [[0, 'desc']],// order by ID desc (newest first)
                     aoColumns: [
                         { mData: "id", visible: false },
                         {
@@ -440,15 +692,15 @@
                                 let imageComponent = ""
 
                                 if (row.image !== "") {
-                                    imageComponent = '<div class="symbol symbol-45px me-5"><img alt="Pic" src="' + row.image + '" onerror="this.onerror=null;this.src=\'/assets/media/avatars/blank.png\';" /></div>';
+                                    imageComponent = '<div class="symbol symbol-35px me-3"><img alt="Pic" src="' + row.image + '" onerror="this.onerror=null;this.src=\'/assets/media/avatars/blank.png\';" /></div>';
                                 } else {
-                                    imageComponent = '<div class="symbol symbol-45px me-5"><span class="symbol-label bg-light-danger text-danger fw-bolder">' + row.fullName.charAt(0).toUpperCase() + '</span></div>'
+                                    imageComponent = '<div class="symbol symbol-35px me-3"><span class="symbol-label bg-light-danger text-danger fw-bolder">' + row.fullName.charAt(0).toUpperCase() + '</span></div>'
                                 }
 
-                                let detailComponent = '<div class="d-flex justify-content-start flex-column"><a style="cursor: pointer;" id="' + row.id + '" onclick="OpenViewModal(' + row.id + ')" class="text-muted fw-bold text-muted d-block fs-7"><span class="text-dark fw-bolder text-hover-primary fs-6" style="color:black">' + row.fullName + '</span></a><span class="text-gray-600 fw-bold fs-7">ID: ' + (row.employeeId || 'N/A') + '</span><a href="" class="text-dark fw-bold text-dark d-block fs-7" style="color:black"><span class="text-dark">Email</span>: ' + row.email + '</a></div>';
+                                let detailComponent = '<div class="d-flex justify-content-start flex-column"><span class="text-dark fw-bolder fs-7">' + row.fullName + '</span><span class="text-muted fs-8">ID: ' + (row.employeeId || 'N/A') + '</span><span class="text-muted fs-8 text-truncate" style="max-width:180px;" title="' + row.email + '">' + row.email + '</span></div>';
+                                let fullComponent = '<div class="d-flex align-items-center">' + imageComponent + detailComponent + '</div>';
 
-                                //Edit and Delete buttons
-                                                                                                return '<div class="d-flex align-items-center">' + imageComponent + detailComponent + '</div>';
+                                return fullComponent;
                             }
                         },
                         { 
@@ -500,13 +752,28 @@
                         },
                         {
                             render: function (data, type, row, meta) {
-                                let buttonComponent = '<a id="edit_' + row.id + '" onclick="Edit(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm me-1" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit"><i class="bi bi-pencil-fill fs-4"></i></a>';
-                                if (row.isResign) {
-                                    buttonComponent += '<a id="activate_' + row.id + '" onclick="Activate(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-success btn-sm me-1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Activate"><i class="bi bi-check-circle-fill fs-4 text-success"></i></a>';
+                                if (row.requirePasswordChange) {
+                                    return '<span class="badge badge-light-warning fw-bold fs-7"><i class="bi bi-clock-history text-warning me-1"></i>Not Logged In</span>';
                                 } else {
-                                    buttonComponent += '<a id="deactivate_' + row.id + '" onclick="Delete(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-danger btn-sm me-1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Deactivate"><i class="bi bi-slash-circle-fill fs-4 text-warning"></i></a>';
+                                    return '<span class="badge badge-light-success fw-bold fs-7"><i class="bi bi-check-circle-fill text-success me-1"></i>Logged In</span>';
+                                }
+                            }
+                        },
+                        {
+                            render: function (data, type, row, meta) {
+                                let buttonComponent = '<div class="action-btn-group justify-content-end">';
+                                buttonComponent += '<a id="edit_' + row.id + '" onclick="Edit(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit"><i class="bi bi-pencil-fill fs-4"></i></a>';
+                                // Resend invite button — only for users who haven't activated yet
+                                if (row.requirePasswordChange) {
+                                    buttonComponent += '<a id="resend_' + row.id + '" onclick="ResendInvite(' + row.id + ', \'' + row.fullName + '\')" class="btn btn-icon btn-bg-light btn-active-color-info btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Resend Login Credentials"><i class="bi bi-send-fill fs-4 text-info"></i></a>';
+                                }
+                                if (row.isResign) {
+                                    buttonComponent += '<a id="activate_' + row.id + '" onclick="Activate(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-success btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Activate"><i class="bi bi-check-circle-fill fs-4 text-success"></i></a>';
+                                } else {
+                                    buttonComponent += '<a id="deactivate_' + row.id + '" onclick="Delete(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-danger btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Deactivate"><i class="bi bi-slash-circle-fill fs-4 text-warning"></i></a>';
                                 }
                                 buttonComponent += '<a id="harddelete_' + row.id + '" onclick="HardDeleteUser(' + row.id + ', \'' + row.fullName + '\')" class="btn btn-icon btn-bg-light btn-active-color-danger btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Permanently Delete"><i class="bi bi-trash-fill fs-4 text-danger"></i></a>';
+                                buttonComponent += '</div>';
                                 return buttonComponent;
                             }
                         }
@@ -646,9 +913,28 @@
                             $('#editDeptContainer').hide();
                             $('#editDepartment').val('');
                             $('#editSpecContainer').hide();
+                            $('#editProgContainer').hide();
+                            $('#editStudentFields').show();
+                            // Programme: ensure option exists before selecting
+                            if (data.programme) {
+                                var $progSel = $('#editStudentProgramme');
+                                if ($progSel.find('option[value="' + data.programme + '"]').length === 0) {
+                                    $progSel.append(new Option(data.programme, data.programme));
+                                }
+                                $progSel.val(data.programme);
+                            }
+                            // Academic Session: ensure option exists before selecting
+                            if (data.academicSession) {
+                                var $sessSel = $('#editAcademicSession');
+                                if ($sessSel.find('option[value="' + data.academicSession + '"]').length === 0) {
+                                    $sessSel.append(new Option(data.academicSession, data.academicSession));
+                                }
+                                $sessSel.val(data.academicSession);
+                            }
                         } else {
                             $('#editDeptContainer').show();
                             $('#editSpecContainer').show();
+                            $('#editProgContainer').show();
                         }
 
                         $('#editDepartment').val(data.department);
@@ -663,12 +949,8 @@
                     }
 
                     if (data.userType === 'Student' || data.userType === 'STUDENT') {
-                        $('#editStudentFields').show();
+                        // editStudentFields already shown above
                         $('#editSupervisorFields').hide();
-                        if (data.academicSession && $('#editAcademicSession option[value="' + data.academicSession + '"]').length === 0) {
-                            $('#editAcademicSession').append(new Option(data.academicSession, data.academicSession));
-                        }
-                        $('#editAcademicSession').val(data.academicSession);
                     } else if (data.userType === 'Supervisor' || data.userType === 'SUPERVISOR') {
                         $('#editStudentFields').hide();
                         $('#editSupervisorFields').show();
@@ -702,14 +984,30 @@
         var phone = $('#editPhone').val().trim();
         var department = $('#editDepartment').val();
         
-        var progVal = $('#editProgramme').val();
-        var programme = Array.isArray(progVal) ? progVal.join(', ') : (progVal || '');
+        var userType = $('#editUserType').val();
         
-        var specVal = $('#editSpecialization').val();
-        var specialization = Array.isArray(specVal) ? specVal.join(', ') : (specVal || '');
+        // For students, read from the student-specific dropdowns
+        var programme, specialization, academicSession;
+        if (userType === 'Student' || userType === 'STUDENT') {
+            programme = $('#editStudentProgramme').val() || '';
+            specialization = '';
+            academicSession = $('#editAcademicSession').val() || '';
+        } else {
+            var progVal = $('#editProgramme').val();
+            programme = Array.isArray(progVal) ? progVal.join(', ') : (progVal || '');
+            var specVal = $('#editSpecialization').val();
+            specialization = Array.isArray(specVal) ? specVal.join(', ') : (specVal || '');
+            academicSession = '';
+        }
         
-        var academicSession = $('#editAcademicSession').val();
         var title = $('#editTitle').val().trim();
+
+        // Clear previous inline errors
+        $('#editEmailError').text('');
+        $('#editStudentProgrammeError').text('');
+        $('#editAcademicSessionError').text('');
+        $('#editTitleError').text('');
+        $('#editDepartmentError').text('');
 
         if (!fullName) {
             Swal.fire({ text: "Please enter a full name.", icon: "warning", confirmButtonText: "Ok, got it!" });
@@ -717,33 +1015,35 @@
         }
 
         if (!email) {
-            Swal.fire({ text: "Please enter an email.", icon: "warning", confirmButtonText: "Ok, got it!" });
+            $('#editEmailError').text('Please enter an email.');
             return;
         }
 
         const emailPattern = /^[^@@\s]+@@[^@@\s]+\.[^@@\s]+$/;
         if (!emailPattern.test(email)) {
-            Swal.fire({ text: "Please enter a valid email address.", icon: "warning", confirmButtonText: "Ok, got it!" });
+            $('#editEmailError').text('Please enter a valid email address.');
             return;
         }
 
-        var userType = $('#editUserType').val();
-        if (userType === "Student") {
+
+        if (userType === "Student" || userType === "STUDENT") {
             if (!programme) {
-                Swal.fire({ text: "Please select a Programme.", icon: "warning", confirmButtonText: "Ok, got it!" });
+                $('#editStudentProgrammeError').text('Please select a Programme.');
                 return;
             }
             if (!academicSession) {
-                Swal.fire({ text: "Please select an Academic Session.", icon: "warning", confirmButtonText: "Ok, got it!" });
+                $('#editAcademicSessionError').text('Please select an Academic Session.');
                 return;
             }
-        } else if (userType === "Supervisor") {
+        }
+
+        if (userType === "Supervisor") {
             if (!title) {
-                Swal.fire({ text: "Please select a Title.", icon: "warning", confirmButtonText: "Ok, got it!" });
+                $('#editTitleError').text('Please select a Title.');
                 return;
             }
             if (!department) {
-                Swal.fire({ text: "Please select a Department.", icon: "warning", confirmButtonText: "Ok, got it!" });
+                $('#editDepartmentError').text('Please select a Department.');
                 return;
             }
         }
@@ -814,6 +1114,13 @@
             }
         });
     }
+
+    // Clear dropdown errors on change
+    $(document).ready(function() {
+        $('#editStudentProgramme, #editAcademicSession, #editTitle, #editDepartment').on('change', function() {
+            $(this).siblings('.text-danger').text('');
+        });
+    });
 
     // ── Tab Filtering Logic ────────────────────────────────────
     function filterUserType(e, type) {
@@ -920,7 +1227,6 @@
         }
     });
 </script>
-}
 
 
 

@@ -352,7 +352,7 @@
                 </div>
 
                 @* Upcoming Deadlines *@
-                <div class="glass-card p-4">
+                <div class="glass-card p-4 mb-4">
                     <h6 class="fw-bold text-dark mb-3"><i class="fas fa-clock me-2 text-warning"></i>Upcoming Deadlines</h6>
                     @{
                         var upcoming = milestones
@@ -382,6 +382,50 @@
                             }
                         </div>
                     }
+                </div>
+
+                @* FYP Key Dates *@
+                <div class="glass-card p-4">
+                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-calendar-check me-2" style="color:#0d9488;"></i>FYP Key Dates</h6>
+                    <div class="d-flex flex-column gap-2">
+                        @if (!string.IsNullOrEmpty(ViewBag.DPPDeadline))
+                        {
+                            <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                                <div>
+                                    <div class="fw-semibold text-dark" style="font-size:.85rem;">DPP Submission</div>
+                                    <small class="text-muted">Deadline</small>
+                                </div>
+                                @{
+                                    DateTime dppDate;
+                                    bool hasDpp = DateTime.TryParse(ViewBag.DPPDeadline, out dppDate);
+                                }
+                                <span class="fw-bold text-primary" style="font-size:.85rem;">@(hasDpp ? dppDate.ToString("dd MMM yyyy") : ViewBag.DPPDeadline)</span>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(ViewBag.ExhibitionDate))
+                        {
+                            <div class="d-flex justify-content-between align-items-center py-2">
+                                <div>
+                                    <div class="fw-semibold text-dark" style="font-size:.85rem;">FYP Exhibition</div>
+                                    @if (!string.IsNullOrEmpty(ViewBag.ExhibitionTimeStart) || !string.IsNullOrEmpty(ViewBag.ExhibitionTimeEnd))
+                                    {
+                                        <small class="text-muted">@ViewBag.ExhibitionTimeStart - @ViewBag.ExhibitionTimeEnd</small>
+                                    }
+                                </div>
+                                @{
+                                    DateTime exDate;
+                                    bool hasEx = DateTime.TryParse(ViewBag.ExhibitionDate, out exDate);
+                                }
+                                <span class="fw-bold text-success" style="font-size:.85rem;">@(hasEx ? exDate.ToString("dd MMM yyyy") : ViewBag.ExhibitionDate)</span>
+                            </div>
+                        }
+                        
+                        @if (string.IsNullOrEmpty(ViewBag.DPPDeadline) && string.IsNullOrEmpty(ViewBag.ExhibitionDate))
+                        {
+                            <p class="text-muted text-center py-2 mb-0" style="font-size: 0.85rem;">Dates to be announced by coordinator.</p>
+                        }
+                    </div>
                 </div>
             </div>
         </div>

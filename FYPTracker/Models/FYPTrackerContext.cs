@@ -36,6 +36,8 @@ namespace FYPTracker.Models
         public virtual DbSet<ChatMessage>       ChatMessages       { get; set; } = null!;
         public virtual DbSet<ChatGroup>         ChatGroups         { get; set; } = null!;
         public virtual DbSet<ChatGroupMember>   ChatGroupMembers   { get; set; } = null!;
+        public virtual DbSet<InvitationLog>     InvitationLogs     { get; set; } = null!;
+        public virtual DbSet<FYPSetting>        FYPSettings        { get; set; } = null!;
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -252,6 +254,23 @@ namespace FYPTracker.Models
                       .WithMany()
                       .HasForeignKey(e => e.StudentId)
                       .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // InvitationLog
+            modelBuilder.Entity<InvitationLog>(entity =>
+            {
+                entity.ToTable("InvitationLog");
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Admin)
+                      .WithMany()
+                      .HasForeignKey(e => e.AdminId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Student)
+                      .WithMany()
+                      .HasForeignKey(e => e.StudentId)
+                      .OnDelete(DeleteBehavior.NoAction);
             });
 
             OnModelCreatingPartial(modelBuilder);

@@ -304,14 +304,19 @@
                                             <input type="text" class="form-control bg-light" value="@currentUser?.FullName" readonly />
                                         </div>
                                         <div class="col-md-6">
-                                            <label class="form-label fw-semibold">Coventry ID</label>
+                                            <label class="form-label fw-semibold">INTI ID</label>
                                             <input type="text" class="form-control bg-light" value="@currentUser?.EmployeeId" readonly />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold">Coventry ID <span class="text-danger">*</span></label>
+                                            <input type="text" name="coventryId" class="form-control @(isIafLocked ? "bg-light" : "")" value="@currentUser?.CoventryId" @(isIafLocked ? "readonly" : "") placeholder="Enter your Coventry ID" required />
+                                            <div class="invalid-feedback">Coventry ID is required.</div>
                                         </div>
                                         <div class="col-md-6">
                                             <label class="form-label fw-semibold">Program</label>
                                             <input type="text" class="form-control bg-light" value="@currentUser?.Programme" readonly />
                                         </div>
-                                        <div class="col-md-6">
+                                        <div class="col-md-12">
                                             <label class="form-label fw-semibold">Project Title</label>
                                             <input type="text" name="title" class="form-control bg-light" value="@Model.Title" readonly required />
                                         </div>
@@ -570,6 +575,20 @@
                                 <form id="proposalForm" asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
                                     <input type="hidden" name="formType" value="Proposal Form" />
                                     <input type="hidden" name="milestoneId" value="@propMilestoneId" />
+
+                                    @* Stage 1 Submission Guide *@
+                                    <div class="alert alert-info border-0 rounded-3 shadow-sm mb-4">
+                                        <h6 class="fw-bold text-dark mb-2"><i class="fas fa-list-check me-2"></i>Stage 1 Submission Requirements</h6>
+                                        <p class="small text-dark mb-2">Please ensure you have completed the following before the deadline. Each submission requires the correct template:</p>
+                                        <ul class="small text-dark mb-0 ps-3" style="line-height: 1.6;">
+                                            <li><strong>Submission of Initial Form (IAF)</strong> - (Already Completed)</li>
+                                            <li><strong>Submission of Detail Project Proposal (DPP)</strong> - Complete the word template below and upload.</li>
+                                            <li><strong>Turnitin Checking</strong> - Ensure similarity is below the accepted threshold.</li>
+                                            <li><strong>Submission of Marksheet</strong></li>
+                                            <li><strong>Submission of Ethics Form</strong> - (Template available in Final Submission tab)</li>
+                                            <li><strong>Submission of Meeting Log</strong> - (Downloadable from the Book Meeting page)</li>
+                                        </ul>
+                                    </div>
 
                                 <div class="form-section-title">Part 1: Proposal Details</div>
                                 <div class="mb-4">

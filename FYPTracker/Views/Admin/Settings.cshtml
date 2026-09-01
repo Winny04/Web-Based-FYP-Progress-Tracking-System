@@ -79,4 +79,61 @@
             </div>
         </div>
     </div>
+
+        @* ── FYP Submission Dates (DPP, Exhibition) ── *@
+        <div class="col-12 mt-2">
+            <div class="card shadow-sm border-0 rounded-4 p-4">
+                <h5 class="fw-bold mb-1"><i class="fas fa-calendar-check text-success me-2"></i>FYP Key Submission Dates</h5>
+                <p class="text-muted small mb-4">These dates are displayed on the student dashboard timeline and used in downloadable templates.</p>
+
+                @if (TempData["FYPSettingSuccess"] != null)
+                {
+                    <div class="alert alert-success border-0 p-2 small mb-3">@TempData["FYPSettingSuccess"]</div>
+                }
+                @if (TempData["FYPSettingError"] != null)
+                {
+                    <div class="alert alert-danger border-0 p-2 small mb-3">@TempData["FYPSettingError"]</div>
+                }
+
+                <form asp-action="UpdateFYPSettings" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="row g-3">
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label fw-semibold small text-muted text-uppercase">
+                                <i class="fas fa-file-alt text-primary me-1"></i>DPP Submission Deadline
+                            </label>
+                            <input type="date" name="dppDeadline" class="form-control" value="@ViewBag.DPPDeadline" />
+                            <div class="form-text small">e.g. 19th June 2026 before 11.59pm</div>
+                        </div>
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label fw-semibold small text-muted text-uppercase">
+                                <i class="fas fa-star text-warning me-1"></i>FYP Exhibition Date
+                            </label>
+                            <input type="date" name="exhibitionDate" class="form-control" value="@ViewBag.ExhibitionDate" />
+                            <div class="form-text small">e.g. 25th June 2026</div>
+                        </div>
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label fw-semibold small text-muted text-uppercase">
+                                <i class="far fa-clock text-info me-1"></i>Exhibition Start Time
+                            </label>
+                            <input type="time" name="exhibitionTimeStart" class="form-control" value="@ViewBag.ExhibitionTimeStart" />
+                            <div class="form-text small">e.g. 09:00 (9am)</div>
+                        </div>
+                        <div class="col-md-6 col-lg-3">
+                            <label class="form-label fw-semibold small text-muted text-uppercase">
+                                <i class="far fa-clock text-secondary me-1"></i>Exhibition End Time
+                            </label>
+                            <input type="time" name="exhibitionTimeEnd" class="form-control" value="@ViewBag.ExhibitionTimeEnd" />
+                            <div class="form-text small">e.g. 13:00 (1pm)</div>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-success fw-bold px-4">
+                            <i class="fas fa-save me-2"></i>Save Dates
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>

@@ -38,6 +38,10 @@ namespace FYPTracker.Controllers
             {
                 return RedirectToAction("Index", "Admin");
             }
+            else if (getUser.UserType == "Examiner")
+            {
+                return RedirectToAction("Index", "Examiner");
+            }
             else if (getUser.UserType == "Supervisor")
             {
                 projects = await _context.FYPProjects.Include(p => p.Student).Include(p => p.Supervisor).Where(p => p.SupervisorId == getUser.Id).ToListAsync();

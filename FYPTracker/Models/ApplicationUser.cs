@@ -30,7 +30,8 @@ namespace FYPTracker.Models
         public string? UserType { get; set; } // "Student", "Supervisor", "Admin", etc.
         
 
-        public string? EmployeeId { get; set; } // We keep this name for legacy data, but it acts as StudentId
+        public string? EmployeeId { get; set; } // We keep this name for legacy data, but it acts as StudentId (INTI ID)
+        public string? CoventryId { get; set; } // Added Coventry ID
         public int? DepartmentId { get; set; }
         public bool IsNotificationOn { get; set; }
         public bool IsResign { get; set; }
@@ -48,6 +49,10 @@ namespace FYPTracker.Models
         public string? Title { get; set; } // e.g., Dr, Prof, Mr, Ms
 
         public int? MaxStudentSlots { get; set; }
+
+        // --- Invite / Onboarding ---
+        public string? TempPassword { get; set; }   // Stored for resend-invite scenarios
+        public DateTime? AccountExpiry { get; set; } // Auto-calculated from AcademicSession
 
         [ForeignKey(nameof(DepartmentId))]
         public Department? EmpDepartment { get; set; }

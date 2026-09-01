@@ -195,16 +195,28 @@
                         </div>
                     </div>
 
-                    <div class="row mb-6" id="programmeRow" style="display: @(Model.UserType == "Student" || Model.UserType == "Supervisor" || Model.UserType == "Examiner" || Model.UserType == "Admin" ? "flex" : "none")">
-                        @Html.LabelFor(model => model.SelectedProgrammes, "Programme", htmlAttributes: new { @class = "col-lg-4 col-form-label required fw-bold fs-6" })
-                        <div class="col-lg-8">
-                            <div class="row">
-                                <div class="col-lg-6 fv-row">
-                                    @Html.ListBoxFor(model => model.SelectedProgrammes, programmeList, new {@class = "form-select form-select-solid form-select-lg fw-bold", multiple = "multiple", data_control = "select2", data_placeholder = "-- Select Programme(s) --"})
+                    @if (Model.UserType == "Student")
+                    {
+                        <div class="row mb-6">
+                            <label class="col-lg-4 col-form-label fw-bold fs-6">Programme</label>
+                            <div class="col-lg-8 fv-row">
+                                <input type="text" class="form-control form-control-lg form-control-solid bg-light" value="@(Model.Programme ?? "Not Assigned")" readonly />
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row mb-6" id="programmeRow" style="display: @(Model.UserType == "Supervisor" || Model.UserType == "Examiner" || Model.UserType == "Admin" ? "flex" : "none")">
+                            @Html.LabelFor(model => model.SelectedProgrammes, "Programme", htmlAttributes: new { @class = "col-lg-4 col-form-label required fw-bold fs-6" })
+                            <div class="col-lg-8">
+                                <div class="row">
+                                    <div class="col-lg-6 fv-row">
+                                        @Html.ListBoxFor(model => model.SelectedProgrammes, programmeList, new {@class = "form-select form-select-solid form-select-lg fw-bold", multiple = "multiple", data_control = "select2", data_placeholder = "-- Select Programme(s) --"})
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    }
                     
                     <div class="row mb-6" id="specializationRow" style="display: @(Model.UserType == "Student" || Model.UserType == "Supervisor" || Model.UserType == "Examiner" || Model.UserType == "Admin" ? "flex" : "none")">
                         @Html.LabelFor(model => model.SelectedSpecializations, "Specialization", htmlAttributes: new { @class = "col-lg-4 col-form-label fw-bold fs-6" })

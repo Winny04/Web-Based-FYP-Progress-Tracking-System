@@ -403,6 +403,35 @@
 
     }
 
+    @* ── SUPERVISOR FEEDBACK ALERT ── *@
+    @{
+        var myRequests = ViewBag.MyRequests as List<FYPTracker.Models.SupervisorRequest> ?? new List<FYPTracker.Models.SupervisorRequest>();
+        var latestResponse = myRequests
+            .Where(r => !string.IsNullOrEmpty(r.ResponseNote) && (r.Status == "Approved" || r.Status == "Rejected"))
+            .OrderByDescending(r => r.RespondedDate)
+            .FirstOrDefault();
+    }
+
+    @if (latestResponse != null && latestResponse.Status == "Rejected")
+    {
+        <div class="action-alert" style="border-left-color: @(latestResponse.Status == "Approved" ? "#10b981" : "#ef4444");">
+            <div class="action-alert-icon" style="color: @(latestResponse.Status == "Approved" ? "#10b981" : "#ef4444");">
+                <i class="fas @(latestResponse.Status == "Approved" ? "fa-check-circle" : "fa-times-circle")"></i>
+            </div>
+            <div class="flex-grow-1">
+                <h6 class="fw-bold mb-1" style="color: @(latestResponse.Status == "Approved" ? "#047857" : "#b91c1c");">
+                    Supervisor Request @latestResponse.Status
+                </h6>
+                <div class="text-dark mt-2" style="font-size: 0.95rem;">
+                    <strong>Message from @latestResponse.Supervisor?.FullName:</strong>
+                    <div class="p-3 mt-2 rounded bg-white border">
+                        @(string.IsNullOrEmpty(latestResponse.ResponseNote) ? "No additional comments provided." : latestResponse.ResponseNote)
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     @* ── DEADLINES ALERT BAR ────────────────────────────────── *@
     @if (upcomingUrgent != null && upcomingUrgent.DueDate.HasValue && daysLeft.HasValue && daysLeft.Value <= 5)
     {
@@ -566,18 +595,9 @@
                     <p class="text-muted mb-4 mx-auto" style="max-width: 500px;">
                         Your very first step is to secure a supervisor and register your project topic. You won't be able to submit forms or book meetings until this is done!
                     </p>
-                    @if (string.IsNullOrEmpty(currentUser?.AcademicSession) || currentUser?.AcademicSession == Model?.AcademicSession)
-                    {
-                        <button type="button" class="btn btn-monochrome px-4 py-2" data-bs-toggle="modal" data-bs-target="#sessionModal">
-                            <i class="fas fa-user-plus me-2"></i> Select Supervisor
-                        </button>
-                    }
-                    else
-                    {
-                        <a href="/Student/SelectSupervisor" class="btn btn-monochrome px-4 py-2">
-                            <i class="fas fa-user-plus me-2"></i> Select Supervisor
-                        </a>
-                    }
+                    <a href="/Student/SelectSupervisor" class="btn btn-monochrome px-4 py-2">
+                        <i class="fas fa-user-plus me-2"></i> Select Supervisor
+                    </a>
                 </div>
             }
             else
@@ -933,6 +953,27 @@
                 </div>
             }
 
+            <div class="premium-card p-4 mb-4 border-0 shadow-sm bg-white">
+                <h5 class="fw-bold text-dark mb-4" style="font-size: 1.1rem; border-bottom: 1px solid #eef2f6; padding-bottom: 12px;">Recent Feedback</h5>
+                
+                @if (latestResponse != null && !string.IsNullOrEmpty(latestResponse.ResponseNote))
+                {
+                    <div class="d-flex align-items-start mt-2">
+                        <div class="me-3 mt-1">
+                            <i class="fas fa-comment-dots text-primary" style="font-size: 1.2rem; font-weight: 300;"></i>
+                        </div>
+                        <div>
+                            <div class="fw-semibold mb-1 d-block" style="color: #3b5998; font-size: 1rem;">Message from @latestResponse.Supervisor?.FullName:</div>
+                            <div class="text-muted" style="font-size: 0.85rem; color: #64748b !important;">@latestResponse.ResponseNote</div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-muted" style="font-size: 0.85rem; font-style: italic;">No recent feedback available.</div>
+                }
+            </div>
+
             <div class="premium-card p-4 h-100 d-flex flex-column">
                 <h5 class="fw-bold text-dark mb-4"><i class="fas fa-history text-indigo me-2"></i>Recent Activities</h5>
                 <div class="flex-grow-1 overflow-auto pe-2" style="max-height: 450px;">
@@ -954,7 +995,7 @@
                                     {
                                         <p class="text-muted mb-1" style="font-size: 0.82rem; line-height: 1.4;">@a.Description</p>
                                     }
-                                    <small class="text-muted d-block" style="font-size: 0.75rem;"><i class="far fa-clock me-1"></i>@a.CreatedDate.ToString("dd/MM/yyyy hh:mm tt")</small>
+                                    <small class="text-muted d-block mt-2" style="font-size: 0.75rem;"><i class="far fa-clock me-1"></i>@a.CreatedDate.ToString("dd/MM/yyyy hh:mm tt")</small>
                                 </div>
                             }
                         </div>
@@ -969,52 +1010,7 @@
 
 </div>
 
-<!-- Session Selection Modal -->
-<div class="modal fade" id="sessionModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg rounded-4">
-            <form method="post" action="/Student/RepeatFYP">
-                @Html.AntiForgeryToken()
-                <div class="modal-header bg-primary text-white border-0 py-3">
-                    <h5 class="fw-bold mb-0"><i class="fas fa-calendar-alt me-2"></i>Select Academic Session</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body p-4 bg-light">
-                    <p class="text-muted mb-4">Please select your academic session before proceeding to choose a supervisor.</p>
-                    
-                    <div class="mb-3">
-                        <label class="form-label fw-bold text-dark">Academic Session</label>
-                        <select name="newSession" class="form-select border-1" required>
-                            <option value="">-- Select Session --</option>
-                            @{
-                                int currentYear = DateTime.Now.Year;
-                                int currentMonth = DateTime.Now.Month;
-                                string[] months = { "Jan", "April", "Aug" };
-                                
-                                for (int y = currentYear; y <= currentYear + 2; y++)
-                                {
-                                    foreach (var m in months)
-                                    {
-                                        int monthNum = m == "Jan" ? 1 : m == "April" ? 4 : 8;
-                                        if (y > currentYear || (y == currentYear && monthNum >= currentMonth - 2)) 
-                                        {
-                                            string sessionName = $"{y} {m}";
-                                            <option value="@sessionName">@sessionName</option>
-                                        }
-                                    }
-                                }
-                            }
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer border-0 bg-light pt-0">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary fw-bold">Confirm & Continue</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {

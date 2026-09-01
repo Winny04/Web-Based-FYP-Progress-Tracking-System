@@ -33,9 +33,15 @@ namespace FYPTracker.Migrations
                     b.Property<string>("AcademicSession")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime?>("AccountExpiry")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("AddedBy")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("CoventryId")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("DateCreated")
                         .HasColumnType("datetime");
@@ -86,6 +92,9 @@ namespace FYPTracker.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Specialization")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TempPassword")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Title")
@@ -234,7 +243,7 @@ namespace FYPTracker.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Department", (string)null);
+                    b.ToTable("Department");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPActivity", b =>
@@ -425,12 +434,21 @@ namespace FYPTracker.Migrations
                     b.Property<DateTime?>("EndDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("ExaminerComments")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int?>("ExaminerId")
                         .HasColumnType("int");
+
+                    b.Property<string>("ExaminerImprovements")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ExaminerMarksheetPath")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("ExaminerStrengths")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ExpectedOutcome")
                         .HasColumnType("nvarchar(max)");
@@ -440,6 +458,9 @@ namespace FYPTracker.Migrations
                         .HasColumnType("nvarchar(50)");
 
                     b.Property<bool>("IsGradingLocked")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsTurnitinApproved")
                         .HasColumnType("bit");
 
                     b.Property<int>("MarksheetUploadCount")
@@ -482,6 +503,9 @@ namespace FYPTracker.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<int?>("TurnitinScore")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("UpdatedDate")
                         .HasColumnType("datetime");
 
@@ -497,6 +521,35 @@ namespace FYPTracker.Migrations
                     b.HasIndex("SupervisorId");
 
                     b.ToTable("FYPProject", (string)null);
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.FYPSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UpdatedDate")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("Value")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FYPSetting");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPSubmissionFile", b =>
@@ -536,6 +589,53 @@ namespace FYPTracker.Migrations
                     b.HasIndex("UploadedBy");
 
                     b.ToTable("FYPSubmissionFile", (string)null);
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.InvitationLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("AdminId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("nvarchar(45)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("StudentEmail")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("StudentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UserAgent")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdminId");
+
+                    b.HasIndex("StudentId");
+
+                    b.ToTable("InvitationLog", (string)null);
                 });
 
             modelBuilder.Entity("FYPTracker.Models.MeetingBooking", b =>
@@ -670,7 +770,7 @@ namespace FYPTracker.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Programme", (string)null);
+                    b.ToTable("Programme");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.Specialization", b =>
@@ -691,7 +791,7 @@ namespace FYPTracker.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Specialization", (string)null);
+                    b.ToTable("Specialization");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.SupervisorAvailability", b =>
@@ -730,7 +830,7 @@ namespace FYPTracker.Migrations
 
                     b.HasIndex("SupervisorId");
 
-                    b.ToTable("SupervisorAvailabilities", (string)null);
+                    b.ToTable("SupervisorAvailabilities");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.SupervisorRequest", b =>
@@ -961,6 +1061,24 @@ namespace FYPTracker.Migrations
                     b.Navigation("Milestone");
 
                     b.Navigation("Uploader");
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.InvitationLog", b =>
+                {
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "Admin")
+                        .WithMany()
+                        .HasForeignKey("AdminId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "Student")
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("Admin");
+
+                    b.Navigation("Student");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.MeetingBooking", b =>

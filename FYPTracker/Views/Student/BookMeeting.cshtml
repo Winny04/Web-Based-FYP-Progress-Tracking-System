@@ -1,9 +1,10 @@
 @using FYPTracker.Models
 @{
     ViewData["Title"] = "Book Meeting";
-    var currentUser        = ViewBag.CurrentUser as ApplicationUser;
-    var assignedSupervisor = ViewBag.AssignedSupervisor as ApplicationUser;
-    var meetings           = ViewBag.Meetings as List<MeetingBooking> ?? new();
+    var currentUser           = ViewBag.CurrentUser as ApplicationUser;
+    var assignedSupervisor    = ViewBag.AssignedSupervisor as ApplicationUser;
+    var meetings              = ViewBag.Meetings as List<MeetingBooking> ?? new();
+    var supervisorHasAvailability = (bool)(ViewBag.SupervisorHasAvailability ?? false);
 }
 
 <style>
@@ -162,6 +163,21 @@
     }
 
     <!-- Tabs Nav -->
+    @if (assignedSupervisor != null && !supervisorHasAvailability)
+    {
+        <div class="alert border-0 rounded-3 shadow-sm mb-4 d-flex align-items-center gap-3 p-4" style="background: linear-gradient(135deg, #fef3c7, #fffbeb); border-left: 5px solid #f59e0b !important;">
+            <span class="fs-2"><i class="fas fa-exclamation-triangle text-warning"></i></span>
+            <div>
+                <h6 class="fw-bold text-dark mb-1">Supervisor Has Not Set Availability Yet</h6>
+                <p class="mb-0 text-muted" style="font-size:0.9rem;">
+                    Your supervisor <strong>@assignedSupervisor.FullName</strong> has not configured their available meeting time slots yet.
+                    You will be able to book meetings once they set up their schedule. Please contact them if this persists.
+                </p>
+            </div>
+        </div>
+    }
+
+    <!-- Tabs Nav -->
     <ul class="nav nav-pills mb-4" id="meetingTabs" role="tablist">
         <li class="nav-item" role="presentation">
             <button class="nav-link active fw-bold px-4 rounded-pill" id="list-tab" data-bs-toggle="pill" data-bs-target="#list-view" type="button" role="tab" aria-controls="list-view" aria-selected="true">
@@ -187,6 +203,13 @@
                 <a href="/Student/SelectSupervisor" class="btn btn-outline-danger rounded-3 px-4">
                     <i class="fas fa-search me-1"></i> Select a Supervisor
                 </a>
+            }
+            else if (!supervisorHasAvailability)
+            {
+                <button type="button" class="btn btn-secondary rounded-3 px-4" disabled
+                        title="Your supervisor has not configured their availability yet.">
+                    <i class="fas fa-clock me-1"></i> Awaiting Supervisor Schedule
+                </button>
             }
             else
             {
@@ -326,7 +349,7 @@
     </div> <!-- End tab-content -->
 </div>
 
-@if (assignedSupervisor != null)
+@if (assignedSupervisor != null && supervisorHasAvailability)
 {
     <!-- Schedule Meeting Modal -->
     <div class="modal fade" id="scheduleMeetingModal" tabindex="-1">
@@ -518,6 +541,11 @@
             
             container.innerHTML = '';
             
+            if (data.noAvailability) {
+                container.innerHTML = `<div class="col-12 text-center text-danger fw-bold"><i class="fas fa-exclamation-triangle me-1"></i>${data.message}</div>`;
+                return;
+            }
+
             if (data.slots && data.slots.length > 0) {
                 data.slots.forEach(slotTime => {
                     const col = document.createElement('div');
@@ -620,6 +648,11 @@
             
             container.innerHTML = '';
             
+            if (data.noAvailability) {
+                container.innerHTML = `<div class="col-12 text-center text-danger fw-bold"><i class="fas fa-exclamation-triangle me-1"></i>${data.message}</div>`;
+                return;
+            }
+
             if (data.slots && data.slots.length > 0) {
                 data.slots.forEach(slotTime => {
                     const col = document.createElement('div');

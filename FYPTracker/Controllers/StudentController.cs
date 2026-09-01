@@ -73,6 +73,13 @@ namespace FYPTracker.Controllers
                 .CountAsync();
             ViewBag.PendingMeetingsCount = pendingMeetingsCount;
 
+            // Fetch Supervisor Requests for feedback banner
+            var myRequests = await _context.SupervisorRequests
+                .Include(r => r.Supervisor)
+                .Where(r => r.StudentId == user.Id)
+                .ToListAsync();
+            ViewBag.MyRequests = myRequests;
+
             return View(project);
         }
 
@@ -141,6 +148,15 @@ namespace FYPTracker.Controllers
                     .ThenInclude(m => m.SubmissionFiles)
                 .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
+            // Fetch global FYP key dates (DPP, Exhibition)
+            var fypSettings = await _context.FYPSettings.ToListAsync();
+            string GetSetting(string key) => fypSettings.FirstOrDefault(s => s.Key == key)?.Value ?? "";
+            
+            ViewBag.DPPDeadline = GetSetting("DPPDeadline");
+            ViewBag.ExhibitionDate = GetSetting("ExhibitionDate");
+            ViewBag.ExhibitionTimeStart = GetSetting("ExhibitionTimeStart");
+            ViewBag.ExhibitionTimeEnd = GetSetting("ExhibitionTimeEnd");
+
             return View(project);
         }
 
@@ -201,9 +217,7 @@ namespace FYPTracker.Controllers
 
             var departments = await _context.Department.Select(d => d.Name).Distinct().ToListAsync();
 
-            bool isProfileIncomplete = user.DepartmentId == null || 
-                                       string.IsNullOrWhiteSpace(user.Programme) || 
-                                       string.IsNullOrWhiteSpace(user.AcademicSession);
+            bool isProfileIncomplete = false;
 
             ViewBag.Supervisors     = supervisors;
             ViewBag.ApplicantCounts = applicantCounts;
@@ -391,10 +405,18 @@ namespace FYPTracker.Controllers
             int milestoneId, string formType, string? title, string? detailsJson, IFormFile? attachedFile, List<IFormFile>? attachedFiles,
             string? problemStatement, string? objective1, string? objective2, string? objective3,
             string? scope, string? outcome, string? references,
-            DateTime? startDate, DateTime? endDate, string? workDone, string? challenges, string? nextPeriodPlan, string? pctComplete)
+            DateTime? startDate, DateTime? endDate, string? workDone, string? challenges, string? nextPeriodPlan, string? pctComplete, string? coventryId)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "User");
+
+            if (!string.IsNullOrEmpty(coventryId) && user.CoventryId != coventryId)
+            {
+                user.CoventryId = coventryId;
+                _context.Update(user);
+                // We don't save changes here yet, we'll let the milestone logic save it or we can save it now.
+                await _context.SaveChangesAsync();
+            }
 
             var allFiles = new List<IFormFile>();
             if (attachedFile != null && attachedFile.Length > 0) allFiles.Add(attachedFile);
@@ -689,6 +711,15 @@ namespace FYPTracker.Controllers
             ViewBag.StartHour = 8;
             ViewBag.EndHour = 17;
 
+            // ── Check if supervisor has configured any availability ──
+            bool supervisorHasAvailability = false;
+            if (approvedRequest?.Supervisor != null)
+            {
+                supervisorHasAvailability = await _context.SupervisorAvailabilities
+                    .AnyAsync(a => a.SupervisorId == approvedRequest.Supervisor.Id && a.IsAvailable);
+            }
+            ViewBag.SupervisorHasAvailability = supervisorHasAvailability;
+
             var firstMeeting = await _context.MeetingBookings
                 .Where(m => m.StudentId == user.Id && m.Status != "Rejected" && m.Status != "Postponed")
                 .OrderBy(m => m.CreatedDate)
@@ -740,6 +771,15 @@ namespace FYPTracker.Controllers
             if (parsedDate.Date < DateTime.Today)
             {
                 TempData["Error"] = "Meeting date cannot be in the past.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            // ── Guard: supervisor must have configured availability ──
+            var supervisorHasAvailability = await _context.SupervisorAvailabilities
+                .AnyAsync(a => a.SupervisorId == supervisorId && a.IsAvailable);
+            if (!supervisorHasAvailability)
+            {
+                TempData["Error"] = "Your supervisor has not yet configured their available time slots. Please contact them to set up their availability before booking.";
                 return RedirectToAction(nameof(BookMeeting));
             }
 
@@ -871,6 +911,12 @@ namespace FYPTracker.Controllers
                 .Where(a => a.SupervisorId == supervisorId)
                 .ToListAsync();
 
+            // ── If supervisor has NO availability configured at all, block booking ──
+            if (!availabilities.Any(a => a.IsAvailable))
+            {
+                return Json(new { slots = new List<string>(), message = "Your supervisor has not yet set their available time slots. Please ask them to configure their availability first.", noAvailability = true });
+            }
+
             // 2. Find specific date override
             var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == parsedDate.Date);
             
@@ -881,17 +927,15 @@ namespace FYPTracker.Controllers
 
             var activeAvail = overrideAvail ?? weeklyAvail;
 
-            // If there's no configuration, fallback to 8 AM - 5 PM
-            TimeSpan start = new TimeSpan(8, 0, 0);
-            TimeSpan end = new TimeSpan(17, 0, 0);
-            bool isAvailable = true;
-
-            if (activeAvail != null)
+            // If there's no configuration for this specific day, show message
+            if (activeAvail == null)
             {
-                start = activeAvail.StartTime;
-                end = activeAvail.EndTime;
-                isAvailable = activeAvail.IsAvailable;
+                return Json(new { slots = new List<string>(), message = "Your supervisor has not set availability for this day. Please select a different date." });
             }
+
+            TimeSpan start = activeAvail.StartTime;
+            TimeSpan end = activeAvail.EndTime;
+            bool isAvailable = activeAvail.IsAvailable;
 
             if (!isAvailable)
             {
@@ -1778,7 +1822,9 @@ namespace FYPTracker.Controllers
             for (int i = 0; i < 4; i++) addBlankLine("");
             addPara("Name: " + (user.FullName ?? "[STUDENT NAME]"), false, 18, "000000", true);
             addBlankLine("");
-            addPara("Coventry Student ID: " + (user.EmployeeId ?? "[COVENTRY STUDENT ID]"), false, 18, "000000", true);
+            addPara("INTI Student ID: " + (user.EmployeeId ?? "[INTI STUDENT ID]"), false, 18, "000000", true);
+            addBlankLine("");
+            addPara("Coventry Student ID: " + (user.CoventryId ?? "[COVENTRY STUDENT ID]"), false, 18, "000000", true);
             addBlankLine("");
             addPara("Supervisor Name: " + (project?.Supervisor?.FullName ?? "[Supervisor Name]"), false, 18, "000000", true);
             for (int i = 0; i < 4; i++) addBlankLine("");

@@ -61,6 +61,33 @@ namespace FYPTracker.Controllers
             return new ApplicationUser { Image = "/assets/media/avatars/blank.png" };
         }
 
+        /// <summary>
+        /// Calculates account expiry from a session string like "2026 Aug" → 2027-01-31.
+        /// Jan → Jul 31 same year; April → Oct 31 same year; Aug → Jan 31 next year.
+        /// </summary>
+        private static DateTime? CalculateAccountExpiry(string? academicSession)
+        {
+            if (string.IsNullOrWhiteSpace(academicSession)) return null;
+            var parts = academicSession.Trim().Split(' ');
+            if (parts.Length < 2 || !int.TryParse(parts[0], out int year)) return null;
+            string intake = parts[1].ToLower();
+            return intake switch
+            {
+                "jan"   => new DateTime(year, 7, 31),
+                "april" => new DateTime(year, 10, 31),
+                "aug"   => new DateTime(year + 1, 1, 31),
+                _       => null
+            };
+        }
+
+        /// <summary>Generates a random 8-character alphanumeric password.</summary>
+        private static string GenerateTempPassword()
+        {
+            const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+            var rng = new Random();
+            return new string(Enumerable.Range(0, 8).Select(_ => chars[rng.Next(chars.Length)]).ToArray());
+        }
+
         public async Task<IActionResult> Index()
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
@@ -296,8 +323,18 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 {
                     var deptId = await _context.Department.Where(x => x.Name == department).Select(x => x.Id).FirstOrDefaultAsync();
                     user.DepartmentId = deptId > 0 ? deptId : user.DepartmentId;
-                    user.Programme = programme;
-                    user.Specialization = specialization;
+                    
+                    if (user.UserType != "Student" && user.UserType != "STUDENT")
+                    {
+                        user.Programme = programme;
+                        user.Specialization = specialization;
+                    }
+                    else
+                    {
+                        // For students: save Programme from the edit student dropdown
+                        if (!string.IsNullOrWhiteSpace(programme))
+                            user.Programme = programme;
+                    }
                 }
 
                 if (user.UserType == "Supervisor" || user.UserType == "SUPERVISOR")
@@ -306,7 +343,9 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 }
                 else if (user.UserType == "Student" || user.UserType == "STUDENT")
                 {
-                    user.AcademicSession = academicSession;
+                    // Save AcademicSession for students from the edit modal
+                    if (!string.IsNullOrWhiteSpace(academicSession))
+                        user.AcademicSession = academicSession;
                 }
 
                 _context.Update(user);
@@ -432,8 +471,11 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     model.EmployeeId = ApplicationUser.EmployeeId;
                     
                     model.Phone = ApplicationUser.Phone;
-                    model.Programme = ApplicationUser.Programme;
-                    model.AcademicSession = ApplicationUser.AcademicSession;
+                    if (model.UserType != "Student" && model.UserType != "STUDENT")
+                    {
+                        model.Programme = ApplicationUser.Programme;
+                        model.AcademicSession = ApplicationUser.AcademicSession;
+                    }
                     model.Title = ApplicationUser.Title;
 
 
@@ -466,6 +508,22 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             {
                 if (newEmployee != null)
                 {
+                    // ── Validate required student profile fields before sending credentials ──
+                    if (newEmployee.UserType == "Student")
+                    {
+                        if (string.IsNullOrWhiteSpace(newEmployee.Programme))
+                            return Json(new { status = false, msg = "Programme is required before sending login credentials to a student." });
+
+                        if (string.IsNullOrWhiteSpace(newEmployee.AcademicSession))
+                            return Json(new { status = false, msg = "Academic Session is required before sending login credentials to a student." });
+                    }
+
+                    if (string.IsNullOrWhiteSpace(newEmployee.FullName))
+                        return Json(new { status = false, msg = "Full Name is required." });
+
+                    if (string.IsNullOrWhiteSpace(newEmployee.Email))
+                        return Json(new { status = false, msg = "Email is required." });
+
                     string newId;
                     if (!string.IsNullOrEmpty(newEmployee.Email) && 
                         (newEmployee.Email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) || 
@@ -620,11 +678,9 @@ public ActionResult ManageUsersData()
                         ? projects.Count(p => p.ExaminerId == u.Id && p.Student != null).ToString()
                         : "-",
                 specialization = u.Specialization,
-                isProfileIncomplete = (u.UserType == "Student" && 
-                                      (u.DepartmentId == null || 
-                                       string.IsNullOrWhiteSpace(u.Programme) || 
-                                       string.IsNullOrWhiteSpace(u.AcademicSession))) ||
-                                      ((u.UserType == "Supervisor" || u.UserType == "Examiner") && 
+                requirePasswordChange = u.RequirePasswordChange,
+                accountExpiry = u.AccountExpiry,
+                isProfileIncomplete = ((u.UserType == "Supervisor" || u.UserType == "Examiner") && 
                                       (u.DepartmentId == null || 
                                        string.IsNullOrWhiteSpace(u.Programme) || 
                                        string.IsNullOrWhiteSpace(u.Specialization) || 
@@ -679,22 +735,52 @@ public ActionResult ManageUsersData()
                 var user = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.Id == id);
                 if (user == null) return Json(new { status = false, msg = "User not found." });
 
-                // 1. ChatMessages — Restrict FK, must delete manually
+                // 1. ChatGroupMembers — Restrict FK (student or supervisor as member)
+                var groupMembers = await _context.ChatGroupMembers
+                    .Where(m => m.StudentId == id).ToListAsync();
+                _context.ChatGroupMembers.RemoveRange(groupMembers);
+
+                // 2. ChatGroups owned by supervisor — Restrict FK (messages cascade via Group)
+                if (user.UserType == "Supervisor" || user.UserType == "SUPERVISOR")
+                {
+                    var ownedGroups = await _context.ChatGroups
+                        .Include(g => g.Messages)
+                        .Include(g => g.Members)
+                        .Where(g => g.SupervisorId == id).ToListAsync();
+                    foreach (var g in ownedGroups)
+                    {
+                        _context.ChatMessages.RemoveRange(g.Messages);
+                        _context.ChatGroupMembers.RemoveRange(g.Members);
+                    }
+                    _context.ChatGroups.RemoveRange(ownedGroups);
+                }
+
+                // 3. ChatMessages (direct 1-to-1 messages) — Restrict FK
                 var chatMessages = await _context.ChatMessages
                     .Where(m => m.SenderId == id || m.ReceiverId == id).ToListAsync();
                 _context.ChatMessages.RemoveRange(chatMessages);
 
-                // 2. SupervisorRequests — Restrict FK
+                // 4. SupervisorRequests — Restrict FK
                 var requests = await _context.SupervisorRequests
                     .Where(r => r.StudentId == id || r.SupervisorId == id).ToListAsync();
                 _context.SupervisorRequests.RemoveRange(requests);
 
-                // 3. MeetingBookings — Restrict FK (MeetingLogs cascade automatically)
+                // 5. MeetingBookings — Restrict FK (MeetingLogs cascade automatically)
                 var meetings = await _context.MeetingBookings
                     .Where(b => b.StudentId == id || b.SupervisorId == id).ToListAsync();
                 _context.MeetingBookings.RemoveRange(meetings);
 
-                if (user.UserType == "Student")
+                // 6. SupervisorAvailabilities — FK on supervisor
+                var availabilities = await _context.SupervisorAvailabilities
+                    .Where(a => a.SupervisorId == id).ToListAsync();
+                _context.SupervisorAvailabilities.RemoveRange(availabilities);
+
+                // 7. InvitationLogs — NoAction FK (must delete manually)
+                var inviteLogs = await _context.InvitationLogs
+                    .Where(l => l.StudentId == id || l.AdminId == id).ToListAsync();
+                _context.InvitationLogs.RemoveRange(inviteLogs);
+
+                if (user.UserType == "Student" || user.UserType == "STUDENT")
                 {
                     // Student's project: Milestones → Feedbacks/Files cascade automatically
                     var project = await _context.FYPProjects
@@ -702,7 +788,7 @@ public ActionResult ManageUsersData()
                     if (project != null)
                         _context.FYPProjects.Remove(project);
                 }
-                else if (user.UserType == "Supervisor")
+                else if (user.UserType == "Supervisor" || user.UserType == "SUPERVISOR")
                 {
                     // Nullify supervisor on students' projects (preserve students' data)
                     var supervisorProjects = await _context.FYPProjects
@@ -715,13 +801,21 @@ public ActionResult ManageUsersData()
                         .Where(f => f.SupervisorId == id).ToListAsync();
                     _context.FYPFeedbacks.RemoveRange(feedbacks);
                 }
+                else if (user.UserType == "Examiner" || user.UserType == "EXAMINER")
+                {
+                    // Nullify examiner on projects (preserve project data)
+                    var examinerProjects = await _context.FYPProjects
+                        .Where(p => p.ExaminerId == id).ToListAsync();
+                    foreach (var p in examinerProjects)
+                        p.ExaminerId = null;
+                }
 
-                // 4. Submission files uploaded by this user — Restrict FK
+                // 8. Submission files uploaded by this user — Restrict FK
                 var uploadedFiles = await _context.FYPSubmissionFiles
                     .Where(f => f.UploadedBy == id).ToListAsync();
                 _context.FYPSubmissionFiles.RemoveRange(uploadedFiles);
 
-                // 5. Remove user (FYPNotifications + FYPActivities cascade automatically)
+                // 9. Remove user (FYPNotifications + FYPActivities cascade automatically)
                 _context.ApplicationUsers.Remove(user);
                 await _context.SaveChangesAsync();
 
@@ -729,7 +823,8 @@ public ActionResult ManageUsersData()
             }
             catch (Exception ex)
             {
-                return Json(new { status = false, msg = "Error: " + ex.Message });
+                var inner = ex.InnerException?.Message ?? ex.Message;
+                return Json(new { status = false, msg = "Error: " + inner });
             }
         }
 
@@ -769,6 +864,17 @@ public ActionResult ManageUsersData()
             {
                 ViewBag.IAFDeadline = "";
             }
+
+            // Load FYP global settings (DPP deadline, exhibition, etc.)
+            var fypSettings = await _context.FYPSettings.ToListAsync();
+            ViewBag.FYPSettings = fypSettings;
+
+            // Helper: get setting value by key
+            string GetSetting(string key) => fypSettings.FirstOrDefault(s => s.Key == key)?.Value ?? "";
+            ViewBag.DPPDeadline       = GetSetting("DPPDeadline");
+            ViewBag.ExhibitionDate    = GetSetting("ExhibitionDate");
+            ViewBag.ExhibitionTimeStart = GetSetting("ExhibitionTimeStart");
+            ViewBag.ExhibitionTimeEnd   = GetSetting("ExhibitionTimeEnd");
 
             return View();
         }
@@ -825,6 +931,52 @@ public ActionResult ManageUsersData()
             }
         }
 
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateFYPSettings(string dppDeadline, string exhibitionDate, string exhibitionTimeStart, string exhibitionTimeEnd)
+        {
+            try
+            {
+                var updates = new Dictionary<string, (string value, string label)>
+                {
+                    { "DPPDeadline",         (dppDeadline ?? "",         "DPP Submission Deadline") },
+                    { "ExhibitionDate",      (exhibitionDate ?? "",      "FYP Exhibition Date") },
+                    { "ExhibitionTimeStart", (exhibitionTimeStart ?? "", "Exhibition Start Time") },
+                    { "ExhibitionTimeEnd",   (exhibitionTimeEnd ?? "",   "Exhibition End Time") },
+                };
+
+                foreach (var kv in updates)
+                {
+                    var existing = await _context.FYPSettings.FirstOrDefaultAsync(s => s.Key == kv.Key);
+                    if (existing != null)
+                    {
+                        existing.Value = kv.Value.value;
+                        existing.UpdatedDate = DateTime.Now;
+                        _context.FYPSettings.Update(existing);
+                    }
+                    else
+                    {
+                        _context.FYPSettings.Add(new FYPTracker.Models.FYPSetting
+                        {
+                            Key = kv.Key,
+                            Value = kv.Value.value,
+                            Label = kv.Value.label,
+                            UpdatedDate = DateTime.Now
+                        });
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                TempData["FYPSettingSuccess"] = "FYP submission dates updated successfully.";
+            }
+            catch (Exception ex)
+            {
+                TempData["FYPSettingError"] = $"Error saving settings: {ex.Message}";
+            }
+
+            return RedirectToAction(nameof(Settings));
+        }
 
 
         public async Task<IActionResult> DefenseList()
@@ -1000,12 +1152,27 @@ public ActionResult ManageUsersData()
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkInvite(List<string> inviteNames, List<string> inviteEmails, string bulkUserType)
+        public async Task<IActionResult> BulkInvite(List<string> inviteNames, List<string> inviteEmails, string bulkUserType, string bulkProgramme, string bulkAcademicSession)
         {
             if (inviteEmails == null || !inviteEmails.Any() || string.IsNullOrWhiteSpace(bulkUserType))
             {
                 TempData["Error"] = "Please provide emails and select a user type.";
                 return RedirectToAction(nameof(ManageUsers));
+            }
+
+            // ── Validate required student profile fields before sending credentials ──
+            if (bulkUserType == "Student")
+            {
+                if (string.IsNullOrWhiteSpace(bulkProgramme))
+                {
+                    TempData["Error"] = "Programme is required before sending login credentials to students.";
+                    return RedirectToAction(nameof(ManageUsers));
+                }
+                if (string.IsNullOrWhiteSpace(bulkAcademicSession))
+                {
+                    TempData["Error"] = "Academic Session is required before sending login credentials to students.";
+                    return RedirectToAction(nameof(ManageUsers));
+                }
             }
 
             var invites = new List<(string Name, string Email)>();
@@ -1084,25 +1251,53 @@ public ActionResult ManageUsersData()
                     nextIdNum++;
                 }
 
+                // ── Generate a unique temp password ──
+                string tempPwd = GenerateTempPassword();
+
                 var newUser = new ApplicationUser
                 {
                     UserName = newId,
                     FullName = !string.IsNullOrWhiteSpace(invite.Name) ? invite.Name : email.Split('@')[0],
                     Email = email,
-                    PassCode = FYPTracker.Common.Encryption.GetHash("defaultpassword"),
+                    PassCode = FYPTracker.Common.Encryption.GetHash(tempPwd),
+                    TempPassword = tempPwd,
                     EmployeeId = newId,
                     DateCreated = DateTime.Now,
                     DateJoin = DateTime.Now,
                     AddedBy = "sys",
                     UserType = bulkUserType,
                     Image = "/assets/media/avatars/blank.png",
-                    RequirePasswordChange = true // Forces onboarding flow
+                    RequirePasswordChange = true, // Forces onboarding flow
+                    // Store student-specific profile fields supplied by admin
+                    Programme = bulkUserType == "Student" ? bulkProgramme : null,
+                    AcademicSession = bulkUserType == "Student" ? bulkAcademicSession : null,
+                    AccountExpiry = bulkUserType == "Student" ? CalculateAccountExpiry(bulkAcademicSession) : null
                 };
 
                 _context.ApplicationUsers.Add(newUser);
+                await _context.SaveChangesAsync(); // save so we have newUser.Id for the log
+
+                // ── Log the invitation ──
+                var adminUser = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+                if (adminUser != null)
+                {
+                    _context.InvitationLogs.Add(new InvitationLog
+                    {
+                        StudentId = newUser.Id,
+                        StudentEmail = email,
+                        AdminId = adminUser.Id,
+                        Action = "Invited",
+                        Status = "Sent",
+                        IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                        UserAgent = Request.Headers["User-Agent"].ToString(),
+                        CreatedAt = DateTime.Now
+                    });
+                    await _context.SaveChangesAsync();
+                }
+
                 successCount++;
 
-                // Prepare Email
+                // ── Prepare Email ──
                 string subject = "Welcome to FYP Tracking System - Your Login Credentials";
                 string htmlBody = $@"
                     <h3>Welcome!</h3>
@@ -1110,7 +1305,7 @@ public ActionResult ManageUsersData()
                     <ul>
                         <li><strong>Username:</strong> {newId}</li>
                         <li><strong>Email:</strong> {email}</li>
-                        <li><strong>Password:</strong> defaultpassword</li>
+                        <li><strong>Temporary Password:</strong> {tempPwd}</li>
                     </ul>
                     <p style='margin: 20px 0;'>
                         <a href='{loginUrl}' style='display: inline-block; padding: 10px 20px; color: white; background-color: #009ef7; text-decoration: none; border-radius: 6px; font-weight: bold; font-family: sans-serif;'>Click Here to Login</a>
@@ -1128,13 +1323,223 @@ public ActionResult ManageUsersData()
 
             if (successCount > 0)
             {
-                await _context.SaveChangesAsync();
                 TempData["Success"] = $"Successfully invited {successCount} users. {duplicateCount} duplicates ignored.";
             }
             else
             {
                 TempData["Info"] = $"No new users created. {duplicateCount} emails were already registered.";
             }
+
+            return RedirectToAction(nameof(ManageUsers));
+        }
+
+        // ────────────────────────────────────────────────────────
+        // Resend Invite
+        // ────────────────────────────────────────────────────────
+        [HttpPost]
+        public async Task<IActionResult> ResendInvite(int userId)
+        {
+            var admin = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (admin == null) return Json(new { success = false, message = "Unauthorized." });
+
+            var user = await _context.ApplicationUsers.FindAsync(userId);
+            if (user == null) return Json(new { success = false, message = "User not found." });
+
+            if (!user.RequirePasswordChange)
+                return Json(new { success = false, message = "This user has already activated their account." });
+
+            // Generate a fresh temp password
+            string newTempPwd = GenerateTempPassword();
+            user.PassCode = FYPTracker.Common.Encryption.GetHash(newTempPwd);
+            user.TempPassword = newTempPwd;
+
+            // Log the resend action
+            _context.InvitationLogs.Add(new InvitationLog
+            {
+                StudentId = user.Id,
+                StudentEmail = user.Email,
+                AdminId = admin.Id,
+                Action = "Resend",
+                Status = "Sent",
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                UserAgent = Request.Headers["User-Agent"].ToString(),
+                CreatedAt = DateTime.Now
+            });
+
+            await _context.SaveChangesAsync();
+
+            // Resend email
+            var request = HttpContext.Request;
+            var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+            string subject = "FYP Tracking System - Your Updated Login Credentials";
+            string htmlBody = $@"
+                <h3>Login Credentials Resent</h3>
+                <p>Dear <strong>{user.FullName}</strong>,</p>
+                <p>Your login credentials have been refreshed by the administrator. Please use the details below to log in:</p>
+                <ul>
+                    <li><strong>Username:</strong> {user.UserName}</li>
+                    <li><strong>Email:</strong> {user.Email}</li>
+                    <li><strong>New Temporary Password:</strong> {newTempPwd}</li>
+                </ul>
+                <p style='margin: 20px 0;'>
+                    <a href='{loginUrl}' style='display: inline-block; padding: 10px 20px; color: white; background-color: #009ef7; text-decoration: none; border-radius: 6px; font-weight: bold; font-family: sans-serif;'>Click Here to Login</a>
+                </p>
+                <p>You will be required to change your password upon first login.</p>
+                <br/>
+                <p>Best Regards,<br/>FYP Tracking System Admin</p>
+            ";
+
+            try { _emailService.Send(user.Email!, subject, htmlBody); }
+            catch { /* email failure is non-fatal */ }
+
+            return Json(new { success = true, message = $"Credentials resent to {user.Email}." });
+        }
+
+        // ────────────────────────────────────────────────────────
+        // CSV Bulk Upload
+        // ────────────────────────────────────────────────────────
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UploadCSV(IFormFile csvFile, string csvUserType, string csvProgramme, string csvAcademicSession)
+        {
+            if (csvFile == null || csvFile.Length == 0)
+            {
+                TempData["Error"] = "Please select a CSV file to upload.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            var ext = Path.GetExtension(csvFile.FileName).ToLowerInvariant();
+            if (ext != ".csv")
+            {
+                TempData["Error"] = "Only .csv files are supported.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            if (string.IsNullOrWhiteSpace(csvUserType))
+            {
+                TempData["Error"] = "Please select a User Type.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            if (csvUserType == "Student")
+            {
+                if (string.IsNullOrWhiteSpace(csvProgramme))
+                { TempData["Error"] = "Programme is required for student CSV uploads."; return RedirectToAction(nameof(ManageUsers)); }
+                if (string.IsNullOrWhiteSpace(csvAcademicSession))
+                { TempData["Error"] = "Academic Session is required for student CSV uploads."; return RedirectToAction(nameof(ManageUsers)); }
+            }
+
+            var admin = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            var emailRegex = new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$");
+            var request = HttpContext.Request;
+            var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+
+            int successCount = 0, dupCount = 0, errorCount = 0;
+
+            string prefix = csvUserType == "Examiner" ? "EXM-" : "SUP-";
+            var maxNums = await _context.ApplicationUsers
+                .Where(u => u.UserName != null && u.UserName.StartsWith(prefix))
+                .Select(u => u.UserName!.Substring(prefix.Length))
+                .ToListAsync();
+            int nextIdNum = maxNums.Select(n => int.TryParse(n, out int num) ? num : 0).DefaultIfEmpty(0).Max() + 1;
+
+            using var reader = new System.IO.StreamReader(csvFile.OpenReadStream());
+            bool isFirstLine = true;
+            while (!reader.EndOfStream)
+            {
+                var line = await reader.ReadLineAsync();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                // Skip header row
+                if (isFirstLine) { isFirstLine = false; continue; }
+
+                var cols = line.Split(',').Select(c => c.Trim().Trim('"')).ToArray();
+                // Expected: Full Name, Email  (min 2 columns)
+                if (cols.Length < 2) { errorCount++; continue; }
+
+                string name  = cols[0];
+                string email = cols[1];
+
+                if (!emailRegex.IsMatch(email)) { errorCount++; continue; }
+
+                var exists = await _context.ApplicationUsers.AnyAsync(u => u.Email == email || u.UserName == email);
+                if (exists) { dupCount++; continue; }
+
+                string newId;
+                if (email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) ||
+                    email.EndsWith("@newinti.edu.my", StringComparison.OrdinalIgnoreCase))
+                {
+                    newId = email.Split('@')[0];
+                }
+                else if (csvUserType == "Student")
+                {
+                    var rng = new Random();
+                    string rid;
+                    do { rid = "P" + rng.Next(10000000, 99999999); }
+                    while (await _context.ApplicationUsers.AnyAsync(u => u.UserName == rid || u.EmployeeId == rid));
+                    newId = rid;
+                }
+                else
+                {
+                    newId = $"{prefix}{nextIdNum:D3}";
+                    nextIdNum++;
+                }
+
+                string tempPwd = GenerateTempPassword();
+                var newUser = new ApplicationUser
+                {
+                    UserName = newId,
+                    FullName = !string.IsNullOrWhiteSpace(name) ? name : email.Split('@')[0],
+                    Email = email,
+                    PassCode = FYPTracker.Common.Encryption.GetHash(tempPwd),
+                    TempPassword = tempPwd,
+                    EmployeeId = newId,
+                    DateCreated = DateTime.Now,
+                    DateJoin = DateTime.Now,
+                    AddedBy = "sys",
+                    UserType = csvUserType,
+                    Image = "/assets/media/avatars/blank.png",
+                    RequirePasswordChange = true,
+                    Programme = csvUserType == "Student" ? csvProgramme : null,
+                    AcademicSession = csvUserType == "Student" ? csvAcademicSession : null,
+                    AccountExpiry = csvUserType == "Student" ? CalculateAccountExpiry(csvAcademicSession) : null
+                };
+                _context.ApplicationUsers.Add(newUser);
+                await _context.SaveChangesAsync();
+
+                if (admin != null)
+                {
+                    _context.InvitationLogs.Add(new InvitationLog
+                    {
+                        StudentId = newUser.Id, StudentEmail = email,
+                        AdminId = admin.Id, Action = "Invited", Status = "Sent",
+                        IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                        UserAgent = Request.Headers["User-Agent"].ToString(),
+                        CreatedAt = DateTime.Now
+                    });
+                    await _context.SaveChangesAsync();
+                }
+
+                // Send welcome email
+                try
+                {
+                    string subject = "Welcome to FYP Tracking System - Your Login Credentials";
+                    string htmlBody = $@"<h3>Welcome!</h3>
+<p>Your account has been created. Here are your login credentials:</p>
+<ul><li><strong>Username:</strong> {newId}</li><li><strong>Email:</strong> {email}</li><li><strong>Temporary Password:</strong> {tempPwd}</li></ul>
+<p style='margin:20px 0'><a href='{loginUrl}' style='display:inline-block;padding:10px 20px;color:white;background:#009ef7;text-decoration:none;border-radius:6px;font-weight:bold'>Click Here to Login</a></p>
+<p>You will be asked to change your password on first login.</p><p>Best Regards,<br/>FYP Tracking System Admin</p>";
+                    _emailService.Send(email, subject, htmlBody);
+                }
+                catch { }
+
+                successCount++;
+            }
+
+            if (successCount > 0)
+                TempData["Success"] = $"CSV imported: {successCount} user(s) created. {dupCount} duplicate(s) skipped. {errorCount} invalid row(s) ignored.";
+            else
+                TempData["Info"] = $"No new users created from CSV. {dupCount} duplicate(s), {errorCount} invalid row(s).";
 
             return RedirectToAction(nameof(ManageUsers));
         }

@@ -146,7 +146,7 @@
             <div>
                 <h4 class="fw-bold mb-2 text-dark">Profile Configuration Pending</h4>
                 <div class="text-dark fs-6">
-                    Your account is missing essential academic information (Department, Programme, or Academic Session).<br/>
+                    Your account is missing essential academic information (Programme or Academic Session).<br/>
                     <strong>Please contact your FYP Coordinator or Administrator to configure your profile before you can select a supervisor.</strong>
                 </div>
             </div>
@@ -341,8 +341,9 @@
                                 <input type="text" name="program" class="form-control bg-light border-0" value="@currentUser?.Programme" readonly />
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold small">Phone Number</label>
-                                <input type="tel" name="phoneNumber" class="form-control bg-light border-0" value="@currentUser?.Phone" readonly />
+                                <label class="form-label fw-semibold small">Phone Number <span class="text-danger">*</span></label>
+                                <input type="tel" name="phoneNumber" id="modalPhone" class="form-control" value="@currentUser?.Phone" placeholder="012-3456789" required />
+                                <div id="modalPhoneError" class="text-danger small mt-1 d-none">Please provide a valid Malaysia Phone Number (e.g. 012-3456789).</div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold small">Session / Semester</label>
@@ -445,6 +446,22 @@
         setInterval(updateTimers, 1000);
     });
 
+    const phonePattern = /^(\+?60|0)1[0-9][\-\s]?[0-9]{3,4}[\-\s]?[0-9]{4}$/;
+
+    var modalPhoneInput = document.getElementById('modalPhone');
+    if (modalPhoneInput) {
+        modalPhoneInput.addEventListener('input', function() {
+            var err = document.getElementById('modalPhoneError');
+            if (!this.value.trim() || !phonePattern.test(this.value.trim())) {
+                err.classList.remove('d-none');
+                this.classList.add('is-invalid');
+            } else {
+                err.classList.add('d-none');
+                this.classList.remove('is-invalid');
+            }
+        });
+    }
+
     document.getElementById('projectTopic').addEventListener('input', function() {
         var err = document.getElementById('projectTopicError');
         if (this.value.trim().length < 5) {
@@ -470,7 +487,14 @@
     document.getElementById('subReqForm').addEventListener('submit', function(e) {
         var topic = document.getElementById('projectTopic');
         var msg = document.getElementById('requestMessage');
+        var phone = document.getElementById('modalPhone');
         var isValid = true;
+
+        if (!phone || !phone.value.trim() || !phonePattern.test(phone.value.trim())) {
+            document.getElementById('modalPhoneError').classList.remove('d-none');
+            if (phone) phone.classList.add('is-invalid');
+            isValid = false;
+        }
         
         if (topic.value.trim().length < 5) {
             document.getElementById('projectTopicError').classList.remove('d-none');

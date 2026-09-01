@@ -281,36 +281,7 @@
                             </div>
                         </div>
                     </div>
-                    
-                    @if (Model.UserType == "STUDENT")
-                    {
-                        <div class="row mb-6">
-                            @Html.LabelFor(model => model.Programme, "Programme (Students)", htmlAttributes: new { @class = "col-lg-4 col-form-label fw-bold fs-6" })
-                            <div class="col-lg-8">
-                                <div class="row">
-                                    <div class="col-lg-6 fv-row">
-                                        @Html.EditorFor(model => model.Programme, new { htmlAttributes = new { @class = "form-control form-control-lg form-control-solid mb-3 mb-lg-0"} })
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 
-                        <div class="row mb-6">
-                            @Html.LabelFor(model => model.AcademicSession, "Academic Session (Students)", htmlAttributes: new { @class = "col-lg-4 col-form-label fw-bold fs-6" })
-                            <div class="col-lg-8">
-                                <div class="row">
-                                    <div class="col-lg-6 fv-row">
-                                        @Html.DropDownListFor(model => model.AcademicSession, new List<SelectListItem>
-                                        {
-                                            new SelectListItem { Text = "2026 Jan", Value = "2026 Jan" },
-                                            new SelectListItem { Text = "2026 April", Value = "2026 April" },
-                                            new SelectListItem { Text = "2026 Aug", Value = "2026 Aug" }
-                                        }, "-- Select Session --", new { @class = "form-select form-select-lg form-select-solid fw-bold mb-3 mb-lg-0" })
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    }
 
                     @if (Model.UserType == "SUPERVISOR")
                     {

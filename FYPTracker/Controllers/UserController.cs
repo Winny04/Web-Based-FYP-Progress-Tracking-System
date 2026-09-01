@@ -374,7 +374,7 @@ namespace FYPTracker.Controllers
                 model.Phone = ApplicationUser.Phone;
                 // Use null-guard: only overwrite if submitted value is non-empty
                 // This prevents readonly display fields from wiping existing data
-                if (model.UserType == "Student" || model.UserType == "Supervisor" || model.UserType == "Examiner" || model.UserType == "Admin")
+                if (model.UserType == "Supervisor" || model.UserType == "Examiner" || model.UserType == "Admin")
                 {
                     if (ApplicationUser.SelectedProgrammes != null && ApplicationUser.SelectedProgrammes.Any())
                         model.Programme = string.Join(", ", ApplicationUser.SelectedProgrammes);
@@ -545,8 +545,10 @@ namespace FYPTracker.Controllers
 
             if (user.UserType == "Student")
             {
-                user.Programme = programme;
-                user.AcademicSession = academicSession;
+                if (!string.IsNullOrEmpty(programme))
+                    user.Programme = programme;
+                if (!string.IsNullOrEmpty(academicSession))
+                    user.AcademicSession = academicSession;
             }
             else if (user.UserType == "Supervisor" || user.UserType == "Examiner")
             {

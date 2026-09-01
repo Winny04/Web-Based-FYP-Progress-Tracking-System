@@ -103,7 +103,7 @@
                                         <form asp-action="RespondRequest" method="post" id="acceptForm_@req.Id">
                                             <input type="hidden" name="requestId" value="@req.Id" />
                                             <input type="hidden" name="status" value="Approved" />
-                                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3" onclick="confirmAccept(@req.Id, '@req.Student?.FullName')">Accept</button>
+                                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3" onclick="openAcceptModal(@req.Id, '@req.Student?.FullName')">Accept</button>
                                         </form>
                                         <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3" onclick="openRejectModal(@req.Id, '@req.Student?.FullName')">Reject</button>
                                     </div>
