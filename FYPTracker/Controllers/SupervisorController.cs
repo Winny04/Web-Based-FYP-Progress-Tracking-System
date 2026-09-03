@@ -25,11 +25,16 @@ namespace FYPTracker.Controllers
 
         private async Task<ApplicationUser?> GetCurrentUserAsync()
         {
-            var username = HttpContext.User.Identity?.Name;
-            if (string.IsNullOrEmpty(username)) return null;
-            return await _context.ApplicationUsers
-                .Include(x => x.EmpDepartment)
-                .FirstOrDefaultAsync(u => u.UserName == username || u.Email == username);
+            var user = HttpContext.User;
+            if (user?.Identity == null || !user.Identity.IsAuthenticated) return null;
+
+            if (int.TryParse(user.FindFirst("Id")?.Value, out int id))
+            {
+                return await _context.ApplicationUsers
+                    .Include(u => u.EmpDepartment)
+                    .FirstOrDefaultAsync(u => u.Id == id);
+            }
+            return null;
         }
 
         private async Task AddNotificationAsync(int recipientId, string type, string title, string? message = null)
@@ -189,8 +194,11 @@ namespace FYPTracker.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RespondRequest(int requestId, string status, string? responseNote)
         {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
             var req = await _context.SupervisorRequests.Include(r => r.Student).Include(r => r.Supervisor).FirstOrDefaultAsync(r => r.Id == requestId);
-            if (req != null && req.Status == "Pending")
+            if (req != null && req.Status == "Pending" && req.SupervisorId == user.Id)
             {
                 req.Status = status; // Approved or Rejected
                 req.RespondedDate = DateTime.Now;
@@ -223,21 +231,47 @@ namespace FYPTracker.Controllers
                         _context.FYPProjects.Add(proj);
                         await _context.SaveChangesAsync(); // Get ID
 
+                        _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
+                        {
+                            ProjectId = proj.Id,
+                            OldStatus = "None",
+                            NewStatus = "Approved",
+                            ChangedById = req.SupervisorId,
+                            Remarks = "Project created and approved from Supervisor Request."
+                        });
+
                         // Create Default Milestones
                         var milestones = new List<FYPMilestone>
                         {
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Initial Assessment Form (IAF)", DueDate = DateTime.Now.AddDays(14), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Proposal", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Interim Report", DueDate = DateTime.Now.AddMonths(3), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 2: Final Dissertation", DueDate = DateTime.Now.AddMonths(6), Status = "Pending" }
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 1: Turnitin Checking", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 2: Final Report Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 3: Marksheet Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 4: Record of Supervisor Meeting Form Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 5: Presentation Slides Submission", DueDate = DateTime.Now.AddMonths(6), Status = "Pending" }
                         };
                         _context.FYPMilestones.AddRange(milestones);
                     }
                     else
                     {
+                        string oldStatus = proj.Status;
                         proj.SupervisorId = req.SupervisorId;
                         proj.Status = "Approved";
                         proj.AcademicSession = req.Student.AcademicSession; // Sync session just in case
+
+                        if (oldStatus != "Approved")
+                        {
+                            _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
+                            {
+                                ProjectId = proj.Id,
+                                OldStatus = oldStatus,
+                                NewStatus = "Approved",
+                                ChangedById = req.SupervisorId,
+                                Remarks = "Project approved from Supervisor Request."
+                            });
+                        }
                     }
 
                     // --- NEW: Reject all other pending requests for this student ---
@@ -262,6 +296,20 @@ namespace FYPTracker.Controllers
 
                 await _context.SaveChangesAsync();
                 
+                // --- NEW: Email Notification to Student ---
+                if (req.Student != null && !string.IsNullOrEmpty(req.Student.Email))
+                {
+                    string subject = status == "Approved" ? "FYP Supervisor Request Approved!" : "FYP Supervisor Request Declined";
+                    string body = $"<p>Dear {req.Student.FullName},</p><p>Your request to be supervised by {req.Supervisor?.FullName} has been <strong>{status}</strong>.</p>";
+                    if (!string.IsNullOrEmpty(responseNote))
+                    {
+                        body += $"<p><strong>Supervisor's Note:</strong> {responseNote}</p>";
+                    }
+                    body += "<p>Please log in to the FYP Tracking System for more details.</p>";
+                    
+                    try { _emailService.Send(req.Student.Email, subject, body); } catch {}
+                }
+
                 // --- NEW: SignalR Real-Time Notification ---
                 await _hubContext.Clients.Group($"User_{req.StudentId}").SendAsync("ReceiveRequestStatusUpdate", req.SupervisorId, req.Status, req.Id);
 
@@ -756,7 +804,10 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks, string? supervisorSignature, string? pctComplete, int? turnitinScore, IFormFile? gradedFile)
         {
             var user = await GetCurrentUserAsync();
-            var milestone = await _context.FYPMilestones.Include(m => m.Project).FirstOrDefaultAsync(m => m.Id == milestoneId);
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
 
             if (milestone != null && milestone.Project.SupervisorId == user?.Id)
             {
@@ -821,8 +872,10 @@ namespace FYPTracker.Controllers
                             }
                             else
                             {
-                                TempData["Error"] = $"Turnitin score ({turnitinScore.Value}%) exceeds the 20% limit. You cannot approve this submission.";
-                                return RedirectToAction(nameof(GradeSubmission), new { id = milestone.Id });
+                                status = "Rejected"; // Override local status variable
+                                milestone.Status = "Rejected"; // Override entity status
+                                TempData["Error"] = $"Turnitin score ({turnitinScore.Value}%) exceeds the 20% limit. Approval blocked. Status changed to Rejected.";
+                                // Do not return early, let it flow to send emails and increment RejectionCount
                             }
                         }
                         else
@@ -834,6 +887,19 @@ namespace FYPTracker.Controllers
 
                 if (gradedFile != null && gradedFile.Length > 0)
                 {
+                    var extCheck = System.IO.Path.GetExtension(gradedFile.FileName).ToLowerInvariant();
+                    var allowedExt = new[] { ".pdf", ".doc", ".docx" };
+                    if (!allowedExt.Contains(extCheck))
+                    {
+                        TempData["Error"] = "Only PDF and Word documents are allowed for graded files.";
+                        return RedirectToAction(nameof(GradeSubmission), new { id = milestone.Id });
+                    }
+                    if (gradedFile.Length > 20 * 1024 * 1024)
+                    {
+                        TempData["Error"] = "File size must not exceed 20 MB.";
+                        return RedirectToAction(nameof(GradeSubmission), new { id = milestone.Id });
+                    }
+
                     string uniqueFileName = Guid.NewGuid().ToString() + "_" + gradedFile.FileName;
                     string folderPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", "uploads", "submissions");
                     if (!System.IO.Directory.Exists(folderPath))
@@ -858,6 +924,20 @@ namespace FYPTracker.Controllers
 
                 await _context.SaveChangesAsync();
                 
+                // --- Email Notification ---
+                if (milestone.Project.Student != null && !string.IsNullOrEmpty(milestone.Project.Student.Email))
+                {
+                    string subject = $"Milestone Reviewed: {milestone.Title}";
+                    string body = $"<p>Dear {milestone.Project.Student.FullName},</p><p>Your milestone '<strong>{milestone.Title}</strong>' has been reviewed by your supervisor and marked as <strong>{status}</strong>.</p>";
+                    if (!string.IsNullOrEmpty(remarks))
+                    {
+                        body += $"<p><strong>Feedback:</strong> {remarks}</p>";
+                    }
+                    body += "<p>Please log in to the FYP Tracking System to view any graded files or Turnitin scores.</p>";
+                    
+                    try { _emailService.Send(milestone.Project.Student.Email, subject, body); } catch {}
+                }
+
                 // --- SignalR Real-Time Notification ---
                 string actionStr = status == "Approved" ? "graded" : "reviewed";
                 var reviewPayload = new { Type = "ReviewMilestone", MilestoneId = milestone.Id, Title = milestone.Title, Status = status, Message = $"Your milestone '{milestone.Title}' was {actionStr}." };
@@ -866,6 +946,26 @@ namespace FYPTracker.Controllers
                 if (status == "Approved") {
                     await AddNotificationAsync(milestone.Project.StudentId, "SubmissionFeedback", $"{milestone.Title} Approved", remarks);
                     await LogActivityAsync(milestone.Project.StudentId, "MilestoneApproved", $"{milestone.Title} Approved");
+
+                    // ── Seed Final Evaluation Steps when Final/Thesis milestone is approved ──
+                    bool isFinalMilestone = milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) 
+                                        || milestone.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase);
+                    bool stepsAlreadyExist = await _context.FYPMilestones
+                        .AnyAsync(m => m.FYPProjectId == milestone.FYPProjectId && m.Title.StartsWith("Step"));
+
+                    if (isFinalMilestone && !stepsAlreadyExist)
+                    {
+                        var stepMilestones = new List<FYPMilestone>
+                        {
+                            new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 1: Turnitin", Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 2: DPP report full", Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 3: Marksheet Submission", Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 4: Record of Supervisor Meeting Form Submission", Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 5: Presentation Slides Submission", Status = "Pending" }
+                        };
+                        _context.FYPMilestones.AddRange(stepMilestones);
+                        await _context.SaveChangesAsync();
+                    }
                 } 
                 else if (status == "Rejected") {
                     milestone.RejectionCount++;
@@ -907,6 +1007,22 @@ namespace FYPTracker.Controllers
             {
                 if (model.ScheduleType == "WeeklyDefault" && SelectedDays != null && SelectedDays.Any())
                 {
+                    // Validation: Prevent overlapping times on the same day
+                    foreach (var day in SelectedDays)
+                    {
+                        bool exists = await _context.SupervisorAvailabilities
+                            .AnyAsync(a => a.SupervisorId == user.Id && a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == day &&
+                                      ((model.StartTime >= a.StartTime && model.StartTime < a.EndTime) || 
+                                       (model.EndTime > a.StartTime && model.EndTime <= a.EndTime) ||
+                                       (model.StartTime <= a.StartTime && model.EndTime >= a.EndTime)));
+                            
+                        if (exists)
+                        {
+                            TempData["Error"] = $"You already have an overlapping schedule set for {day}. Please adjust the times.";
+                            return RedirectToAction(nameof(ManageAvailability));
+                        }
+                    }
+
                     foreach (var day in SelectedDays)
                     {
                         var newModel = new SupervisorAvailability
@@ -924,6 +1040,20 @@ namespace FYPTracker.Controllers
                 }
                 else
                 {
+                    if (model.ScheduleType == "DateOverride" && model.SpecificDate.HasValue)
+                    {
+                        bool exists = await _context.SupervisorAvailabilities
+                            .AnyAsync(a => a.SupervisorId == user.Id && a.ScheduleType == "DateOverride" && a.SpecificDate.HasValue && a.SpecificDate.Value.Date == model.SpecificDate.Value.Date &&
+                                      ((model.StartTime >= a.StartTime && model.StartTime < a.EndTime) || 
+                                       (model.EndTime > a.StartTime && model.EndTime <= a.EndTime) ||
+                                       (model.StartTime <= a.StartTime && model.EndTime >= a.EndTime)));
+                            
+                        if (exists)
+                        {
+                            TempData["Error"] = $"You already have an overlapping override set for {model.SpecificDate.Value:dd MMM yyyy}. Please adjust the times.";
+                            return RedirectToAction(nameof(ManageAvailability));
+                        }
+                    }
                     _context.SupervisorAvailabilities.Add(model);
                 }
             }
@@ -1048,6 +1178,19 @@ namespace FYPTracker.Controllers
                         for (int i = 1; i < recurringWeeks; i++)
                         {
                             var nextDate = meeting.MeetingDate.AddDays(7 * i);
+
+                            // 1. Check if supervisor is available on this specific date
+                            var availabilities = await _context.SupervisorAvailabilities.Where(a => a.SupervisorId == user.Id).ToListAsync();
+                            var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == nextDate.Date);
+                            var weeklyAvail = overrideAvail == null ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == nextDate.DayOfWeek.ToString()) : null;
+                            var activeAvail = overrideAvail ?? weeklyAvail;
+
+                            if (activeAvail == null || !activeAvail.IsAvailable) continue; // Skip this week due to unavailability
+
+                            // 2. Check for overlapping meeting on this date/time
+                            bool timeConflict = await _context.MeetingBookings.AnyAsync(m => m.SupervisorId == user.Id && m.MeetingDate.Date == nextDate.Date && m.MeetingTime == meeting.MeetingTime && m.Status != "Rejected" && m.Status != "Cancelled");
+                            if (timeConflict) continue; // Skip this week due to conflict
+
                             newMeetings.Add(new MeetingBooking
                             {
                                 StudentId = meeting.StudentId,
@@ -1062,8 +1205,11 @@ namespace FYPTracker.Controllers
                                 RespondedDate = DateTime.Now
                             });
                         }
-                        _context.MeetingBookings.AddRange(newMeetings);
-                        await _context.SaveChangesAsync();
+                        if (newMeetings.Any())
+                        {
+                            _context.MeetingBookings.AddRange(newMeetings);
+                            await _context.SaveChangesAsync();
+                        }
                     }
                 }
 
@@ -1359,12 +1505,12 @@ namespace FYPTracker.Controllers
                 foreach (var p in progressList)
                 {
                     if (p.DueDate.Value.Date > final.DueDate.Value.Date)
-                        return $"Date Validation Error: '{p.Title}' due date cannot be after the FYP 2: Final Dissertation due date.";
+                        return $"Date Validation Error: '{p.Title}' due date cannot be after the Step 2: Final Report Submission due date.";
                 }
 
                 if (proposal?.DueDate.HasValue == true && proposal.DueDate.Value.Date > final.DueDate.Value.Date)
                 {
-                    return "Date Validation Error: FYP 1: Proposal due date cannot be after the FYP 2: Final Dissertation due date.";
+                    return "Date Validation Error: FYP 1: Proposal due date cannot be after the Step 2: Final Report Submission due date.";
                 }
             }
 
@@ -1563,6 +1709,54 @@ namespace FYPTracker.Controllers
 
             TempData["Success"] = $"Turnitin score ({score}%) approved successfully! The examiner can now upload the final grade.";
             return RedirectToAction("ProjectDetails", new { projectId = projectId });
+        }
+
+        // --- Joint Evaluation Marksheet ---
+        [HttpGet]
+        public async Task<IActionResult> GradeMarksheet(int milestoneId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .ThenInclude(p => p.Student)
+                .Include(m => m.SubmissionFiles)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.SupervisorId == user.Id);
+
+            if (milestone == null || !milestone.IsReadyForJointEvaluation)
+            {
+                TempData["Error"] = "Invalid milestone or it is not ready for joint evaluation.";
+                return RedirectToAction("ReviewSubmissions");
+            }
+
+            ViewBag.Role = "Supervisor";
+            return View("~/Views/Shared/GradeMarksheet.cshtml", milestone);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> GradeMarksheet(int milestoneId, string marksheetData)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.SupervisorId == user.Id);
+
+            if (milestone == null || !milestone.IsReadyForJointEvaluation)
+            {
+                TempData["Error"] = "Invalid milestone or it is not ready for joint evaluation.";
+                return RedirectToAction("ReviewSubmissions");
+            }
+
+            milestone.SupervisorMarksheetData = marksheetData;
+            milestone.Status = "Completed"; // Or leave as Approved depending on if Examiner also finished
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Your joint evaluation marks have been saved successfully.";
+            return RedirectToAction("ReviewSubmissions");
         }
     }
 }

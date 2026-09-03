@@ -84,16 +84,120 @@ namespace FYPTracker.Controllers
             return View(project);
         }
 
+        // ══════════════════════════════════════════════════════
+        //  STAGE 2 - FINAL SUBMISSION
+        // ══════════════════════════════════════════════════════
+        public async Task<IActionResult> Stage2()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .Include(p => p.Milestones)
+                    .ThenInclude(m => m.Feedbacks)
+                .Include(p => p.Milestones)
+                    .ThenInclude(m => m.SubmissionFiles)
+                .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
+
+            if (project == null || project.Stage1Grade != "Pass")
+            {
+                TempData["Error"] = "You must pass Stage 1 before accessing Stage 2.";
+                return RedirectToAction("Forms");
+            }
+
+            ViewBag.CurrentUser = user;
+            return View(project);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SubmitStage2Milestone(string stepTitle, IFormFile file)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Milestones)
+                .FirstOrDefaultAsync(p => p.StudentId == user.Id && p.Status != "Completed");
+
+            if (project == null)
+            {
+                TempData["Error"] = "Active project not found.";
+                return RedirectToAction("Stage2");
+            }
+
+            var milestone = project.Milestones.FirstOrDefault(m => m.Title.Equals(stepTitle, StringComparison.OrdinalIgnoreCase));
+            if (milestone == null)
+            {
+                // Create it if it doesn't exist
+                milestone = new FYPMilestone
+                {
+                    FYPProjectId = project.Id,
+                    Title = stepTitle,
+                    Description = "Stage 2 Final Submission Step",
+                    Status = "Submitted",
+                    CreatedDate = DateTime.Now,
+                    SubmittedDate = DateTime.Now,
+                    IsReadyForJointEvaluation = stepTitle.StartsWith("Step 5") // Only ready after step 5 is submitted
+                };
+                _context.FYPMilestones.Add(milestone);
+            }
+            else
+            {
+                milestone.Status = "Submitted";
+                milestone.SubmittedDate = DateTime.Now;
+                if (stepTitle.StartsWith("Step 5")) milestone.IsReadyForJointEvaluation = true;
+                _context.FYPMilestones.Update(milestone);
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Handle file upload
+            if (file != null && file.Length > 0)
+            {
+                var uploadDir = Path.Combine(_env.WebRootPath, "uploads", "submissions", user.Id.ToString());
+                if (!Directory.Exists(uploadDir)) Directory.CreateDirectory(uploadDir);
+
+                string fileName = $"{Guid.NewGuid()}_{Path.GetFileName(file.FileName)}";
+                string filePath = Path.Combine(uploadDir, fileName);
+
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await file.CopyToAsync(stream);
+                }
+
+                _context.FYPSubmissionFiles.Add(new FYPSubmissionFile
+                {
+                    MilestoneId = milestone.Id,
+                    FileName = file.FileName,
+                    FilePath = $"/uploads/submissions/{user.Id}/{fileName}",
+                    UploadedDate = DateTime.Now
+                });
+                
+                await _context.SaveChangesAsync();
+            }
+
+            TempData["Success"] = $"{stepTitle} has been successfully submitted.";
+            return RedirectToAction("Stage2");
+        }
+
 
         //  HELPER: current logged-in ApplicationUser
         // ──────────────────────────────────────────────────────
         private async Task<ApplicationUser?> GetCurrentUserAsync()
         {
-            var userName = HttpContext.User.Identity?.Name;
-            if (string.IsNullOrEmpty(userName)) return null;
-            return await _context.ApplicationUsers
-                .Include(x => x.EmpDepartment)
-                .FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
+            var user = HttpContext.User;
+            if (user?.Identity == null || !user.Identity.IsAuthenticated) return null;
+
+            if (int.TryParse(user.FindFirst("Id")?.Value, out int id))
+            {
+                return await _context.ApplicationUsers
+                    .Include(u => u.EmpDepartment)
+                    .FirstOrDefaultAsync(u => u.Id == id);
+            }
+            return null;
         }
 
         // ──────────────────────────────────────────────────────
@@ -343,11 +447,14 @@ namespace FYPTracker.Controllers
             };
 
             // Update user profile with latest provided data
-            user.EmployeeId = matricNumber;
-            user.Phone = phoneNumber;
-            user.Programme = program;
-            user.AcademicSession = sessionSemester;
-            _context.ApplicationUsers.Update(user);
+            var dbUser = await _context.ApplicationUsers.FindAsync(user.Id);
+            if (dbUser != null)
+            {
+                dbUser.EmployeeId = matricNumber;
+                dbUser.Phone = phoneNumber;
+                dbUser.Programme = program;
+                dbUser.AcademicSession = sessionSemester;
+            }
 
             _context.SupervisorRequests.Add(request);
             await _context.SaveChangesAsync();
@@ -453,13 +560,12 @@ namespace FYPTracker.Controllers
 
             try
             {
-                if (System.IO.File.Exists(file.FilePath))
-                {
-                    System.IO.File.Delete(file.FilePath);
-                }
-                _context.FYPSubmissionFiles.Remove(file);
+                // Soft delete
+                file.IsDeleted = true;
+                file.DeletedDate = DateTime.Now;
+                _context.FYPSubmissionFiles.Update(file);
                 
-                var remainingFiles = await _context.FYPSubmissionFiles.CountAsync(f => f.MilestoneId == file.MilestoneId && f.Id != fileId);
+                var remainingFiles = await _context.FYPSubmissionFiles.CountAsync(f => f.MilestoneId == file.MilestoneId && f.Id != fileId && !f.IsDeleted);
                 if (remainingFiles == 0)
                 {
                     file.Milestone.Status = "Pending";
@@ -472,6 +578,36 @@ namespace FYPTracker.Controllers
             {
                 return Json(new { success = false, message = "Failed to delete file. " + ex.Message });
             }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SubmitForJointEvaluation(int milestoneId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.StudentId == user.Id);
+
+            if (milestone == null || milestone.Status != "Approved")
+            {
+                TempData["Error"] = "Invalid milestone or it is not yet approved by your supervisor.";
+                return RedirectToAction("Forms");
+            }
+
+            if (milestone.IsReadyForJointEvaluation)
+            {
+                TempData["Error"] = "This milestone has already been submitted for joint evaluation.";
+                return RedirectToAction("Forms");
+            }
+
+            milestone.IsReadyForJointEvaluation = true;
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Successfully submitted for Final Joint Evaluation! Your Supervisor and Examiner will now mark it.";
+            return RedirectToAction("Forms");
         }
 
         [HttpPost]
@@ -493,6 +629,29 @@ namespace FYPTracker.Controllers
                 await _context.SaveChangesAsync();
             }
 
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.StudentId == user.Id);
+
+            if (milestone == null)
+            {
+                TempData["Error"] = "Invalid milestone or unauthorized access.";
+                return RedirectToAction("Forms");
+            }
+
+            // ── Guard: Prevent modifying graded milestones (except Rejected which needs revision) ──
+            if (milestone.Status == "Approved" || milestone.Status == "Completed")
+            {
+                TempData["Error"] = "This milestone has already been graded and cannot be modified or resubmitted.";
+                return RedirectToAction("Forms");
+            }
+
+            if (milestone.RejectionCount >= 3 && (formType == "Initial Project Allocation Form (IAF)" || milestone.Title.Contains("IAF")))
+            {
+                TempData["Error"] = "This form has been rejected 3 times and is now locked. Kindly arrange a meeting with your supervisor to discuss the necessary revisions.";
+                return RedirectToAction("Forms");
+            }
+
             var allFiles = new List<IFormFile>();
             if (attachedFile != null && attachedFile.Length > 0) allFiles.Add(attachedFile);
             if (attachedFiles != null && attachedFiles.Any()) allFiles.AddRange(attachedFiles.Where(f => f.Length > 0));
@@ -501,13 +660,13 @@ namespace FYPTracker.Controllers
             if (allFiles.Any())
             {
                 // Validate all files BEFORE proceeding
-                var allowedExt = new[] { ".pdf" };
+                var allowedExt = new[] { ".pdf", ".pptx", ".ppt" };
                 foreach (var file in allFiles)
                 {
                     var extCheck = Path.GetExtension(file.FileName).ToLowerInvariant();
                     if (!allowedExt.Contains(extCheck))
                     {
-                        TempData["Error"] = "Only PDF files are allowed.";
+                        TempData["Error"] = "Only PDF and PPT/PPTX files are allowed.";
                         return RedirectToAction("Forms");
                     }
                     if (file.Length > 20 * 1024 * 1024)
@@ -553,17 +712,6 @@ namespace FYPTracker.Controllers
                 }
             }
 
-            var milestone = await _context.FYPMilestones
-                .Include(m => m.Project)
-                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.StudentId == user.Id);
-
-            if (milestone != null)
-            {
-                if (milestone.RejectionCount >= 3 && (formType == "Initial Project Allocation Form (IAF)" || milestone.Title.Contains("IAF")))
-                {
-                    TempData["Error"] = "This form has been rejected 3 times and is now locked. Kindly arrange a meeting with your supervisor to discuss the necessary revisions.";
-                    return RedirectToAction("Forms");
-                }
                 if (formType == "Progress Report Form")
                 {
                     var dict = new System.Collections.Generic.Dictionary<string, string> {
@@ -634,7 +782,23 @@ namespace FYPTracker.Controllers
                     _context.FYPSubmissionFiles.AddRange(savedFileRecords);
                 }
                 
-                await _context.SaveChangesAsync();
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch (Exception)
+                {
+                    await transaction.RollbackAsync();
+                    foreach(var f in savedFileRecords)
+                    {
+                        var physicalPath = System.IO.Path.Combine(_env.WebRootPath, f.FilePath.TrimStart('/', '\\'));
+                        if (System.IO.File.Exists(physicalPath)) System.IO.File.Delete(physicalPath);
+                    }
+                    TempData["Error"] = "Failed to save submission to database. Please try again.";
+                    return RedirectToAction("Forms");
+                }
                 
                 await LogActivityAsync(user.Id, "Submission", "Form Submitted", $"Submitted {formType} for {milestone.Title}");
                 if (milestone.Project.SupervisorId.HasValue)
@@ -653,7 +817,6 @@ namespace FYPTracker.Controllers
                     };
                     await _hubContext.Clients.Group($"User_{milestone.Project.SupervisorId.Value}").SendAsync("ReceiveMilestoneUpdate", submissionPayload);
                 }
-            }
 
             TempData["Success"] = "Your form has been submitted successfully!";
             return RedirectToAction("Forms");
@@ -687,7 +850,7 @@ namespace FYPTracker.Controllers
             else if (ext == ".png") mimeType = "image/png";
             else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
 
-            var physicalPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", file.FilePath.TrimStart('/', '\\'));
+            var physicalPath = System.IO.Path.Combine(_env.WebRootPath, file.FilePath.TrimStart('/', '\\'));
             if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
 
             Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}\"");
@@ -760,6 +923,25 @@ namespace FYPTracker.Controllers
             {
                 ViewBag.IAFDeadline = "Please wait for project allocation.";
             }
+
+            bool isStage2Unlocked = false;
+            var finalMilestone = project?.Milestones?.FirstOrDefault(m => m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase));
+            
+            // Admin gated unlock check based on FYPSettings
+            var finalSubmissionStartSetting = await _context.FYPSettings.FirstOrDefaultAsync(s => s.Key == "FinalSubmissionStart");
+            if (finalSubmissionStartSetting != null && DateTime.TryParse(finalSubmissionStartSetting.Value, out DateTime finalSubmissionStart))
+            {
+                if (DateTime.Now.Date >= finalSubmissionStart.Date)
+                {
+                    isStage2Unlocked = true;
+                }
+            }
+
+            ViewBag.Stage2Model = new FYPTracker.ViewModels.Stage2ViewModel 
+            { 
+                IsStage2Unlocked = isStage2Unlocked,
+                MilestoneId = finalMilestone?.Id ?? 0
+            };
 
             return View(project);
         }
@@ -845,12 +1027,32 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
-            // ── Guard: supervisor must have configured availability ──
-            var supervisorHasAvailability = await _context.SupervisorAvailabilities
-                .AnyAsync(a => a.SupervisorId == supervisorId && a.IsAvailable);
-            if (!supervisorHasAvailability)
+            // ── Guard: Ensure supervisor is actually available on this specific date/time ──
+            var availabilities = await _context.SupervisorAvailabilities
+                .Where(a => a.SupervisorId == supervisorId)
+                .ToListAsync();
+
+            if (!availabilities.Any(a => a.IsAvailable))
             {
-                TempData["Error"] = "Your supervisor has not yet configured their available time slots. Please contact them to set up their availability before booking.";
+                TempData["Error"] = "Your supervisor has not yet configured their available time slots. Please contact them.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == parsedDate.Date);
+            var weeklyAvail = overrideAvail == null ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == parsedDate.DayOfWeek.ToString()) : null;
+            var activeAvail = overrideAvail ?? weeklyAvail;
+
+            if (activeAvail == null || !activeAvail.IsAvailable)
+            {
+                TempData["Error"] = "Your supervisor is not available on this date. Please select a different day.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            // ── Guard: Ensure student is actually supervised by this supervisor ──
+            var isMySupervisor = await _context.SupervisorRequests.AnyAsync(r => r.StudentId == user.Id && r.SupervisorId == supervisorId && r.Status == "Approved");
+            if (!isMySupervisor)
+            {
+                TempData["Error"] = "Unauthorized. You can only book meetings with your assigned supervisor.";
                 return RedirectToAction(nameof(BookMeeting));
             }
 
@@ -1306,7 +1508,13 @@ namespace FYPTracker.Controllers
                 bool duplicateExists = await _context.MeetingBookings
                     .AnyAsync(m => m.StudentId == user.Id && m.MeetingDate.Date == nextMeetingDate.Value.Date && m.Status != "Rejected" && m.Status != "Postponed");
 
-                if (!duplicateExists)
+                // Check supervisor availability
+                var availabilities = await _context.SupervisorAvailabilities.Where(a => a.SupervisorId == meeting.SupervisorId).ToListAsync();
+                var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == nextMeetingDate.Value.Date);
+                var weeklyAvail = overrideAvail == null ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == nextMeetingDate.Value.DayOfWeek.ToString()) : null;
+                var activeAvail = overrideAvail ?? weeklyAvail;
+
+                if (!duplicateExists && activeAvail != null && activeAvail.IsAvailable)
                 {
                     // Instantly generate a new Meeting Booking so it appears in the list.
                     var newBooking = new MeetingBooking
@@ -1500,7 +1708,7 @@ namespace FYPTracker.Controllers
             else if (ext == ".png") mimeType = "image/png";
             else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
 
-            var physicalPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", file.FilePath.TrimStart('/', '\\'));
+            var physicalPath = System.IO.Path.Combine(_env.WebRootPath, file.FilePath.TrimStart('/', '\\'));
             if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
 
             Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}\"");
@@ -1992,5 +2200,6 @@ namespace FYPTracker.Controllers
         }
     }
 }
+
 
 

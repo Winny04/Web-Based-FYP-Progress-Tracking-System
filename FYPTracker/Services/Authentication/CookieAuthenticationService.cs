@@ -56,6 +56,17 @@ namespace FYPTracker.Services.Authentication
             if (!string.IsNullOrEmpty(employee.Email))
                 claims.Add(new Claim(ClaimTypes.Email, employee.Email, ClaimValueTypes.Email, AuthenticationDefaults.ClaimsIssuer));
 
+            if (employee.UserRoles != null)
+            {
+                foreach (var ur in employee.UserRoles)
+                {
+                    if (ur.Role != null && !string.IsNullOrEmpty(ur.Role.Name))
+                    {
+                        claims.Add(new Claim(ClaimTypes.Role, ur.Role.Name, ClaimValueTypes.String, AuthenticationDefaults.ClaimsIssuer));
+                    }
+                }
+            }
+
             //create principal for the current authentication scheme
             var userIdentity = new ClaimsIdentity(claims, AuthenticationDefaults.AuthenticationScheme);
             var userPrincipal = new ClaimsPrincipal(userIdentity);

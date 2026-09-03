@@ -42,6 +42,14 @@ namespace FYPTracker.Models
 
         public int RejectionCount { get; set; } = 0;
 
+        // --- Joint Marking Fields ---
+        public bool IsReadyForJointEvaluation { get; set; } = false;
+
+        public string? SupervisorMarksheetData { get; set; }
+
+        public string? ExaminerMarksheetData { get; set; }
+        // ----------------------------
+
         [Column(TypeName = "date")]
         public DateTime? DefenseDate { get; set; }
 

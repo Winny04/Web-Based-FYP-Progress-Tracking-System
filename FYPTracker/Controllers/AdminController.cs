@@ -120,9 +120,11 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [Authorize]
+        [ValidateAntiForgeryToken]
         [ClaimRequirement("Type", "Admin")]
         public async Task<IActionResult> RespondRepeatRequest(int studentId, string status)
         {
+            int.TryParse(HttpContext.User.FindFirst("Id")?.Value, out int adminUserId);
             var student = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == studentId);
             if (student != null)
             {
@@ -130,7 +132,16 @@ namespace FYPTracker.Controllers
                 {
                     var currentProject = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == studentId && p.Status != "Archived");
                     if (currentProject != null) {
+                        string oldStatus = currentProject.Status;
                         currentProject.Status = "Archived";
+                        _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
+                        {
+                            ProjectId = currentProject.Id,
+                            OldStatus = oldStatus,
+                            NewStatus = "Archived",
+                            ChangedById = adminUserId > 0 ? adminUserId : null,
+                            Remarks = "Project archived due to repeat request approval."
+                        });
                     }
                     var currentRequests = await _context.SupervisorRequests.Where(r => r.StudentId == studentId && r.Status == "Pending").ToListAsync();
                     foreach (var r in currentRequests) {
@@ -145,9 +156,11 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [Authorize]
+        [ValidateAntiForgeryToken]
         [ClaimRequirement("Type", "Admin")]
         public async Task<IActionResult> ArchiveAcademicSession(string sessionName)
         {
+            int.TryParse(HttpContext.User.FindFirst("Id")?.Value, out int adminUserId);
             if (string.IsNullOrWhiteSpace(sessionName)) {
                 TempData["Error"] = "Session name cannot be empty.";
                 return RedirectToAction(nameof(Index));
@@ -156,7 +169,16 @@ namespace FYPTracker.Controllers
             var projects = await _context.FYPProjects.Include(p => p.Student).Where(p => p.Student.AcademicSession == sessionName && p.Status != "Archived").ToListAsync();
             foreach (var p in projects)
             {
+                string oldStatus = p.Status;
                 p.Status = "Archived";
+                _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
+                {
+                    ProjectId = p.Id,
+                    OldStatus = oldStatus,
+                    NewStatus = "Archived",
+                    ChangedById = adminUserId > 0 ? adminUserId : null,
+                    Remarks = $"Archived via batch academic session archiving ({sessionName})."
+                });
             }
 
             var requests = await _context.SupervisorRequests.Include(r => r.Student).Where(r => r.Student.AcademicSession == sessionName && r.Status == "Pending").ToListAsync();
@@ -352,6 +374,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> UpdateUserModal(int id, string fullName, string email, string phone, string department, string programme, string academicSession, string title, string specialization)
         {
             try
@@ -455,6 +478,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult EditUser(EmployeeEditVM ApplicationUser, IFormFile? picture, string isImgChanged)
         {
             try {
@@ -550,11 +574,14 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
             return View(ApplicationUser);
             } catch (Exception ex) {
-                return Content("CRASH OCCURRED: " + ex.Message + " | " + ex.StackTrace);
+                // Log exception properly here in a real production environment
+                TempData["Error"] = "An unexpected error occurred while updating the user profile. Please try again.";
+                return RedirectToAction("Index");
             }
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public JsonResult Create(ApplicationUserVM newEmployee)
         {
             try
@@ -744,6 +771,7 @@ public ActionResult ManageUsersData()
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public bool Delete(int id)
         {
             try
@@ -763,6 +791,7 @@ public ActionResult ManageUsersData()
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public bool Activate(int id)
         {
             try
@@ -781,6 +810,7 @@ public ActionResult ManageUsersData()
             }
         }
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> HardDelete(int id)
         {
             try
@@ -917,6 +947,21 @@ public ActionResult ManageUsersData()
                 ViewBag.IAFDeadline = "";
             }
 
+            var existingStep1 = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .Where(m => m.Project.AcademicSession == sessionFilter && m.Title.StartsWith("Step 1") && m.DueDate != null)
+                .OrderByDescending(m => m.DueDate)
+                .FirstOrDefaultAsync();
+                
+            ViewBag.Step1to4Deadline = existingStep1?.DueDate?.ToString("yyyy-MM-dd") ?? "";
+
+            var existingStep5 = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .Where(m => m.Project.AcademicSession == sessionFilter && m.Title.StartsWith("Step 5") && m.DueDate != null)
+                .OrderByDescending(m => m.DueDate)
+                .FirstOrDefaultAsync();
+                
+            ViewBag.Step5Deadline = existingStep5?.DueDate?.ToString("yyyy-MM-dd") ?? "";
             // Load FYP global settings (DPP deadline, exhibition, etc.)
             var fypSettings = await _context.FYPSettings.ToListAsync();
             ViewBag.FYPSettings = fypSettings;
@@ -927,6 +972,7 @@ public ActionResult ManageUsersData()
             ViewBag.ExhibitionDate    = GetSetting("ExhibitionDate");
             ViewBag.ExhibitionTimeStart = GetSetting("ExhibitionTimeStart");
             ViewBag.ExhibitionTimeEnd   = GetSetting("ExhibitionTimeEnd");
+
 
             return View();
         }
@@ -976,13 +1022,129 @@ public ActionResult ManageUsersData()
 
                 return RedirectToAction(nameof(Settings), new { sessionFilter });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                TempData["Error"] = $"Crash Details: {ex.Message} | Inner: {ex.InnerException?.Message}";
+                TempData["Error"] = "An unexpected error occurred while processing your request. Please check the logs.";
                 return RedirectToAction(nameof(Settings), new { sessionFilter });
             }
         }
 
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SeedFinalEvaluationSteps(string sessionFilter)
+        {
+            try
+            {
+                // Find all projects in the session that have an approved Final/Thesis milestone but no Step milestones
+                var projects = await _context.FYPProjects
+                    .Include(p => p.Milestones)
+                    .Where(p => p.AcademicSession == sessionFilter || string.IsNullOrEmpty(sessionFilter))
+                    .ToListAsync();
+
+                int count = 0;
+                var toAdd = new List<FYPMilestone>();
+
+                foreach (var project in projects)
+                {
+                    bool hasFinalApproved = project.Milestones.Any(m =>
+                        (m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase))
+                        && m.Status == "Approved");
+
+                    bool hasSteps = project.Milestones.Any(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase));
+
+                    if (hasFinalApproved && !hasSteps)
+                    {
+                        toAdd.AddRange(new[]
+                        {
+                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 1: Turnitin", Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 2: DPP report full", Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 3: Marksheet Submission", Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 4: Record of Supervisor Meeting Form Submission", Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 5: Presentation Slides Submission", Status = "Pending" },
+                        });
+                        count++;
+                    }
+                }
+
+                if (toAdd.Any())
+                {
+                    _context.FYPMilestones.AddRange(toAdd);
+                    await _context.SaveChangesAsync();
+                    TempData["Success"] = $"Successfully created Step milestones for {count} project(s).";
+                }
+                else
+                {
+                    TempData["Info"] = "No eligible projects found. Either milestones already exist or no projects have an approved Final milestone.";
+                }
+
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"Error: {ex.Message}";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateFinalEvaluationDeadlines(DateTime? step1to4Deadline, DateTime? step5Deadline, string sessionFilter)
+        {
+            try 
+            {
+                if (!step1to4Deadline.HasValue || !step5Deadline.HasValue)
+                {
+                    TempData["Error"] = "The dates provided were invalid or empty.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+                
+                if (string.IsNullOrEmpty(sessionFilter))
+                {
+                    TempData["Error"] = "An academic session must be selected.";
+                    return RedirectToAction(nameof(Settings));
+                }
+
+                var endOfDay1to4 = new DateTime(step1to4Deadline.Value.Year, step1to4Deadline.Value.Month, step1to4Deadline.Value.Day, 23, 59, 59);
+                var endOfDay5 = new DateTime(step5Deadline.Value.Year, step5Deadline.Value.Month, step5Deadline.Value.Day, 23, 59, 59);
+
+                var milestones = await _context.FYPMilestones
+                    .Include(m => m.Project)
+                    .Where(m => m.Project.AcademicSession == sessionFilter && m.Title.StartsWith("Step"))
+                    .ToListAsync();
+
+                int count = 0;
+                foreach(var m in milestones)
+                {
+                    if (m.Title.Contains("Step 5"))
+                    {
+                        m.DueDate = endOfDay5;
+                    }
+                    else if (m.Title.Contains("Step 1") || m.Title.Contains("Step 2") || m.Title.Contains("Step 3") || m.Title.Contains("Step 4"))
+                    {
+                        m.DueDate = endOfDay1to4;
+                    }
+                    count++;
+                }
+
+                if (count > 0)
+                {
+                    await _context.SaveChangesAsync();
+                    TempData["Success"] = $"Successfully updated the Final Evaluation deadlines for {count} milestone(s) in {sessionFilter}.";
+                }
+                else
+                {
+                    TempData["Info"] = $"No Final Evaluation steps found in {sessionFilter} to update.";
+                }
+
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+            catch (Exception)
+            {
+                TempData["Error"] = "An unexpected error occurred while processing your request. Please check the logs.";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+        }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -995,7 +1157,7 @@ public ActionResult ManageUsersData()
                     { "DPPDeadline",         (dppDeadline ?? "",         "DPP Submission Deadline") },
                     { "ExhibitionDate",      (exhibitionDate ?? "",      "FYP Exhibition Date") },
                     { "ExhibitionTimeStart", (exhibitionTimeStart ?? "", "Exhibition Start Time") },
-                    { "ExhibitionTimeEnd",   (exhibitionTimeEnd ?? "",   "Exhibition End Time") },
+                    { "ExhibitionTimeEnd",   (exhibitionTimeEnd ?? "",   "Exhibition End Time") }
                 };
 
                 foreach (var kv in updates)
@@ -1389,6 +1551,9 @@ public ActionResult ManageUsersData()
         // Resend Invite
         // ────────────────────────────────────────────────────────
         [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        [ClaimRequirement("Type", "Admin")]
         public async Task<IActionResult> ResendInvite(int userId)
         {
             var admin = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
@@ -1702,6 +1867,7 @@ public ActionResult ManageUsersData()
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public IActionResult AddLookup(string type, string name)
         {
             try
@@ -1733,6 +1899,7 @@ public ActionResult ManageUsersData()
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public IActionResult EditLookup(string type, int id, string name)
         {
             try
@@ -1763,6 +1930,7 @@ public ActionResult ManageUsersData()
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public IActionResult ToggleLookupStatus(string type, int id)
         {
             try

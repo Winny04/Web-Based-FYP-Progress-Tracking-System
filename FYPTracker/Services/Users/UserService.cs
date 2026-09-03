@@ -31,14 +31,14 @@ namespace FYPTracker.Services.Employees
                         where e.UserName == username
                         select e;
 
-            var emp = await query.Include(x => x.EmpDepartment).FirstOrDefaultAsync();
+            var emp = await query.Include(x => x.EmpDepartment).Include(x => x.UserRoles).ThenInclude(ur => ur.Role).FirstOrDefaultAsync();
 
             if(emp == null)
             {
                  query = from e in _context.ApplicationUsers
                             where e.Email == username
                             select e;
-                 emp = await query.Include(x => x.EmpDepartment).FirstOrDefaultAsync();
+                 emp = await query.Include(x => x.EmpDepartment).Include(x => x.UserRoles).ThenInclude(ur => ur.Role).FirstOrDefaultAsync();
 
             }
 

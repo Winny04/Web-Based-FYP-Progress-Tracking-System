@@ -372,3 +372,9 @@ FodyWeavers.xsd
 # Local Chromium (Puppeteer / PDF generation binaries)
 **/.local-chromium/
 
+
+# Ignore local database
+FYPTracker/FYPTracker.db
+
+# Ignore uploaded files
+FYPTracker/wwwroot/uploads/

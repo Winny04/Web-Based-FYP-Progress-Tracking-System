@@ -1,0 +1,190 @@
+@model FYPTracker.Models.FYPProject
+@{
+    ViewData["Title"] = "Stage 2 Final Evaluation";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var dppFile = Model.Milestones.FirstOrDefault(m => m.Title.StartsWith("Step 2"))?.SubmissionFiles?.OrderByDescending(f => f.UploadedDate).FirstOrDefault();
+    var existingMarks = Model.Stage2ExaminerMarksheetData;
+}
+
+<div class="d-flex flex-column h-100" style="background: #f8fafc; min-height: calc(100vh - 100px);">
+    <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center shadow-sm">
+        <div>
+            <h3 class="fw-bold mb-1 text-dark"><i class="fas fa-graduation-cap text-success me-2"></i> Stage 2 Final Evaluation</h3>
+            <p class="mb-0 text-muted">
+                Candidate: <span class="fw-bold text-dark">@Model.Student?.FullName</span> | 
+                Dissertation: <span class="fw-bold text-dark">@Model.Title</span>
+            </p>
+        </div>
+        <div>
+            <a href="javascript:history.back()" class="btn btn-outline-secondary rounded-pill px-4"><i class="fas fa-arrow-left me-2"></i>Back</a>
+        </div>
+    </div>
+
+    <div class="row g-0 flex-grow-1">
+        <!-- PDF Viewer (Left Side) -->
+        <div class="col-lg-6 border-end bg-dark">
+            @if (dppFile != null)
+            {
+                <iframe src="@dppFile.FilePath" style="width: 100%; height: calc(100vh - 180px); border: none;" allowfullscreen></iframe>
+            }
+            else
+            {
+                <div class="d-flex align-items-center justify-content-center h-100 text-white flex-column">
+                    <i class="fas fa-file-pdf fa-4x mb-3 text-secondary"></i>
+                    <h5>No final document uploaded</h5>
+                </div>
+            }
+        </div>
+
+        <!-- Evaluation Form (Right Side) -->
+        <div class="col-lg-6 bg-white overflow-auto" style="height: calc(100vh - 180px);">
+            <div class="p-5">
+                <form asp-controller="Examiner" asp-action="GradeMarksheetStage2" method="post" id="marksheetForm">
+                    <input type="hidden" name="projectId" value="@Model.Id" />
+                    <!-- We'll store the JSON data here -->
+                    <input type="hidden" name="marksheetData" id="marksheetData" value="@existingMarks" />
+
+                    <!-- Technical Depth -->
+                    <div class="mb-5">
+                        <div class="d-flex justify-content-between mb-2">
+                            <label class="fw-bold fs-5 text-dark">Technical Depth & Complexity</label>
+                            <span class="badge bg-dark fs-6" id="valTech">0/100</span>
+                        </div>
+                        <p class="text-muted small mb-3">Evaluates the final solution complexity, analytical rigor, and depth of technical execution.</p>
+                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" id="scoreTech" oninput="updateScore('Tech')">
+                    </div>
+
+                    <!-- Innovation & Research -->
+                    <div class="mb-5">
+                        <div class="d-flex justify-content-between mb-2">
+                            <label class="fw-bold fs-5 text-dark">Innovation & Research Contribution</label>
+                            <span class="badge bg-dark fs-6" id="valLit">0/100</span>
+                        </div>
+                        <p class="text-muted small mb-3">Evaluates the novelty of the solution and its contribution to the field.</p>
+                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" id="scoreLit" oninput="updateScore('Lit')">
+                    </div>
+
+                    <!-- Result Analysis -->
+                    <div class="mb-5">
+                        <div class="d-flex justify-content-between mb-2">
+                            <label class="fw-bold fs-5 text-dark">Result Analysis & Testing</label>
+                            <span class="badge bg-dark fs-6" id="valMeth">0/100</span>
+                        </div>
+                        <p class="text-muted small mb-3">Evaluates the robustness of testing, result accuracy, and critical analysis of outcomes.</p>
+                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" id="scoreMeth" oninput="updateScore('Meth')">
+                    </div>
+
+                    <!-- Presentation & Dissertation -->
+                    <div class="mb-5">
+                        <div class="d-flex justify-content-between mb-2">
+                            <label class="fw-bold fs-5 text-dark">Dissertation & Defense</label>
+                            <span class="badge bg-dark fs-6" id="valPres">0/100</span>
+                        </div>
+                        <p class="text-muted small mb-3">Evaluates the overall quality of the dissertation report and the student's ability to defend it.</p>
+                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" id="scorePres" oninput="updateScore('Pres')">
+                    </div>
+
+                    <div class="mb-5">
+                        <label class="fw-bold fs-5 text-dark mb-2">Examiner Comments</label>
+                        <textarea class="form-control bg-light" name="examinerComments" id="feedbackText" rows="5" placeholder="Provide detailed feedback, strengths, and areas for improvement...">@Model.ExaminerComments</textarea>
+                    </div>
+
+                    <!-- FINAL GRADE -->
+                    <div class="mb-5 p-4 rounded-3" style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2);">
+                        <label class="fw-bold fs-5 text-success mb-2"><i class="fas fa-award me-2"></i>Final Grade Recommendation</label>
+                        <p class="text-muted small mb-3">Please determine the final overall grade for the student.</p>
+                        <select class="form-select border-success" name="finalGrade" id="finalGrade" required>
+                            <option value="" disabled selected>-- Select Final Grade --</option>
+                            <option value="Excellent (A)" selected="@(Model.FinalGrade == "Excellent (A)")">Excellent (A)</option>
+                            <option value="Good (B)" selected="@(Model.FinalGrade == "Good (B)")">Good (B)</option>
+                            <option value="Average (C)" selected="@(Model.FinalGrade == "Average (C)")">Average (C)</option>
+                            <option value="Pass (D)" selected="@(Model.FinalGrade == "Pass (D)")">Pass (D)</option>
+                            <option value="Fail (F)" selected="@(Model.FinalGrade == "Fail (F)")">Fail (F)</option>
+                        </select>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mt-5 pt-3 border-top">
+                        <div class="fs-4 fw-bold text-dark">
+                            Total Score: <span id="totalScore" class="text-primary">0</span><span class="text-muted fs-5">/100</span>
+                        </div>
+                        <button type="button" class="btn btn-success btn-lg px-5 rounded-pill shadow-sm d-flex align-items-center" onclick="submitMarksheet()">
+                            <i class="fas fa-check-double me-2"></i> Submit Stage 2 Marks
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Custom Range Sliders */
+    .custom-range::-webkit-slider-thumb {
+        background: #0f172a;
+        width: 24px;
+        height: 24px;
+        border: 4px solid white;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    .custom-range::-webkit-slider-runnable-track {
+        background: #cbd5e1;
+        height: 8px;
+        border-radius: 4px;
+    }
+</style>
+
+@section Scripts {
+    <script>
+        // Init scores from existing data if any
+        let existing = document.getElementById('marksheetData').value;
+        if (existing) {
+            try {
+                let data = JSON.parse(existing);
+                document.getElementById('scoreTech').value = data.Tech || 0;
+                document.getElementById('scoreLit').value = data.Lit || 0;
+                document.getElementById('scoreMeth').value = data.Meth || 0;
+                document.getElementById('scorePres').value = data.Pres || 0;
+                
+                ['Tech', 'Lit', 'Meth', 'Pres'].forEach(cat => {
+                    if(document.getElementById('val' + cat)) updateScore(cat, false);
+                });
+            } catch(e) {}
+        }
+
+        function updateScore(category, updateAvg = true) {
+            let val = document.getElementById('score' + category).value;
+            document.getElementById('val' + category).innerText = val + "/100";
+            
+            if (updateAvg) calculateTotal();
+        }
+
+        function calculateTotal() {
+            let tech = parseInt(document.getElementById('scoreTech').value) || 0;
+            let lit = parseInt(document.getElementById('scoreLit').value) || 0;
+            let meth = parseInt(document.getElementById('scoreMeth').value) || 0;
+            let pres = parseInt(document.getElementById('scorePres').value) || 0;
+            
+            // Examiner weight: 25% each
+            let total = (tech * 0.25) + (lit * 0.25) + (meth * 0.25) + (pres * 0.25);
+            
+            document.getElementById('totalScore').innerText = Math.round(total);
+        }
+
+        function submitMarksheet() {
+            let data = {
+                Tech: document.getElementById('scoreTech').value,
+                Lit: document.getElementById('scoreLit').value,
+                Meth: document.getElementById('scoreMeth').value,
+                Pres: document.getElementById('scorePres').value,
+                Total: document.getElementById('totalScore').innerText
+            };
+
+            document.getElementById('marksheetData').value = JSON.stringify(data);
+            document.getElementById('marksheetForm').submit();
+        }
+        
+        // Initial calculation
+        calculateTotal();
+    </script>
+}

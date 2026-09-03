@@ -190,20 +190,32 @@
         var proposalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
         bool isProposalApproved = proposalMilestone != null && proposalMilestone.Status == "Approved";
         
-        var finalMsRef = milestones.FirstOrDefault(m => m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase));
+        var stage2Milestones = milestones.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
 
-        // Any milestone that isn't IAF, Proposal, or Final is considered an intermediate "Progress" milestone
+        // Any milestone that isn't IAF, Proposal, or Stage 2 is considered an intermediate "Progress" milestone
         var allProgressMilestones = milestones.Where(m => 
             m.Id != (iafMilestone?.Id ?? -1) && 
             m.Id != (proposalMilestone?.Id ?? -1) && 
-            m.Id != (finalMsRef?.Id ?? -1)).ToList();
+            !stage2Milestones.Any(s2 => s2.Id == m.Id)).ToList();
             
-        // If there are intermediate milestones, they must all be approved. If none exist, it is true by default.
-        bool isAllProgressApproved = allProgressMilestones.Any() ? allProgressMilestones.All(m => m.Status == "Approved") : true;
+        // Check if Stage 1 marking is completed (if a joint evaluation milestone exists, it MUST be fully marked)
+        bool hasStage1JointEvaluation = allProgressMilestones.Any(m => m.IsReadyForJointEvaluation);
+        bool isStage1MarkingComplete = hasStage1JointEvaluation && allProgressMilestones
+            .Where(m => m.IsReadyForJointEvaluation)
+            .All(m => !string.IsNullOrEmpty(m.SupervisorMarksheetData) && !string.IsNullOrEmpty(m.ExaminerMarksheetData));
+
+        // If there are intermediate milestones, they must all be approved AND joint marked.
+        bool isAllProgressApproved = allProgressMilestones.Any() 
+            ? (allProgressMilestones.All(m => m.Status == "Approved") && isStage1MarkingComplete) 
+            : false;
+
+        // NEW: Stage 2 unlock logic depends on Stage1Grade == "Pass"
+        bool isStage2Unlocked = Model?.Stage1Grade == "Pass";
+        bool isStage1Failed = Model?.Stage1Grade == "Fail";
 
         // Force logical cascade: if a later milestone is approved, logically treat the previous ones as approved
         // so the UI doesn't break into multiple active tabs.
-        if (isAllProgressApproved) { isProposalApproved = true; }
+        if (isAllProgressApproved || isStage2Unlocked) { isProposalApproved = true; }
         if (isProposalApproved) { isIafApproved = true; }
 
         string iafTooltip = isIafApproved ? "data-toggle=\"tooltip\" title=\"IAF Form has been approved and locked\"" : "";
@@ -216,10 +228,43 @@
         if (!isProposalApproved) progressTooltip = "data-toggle=\"tooltip\" title=\"Requires Proposal Approval first\"";
 
         string finalTooltip = "";
-        if (!isAllProgressApproved) finalTooltip = "data-toggle=\"tooltip\" title=\"Requires all Progress Reports to be Approved first\"";
+        if (!isAllProgressApproved) finalTooltip = "data-toggle=\"tooltip\" title=\"Requires all Progress Reports to be Approved and marked by Supervisor and Examiner\"";
 
         <div class="row g-4">
             
+            @* ── STAGE 1 STATUS BANNER ──────────────────────── *@
+            @if (isStage1Failed)
+            {
+                <div class="col-12 mb-2">
+                    <div class="alert alert-danger d-flex align-items-center shadow-sm" role="alert">
+                        <i class="fas fa-times-circle fs-3 me-3"></i>
+                        <div>
+                            <h5 class="alert-heading fw-bold mb-1">Stage 1 Failed</h5>
+                            <p class="mb-0">You have failed Stage 1. Please contact your supervisor to retake Stage 1.</p>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (isStage2Unlocked)
+            {
+                <div class="col-12 mb-2">
+                    <div class="alert alert-success d-flex justify-content-between align-items-center shadow-sm" role="alert" style="border-left: 5px solid #10b981;">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-check-circle fs-3 me-3 text-success"></i>
+                            <div>
+                                <h5 class="alert-heading fw-bold mb-1 text-success">Stage 1 Passed!</h5>
+                                <p class="mb-0 text-dark">Congratulations! You have successfully passed Stage 1. You may now proceed to Stage 2.</p>
+                            </div>
+                        </div>
+                        <div>
+                            <a href="@Url.Action("Stage2", "Student")" class="btn btn-success btn-lg shadow-sm fw-bold rounded-pill px-4">
+                                Proceed to Stage 2 <i class="fas fa-arrow-right ms-2"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            }
+
             @* ── WIZARD STEPPER (Navigation) ────────────────── *@
             <div class="col-12">
                 <ul class="wizard-stepper nav nav-pills m-0 p-0" style="list-style: none;" id="forms-tab" role="tablist">
@@ -241,12 +286,7 @@
                             <div class="step-text">B. Progress Report</div>
                         </button>
                     </li>
-                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(finalTooltip)>
-                        <button class="stepper-btn nav-link @(isAllProgressApproved ? "active" : "")" id="final-form-tab" data-toggle="pill" data-target="#final-form-pane" type="button" role="tab" @(!isAllProgressApproved ? "disabled" : "") style="@(!isAllProgressApproved ? "pointer-events: none;" : "")">
-                            <div class="step-icon"><i class="fas fa-graduation-cap"></i></div>
-                            <div class="step-text">C. Final Submission</div>
-                        </button>
-                    </li>
+                    <!-- Stage 2 is now a separate page, Final Submission tab removed -->
                 </ul>
 
                 <div class="premium-card p-3 mb-2 bg-light d-flex align-items-center gap-3">
@@ -652,11 +692,18 @@
                             @{
                                 var progressMilestones = milestones.Where(x => 
                                     (x.Status == "Pending" || x.Status == "Rejected")
-                                    && !x.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) 
-                                    && !x.Title.Contains("Final", StringComparison.OrdinalIgnoreCase)).ToList();
+                                    && !x.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)
+                                    && !x.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase)
+                                    && !x.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
+                                    
+                                var submittedProgress = milestones.Where(x => 
+                                    (x.Status == "Submitted" || x.Status == "UnderReview" || x.Status == "Approved")
+                                    && !x.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)
+                                    && !x.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase)
+                                    && !x.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
                             }
                             
-                            @if (!progressMilestones.Any())
+                            @if (!progressMilestones.Any() && !submittedProgress.Any())
                             {
                                 <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
                                     <i class="fas fa-lock fs-2 me-3 text-info"></i>
@@ -678,83 +725,95 @@
                                         </div>
                                     </div>
                                 }
-                            <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
-                                <input type="hidden" name="formType" value="Progress Report Form" />
+                                @if (progressMilestones.Any())
+                                {
+                                    <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+                                        <input type="hidden" name="formType" value="Progress Report Form" />
 
-                                <div class="mb-4">
-                                    <label class="form-label fw-bold text-dark" style="font-size: 0.95rem;">Select Milestone to Report On</label>
-                                    <select name="milestoneId" id="progressMilestoneSelect" class="form-select" required onchange="toggleProgressTemplate(this)">
-                                        <option value="">-- Choose a Milestone --</option>
-                                        @foreach (var m in progressMilestones)
-                                        {
-                                            <option value="@m.Id">@m.Title (@m.Status)</option>
-                                        }
-                                    </select>
-                                    <div class="invalid-feedback">Please select a milestone.</div>
-                                </div>
-
-                                <div id="progressTemplateSection" class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1; display: none;">
-                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                                        <div>
-                                            <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>FYP Progress Report Template</div>
-                                            <div class="text-muted small">Select a milestone above to download the pre-filled Word template for that specific progress report.</div>
+                                        <div class="mb-4">
+                                            <label class="form-label fw-bold text-dark" style="font-size: 0.95rem;">Select Milestone to Report On</label>
+                                            <select name="milestoneId" id="progressMilestoneSelect" class="form-select" required onchange="toggleProgressTemplate(this)">
+                                                <option value="">-- Choose a Milestone --</option>
+                                                @foreach (var m in progressMilestones)
+                                                {
+                                                    <option value="@m.Id">@m.Title (@m.Status)</option>
+                                                }
+                                            </select>
+                                            <div class="invalid-feedback">Please select a milestone.</div>
                                         </div>
-                                        <a href="@Url.Action("DownloadProgressTemplate", "Student")"
-                                           id="btnDownloadProgress"
-                                           class="btn btn-outline-dark fw-semibold rounded-3 px-4 py-2 text-decoration-none d-flex align-items-center gap-2"
-                                           style="white-space: nowrap;">
-                                            <i class="fas fa-download"></i> Download Template (.docx)
-                                        </a>
-                                    </div>
-                                </div>
 
-
-                                <div class="form-section-title">Part 1: Reporting Period</div>
-                                <div class="row g-3 mb-3">
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-semibold">Start Period</label>
-                                        <input type="date" name="startDate" id="progressStartDate" class="form-control" required />
-                                        <div class="invalid-feedback">Start date is required.</div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-semibold">End Period</label>
-                                        <input type="date" name="endDate" id="progressEndDate" class="form-control" required />
-                                        <div class="invalid-feedback">End date is required.</div>
-                                    </div>
-                                    <div class="col-12 mt-2">
-                                        <div id="progressDateError" class="text-danger fw-bold d-none"><i class="fas fa-exclamation-triangle me-1"></i>End Period must be equal to or after the Start Period.</div>
-                                    </div>
-                                </div>
-
-                                <div class="form-section-title">Part 2: Document Attachment</div>
-                                <div class="row g-3 mb-4">
-                                    <div class="col-md-12">
-                                        <label class="form-label fw-semibold mb-2">Attach Completed Progress Report</label>
-                                        <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="progressDropZone" onclick="document.getElementById('progressFiles').click()">
-                                            <i class="fas fa-copy fs-1 mb-3" style="color: #3b82f6 !important;"></i>
-                                            <h6 class="fw-bold mb-1">Drag & Drop your files here</h6>
-                                            <p class="text-muted small mb-0">or click to browse (PDF ONLY)</p>
-                                            <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
-                                            <input type="file" name="attachedFiles" id="progressFiles" class="d-none" accept=".pdf" multiple onchange="updateMultiFileNames(this, 'progressFileList')" />
-                                            <div id="progressFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please select at least one PDF file before submitting.</div>
-                                            <div id="progressFileList" class="mt-3 text-start small fw-semibold text-primary" style="display:none; max-width: 300px; margin: auto;">
+                                        <div id="progressTemplateSection" class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1; display: none;">
+                                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                                                <div>
+                                                    <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>FYP Progress Report Template</div>
+                                                    <div class="text-muted small">Select a milestone above to download the pre-filled Word template for that specific progress report.</div>
+                                                </div>
+                                                <a href="@Url.Action("DownloadProgressTemplate", "Student")"
+                                                   id="btnDownloadProgress"
+                                                   class="btn btn-outline-dark fw-semibold rounded-3 px-4 py-2 text-decoration-none d-flex align-items-center gap-2"
+                                                   style="white-space: nowrap;">
+                                                    <i class="fas fa-download"></i> Download Template (.docx)
+                                                </a>
                                             </div>
                                         </div>
+
+                                        <div class="form-section-title">Part 1: Reporting Period</div>
+                                        <div class="row g-3 mb-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Start Period</label>
+                                                <input type="date" name="startDate" id="progressStartDate" class="form-control" required />
+                                                <div class="invalid-feedback">Start date is required.</div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">End Period</label>
+                                                <input type="date" name="endDate" id="progressEndDate" class="form-control" required />
+                                                <div class="invalid-feedback">End date is required.</div>
+                                            </div>
+                                            <div class="col-12 mt-2">
+                                                <div id="progressDateError" class="text-danger fw-bold d-none"><i class="fas fa-exclamation-triangle me-1"></i>End Period must be equal to or after the Start Period.</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-section-title">Part 2: Document Attachment</div>
+                                        <div class="row g-3 mb-4">
+                                            <div class="col-md-12">
+                                                <label class="form-label fw-semibold mb-2">Attach Completed Progress Report</label>
+                                                <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="progressDropZone" onclick="document.getElementById('progressFiles').click()">
+                                                    <i class="fas fa-copy fs-1 mb-3" style="color: #3b82f6 !important;"></i>
+                                                    <h6 class="fw-bold mb-1">Drag & Drop your files here</h6>
+                                                    <p class="text-muted small mb-0">or click to browse (PDF ONLY)</p>
+                                                    <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
+                                                    <input type="file" name="attachedFiles" id="progressFiles" class="d-none" accept=".pdf" multiple onchange="updateMultiFileNames(this, 'progressFileList')" />
+                                                    <div id="progressFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please select at least one PDF file before submitting.</div>
+                                                    <div id="progressFileList" class="mt-3 text-start small fw-semibold text-primary" style="display:none; max-width: 300px; margin: auto;">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-section-title text-danger"><i class="fas fa-history me-2"></i>Part 3: Revision Notes (If Resubmitting)</div>
+                                        <div class="mb-4">
+                                            <label class="form-label fw-semibold">What did you change in this version?</label>
+                                            <textarea name="revisionNotes" class="form-control" rows="3" placeholder="Explain what was changed based on supervisor feedback..."></textarea>
+                                            <div class="text-muted small mt-1">Leave blank if this is your first attempt.</div>
+                                        </div>
+
+                                        <div class="d-flex gap-3 justify-content-end">
+                                            <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
+                                            <button type="submit" class="btn-submit" onclick="return validateProgressForm()">Submit Progress Report</button>
+                                        </div>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
+                                        <i class="fas fa-check-circle fs-2 me-3 text-success"></i>
+                                        <div>
+                                            <h5 class="fw-bold text-dark mb-1">All Progress Reports Completed</h5>
+                                            <p class="mb-0 text-muted">You have no remaining Stage 1 progress reports to submit. Please proceed to the Final Submission tab if it is unlocked.</p>
+                                        </div>
                                     </div>
-                                </div>
-
-                                <div class="form-section-title text-danger"><i class="fas fa-history me-2"></i>Part 3: Revision Notes (If Resubmitting)</div>
-                                <div class="mb-4">
-                                    <label class="form-label fw-semibold">What did you change in this version?</label>
-                                    <textarea name="revisionNotes" class="form-control" rows="3" placeholder="Explain what was changed based on supervisor feedback..."></textarea>
-                                    <div class="text-muted small mt-1">Leave blank if this is your first attempt.</div>
-                                </div>
-
-                                <div class="d-flex gap-3 justify-content-end">
-                                    <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
-                                    <button type="submit" class="btn-submit" onclick="return validateProgressForm()">Submit Progress Report</button>
-                                </div>
-                            </form>
+                                }
                             }
                         </div>
                     </div>
@@ -762,180 +821,76 @@
                     @* ── C. FINAL SUBMISSION FORM ────────────────────── *@
                     <div class="tab-pane fade @(isAllProgressApproved ? "show active" : "")" id="final-form-pane" role="tabpanel" tabindex="0">
                         <div class="premium-card p-4">
-                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-graduation-cap text-orange me-2"></i>C. Final FYP Report & Thesis Submission</h4>
-                            
-                                @* Select corresponding Milestone *@
-                                @{
-                                    var finalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Final") || m.Title.Contains("Thesis")) ?? milestones.LastOrDefault();
-                                    int finalMilestoneId = finalMilestone?.Id ?? 0;
-                                    bool isFinLocked = finalMilestone != null && (finalMilestone.Status == "Submitted" || finalMilestone.Status == "UnderReview" || finalMilestone.Status == "Approved");
+                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-graduation-cap text-orange me-2"></i>C. Stage 2 Final Submission</h4>
+                            @if (!isStage2Unlocked)
+                            {
+                                <div class="alert alert-secondary border d-flex flex-column align-items-center p-4">
+                                    <i class="fas fa-lock fs-1 text-muted mb-3"></i>
+                                    <h5 class="text-muted fw-bold">Stage 2 is Currently Locked</h5>
+                                    <p class="text-muted text-center mb-0">
+                                        Stage 2 Final Submissions will unlock automatically once your Examiner has reviewed your Stage 1 submission and assigned a "Pass" grade.
+                                    </p>
+                                </div>
+                            }
+                            else
+                            {
+                                var finalPending = stage2Milestones.Where(x => x.Status == "Pending" || x.Status == "Rejected").ToList();
+                                var finalSubmitted = stage2Milestones.Where(x => x.Status == "Submitted" || x.Status == "UnderReview" || x.Status == "Approved").ToList();
+                                
+                                @if (finalSubmitted.Any())
+                                {
+                                    <h6 class="fw-bold mt-3 mb-3">Your Stage 2 Submissions</h6>
+                                    <div class="list-group mb-4 shadow-sm">
+                                        @foreach(var sp in finalSubmitted)
+                                        {
+                                            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3">
+                                                <div>
+                                                    <h6 class="mb-1 fw-bold text-dark">@sp.Title</h6>
+                                                    <small class="text-muted">Submitted on: @(sp.SubmittedDate?.ToString("dd MMM yyyy") ?? "N/A")</small>
+                                                </div>
+                                                <div>
+                                                    @if(sp.Status == "Approved") {
+                                                        <span class="badge bg-success py-2 px-3 rounded-pill">Approved</span>
+                                                    } else {
+                                                        <span class="badge bg-warning text-dark py-2 px-3 rounded-pill"><i class="fas fa-hourglass-half me-1"></i> Under Review</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
                                 }
                                 
-                                @if (finalMilestone != null && finalMilestone.Status == "Rejected")
+                                @if (finalPending.Any())
                                 {
-                                    <div class="alert alert-danger d-flex align-items-center mt-3 border-danger shadow-sm">
-                                        <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
-                                        <div>
-                                            <h5 class="fw-bold text-dark mb-1">Final Submission Rejected (Needs Revision)</h5>
-                                            <p class="mb-0 text-muted"><strong>Feedback:</strong> @finalMilestone.SupervisorFeedback</p>
+                                    <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+                                        <input type="hidden" name="formType" value="Stage 2 Form" />
+                                        
+                                        <div class="mb-4">
+                                            <label class="form-label fw-bold text-dark">Select Stage 2 Milestone</label>
+                                            <select name="milestoneId" class="form-select" required>
+                                                <option value="">-- Choose a Milestone --</option>
+                                                @foreach (var m in finalPending)
+                                                {
+                                                    <option value="@m.Id">@m.Title</option>
+                                                }
+                                            </select>
                                         </div>
+                                        
+                                        <div class="mb-4">
+                                            <label class="form-label fw-bold text-dark">Attach Document</label>
+                                            <input type="file" name="attachedFiles" class="form-control" accept=".pdf,.doc,.docx,.ppt,.pptx" required multiple />
+                                        </div>
+                                        
+                                        <button type="submit" class="btn btn-primary fw-bold w-100">Submit Milestone</button>
+                                    </form>
+                                }
+                                else if (!finalSubmitted.Any())
+                                {
+                                    <div class="alert alert-info mt-3 shadow-sm">
+                                        You have no Stage 2 milestones available at this time.
                                     </div>
                                 }
-                                else if (isFinLocked)
-                                {
-                                    <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
-                                        <i class="fas fa-lock fs-2 me-3 text-info"></i>
-                                        <div>
-                                            <h5 class="fw-bold text-dark mb-1">Final Submission Locked</h5>
-                                                    <p class="mb-0 text-muted">Your final submission is currently: <span class="badge bg-white text-dark ms-1 shadow-sm border">@finalMilestone.Status</span></p>
-                                            @if (!string.IsNullOrEmpty(finalMilestone?.SupervisorFeedback))
-                                            {
-                                                <hr class="my-2 border-info opacity-25">
-                                                <p class="mb-0 text-dark"><strong>Feedback:</strong> @finalMilestone.SupervisorFeedback</p>
-                                            }
-                                            @if (Model.VivaDate.HasValue)
-                                            {
-                                                <hr class="my-2 border-info opacity-25">
-                                                <p class="mb-0 text-dark"><strong><i class="fas fa-calendar-alt text-success me-1"></i> Scheduled Viva Date:</strong> <span class="text-success fw-bold">@Model.VivaDate.Value.ToString("dd MMMM yyyy, hh:mm tt")</span></p>
-                                            }
-                                        </div>
-                                    </div>
-                                }
-
-                                <div class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1;">
-                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                                        <div>
-                                            <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>FYP Final Thesis Template</div>
-                                            <div class="text-muted small">Download the official University template containing the correct structure (Cover, Abstract, TOC, Chapters).</div>
-                                        </div>
-                                        <a href="@Url.Action("DownloadFinalTemplate", "Student")"
-                                           class="btn btn-outline-dark fw-semibold rounded-3 px-4 py-2 text-decoration-none d-flex align-items-center gap-2"
-                                           style="white-space: nowrap;">
-                                            <i class="fas fa-download"></i> Download Template (.docx)
-                                        </a>
-                                    </div>
-                                </div>
-
-                                @if (!isFinLocked)
-                                {
-                                <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
-                                    <input type="hidden" name="formType" value="Final Submission Form" />
-                                    <input type="hidden" name="milestoneId" value="@finalMilestoneId" />
-
-
-                                <div class="form-section-title">Part 1: Thesis Metadata</div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Final Project Title</label>
-                                    <input type="text" name="title" class="form-control bg-light" value="@Model.Title" readonly required />
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Abstract</label>
-                                    <textarea name="abstract" id="finalAbstract" class="form-control" rows="4" required placeholder="Enter the project abstract..."></textarea>
-                                    <div id="finalAbstractError" class="text-danger fw-bold small mt-1 d-none">Abstract must be at least 50 characters long.</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Acknowledgements (Optional)</label>
-                                    <textarea name="acknowledgements" id="finalAck" class="form-control" rows="2" placeholder="Acknowledge individuals and academic support..."></textarea>
-                                    <div id="finalAckError" class="text-danger fw-bold small mt-1 d-none">Acknowledgements must be at least 10 characters long if provided.</div>
-                                </div>
-
-                                <div class="form-section-title">Part 2: Project Repos & Viva</div>
-                                <div class="row g-3 mb-3">
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-semibold">Link to Source Code Repository (Optional)</label>
-                                        <input type="url" name="sourceCodeLink" id="finalRepo" class="form-control" placeholder="https://github.com/..." />
-                                        <div id="finalRepoError" class="text-danger fw-bold small mt-1 d-none">Please enter a valid URL (e.g. https://github.com/...).</div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-semibold">Viva Oral Examination Date (Assigned by faculty)</label>
-                                        @if (Model.VivaDate.HasValue)
-                                        {
-                                            <input type="text" class="form-control bg-light border-success text-success fw-bold" value="@Model.VivaDate.Value.ToString("dd MMMM yyyy, hh:mm tt")" readonly />
-                                        }
-                                        else
-                                        {
-                                            <input type="text" class="form-control bg-light border-0" value="TBA — Awaiting Final review" readonly />
-                                        }
-                                    </div>
-                                </div>
-
-                                <div class="form-section-title">Part 3: Final File Upload</div>
-                                <div class="mb-4">
-                                    <div class="alert alert-info d-flex align-items-center mb-4 border-0 shadow-sm">
-                                        <i class="fas fa-info-circle fs-3 me-3 text-info"></i>
-                                        <div>
-                                            <strong>Ethics Form Required:</strong> You must complete the Ethics Form and upload it as a PDF along with your Final Thesis.
-                                            <div class="mt-2">
-                                                <a href="/documents/Ethics Form_6000CEM.docx" class="btn btn-sm btn-outline-info bg-white fw-bold" download>
-                                                    <i class="fas fa-download me-1"></i> Download Ethics Form Template
-                                                </a>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="row g-4">
-                                        <div class="col-md-4">
-                                            <label class="form-label fw-semibold mb-2">Upload Final Thesis (PDF)</label>
-                                            <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="finalDropZone" onclick="document.getElementById('finalDocument').click()">
-                                                <i class="fas fa-cloud-upload-alt fs-1 mb-3" style="color: #ef4444 !important;"></i>
-                                                <h6 class="fw-bold mb-1">Drag & Drop thesis</h6>
-                                                <p class="text-muted small mb-0">or click to browse</p>
-                                                <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
-                                                <input type="file" name="attachedFile" id="finalDocument" class="d-none" accept=".pdf" onchange="updateFileNameForFinal(this)" />
-                                                <div id="finalFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please upload your final thesis PDF.</div>
-                                                <div id="finalFileNameDisplay" class="mt-3 fw-bold text-danger" style="display:none;">
-                                                    <i class="fas fa-file-pdf me-2"></i><span id="fFinalName"></span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label class="form-label fw-semibold mb-2">Upload Turnitin Report (PDF)</label>
-                                            <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="turnitinDropZone" onclick="document.getElementById('turnitinDocument').click()">
-                                                <i class="fas fa-search fs-1 mb-3" style="color: #10b981 !important;"></i>
-                                                <h6 class="fw-bold mb-1">Drag & Drop report</h6>
-                                                <p class="text-muted small mb-0">or click to browse</p>
-                                                <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
-                                                <input type="file" name="attachedFiles" id="turnitinDocument" class="d-none" accept=".pdf" onchange="updateFileNameForTurnitin(this)" />
-                                                <div id="turnitinFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please upload your Turnitin Report PDF.</div>
-                                                <div id="turnitinFileNameDisplay" class="mt-3 fw-bold text-success" style="display:none;">
-                                                    <i class="fas fa-file-pdf me-2"></i><span id="fTurnitinName"></span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label class="form-label fw-semibold mb-2">Upload Completed Ethics Form (PDF)</label>
-                                            <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="ethicsDropZone" onclick="document.getElementById('ethicsDocument').click()">
-                                                <i class="fas fa-file-signature fs-1 mb-3" style="color: #3b82f6 !important;"></i>
-                                                <h6 class="fw-bold mb-1">Drag & Drop Ethics Form here</h6>
-                                                <p class="text-muted small mb-0">or click to browse files (PDF ONLY)</p>
-                                                <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
-                                                <input type="file" name="attachedFiles" id="ethicsDocument" class="d-none" accept=".pdf" onchange="updateFileNameForEthics(this)" />
-                                                <div id="ethicsFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please upload your completed Ethics Form PDF.</div>
-                                                <div id="ethicsFileNameDisplay" class="mt-3 fw-bold text-primary" style="display:none;">
-                                                    <i class="fas fa-file-pdf me-2"></i><span id="fEthicsName"></span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                @if (finalMilestone?.Status == "Rejected")
-                                {
-                                    <div class="form-section-title text-danger"><i class="fas fa-history me-2"></i>Part 3: Revision Notes</div>
-                                    <div class="mb-4">
-                                        <label class="form-label fw-semibold">What did you change in this version?</label>
-                                        <textarea name="revisionNotes" class="form-control" rows="3" placeholder="I fixed the formatting and updated Chapter 5..." required></textarea>
-                                        <div class="text-danger fw-bold small mt-1">* Revision Notes are required for resubmissions.</div>
-                                    </div>
-                                }
-
-                                <div class="d-flex gap-3 justify-content-end">
-                                    <button type="submit" class="btn-submit bg-dark border-0" onclick="return validateFinalForm()">
-                                        <i class="fas fa-file-pdf me-1"></i> Submit Final Report
-                                    </button>
-                                </div>
-                            </form>
-                                }
+                            }
                         </div>
                     </div>
 
@@ -1570,5 +1525,6 @@
         });
     </script>
 }
+
 
 

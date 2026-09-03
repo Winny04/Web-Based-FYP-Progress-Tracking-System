@@ -247,6 +247,8 @@
                         <div class="timeline-container mt-2">
                             @foreach (var ms in milestones.OrderBy(m => m.DueDate))
                             {
+                                if (ms.Title.StartsWith("Step ") && ms.Status == "Pending") continue;
+
                                 var rowCls = ms.Status.ToLower() switch {
                                     "approved"    => "approved",
                                     "rejected"    => "rejected",

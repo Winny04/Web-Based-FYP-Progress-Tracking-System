@@ -72,6 +72,12 @@ namespace FYPTracker.Models
         public int? TurnitinScore { get; set; }
         public bool IsTurnitinApproved { get; set; } = false;
 
+        // --- Stage 1 & 2 Workflow Additions ---
+        [StringLength(50)]
+        public string? Stage1Grade { get; set; }
+
+        public string? Stage2ExaminerMarksheetData { get; set; }
+
         // Navigation
         [ForeignKey(nameof(StudentId))]
         public virtual ApplicationUser? Student { get; set; }

@@ -17,6 +17,11 @@ namespace FYPTracker.Models
         public string? Email { get; set; }
         public string? Phone { get; set; } // Shared field
 
+        [StringLength(255)]
+        public string? PushSubscriptionJson { get; set; }
+
+        public ICollection<UserRoleMapping> UserRoles { get; set; }
+
         [StringLength(50)]
         public string? AddedBy { get; set; }
         

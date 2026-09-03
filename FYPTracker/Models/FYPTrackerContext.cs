@@ -20,6 +20,8 @@ namespace FYPTracker.Models
         public virtual DbSet<Programme>         Programme          { get; set; } = null!;
         public virtual DbSet<Specialization>    Specialization     { get; set; } = null!;
         public virtual DbSet<SupervisorAvailability> SupervisorAvailabilities { get; set; } = null!;
+        public virtual DbSet<AppRole>           AppRoles           { get; set; } = null!;
+        public virtual DbSet<UserRoleMapping>   UserRoleMappings   { get; set; } = null!;
 
         // ── FYP Core ───────────────────────────────────────────────
         public virtual DbSet<FYPProject>        FYPProjects        { get; set; } = null!;
@@ -27,6 +29,7 @@ namespace FYPTracker.Models
         public virtual DbSet<FYPFeedback>       FYPFeedbacks       { get; set; } = null!;
         public virtual DbSet<FYPSubmissionFile> FYPSubmissionFiles { get; set; } = null!;
         public virtual DbSet<FYPProjectExaminer> FYPProjectExaminers { get; set; } = null!;
+        public virtual DbSet<FYPProjectStatusHistory> FYPProjectStatusHistories { get; set; } = null!;
 
         // ── Student Module ─────────────────────────────────────────
         public virtual DbSet<SupervisorRequest> SupervisorRequests { get; set; } = null!;
@@ -59,6 +62,8 @@ namespace FYPTracker.Models
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            // Global Query Filter for Soft Deletes
+            modelBuilder.Entity<FYPSubmissionFile>().HasQueryFilter(f => !f.IsDeleted);
             // FYPProject: one student → many projects; one supervisor → many projects
             modelBuilder.Entity<FYPProject>(entity =>
             {

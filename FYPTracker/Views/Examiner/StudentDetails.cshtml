@@ -240,6 +240,22 @@
                                     </td>
                                     <td>@milestone.SubmittedDate?.ToString("dd MMM yyyy")</td>
                                     <td class="text-end">
+                                        @if (milestone.IsReadyForJointEvaluation)
+                                        {
+                                            if (milestone.Title.StartsWith("Step 5"))
+                                            {
+                                                <a href="@Url.Action("GradeMarksheetStage2", "Examiner", new { projectId = Model.Id })" class="btn btn-sm btn-success me-2 mb-2">
+                                                    <i class="fas fa-award me-1"></i> Grade Final Stage 2
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <a href="@Url.Action("GradeMarksheet", "Examiner", new { milestoneId = milestone.Id })" class="btn btn-sm btn-primary me-2 mb-2">
+                                                    <i class="fas fa-edit me-1"></i> Grade Stage 1
+                                                </a>
+                                            }
+                                        }
+
                                         @if(milestone.SubmissionFiles != null && milestone.SubmissionFiles.Any())
                                         {
                                             @foreach(var file in milestone.SubmissionFiles)

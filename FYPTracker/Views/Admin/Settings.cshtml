@@ -68,7 +68,49 @@
             </div>
         </div>
 
+        @* ── STAGE 2: Final Evaluation Cards (commented out — uncomment when ready) ────────────
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm border-0 rounded-4 p-4 h-100 border-top border-4" style="border-top-color: #8b5cf6 !important;">
+                <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-graduation-cap me-2 text-purple"></i>Final Evaluation Dates</h5>
+                <p class="text-muted small mb-4">Set the global due dates for the FYP 2 Final Evaluation submission steps for the current session.</p>
+                <form asp-action="UpdateFinalEvaluationDeadlines" method="post" class="mt-auto">
+                    <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
+                    
+                    @if(string.IsNullOrEmpty(ViewBag.CurrentSessionFilter))
+                    {
+                        <div class="alert alert-warning border-0 p-2 small mb-3">No active academic session found.</div>
+                    }
+                    else
+                    {
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted">Steps 1-4 Deadline</label>
+                            <input type="date" name="step1to4Deadline" class="form-control bg-light" value="@ViewBag.Step1to4Deadline" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted">Step 5 (Slides) Deadline</label>
+                            <input type="date" name="step5Deadline" class="form-control bg-light" value="@ViewBag.Step5Deadline" required />
+                        </div>
+                        <button type="submit" class="btn text-white w-100 fw-bold" style="background: #8b5cf6;">Save Deadlines</button>
+                    }
+                </form>
+            </div>
+        </div>
         
+        <div class="col-md-6 col-lg-4">
+            <div class="card shadow-sm border-0 rounded-4 p-4 h-100 border-top border-4" style="border-top-color: #f59e0b !important;">
+                <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-magic me-2 text-warning"></i>Generate Step Milestones</h5>
+                <p class="text-muted small mb-4">Retroactively create the 5 Final Evaluation steps for all existing projects with an approved Final/Thesis milestone that don't have steps yet.</p>
+                <form asp-action="SeedFinalEvaluationSteps" method="post" class="mt-auto">
+                    <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
+                    <button type="submit" class="btn w-100 fw-bold text-dark" style="background: #fef3c7; border: 2px solid #f59e0b;"
+                        onclick="return confirm('This will create Step 1-5 milestones for all eligible projects in @ViewBag.CurrentSessionFilter. Continue?')">
+                        <i class="fas fa-bolt me-1 text-warning"></i>Generate Step Milestones Now
+                    </button>
+                </form>
+            </div>
+        </div>
+        ── END STAGE 2 ── *@
+
         <div class="col-md-6 col-lg-4">
             <div class="card shadow-sm border-0 rounded-4 p-4 h-100">
                 <h5 class="fw-bold mb-3 text-danger"><i class="fas fa-shield-alt me-2"></i>Defense List</h5>
@@ -136,4 +178,5 @@
             </div>
         </div>
     </div>
-</div>
+
+

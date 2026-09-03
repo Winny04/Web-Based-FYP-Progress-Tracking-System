@@ -254,6 +254,12 @@ namespace FYPTracker.Controllers
         [Authorize]
         public ActionResult EditProfile(string name)
         {
+            if (User.Identity.Name != name)
+            {
+                TempData["Error"] = "You are not authorized to edit this profile.";
+                return RedirectToAction("Profile", new { name = User.Identity.Name });
+            }
+
             var check = _context.ApplicationUsers
                 .Include(x => x.EmpDepartment)
                 .Where(d => d.UserName == name).FirstOrDefault();
@@ -305,6 +311,12 @@ namespace FYPTracker.Controllers
         [HttpPost]
         public ActionResult EditProfile(EmployeeEditVM ApplicationUser, IFormFile? picture, string isImgChanged)
         {
+            if (User.Identity.Name != ApplicationUser.UserName)
+            {
+                TempData["Error"] = "You are not authorized to edit this profile.";
+                return RedirectToAction("Profile", new { name = User.Identity.Name });
+            }
+
             var model = _context.ApplicationUsers.Where(d => d.Id == ApplicationUser.Id).FirstOrDefault();
             var pattern = @"^[a-zA-Z0-9](\.?[a-zA-Z0-9]){2,}@(gmail\.com|student\.newinti\.edu\.my|newinti\.edu\.my)$";
             Regex r = new Regex(pattern, RegexOptions.IgnoreCase);

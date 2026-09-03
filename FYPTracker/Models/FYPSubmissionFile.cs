@@ -12,6 +12,13 @@ namespace FYPTracker.Models
 
         public int MilestoneId { get; set; }
 
+        [StringLength(255)]
+        public string? Remarks { get; set; }
+
+        public bool IsDeleted { get; set; } = false;
+
+        public DateTime? DeletedDate { get; set; }
+
         [Required]
         [StringLength(255)]
         public string FileName { get; set; } = string.Empty;

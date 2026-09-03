@@ -465,6 +465,60 @@ namespace FYPTracker.Controllers
                 }
             }
         }
+
+        // --- Joint Evaluation Marksheet ---
+        [HttpGet]
+        public async Task<IActionResult> GradeMarksheet(int milestoneId)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .ThenInclude(p => p.Student)
+                .Include(m => m.SubmissionFiles)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
+
+            if (milestone == null || !milestone.IsReadyForJointEvaluation)
+            {
+                TempData["Error"] = "Invalid milestone or it is not ready for joint evaluation.";
+                return RedirectToAction("Index");
+            }
+
+            ViewBag.Role = "Examiner";
+            return View("~/Views/Shared/GradeMarksheet.cshtml", milestone);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> GradeMarksheet(int milestoneId, string marksheetData, string stage1Grade)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
+
+            if (milestone == null || !milestone.IsReadyForJointEvaluation)
+            {
+                TempData["Error"] = "Invalid milestone or it is not ready for joint evaluation.";
+                return RedirectToAction("Index");
+            }
+
+            milestone.ExaminerMarksheetData = marksheetData;
+            milestone.Status = "Completed"; 
+            
+            if (!string.IsNullOrEmpty(stage1Grade))
+            {
+                milestone.Project.Stage1Grade = stage1Grade;
+            }
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Your joint evaluation marks have been saved successfully.";
+            return RedirectToAction("StudentDetails", new { projectId = milestone.FYPProjectId });
+        }
+
         private string GetGradeLabel(double score)
         {
             if (score >= 80) return "Excellent";
@@ -472,6 +526,53 @@ namespace FYPTracker.Controllers
             if (score >= 40) return "Average";
             if (score > 0) return "Poor";
             return "Fail";
+        }
+
+        // --- Stage 2 Joint Evaluation Marksheet ---
+        [HttpGet]
+        public async Task<IActionResult> GradeMarksheetStage2(int projectId)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Milestones)
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction("Index");
+            }
+
+            return View(project);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> GradeMarksheetStage2(int projectId, string marksheetData, string finalGrade, string examinerComments)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction("Index");
+            }
+
+            project.Stage2ExaminerMarksheetData = marksheetData;
+            project.FinalGrade = finalGrade;
+            project.ExaminerComments = examinerComments;
+
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Stage 2 final marks have been saved successfully.";
+            return RedirectToAction("StudentDetails", new { projectId = project.Id });
         }
     }
 }
