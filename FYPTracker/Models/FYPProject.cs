@@ -76,6 +76,8 @@ namespace FYPTracker.Models
         [StringLength(50)]
         public string? Stage1Grade { get; set; }
 
+        public double? Stage1TotalScore { get; set; }
+
         public string? Stage2ExaminerMarksheetData { get; set; }
 
         // Navigation

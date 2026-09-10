@@ -225,6 +225,14 @@
                             </tr>
                         </thead>
                         <tbody>
+                            @{
+                                var stage1Milestones = Model.Milestones
+                                    .Where(m => !m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
+                                    .OrderBy(m => m.DueDate ?? m.CreatedDate)
+                                    .ToList();
+                                bool isAllStage1Approved = stage1Milestones.Count >= 3 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+                                var finalStage1Milestone = stage1Milestones.FirstOrDefault(m => m.Title.Contains("Interim Report", StringComparison.OrdinalIgnoreCase));
+                            }
                             @foreach(var milestone in Model.Milestones.OrderBy(m => m.DueDate ?? m.CreatedDate))
                             {
                                 <tr>
@@ -240,25 +248,28 @@
                                     </td>
                                     <td>@milestone.SubmittedDate?.ToString("dd MMM yyyy")</td>
                                     <td class="text-end">
-                                        @if (milestone.IsReadyForJointEvaluation)
+                                        @if (milestone.Title.StartsWith("Step 5", StringComparison.OrdinalIgnoreCase) && milestone.IsReadyForJointEvaluation)
                                         {
-                                            if (milestone.Title.StartsWith("Step 5"))
-                                            {
-                                                <a href="@Url.Action("GradeMarksheetStage2", "Examiner", new { projectId = Model.Id })" class="btn btn-sm btn-success me-2 mb-2">
-                                                    <i class="fas fa-award me-1"></i> Grade Final Stage 2
-                                                </a>
-                                            }
-                                            else
-                                            {
-                                                <a href="@Url.Action("GradeMarksheet", "Examiner", new { milestoneId = milestone.Id })" class="btn btn-sm btn-primary me-2 mb-2">
-                                                    <i class="fas fa-edit me-1"></i> Grade Stage 1
-                                                </a>
-                                            }
+                                            <a href="@Url.Action("GradeMarksheetStage2", "Examiner", new { projectId = Model.Id })" class="btn btn-sm btn-success me-2 mb-2">
+                                                <i class="fas fa-award me-1"></i> Grade Final Stage 2
+                                            </a>
+                                        }
+                                        else if (!milestone.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase) && isAllStage1Approved && milestone.Id == finalStage1Milestone?.Id)
+                                        {
+                                            bool hasGraded = !string.IsNullOrEmpty(milestone.ExaminerMarksheetData);
+                                            <a href="@Url.Action("GradeMarksheet", "Examiner", new { milestoneId = milestone.Id })" class="btn btn-sm @(hasGraded ? "btn-success" : "btn-primary") me-2 mb-2">
+                                                <i class="fas @(hasGraded ? "fa-check-double" : "fa-edit") me-1"></i> @(hasGraded ? "View / Edit Stage 1 Marks" : "Grade Stage 1")
+                                            </a>
                                         }
 
-                                        @if(milestone.SubmissionFiles != null && milestone.SubmissionFiles.Any())
+                                        @{
+                                            var activeFiles = milestone.SubmissionFiles?.Where(f => !f.IsDeleted).ToList();
+                                            var maxAttempt = activeFiles?.Any() == true ? activeFiles.Max(f => f.AttemptNumber) : 1;
+                                            var latestFiles = activeFiles?.Where(f => f.AttemptNumber == maxAttempt).OrderByDescending(f => f.UploadedDate).ToList();
+                                        }
+                                        @if(latestFiles != null && latestFiles.Any())
                                         {
-                                            @foreach(var file in milestone.SubmissionFiles)
+                                            @foreach(var file in latestFiles)
                                             {
                                                 <a href="@file.FilePath" class="btn btn-sm btn-light btn-active-light-primary me-2 mb-2 d-inline-flex align-items-center" target="_blank" title="Download @file.FileName">
                                                     <i class="bi bi-file-earmark-arrow-down fs-4 me-2"></i> @file.FileName

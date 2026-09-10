@@ -27,8 +27,15 @@
         progressColor = "bg-success"; // 61-100%
     }
     
-    // Upcoming deadline check for the alert bar
-    FYPMilestone? upcomingUrgent = milestones
+    bool isStage1Passed = Model?.Stage1Grade == "Pass";
+    bool isStage1Failed = Model?.Stage1Grade == "Fail";
+
+    // Upcoming deadline check for the alert bar (only consider Stage 1 if Stage 1 is not passed yet)
+    var activeMilestonesForDeadlines = isStage1Passed
+        ? milestones
+        : milestones.Where(m => !m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase));
+
+    FYPMilestone? upcomingUrgent = activeMilestonesForDeadlines
         .Where(m => m.DueDate.HasValue && m.Status != "Approved")
         .OrderBy(m => m.DueDate)
         .FirstOrDefault();
@@ -66,11 +73,6 @@
 
     if (Model != null && milestones.Any())
     {
-        var iaf = milestones.FirstOrDefault(m => m.Title.Contains("IAF"));
-        var proposal = milestones.FirstOrDefault(m => m.Title.Contains("Proposal"));
-        var progress = milestones.FirstOrDefault(m => m.Title.Contains("Progress"));
-        var final = milestones.FirstOrDefault(m => m.Title.Contains("Final"));
-
         // Check for ANY rejections first (highest priority)
         var rejectedMilestone = milestones.FirstOrDefault(m => m.Status == "Rejected" || m.Status == "Revision");
         if (rejectedMilestone != null)
@@ -82,36 +84,89 @@
             nextStepLink = "/Student/Forms";
             nextStepDueDate = rejectedMilestone.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
         }
-        else
+        else if (isStage1Failed)
         {
-            // Find the next unapproved milestone chronologically
-            var nextMilestone = milestones
-                .Where(m => m.Status != "Approved")
+            nextStepTitle = "Stage 1 Failed - Action Required";
+            nextStepDesc = "You have not passed Stage 1. Please contact your supervisor regarding repeating or resubmitting Stage 1 requirements.";
+            nextStepIcon = "fas fa-times-circle text-danger";
+            nextStepBtnText = "View Forms";
+            nextStepLink = "/Student/Forms";
+            nextStepDueDate = "Action Required";
+        }
+        else if (!isStage1Passed)
+        {
+            // Stage 1 is still ongoing or awaiting evaluation
+            var stage1Milestones = milestones
+                .Where(m => !m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(m => m.DueDate ?? DateTime.MaxValue)
-                .FirstOrDefault();
+                .ToList();
 
-            if (nextMilestone != null)
+            var nextStage1 = stage1Milestones.FirstOrDefault(m => m.Status != "Approved" && m.Status != "Completed");
+
+            if (nextStage1 != null)
             {
-                bool isPendingSubmission = nextMilestone.Status == "Pending" && !nextMilestone.SubmittedDate.HasValue;
-                
+                bool isPendingSubmission = nextStage1.Status == "Pending" && !nextStage1.SubmittedDate.HasValue;
                 if (isPendingSubmission)
                 {
-                    nextStepTitle = $"Submit {nextMilestone.Title}";
-                    nextStepDesc = $"Your next required milestone is {nextMilestone.Title}. Please prepare and submit your work before the deadline.";
+                    nextStepTitle = $"Submit {nextStage1.Title}";
+                    nextStepDesc = $"Your next required milestone is {nextStage1.Title}. Please prepare and submit your work before the deadline.";
                     nextStepIcon = "fas fa-file-upload";
                     nextStepBtnText = "Go to Forms";
                     nextStepLink = "/Student/Forms";
-                    nextStepDueDate = nextMilestone.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+                    nextStepDueDate = nextStage1.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
                 }
                 else
                 {
                     // It is Submitted or UnderReview
-                    nextStepTitle = $"Wait for Approval: {nextMilestone.Title}";
-                    nextStepDesc = $"Your {nextMilestone.Title} is currently under review by your supervisor. Please wait for their feedback.";
+                    nextStepTitle = $"Wait for Approval: {nextStage1.Title}";
+                    nextStepDesc = $"Your {nextStage1.Title} is currently under review by your supervisor. Please wait for their feedback.";
                     nextStepIcon = "fas fa-hourglass-half";
                     nextStepBtnText = "View Status";
-                    nextStepLink = "/Student/ProjectDetails";
-                    nextStepDueDate = nextMilestone.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+                    nextStepLink = "/Student/Forms";
+                    nextStepDueDate = nextStage1.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+                }
+            }
+            else
+            {
+                // All Stage 1 milestones are approved or submitted, but Stage 1 evaluation by Examiner & Supervisor has not awarded "Pass" yet.
+                nextStepTitle = "Awaiting Stage 1 Evaluation";
+                nextStepDesc = "Your Stage 1 submissions are awaiting evaluation from your Supervisor and Examiner. Stage 2 (Step 1: Turnitin) will unlock automatically once a 'Pass' grade is awarded.";
+                nextStepIcon = "fas fa-hourglass-half text-warning";
+                nextStepBtnText = "View Forms Status";
+                nextStepLink = "/Student/Forms";
+                nextStepDueDate = "Under Evaluation";
+            }
+        }
+        else
+        {
+            // Stage 1 is PASSED! Now evaluate Stage 2
+            var stage2Milestones = milestones
+                .Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(m => m.Title)
+                .ToList();
+
+            var nextStage2 = stage2Milestones.FirstOrDefault(m => m.Status != "Approved");
+
+            if (nextStage2 != null)
+            {
+                bool isPendingSubmission = nextStage2.Status == "Pending" && !nextStage2.SubmittedDate.HasValue;
+                if (isPendingSubmission)
+                {
+                    nextStepTitle = $"Submit {nextStage2.Title}";
+                    nextStepDesc = $"Stage 1 passed! Your next required milestone is {nextStage2.Title}. Please prepare and submit your work before the deadline.";
+                    nextStepIcon = "fas fa-file-upload";
+                    nextStepBtnText = "Go to Stage 2";
+                    nextStepLink = "/Student/Stage2";
+                    nextStepDueDate = nextStage2.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+                }
+                else
+                {
+                    nextStepTitle = $"Wait for Review: {nextStage2.Title}";
+                    nextStepDesc = $"Your {nextStage2.Title} has been submitted and is currently under review.";
+                    nextStepIcon = "fas fa-hourglass-half";
+                    nextStepBtnText = "View Stage 2";
+                    nextStepLink = "/Student/Stage2";
+                    nextStepDueDate = nextStage2.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
                 }
             }
             else
@@ -125,7 +180,7 @@
                 nextStepDueDate = "Completed";
             }
         }
-        
+
         // Single sleek primary color for uniform design
         nextStepColor = "#4f46e5";
     }
@@ -527,6 +582,38 @@
             </div>
             <div class="text-end">
                 <a href="@nextStepLink" class="btn btn-monochrome btn-sm py-2 px-3">@nextStepBtnText</a>
+            </div>
+        </div>
+    }
+
+    @* ── STAGE 1 RESULT ── *@
+    @if (Model != null && !string.IsNullOrEmpty(Model.Stage1Grade))
+    {
+        var stg1ColorHex = Model.Stage1Grade == "Pass" ? "#16a34a" : "#dc2626";
+        var stg1TextColor = Model.Stage1Grade == "Pass" ? "text-success" : "text-danger";
+
+        <div class="premium-card p-4 mb-4" style="border-left: 5px solid @stg1ColorHex;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold @stg1TextColor mb-0"><i class="fas fa-check-double me-2"></i> Stage 1 Joint Evaluation Result</h5>
+                <span class="badge text-white shadow-sm" style="background-color: @stg1ColorHex; font-size: 0.95rem; padding: 6px 16px;">@Model.Stage1Grade</span>
+            </div>
+            
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <p class="text-muted mb-0" style="font-size: 0.95rem;">
+                        Your Stage 1 documentation has been fully evaluated by your Supervisor and Examiner.
+                        @(Model.Stage1Grade == "Pass" ? "Congratulations, you have passed Stage 1 and unlocked Stage 2!" : "Unfortunately, you have failed Stage 1.")
+                    </p>
+                </div>
+                @if (Model.Stage1TotalScore.HasValue)
+                {
+                    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                        <div class="d-inline-block bg-light rounded px-4 py-2 text-center border">
+                            <div class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.05em;">Total Score</div>
+                            <div class="fw-bolder text-dark" style="font-size: 1.8rem;">@Model.Stage1TotalScore.Value.ToString("0.0")<span class="text-muted fs-5 fw-normal">/100</span></div>
+                        </div>
+                    </div>
+                }
             </div>
         </div>
     }

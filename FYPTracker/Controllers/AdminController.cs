@@ -1,4 +1,4 @@
-using FYPTracker.Models;
+﻿using FYPTracker.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
@@ -243,6 +243,14 @@ namespace FYPTracker.Controllers
 
             var projects = await _context.FYPProjects
                 .Include(p => p.Supervisor)
+                .Include(p => p.AssignedExaminers)
+                    .ThenInclude(ae => ae.Examiner)
+                .ToListAsync();
+
+            ViewBag.AvailableExaminers = await _context.ApplicationUsers
+                .Include(u => u.EmpDepartment)
+                .Where(u => u.UserType == "Examiner" && !u.IsResign)
+                .OrderBy(u => u.FullName)
                 .ToListAsync();
 
             var viewModels = students.Select(s => new FYPTracker.ViewModels.ManageProjectItemVM
@@ -254,6 +262,104 @@ namespace FYPTracker.Controllers
             .ToList();
 
             return View(viewModels);
+        }
+
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AssignExaminer(int projectId, int examinerId)
+        {
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.AssignedExaminers)
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            var examiner = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.Id == examinerId && u.UserType == "Examiner" && !u.IsResign);
+
+            if (examiner == null)
+            {
+                TempData["Error"] = "Invalid or inactive Examiner selected.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            var existingAssignments = await _context.FYPProjectExaminers
+                .Where(pe => pe.FYPProjectId == projectId)
+                .ToListAsync();
+
+            if (existingAssignments.Any())
+            {
+                _context.FYPProjectExaminers.RemoveRange(existingAssignments);
+            }
+
+            _context.FYPProjectExaminers.Add(new FYPProjectExaminer
+            {
+                FYPProjectId = project.Id,
+                ExaminerId = examiner.Id,
+                AssignedDate = DateTime.Now
+            });
+
+            await _context.SaveChangesAsync();
+
+            try
+            {
+                var notification = new FYPNotification
+                {
+                    RecipientId = examiner.Id,
+                    Title = "New Project Assignment",
+                    Message = $"Admin has assigned you as the Examiner for project: '{project.Title}'.",
+                    Type = "ExaminerAssignment",
+                    RelatedRecordId = project.Id,
+                    CreatedDate = DateTime.Now,
+                    IsRead = false
+                };
+                _context.FYPNotifications.Add(notification);
+                await _context.SaveChangesAsync();
+
+                if (!string.IsNullOrEmpty(examiner.Email))
+                {
+                    string subject = "FYP Tracking System - Examiner Assignment";
+                    string content = $"<p>Dear {examiner.FullName},</p><p>You have been assigned by the Administrator as the Examiner for project: <strong>{project.Title}</strong> (Student: <strong>{project.Student?.FullName ?? "Unknown"}</strong>).</p><p>Please log in to the FYP Tracking System to view details.</p>";
+                    _emailService.Send(examiner.Email, subject, content);
+                }
+            }
+            catch { /* Continue on notification error */ }
+
+            TempData["Success"] = $"Successfully assigned {examiner.FullName} as Examiner for '{project.Title}'.";
+            return RedirectToAction(nameof(ManageProjects));
+        }
+
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemoveExaminer(int projectId)
+        {
+            var project = await _context.FYPProjects
+                .Include(p => p.AssignedExaminers)
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project != null)
+            {
+                var existing = await _context.FYPProjectExaminers
+                    .Where(pe => pe.FYPProjectId == projectId)
+                    .ToListAsync();
+
+                if (existing.Any())
+                {
+                    _context.FYPProjectExaminers.RemoveRange(existing);
+                    await _context.SaveChangesAsync();
+                }
+                TempData["Success"] = "Examiner assignment removed successfully.";
+            }
+            return RedirectToAction(nameof(ManageProjects));
         }
 
         [Authorize]

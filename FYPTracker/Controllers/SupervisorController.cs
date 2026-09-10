@@ -332,6 +332,8 @@ namespace FYPTracker.Controllers
             var projects = await _context.FYPProjects
                 .Include(p => p.Student)
                 .Include(p => p.Milestones)
+                .Include(p => p.AssignedExaminers)
+                    .ThenInclude(ae => ae.Examiner)
                 .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign && (activeSession == null || p.AcademicSession == activeSession))
                 .OrderByDescending(p => p.CreatedDate)
                 .ToListAsync();
@@ -770,7 +772,7 @@ namespace FYPTracker.Controllers
                     .ThenInclude(p => p.Student)
                 .Include(m => m.Feedbacks)
                 .Include(m => m.SubmissionFiles)
-                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (m.Status == "Submitted" || m.Status == "Pending" || m.Status == "Approved" || m.Status == "Revision" || m.Status == "Rejected" || m.Status == "UnderReview") && (activeSession == null || m.Project.AcademicSession == activeSession))
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (m.Status == "Submitted" || m.Status == "Pending" || m.Status == "Approved" || m.Status == "Completed" || m.Status == "Revision" || m.Status == "Rejected" || m.Status == "UnderReview") && (activeSession == null || m.Project.AcademicSession == activeSession))
                 .OrderBy(m => m.Status == "Submitted" ? 0 : 1)
                 .ThenBy(m => m.DueDate)
                 .ToListAsync();
@@ -1724,9 +1726,20 @@ namespace FYPTracker.Controllers
                 .Include(m => m.SubmissionFiles)
                 .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.SupervisorId == user.Id);
 
-            if (milestone == null || !milestone.IsReadyForJointEvaluation)
+            if (milestone == null)
             {
-                TempData["Error"] = "Invalid milestone or it is not ready for joint evaluation.";
+                TempData["Error"] = "Milestone not found or unauthorized.";
+                return RedirectToAction("ReviewSubmissions");
+            }
+
+            var stage1Milestones = await _context.FYPMilestones
+                .Where(m => m.FYPProjectId == milestone.FYPProjectId && !m.Title.StartsWith("Step"))
+                .ToListAsync();
+            bool isAllStage1Approved = stage1Milestones.Count >= 3 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+
+            if (!isAllStage1Approved && milestone.Status != "Completed")
+            {
+                TempData["Error"] = "All 3 Stage 1 milestones must be approved before joint evaluation.";
                 return RedirectToAction("ReviewSubmissions");
             }
 
@@ -1745,14 +1758,38 @@ namespace FYPTracker.Controllers
                 .Include(m => m.Project)
                 .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.SupervisorId == user.Id);
 
-            if (milestone == null || !milestone.IsReadyForJointEvaluation)
+            if (milestone == null)
             {
-                TempData["Error"] = "Invalid milestone or it is not ready for joint evaluation.";
+                TempData["Error"] = "Invalid milestone.";
                 return RedirectToAction("ReviewSubmissions");
             }
 
             milestone.SupervisorMarksheetData = marksheetData;
-            milestone.Status = "Completed"; // Or leave as Approved depending on if Examiner also finished
+            
+            if (!string.IsNullOrEmpty(milestone.ExaminerMarksheetData))
+            {
+                milestone.Status = "Completed";
+                try
+                {
+                    using var supDoc = System.Text.Json.JsonDocument.Parse(marksheetData);
+                    using var exDoc = System.Text.Json.JsonDocument.Parse(milestone.ExaminerMarksheetData);
+                    
+                    if (supDoc.RootElement.TryGetProperty("Total", out var supTotalProp) && exDoc.RootElement.TryGetProperty("Total", out var exTotalProp))
+                    {
+                        double supTotal = 0;
+                        if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(supTotalProp.GetString(), out double s)) { supTotal = s; }
+                        else if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { supTotal = supTotalProp.GetDouble(); }
+
+                        double exTotal = 0;
+                        if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(exTotalProp.GetString(), out double e)) { exTotal = e; }
+                        else if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { exTotal = exTotalProp.GetDouble(); }
+                        
+                        milestone.Project.Stage1TotalScore = (supTotal + exTotal) / 2.0;
+                    }
+                }
+                catch { }
+            }
+
             await _context.SaveChangesAsync();
 
             TempData["Success"] = "Your joint evaluation marks have been saved successfully.";

@@ -479,10 +479,21 @@ namespace FYPTracker.Controllers
                 .Include(m => m.SubmissionFiles)
                 .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
 
-            if (milestone == null || !milestone.IsReadyForJointEvaluation)
+            if (milestone == null)
             {
-                TempData["Error"] = "Invalid milestone or it is not ready for joint evaluation.";
+                TempData["Error"] = "Milestone not found or unauthorized.";
                 return RedirectToAction("Index");
+            }
+
+            var stage1Milestones = await _context.FYPMilestones
+                .Where(m => m.FYPProjectId == milestone.FYPProjectId && !m.Title.StartsWith("Step"))
+                .ToListAsync();
+            bool isAllStage1Approved = stage1Milestones.Count >= 3 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+
+            if (!milestone.IsReadyForJointEvaluation && !isAllStage1Approved)
+            {
+                TempData["Error"] = "All 3 Stage 1 milestones must be approved by the supervisor before joint evaluation.";
+                return RedirectToAction("StudentDetails", new { projectId = milestone.FYPProjectId });
             }
 
             ViewBag.Role = "Examiner";
@@ -500,14 +511,49 @@ namespace FYPTracker.Controllers
                 .Include(m => m.Project)
                 .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
 
-            if (milestone == null || !milestone.IsReadyForJointEvaluation)
+            if (milestone == null)
             {
-                TempData["Error"] = "Invalid milestone or it is not ready for joint evaluation.";
+                TempData["Error"] = "Milestone not found or unauthorized.";
                 return RedirectToAction("Index");
             }
 
+            var stage1Milestones = await _context.FYPMilestones
+                .Where(m => m.FYPProjectId == milestone.FYPProjectId && !m.Title.StartsWith("Step"))
+                .ToListAsync();
+            bool isAllStage1Approved = stage1Milestones.Count >= 3 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+
+            if (!isAllStage1Approved)
+            {
+                TempData["Error"] = "All 3 Stage 1 milestones must be approved by the supervisor before joint evaluation.";
+                return RedirectToAction("StudentDetails", new { projectId = milestone.FYPProjectId });
+            }
+
+            milestone.IsReadyForJointEvaluation = true;
             milestone.ExaminerMarksheetData = marksheetData;
-            milestone.Status = "Completed"; 
+            
+            if (!string.IsNullOrEmpty(milestone.SupervisorMarksheetData))
+            {
+                milestone.Status = "Completed";
+                try
+                {
+                    using var supDoc = System.Text.Json.JsonDocument.Parse(milestone.SupervisorMarksheetData);
+                    using var exDoc = System.Text.Json.JsonDocument.Parse(marksheetData);
+                    
+                    if (supDoc.RootElement.TryGetProperty("Total", out var supTotalProp) && exDoc.RootElement.TryGetProperty("Total", out var exTotalProp))
+                    {
+                        double supTotal = 0;
+                        if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(supTotalProp.GetString(), out double s)) { supTotal = s; }
+                        else if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { supTotal = supTotalProp.GetDouble(); }
+
+                        double exTotal = 0;
+                        if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(exTotalProp.GetString(), out double e)) { exTotal = e; }
+                        else if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { exTotal = exTotalProp.GetDouble(); }
+                        
+                        milestone.Project.Stage1TotalScore = (supTotal + exTotal) / 2.0;
+                    }
+                }
+                catch { }
+            }
             
             if (!string.IsNullOrEmpty(stage1Grade))
             {

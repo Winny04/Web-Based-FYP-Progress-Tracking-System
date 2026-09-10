@@ -55,7 +55,7 @@
                             <span class="badge bg-dark fs-6" id="valTech">0/100</span>
                         </div>
                         <p class="text-muted small mb-3">Evaluates the complexity of the solution, analytical rigor, and depth of technical discussion.</p>
-                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" id="scoreTech" oninput="updateScore('Tech')">
+                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" value="0" id="scoreTech" oninput="updateScore('Tech')">
                     </div>
 
                     <!-- Literature Review -->
@@ -65,7 +65,7 @@
                             <span class="badge bg-dark fs-6" id="valLit">0/100</span>
                         </div>
                         <p class="text-muted small mb-3">Evaluates the comprehensive use of sources, critical analysis of existing work, and synthesis of ideas.</p>
-                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" id="scoreLit" oninput="updateScore('Lit')">
+                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" value="0" id="scoreLit" oninput="updateScore('Lit')">
                     </div>
 
                     <!-- Methodology -->
@@ -75,7 +75,7 @@
                             <span class="badge bg-dark fs-6" id="valMeth">0/100</span>
                         </div>
                         <p class="text-muted small mb-3">Evaluates the systematic approach, experimental design, and justification of methods used.</p>
-                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" id="scoreMeth" oninput="updateScore('Meth')">
+                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" value="0" id="scoreMeth" oninput="updateScore('Meth')">
                     </div>
 
                     <!-- Presentation -->
@@ -85,7 +85,7 @@
                             <span class="badge bg-dark fs-6" id="valPres">0/100</span>
                         </div>
                         <p class="text-muted small mb-3">Evaluates clarity, grammar, structural flow, citations, and overall academic formatting.</p>
-                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" id="scorePres" oninput="updateScore('Pres')">
+                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" value="0" id="scorePres" oninput="updateScore('Pres')">
                     </div>
 
                     @if (ViewBag.Role == "Supervisor")
@@ -97,7 +97,7 @@
                                 <span class="badge bg-primary fs-6" id="valAttitude">0/100</span>
                             </div>
                             <p class="text-muted small mb-3">Evaluates the student's independence, consistency in meetings, and response to feedback throughout the semester.</p>
-                            <input type="range" class="form-range custom-range custom-range-primary" min="0" max="100" step="1" id="scoreAttitude" oninput="updateScore('Attitude')">
+                            <input type="range" class="form-range custom-range custom-range-primary" min="0" max="100" step="1" value="0" id="scoreAttitude" oninput="updateScore('Attitude')">
                         </div>
                     }
 
@@ -197,10 +197,32 @@
                 total = (tech * 0.25) + (lit * 0.25) + (meth * 0.25) + (pres * 0.25);
             }
             
-            document.getElementById('totalScore').innerText = Math.round(total);
+            let roundedTotal = Math.round(total);
+            document.getElementById('totalScore').innerText = roundedTotal;
+            
+            // Validation: Examiner cannot select Pass if score < 50
+            let stage1GradeSelect = document.getElementById('stage1Grade');
+            if (stage1GradeSelect) {
+                let passOption = stage1GradeSelect.querySelector('option[value="Pass"]');
+                if (passOption) {
+                    if (roundedTotal < 50) {
+                        passOption.disabled = true;
+                        if (stage1GradeSelect.value === 'Pass') {
+                            stage1GradeSelect.value = ''; 
+                        }
+                    } else {
+                        passOption.disabled = false;
+                    }
+                }
+            }
         }
 
         function submitMarksheet() {
+            let form = document.getElementById('marksheetForm');
+            if (!form.reportValidity()) {
+                return; // Prevent submission if required fields (like Pass/Fail select) are missing
+            }
+
             let data = {
                 Tech: document.getElementById('scoreTech').value,
                 Lit: document.getElementById('scoreLit').value,
@@ -214,7 +236,7 @@
             }
 
             document.getElementById('marksheetData').value = JSON.stringify(data);
-            document.getElementById('marksheetForm').submit();
+            form.submit();
         }
         
         // Initial calculation

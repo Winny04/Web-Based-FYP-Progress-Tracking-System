@@ -119,12 +119,10 @@
                 }
                 else
                 {
-                    <div class="text-muted mb-4 small">
-                        No examiner assigned to this project yet.
+                    <div class="p-3 bg-light rounded-3 text-muted mb-3 small d-flex align-items-center gap-2">
+                        <i class="fas fa-info-circle text-primary fs-5"></i>
+                        <span>No examiner assigned yet.<br /><small class="text-muted">Examiners are assigned by the Administrator.</small></span>
                     </div>
-                    <button type="button" class="btn w-100 mb-3" style="background: #2563eb; color: white; font-weight: 600; border-radius: 10px;" data-bs-toggle="modal" data-bs-target="#inviteExaminerModal">
-                        <i class="fas fa-user-plus me-2"></i>Invite Examiner
-                    </button>
                 }
 
             </div>
@@ -155,122 +153,6 @@
                         </div>
                     </div>
                 }
-            </div>
-        </div>
-
-        <!-- Invite Examiner Modal -->
-        <div class="modal fade" id="inviteExaminerModal" tabindex="-1" aria-labelledby="inviteExaminerModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered modal-lg">
-                <div class="modal-content" style="border-radius: 16px; border: none; overflow: hidden;">
-                    <div class="modal-header" style="background: var(--blue-grad); color: white; border-bottom: none; padding: 20px 24px;">
-                        <h5 class="modal-title fw-bold" id="inviteExaminerModalLabel"><i class="fas fa-user-plus me-2"></i>Select an Examiner</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body p-4 bg-light">
-                        <p class="text-muted mb-4">Select an examiner from the list below to evaluate <strong>@Model.Title</strong>.</p>
-                        
-                        <!-- Filters -->
-                        <div class="row g-2 mb-4">
-                            <div class="col-md-12">
-                                <input type="text" id="examinerSearch" class="form-control" placeholder="Search by name or email..." onkeyup="filterExaminers()">
-                            </div>
-                            <div class="col-md-4">
-                                <select id="deptFilter" class="form-select" onchange="filterExaminers()">
-                                    <option value="">All Departments</option>
-                                    @if (ViewBag.AvailableExaminers != null)
-                                    {
-                                        var depts = ((IEnumerable<ApplicationUser>)ViewBag.AvailableExaminers)
-                                            .Where(u => !string.IsNullOrEmpty(u.EmpDepartment?.Name))
-                                            .SelectMany(u => u.EmpDepartment!.Name.Split(',', StringSplitOptions.RemoveEmptyEntries))
-                                            .Select(d => d.Trim())
-                                            .Distinct()
-                                            .OrderBy(d => d);
-                                        foreach (var d in depts)
-                                        {
-                                            <option value="@d">@d</option>
-                                        }
-                                    }
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <select id="progFilter" class="form-select" onchange="filterExaminers()">
-                                    <option value="">All Programmes</option>
-                                    @if (ViewBag.AvailableExaminers != null)
-                                    {
-                                        var progs = ((IEnumerable<ApplicationUser>)ViewBag.AvailableExaminers)
-                                            .Where(u => !string.IsNullOrEmpty(u.Programme))
-                                            .SelectMany(u => u.Programme.Split(',', StringSplitOptions.RemoveEmptyEntries))
-                                            .Select(p => p.Trim())
-                                            .Distinct()
-                                            .OrderBy(p => p);
-                                        foreach (var p in progs)
-                                        {
-                                            <option value="@p">@p</option>
-                                        }
-                                    }
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <select id="specFilter" class="form-select" onchange="filterExaminers()">
-                                    <option value="">All Specializations</option>
-                                    @if (ViewBag.AvailableExaminers != null)
-                                    {
-                                        var specs = ((IEnumerable<ApplicationUser>)ViewBag.AvailableExaminers)
-                                            .Where(u => !string.IsNullOrEmpty(u.Specialization))
-                                            .SelectMany(u => u.Specialization.Split(',', StringSplitOptions.RemoveEmptyEntries))
-                                            .Select(s => s.Trim())
-                                            .Distinct()
-                                            .OrderBy(s => s);
-                                        foreach (var s in specs)
-                                        {
-                                            <option value="@s">@s</option>
-                                        }
-                                    }
-                                </select>
-                            </div>
-                        </div>
-                        
-                        <div class="row row-cols-1 row-cols-md-2 g-4" id="examinerCardsContainer">
-                            @if (ViewBag.AvailableExaminers != null)
-                            {
-                                foreach (var examiner in (IEnumerable<ApplicationUser>)ViewBag.AvailableExaminers)
-                                {
-                                    <div class="col examiner-card-wrapper" 
-                                         data-name="@(examiner.FullName?.ToLower())" 
-                                         data-email="@(examiner.Email?.ToLower())" 
-                                         data-dept="@(examiner.EmpDepartment?.Name)" 
-                                         data-prog="@(examiner.Programme)" 
-                                         data-spec="@(examiner.Specialization)">
-                                        <div class="card h-100 border-0 shadow-sm" style="border-radius: 12px; transition: transform 0.2s;">
-                                            <div class="card-body d-flex flex-column align-items-center text-center p-4">
-                                                <div style="width:60px;height:60px;border-radius:50%;background:#e0e7ff;display:flex;align-items:center;justify-content:center;color:#4f46e5;font-weight:700;font-size:24px; margin-bottom: 12px;">
-                                                    @(examiner.FullName?.Substring(0, 1) ?? "E")
-                                                </div>
-                                                <h6 class="fw-bold mb-1">@examiner.FullName</h6>
-                                                <p class="text-muted small mb-2">@examiner.Email</p>
-                                                
-                                                <div class="d-flex flex-wrap justify-content-center gap-2 mb-4">
-                                                    @if(!string.IsNullOrEmpty(examiner.EmpDepartment?.Name)) { <span class="badge" style="background: #475569; color: white; font-size: 0.75rem; padding: 5px 10px; border-radius: 6px;"><i class="fas fa-building me-1"></i> @examiner.EmpDepartment.Name</span> }
-                                                    @if(!string.IsNullOrEmpty(examiner.Programme)) { <span class="badge" style="background: #0ea5e9; color: white; font-size: 0.75rem; padding: 5px 10px; border-radius: 6px;"><i class="fas fa-graduation-cap me-1"></i> @examiner.Programme</span> }
-                                                    @if(!string.IsNullOrEmpty(examiner.Specialization)) { <span class="badge" style="background: #8b5cf6; color: white; font-size: 0.75rem; padding: 5px 10px; border-radius: 6px;"><i class="fas fa-star me-1"></i> @examiner.Specialization</span> }
-                                                </div>
-                                                
-                                                <form action="/Supervisor/InviteExaminer" method="post" class="mt-auto w-100" onsubmit="return confirm('Are you sure you want to assign @(examiner.FullName) as the Examiner for this project? \n\nNote: Once assigned, you cannot change the examiner later.');">
-                                                    @Html.AntiForgeryToken()
-                                                    <input type="hidden" name="projectId" value="@Model.Id" />
-                                                    <input type="hidden" name="examinerId" value="@examiner.Id" />
-                                                    <button type="submit" class="btn w-100" style="background: #2563eb; color: #ffffff; font-weight: 600; border-radius: 8px; transition: background-color 0.2s;" onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563eb'">
-                                                        Select Examiner
-                                                    </button>
-                                                </form>
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-                            }
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -312,7 +194,8 @@
                                             <i class="fas fa-file-alt"></i> Review
                                         </a>
                                     }
-                                </div>                            </div>
+                                </div>
+                            </div>
                         }
                     </div>
                 }
@@ -360,53 +243,5 @@
                 }
             });
         });
-        function filterExaminers() {
-            const searchTerm = document.getElementById('examinerSearch').value.toLowerCase();
-            const deptFilter = document.getElementById('deptFilter').value;
-            const progFilter = document.getElementById('progFilter').value;
-            const specFilter = document.getElementById('specFilter').value;
-
-            const cards = document.querySelectorAll('.examiner-card-wrapper');
-            let visibleCount = 0;
-
-            cards.forEach(card => {
-                const name = card.getAttribute('data-name') || "";
-                const email = card.getAttribute('data-email') || "";
-                const dept = card.getAttribute('data-dept') || "";
-                const prog = card.getAttribute('data-prog') || "";
-                const spec = card.getAttribute('data-spec') || "";
-
-                const matchesSearch = name.includes(searchTerm) || email.includes(searchTerm);
-                
-                const hasDept = deptFilter === "" || dept.split(',').map(s => s.trim()).includes(deptFilter);
-                const hasProg = progFilter === "" || prog.split(',').map(s => s.trim()).includes(progFilter);
-                const hasSpec = specFilter === "" || spec.split(',').map(s => s.trim()).includes(specFilter);
-
-                if (matchesSearch && hasDept && hasProg && hasSpec) {
-                    card.style.display = 'block';
-                    visibleCount++;
-                } else {
-                    card.style.display = 'none';
-                }
-            });
-            
-            // Optionally handle empty state
-            const container = document.getElementById('examinerCardsContainer');
-            let emptyMsg = document.getElementById('examiner-empty-msg');
-            if (visibleCount === 0) {
-                if (!emptyMsg) {
-                    emptyMsg = document.createElement('div');
-                    emptyMsg.id = 'examiner-empty-msg';
-                    emptyMsg.className = 'col-12 text-center text-muted py-5';
-                    emptyMsg.innerHTML = 'No examiners found matching the selected filters.';
-                    container.appendChild(emptyMsg);
-                }
-                emptyMsg.style.display = 'block';
-            } else {
-                if (emptyMsg) {
-                    emptyMsg.style.display = 'none';
-                }
-            }
-        }
     </script>
 }

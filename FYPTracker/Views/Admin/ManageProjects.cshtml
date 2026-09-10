@@ -1,14 +1,135 @@
+@using FYPTracker.Models
 @model IEnumerable<FYPTracker.ViewModels.ManageProjectItemVM>
 @{
     ViewData["Title"] = "Project Management";
+    var availableExaminers = ViewBag.AvailableExaminers as IEnumerable<ApplicationUser> ?? Enumerable.Empty<ApplicationUser>();
+
+    var depts = availableExaminers
+        .Where(u => !string.IsNullOrEmpty(u.EmpDepartment?.Name))
+        .SelectMany(u => u.EmpDepartment!.Name.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        .Select(d => d.Trim())
+        .Distinct()
+        .OrderBy(d => d);
+
+    var progs = availableExaminers
+        .Where(u => !string.IsNullOrEmpty(u.Programme))
+        .SelectMany(u => u.Programme!.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        .Select(p => p.Trim())
+        .Distinct()
+        .OrderBy(p => p);
+
+    var specs = availableExaminers
+        .Where(u => !string.IsNullOrEmpty(u.Specialization))
+        .SelectMany(u => u.Specialization!.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        .Select(s => s.Trim())
+        .Distinct()
+        .OrderBy(s => s);
 }
+
+<style>
+    /* ========================================================= */
+    /* Refined & Cohesive Examiner Modal Styling (Clean & Modern)*/
+    /* ========================================================= */
+    .modal-header-slate {
+        background: #1e293b;
+        color: #ffffff;
+        border-bottom: 1px solid #334155;
+        padding: 18px 24px;
+    }
+    .modal-body-subtle {
+        background: #f8fafc;
+    }
+    
+    /* Examiner Directory Card */
+    .examiner-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .examiner-card:hover {
+        transform: translateY(-2px);
+        border-color: #cbd5e1;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.06) !important;
+    }
+
+    /* Professional Neutral Avatar */
+    .examiner-avatar-clean {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: #f1f5f9;
+        color: #334155;
+        border: 1px solid #e2e8f0;
+        font-weight: 700;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 12px;
+    }
+
+    /* Cohesive & Subtle Metadata Tags (No harsh rainbow clash) */
+    .tag-neutral {
+        background: #f1f5f9;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+        font-size: 0.74rem;
+        font-weight: 500;
+        padding: 4px 10px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .tag-programme {
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #dbeafe;
+        font-size: 0.74rem;
+        font-weight: 500;
+        padding: 4px 10px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    /* Assign Button States */
+    .btn-select-examiner {
+        background-color: #2563eb;
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.875rem;
+        border-radius: 8px;
+        padding: 8px 16px;
+        transition: all 0.2s ease;
+        border: none;
+    }
+    .btn-select-examiner:hover:not(:disabled) {
+        background-color: #1d4ed8 !important;
+        color: #ffffff !important;
+    }
+    /* Clean, tasteful Assigned State (Strictly non-clickable) */
+    .btn-select-examiner:disabled,
+    .btn-select-examiner.is-assigned {
+        background-color: #f0fdf4 !important;
+        color: #15803d !important;
+        border: 1px solid #bbf7d0 !important;
+        cursor: default !important;
+        opacity: 1 !important;
+        pointer-events: none !important;
+        box-shadow: none !important;
+    }
+</style>
 
 <div class="container-fluid py-4">
     <div class="card shadow-sm border-0 rounded-4">
         <div class="card-header border-0 pt-4 px-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
             <div>
                 <h3 class="fw-bolder text-dark mb-0"><i class="fas fa-project-diagram text-warning me-2"></i>All FYP Projects</h3>
-                <p class="text-muted small mb-0">Monitor and manage all final year projects across the system.</p>
+                <p class="text-muted small mb-0">Monitor and manage all final year projects and examiner assignments.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
                 <div class="d-flex align-items-center position-relative my-1">
@@ -25,6 +146,20 @@
                 </a>
             </div>
         </div>
+
+        @if (TempData["Success"] != null)
+        {
+            <div class="alert alert-success border-0 shadow-sm rounded-3 mt-3 mb-0 mx-4">
+                <i class="fas fa-check-circle me-2"></i>@TempData["Success"]
+            </div>
+        }
+        @if (TempData["Error"] != null)
+        {
+            <div class="alert alert-danger border-0 shadow-sm rounded-3 mt-3 mb-0 mx-4">
+                <i class="fas fa-exclamation-triangle me-2"></i>@TempData["Error"]
+            </div>
+        }
+
         <div class="card-body">
             <div class="table-responsive">
                 <table id="projectsTable" class="table table-hover align-middle">
@@ -32,6 +167,7 @@
                         <tr>
                             <th>Student</th>
                             <th>Supervisor</th>
+                            <th>Examiner</th>
                             <th>Project Title</th>
                             <th>Status</th>
                             <th>Started</th>
@@ -43,6 +179,7 @@
                         {
                             var student = item.Student;
                             var project = item.Project;
+                            var assignedExaminer = project?.AssignedExaminers?.FirstOrDefault()?.Examiner;
                             <tr>
                                 <td>
                                     <div class="fw-bold">@student.FullName</div>
@@ -56,6 +193,23 @@
                                     else
                                     {
                                         <span class="text-danger small"><i class="fas fa-exclamation-triangle me-1"></i> Not Assigned</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (project != null)
+                                    {
+                                        if (assignedExaminer != null)
+                                        {
+                                            <div class="badge badge-light-info"><i class="fas fa-user-check me-1 text-info"></i>@assignedExaminer.FullName</div>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge badge-light-danger"><i class="fas fa-user-slash me-1"></i> Not Assigned</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">-</span>
                                     }
                                 </td>
                                 <td class="fw-bold text-dark">@(project?.Title ?? "No Project")</td>
@@ -83,6 +237,15 @@
                                 <td class="text-end">
                                     @if(project != null)
                                     {
+                                        <button type="button" class="btn btn-sm btn-primary rounded-3 me-1 btn-open-assign-modal"
+                                                data-bs-toggle="modal" data-bs-target="#assignExaminerModal"
+                                                data-project-id="@project.Id"
+                                                data-project-title="@project.Title"
+                                                data-student-name="@student.FullName"
+                                                data-examiner-id="@(assignedExaminer?.Id ?? 0)"
+                                                data-examiner-name="@(assignedExaminer?.FullName ?? "")">
+                                            <i class="fas fa-user-tag me-1"></i> Assign Examiner
+                                        </button>
                                         <button type="button" class="btn btn-sm btn-light-primary rounded-3" data-bs-toggle="modal" data-bs-target="#projectModal-@project.Id">Details</button>
                                     }
                                     else
@@ -99,10 +262,157 @@
     </div>
 </div>
 
+<!-- ============================================================== -->
+<!-- Unified Assign Examiner Modal (Clean, Refined Color Scheme)    -->
+<!-- ============================================================== -->
+<div class="modal fade" id="assignExaminerModal" tabindex="-1" aria-labelledby="assignExaminerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" style="border-radius: 16px; border: none; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.12);">
+            <!-- Sleek Dark Slate Header -->
+            <div class="modal-header modal-header-slate">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fas fa-user-shield text-info me-1"></i>
+                    <h5 class="modal-title fw-bold text-white mb-0" id="assignExaminerModalLabel">Assign Project Examiner</h5>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body p-4 modal-body-subtle">
+                <!-- Project Summary Banner (Subtle border & clean typography) -->
+                <div class="bg-white p-3 rounded-3 shadow-sm mb-4 border" style="border-left: 4px solid #2563eb !important;">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                        <div>
+                            <span class="text-muted small fw-bold text-uppercase d-block">Project Title:</span>
+                            <span class="fw-bold text-dark fs-6" id="modalProjectTitle">-</span>
+                        </div>
+                        <div>
+                            <span class="text-muted small fw-bold text-uppercase d-block">Student:</span>
+                            <span class="fw-bold text-primary" id="modalStudentName">-</span>
+                        </div>
+                        <div>
+                            <span class="text-muted small fw-bold text-uppercase d-block">Current Examiner:</span>
+                            <span class="fw-bold" id="modalCurrentExaminer">None</span>
+                        </div>
+                    </div>
+                </div>
+
+                <p class="text-muted mb-3 small">Filter and select an examiner from the directory below to assign to this project.</p>
+                
+                <!-- Filters (Clean neutral styling) -->
+                <div class="row g-2 mb-4">
+                    <div class="col-md-12">
+                        <input type="text" id="examinerSearch" class="form-control" placeholder="Search by name or email..." onkeyup="filterExaminers()">
+                    </div>
+                    <div class="col-md-4">
+                        <select id="deptFilter" class="form-select" onchange="filterExaminers()">
+                            <option value="">All Departments</option>
+                            @foreach (var d in depts)
+                            {
+                                <option value="@d">@d</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <select id="progFilter" class="form-select" onchange="filterExaminers()">
+                            <option value="">All Programmes</option>
+                            @foreach (var pr in progs)
+                            {
+                                <option value="@pr">@pr</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <select id="specFilter" class="form-select" onchange="filterExaminers()">
+                            <option value="">All Specializations</option>
+                            @foreach (var s in specs)
+                            {
+                                <option value="@s">@s</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Cards Container with clean scrolling -->
+                <div class="row row-cols-1 row-cols-md-2 g-3" id="examinerCardsContainer" style="max-height: 480px; overflow-y: auto; padding-right: 4px;">
+                    @if (availableExaminers.Any())
+                    {
+                        foreach (var examiner in availableExaminers)
+                        {
+                            <div class="col examiner-card-wrapper" 
+                                 data-examiner-id="@examiner.Id"
+                                 data-name="@(examiner.FullName?.ToLower())" 
+                                 data-email="@(examiner.Email?.ToLower())" 
+                                 data-dept="@(examiner.EmpDepartment?.Name)" 
+                                 data-prog="@(examiner.Programme)" 
+                                 data-spec="@(examiner.Specialization)">
+                                <div class="card h-100 examiner-card">
+                                    <div class="card-body d-flex flex-column align-items-center text-center p-4">
+                                        <!-- Professional Neutral Avatar -->
+                                        <div class="examiner-avatar-clean">
+                                            @(examiner.FullName?.Substring(0, 1) ?? "E")
+                                        </div>
+
+                                        <h6 class="fw-bold mb-1 text-dark">@examiner.FullName</h6>
+                                        <p class="text-muted small mb-3">@examiner.Email</p>
+                                        
+                                        <!-- Cohesive, Unified Badges (Subtle & Clean) -->
+                                        <div class="d-flex flex-wrap justify-content-center gap-1 mb-3">
+                                            @if(!string.IsNullOrEmpty(examiner.EmpDepartment?.Name)) { 
+                                                <span class="tag-neutral">
+                                                    <i class="fas fa-building text-muted"></i> @examiner.EmpDepartment.Name
+                                                </span> 
+                                            }
+                                            @if(!string.IsNullOrEmpty(examiner.Programme)) { 
+                                                <span class="tag-programme">
+                                                    <i class="fas fa-graduation-cap"></i> @examiner.Programme
+                                                </span> 
+                                            }
+                                            @if(!string.IsNullOrEmpty(examiner.Specialization)) { 
+                                                <span class="tag-neutral">
+                                                    <i class="fas fa-tag text-muted"></i> @examiner.Specialization
+                                                </span> 
+                                            }
+                                        </div>
+                                        
+                                        <form action="/Admin/AssignExaminer" method="post" class="mt-auto w-100 assign-form">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="projectId" class="modal-input-project-id" value="" />
+                                            <input type="hidden" name="examinerId" value="@examiner.Id" />
+                                            <button type="button" class="btn w-100 btn-select-examiner" onclick="handleAssignClick(this)">
+                                                Select Examiner
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+            
+            <div class="modal-footer bg-white border-top py-3 px-4 d-flex justify-content-between">
+                <form id="removeExaminerForm" action="/Admin/RemoveExaminer" method="post" style="display:none;">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="projectId" id="removeProjectId" value="" />
+                    <button type="button" class="btn btn-sm btn-outline-danger px-3 py-2 rounded-3" onclick="handleRemoveClick()">
+                        <i class="fas fa-user-minus me-1"></i> Remove Current Examiner
+                    </button>
+                </form>
+                <button type="button" class="btn btn-sm btn-light border px-4 py-2 rounded-3 ms-auto" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- Standard Details Modal per project                             -->
+<!-- ============================================================== -->
 @foreach (var item in Model.Where(m => m.Project != null))
 {
-    var p = item.Project;
-    <!-- Modal for Project @p.Id -->
+    var p = item.Project!;
+    var currentExaminer = p.AssignedExaminers?.FirstOrDefault()?.Examiner;
+
+    <!-- Modal for Project Details -->
     <div class="modal fade" id="projectModal-@p.Id" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content rounded-4">
@@ -113,26 +423,40 @@
                     </div>
                 </div>
                 <div class="modal-body pt-4 px-5 pb-5">
-                    <div class="mb-5">
+                    <div class="mb-4">
                         <label class="fw-bolder text-muted text-uppercase small mb-1">Student Name</label>
                         <div class="fs-4 text-dark fw-bold">@(item.Student.FullName ?? "Unknown Student")</div>
                     </div>
                     
-                    <div class="mb-5">
+                    <div class="mb-4">
                         <label class="fw-bolder text-muted text-uppercase small mb-1">Supervisor Name</label>
                         <div class="fs-4 text-dark fw-bold">
-                            @if(p!.Supervisor != null)
+                            @if(p.Supervisor != null)
                             {
                                 @p.Supervisor.FullName
                             }
                             else
                             {
-                                <span class="text-danger fst-italic">Not Assigned</span>
+                                <span class="text-danger">Not Assigned</span>
                             }
                         </div>
                     </div>
 
                     <div class="mb-4">
+                        <label class="fw-bolder text-muted text-uppercase small mb-1">Examiner Name</label>
+                        <div class="fs-4 text-dark fw-bold">
+                            @if(currentExaminer != null)
+                            {
+                                @currentExaminer.FullName
+                            }
+                            else
+                            {
+                                <span class="text-danger">Not Assigned</span>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
                         <label class="fw-bolder text-muted text-uppercase small mb-1">Project Title</label>
                         <div class="fs-4 text-dark fw-bold">@p.Title</div>
                     </div>
@@ -141,8 +465,6 @@
         </div>
     </div>
 }
-
-
 
 @section Scripts {
     <script>
@@ -157,7 +479,7 @@
                     "searchPlaceholder": "Search projects..."
                 },
                 "columnDefs": [
-                    { "orderable": false, "targets": 5 }
+                    { "orderable": false, "targets": 6 }
                 ]
             });
 
@@ -167,7 +489,157 @@
             
             $('.dataTables_filter').hide();
             $('.dataTables_length select').addClass('form-select form-select-solid');
+
+            // Handle Opening Assign Examiner Modal
+            $('.btn-open-assign-modal').on('click', function () {
+                const projectId = $(this).data('project-id');
+                const projectTitle = $(this).data('project-title');
+                const studentName = $(this).data('student-name');
+                const examinerId = $(this).data('examiner-id');
+                const examinerName = $(this).data('examiner-name');
+
+                $('#modalProjectTitle').text(projectTitle || '-');
+                $('#modalStudentName').text(studentName || '-');
+                $('.modal-input-project-id').val(projectId);
+                $('#removeProjectId').val(projectId);
+
+                if (examinerId && examinerId > 0 && examinerName) {
+                    $('#modalCurrentExaminer').html('<span class="badge bg-light-success text-success fw-bold px-3 py-2 border border-success"><i class="fas fa-check-circle me-1"></i>' + examinerName + '</span>');
+                    $('#removeExaminerForm').show();
+                } else {
+                    $('#modalCurrentExaminer').html('<span class="text-muted fst-italic">None Assigned</span>');
+                    $('#removeExaminerForm').hide();
+                }
+
+                // Reset filters and cards view
+                $('#examinerSearch').val('');
+                $('#deptFilter').val('');
+                $('#progFilter').val('');
+                $('#specFilter').val('');
+                filterExaminers();
+
+                // Highlight and disable currently assigned card
+                $('.examiner-card-wrapper').each(function () {
+                    const cardExmId = $(this).data('examiner-id');
+                    const btn = $(this).find('.btn-select-examiner');
+                    if (examinerId && cardExmId == examinerId) {
+                        btn.prop('disabled', true)
+                           .addClass('is-assigned')
+                           .html('<i class="fas fa-check-circle me-1"></i> Currently Assigned');
+                    } else {
+                        btn.prop('disabled', false)
+                           .removeClass('is-assigned')
+                           .html('Select Examiner');
+                    }
+                });
+            });
         });
+
+        // SweetAlert2 confirmation for assigning an examiner
+        function handleAssignClick(btn) {
+            // Strictly guard against clicking assigned card
+            if ($(btn).is(':disabled') || $(btn).hasClass('is-assigned')) {
+                return false;
+            }
+
+            const form = $(btn).closest('form');
+            const card = $(btn).closest('.examiner-card-wrapper');
+            const examinerName = card.find('h6').text().trim();
+            const projectTitle = $('#modalProjectTitle').text().trim();
+
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: 'Assign Examiner?',
+                    html: '<p class="mb-2 text-muted">Are you sure you want to assign <strong>' + examinerName + '</strong> as the Examiner for:</p>' +
+                          '<div class="p-3 bg-light rounded-3 text-primary fw-bold text-start border">' + projectTitle + '</div>',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#2563eb',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: '<i class="fas fa-check me-1"></i> Yes, Assign',
+                    cancelButtonText: 'Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        form.submit();
+                    }
+                });
+            } else {
+                form.submit();
+            }
+        }
+
+        // SweetAlert2 confirmation for removing an assigned examiner
+        function handleRemoveClick() {
+            const examinerName = $('#modalCurrentExaminer').text().trim();
+            const projectTitle = $('#modalProjectTitle').text().trim();
+
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: 'Remove Examiner?',
+                    html: '<p class="mb-2 text-muted">Are you sure you want to unassign the current examiner from:</p>' +
+                          '<div class="p-3 bg-light rounded-3 text-danger fw-bold text-start border">' + projectTitle + '</div>',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#dc2626',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: '<i class="fas fa-trash-alt me-1"></i> Yes, Remove',
+                    cancelButtonText: 'Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        document.getElementById('removeExaminerForm').submit();
+                    }
+                });
+            } else {
+                document.getElementById('removeExaminerForm').submit();
+            }
+        }
+
+        // Filter examiners function (matching Supervisor pattern)
+        function filterExaminers() {
+            const searchTerm = document.getElementById('examinerSearch').value.toLowerCase().trim();
+            const deptFilter = document.getElementById('deptFilter').value;
+            const progFilter = document.getElementById('progFilter').value;
+            const specFilter = document.getElementById('specFilter').value;
+
+            const cards = document.querySelectorAll('.examiner-card-wrapper');
+            let visibleCount = 0;
+
+            cards.forEach(card => {
+                const name = card.getAttribute('data-name') || "";
+                const email = card.getAttribute('data-email') || "";
+                const dept = card.getAttribute('data-dept') || "";
+                const prog = card.getAttribute('data-prog') || "";
+                const spec = card.getAttribute('data-spec') || "";
+
+                const matchesSearch = name.includes(searchTerm) || email.includes(searchTerm);
+                
+                const hasDept = deptFilter === "" || dept.split(',').map(s => s.trim()).includes(deptFilter);
+                const hasProg = progFilter === "" || prog.split(',').map(s => s.trim()).includes(progFilter);
+                const hasSpec = specFilter === "" || spec.split(',').map(s => s.trim()).includes(specFilter);
+
+                if (matchesSearch && hasDept && hasProg && hasSpec) {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            
+            const container = document.getElementById('examinerCardsContainer');
+            let emptyMsg = document.getElementById('examiner-empty-msg');
+            if (visibleCount === 0) {
+                if (!emptyMsg) {
+                    emptyMsg = document.createElement('div');
+                    emptyMsg.id = 'examiner-empty-msg';
+                    emptyMsg.className = 'col-12 text-center py-4 text-muted';
+                    emptyMsg.innerHTML = '<i class="fas fa-search fa-2x mb-2 text-muted"></i><p class="mb-0">No examiners match your criteria.</p>';
+                    container.appendChild(emptyMsg);
+                } else {
+                    emptyMsg.style.display = 'block';
+                }
+            } else if (emptyMsg) {
+                emptyMsg.style.display = 'none';
+            }
+        }
     </script>
 }
-
