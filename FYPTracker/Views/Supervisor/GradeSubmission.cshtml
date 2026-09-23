@@ -236,7 +236,8 @@
                         <input type="hidden" name="milestoneId" value="@Model.Id" />
                         
                         @{
-                            bool isLocked = Model.Status == "Approved" || Model.Status == "Rejected";
+                            // Allow supervisor to always update their review or upload feedback files later
+                            bool isLocked = false;
                         }
                         
                         @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)))
@@ -267,14 +268,14 @@
                             </div>
                         }
 
-                        @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase)))
+                        @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase)))
                         {
 
                             <div class="mb-4 p-3 bg-light-warning border border-warning border-dashed rounded-3">
                                 <label class="form-label fw-bold text-dark"><i class="fas fa-search text-warning me-2"></i>Turnitin Similarity Index (%)</label>
                                 <input type="number" name="turnitinScore" class="form-control form-control-solid form-control-lg" min="0" max="100" value="@Model.Project?.TurnitinScore" placeholder="e.g. 14" @(isLocked ? "disabled" : "required") />
                                 <div class="invalid-feedback">Please enter the Turnitin score.</div>
-                                <div class="form-text text-muted mt-2"><i class="fas fa-exclamation-triangle me-1 text-warning"></i>Must be 20% or less to approve the Final Report. The examiner cannot grade until this is approved.</div>
+                                <div class="form-text text-muted mt-2"><i class="fas fa-exclamation-triangle me-1 text-warning"></i>Must be 20% or less to approve the Turnitin Report. The examiner cannot grade until this is approved.</div>
                             </div>
                         }
 
@@ -312,9 +313,25 @@
                         </div>
 
                         <div class="mb-4">
-                            <label class="form-label fw-bold text-dark"><i class="fas fa-file-pdf text-danger me-2"></i>Upload Feedback File (Optional)</label>
-                            <input type="file" name="gradedFile" accept=".pdf" class="form-control form-control-solid form-control-lg" @(isLocked ? "disabled" : "") />
-                            <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Upload a marked/feedback version of the student's submission.</div>
+                            <label class="form-label fw-bold text-dark"><i class="fas fa-file-upload text-danger me-2"></i>Upload Feedback File / Graded Marksheet</label>
+                            
+                            @if (Model.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <div class="mb-3 p-3 bg-light rounded border">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="fw-bold mb-1"><i class="fas fa-file-excel text-success me-2"></i>Excel Marksheet Template</h6>
+                                            <small class="text-muted">Download this template, fill in your marks, and upload it back here as the Graded Marksheet below.</small>
+                                        </div>
+                                        <a href="@Url.Action("DownloadMarksheet", "Supervisor", new { projectId = Model.Project.Id })" class="btn btn-sm btn-outline-success">
+                                            <i class="fas fa-download me-1"></i> Download
+                                        </a>
+                                    </div>
+                                </div>
+                            }
+
+                            <input type="file" name="gradedFile" accept=".pdf,.doc,.docx,.xls,.xlsx" class="form-control form-control-solid form-control-lg" @(isLocked ? "disabled" : "") />
+                            <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Upload a marked/feedback version of the student's submission or your completed Excel marksheet (PDF, Word, or Excel).</div>
                         </div>
 
                         @if (isLocked)
@@ -487,6 +504,39 @@
             document.getElementById('compareOldIframe').src = oldFileUrl;
             document.getElementById('compareNewIframe').src = newFileUrl;
         }
+
+        // Turnitin Front-end Validation
+        document.addEventListener("DOMContentLoaded", function() {
+            const turnitinInput = document.querySelector('input[name="turnitinScore"]');
+            const statusSelect = document.querySelector('select[name="status"]');
+            
+            if (turnitinInput && statusSelect) {
+                function validateTurnitin() {
+                    const score = parseFloat(turnitinInput.value);
+                    const approveOption = statusSelect.querySelector('option[value="Approved"]');
+                    
+                    if (!isNaN(score) && score > 20) {
+                        turnitinInput.classList.add('border-danger');
+                        if (statusSelect.value === 'Approved') {
+                            statusSelect.value = '';
+                        }
+                        if (approveOption) {
+                            approveOption.disabled = true;
+                            approveOption.innerHTML = 'Approve (Blocked: Turnitin > 20%)';
+                        }
+                    } else {
+                        turnitinInput.classList.remove('border-danger');
+                        if (approveOption) {
+                            approveOption.disabled = false;
+                            approveOption.innerHTML = 'Approve (Passed)';
+                        }
+                    }
+                }
+                
+                turnitinInput.addEventListener('input', validateTurnitin);
+                validateTurnitin();
+            }
+        });
     </script>
 }
 

@@ -245,7 +245,9 @@
                     }).then((result) => {
                         if (result.isConfirmed) {
                             let url = '@(userTypeClaim == "Student" ? "/Student/Forms" : "/Supervisor/MyProjects")';
-                            if ('@(userTypeClaim)' === 'Supervisor' && payload.session) {
+                            if ('@(userTypeClaim)' === 'Student' && payload.title && payload.title.startsWith('Step ')) {
+                                url = '/Student/Stage2';
+                            } else if ('@(userTypeClaim)' === 'Supervisor' && payload.session) {
                                 url = '/Supervisor/ReviewSubmissions?sessionFilter=' + encodeURIComponent(payload.session);
                             }
                             window.location.href = url;

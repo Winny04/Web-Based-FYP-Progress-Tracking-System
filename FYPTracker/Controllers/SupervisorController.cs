@@ -395,7 +395,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkAddMilestone(string title, string description, DateTime? dueDate, string sessionFilter)
+        public async Task<IActionResult> BulkAddMilestone(string title, string description, DateTime? dueDate, string sessionFilter, string stageSelection = "1")
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "Authentication");
@@ -406,16 +406,27 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(MyProjects), new { sessionFilter });
             }
 
+            // Apply prefix based on selected stage
+            string finalTitle = title.Trim();
+            if (stageSelection == "1")
+            {
+                finalTitle = "FYP 1: " + finalTitle;
+            }
+            else if (stageSelection == "2")
+            {
+                finalTitle = "Step - " + finalTitle;
+            }
+
             var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
 
             // Check for duplicate milestone titles across this supervisor's projects in the active session
             bool isDuplicate = await _context.FYPMilestones
                 .Include(m => m.Project)
-                .AnyAsync(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (activeSession == null || m.Project.AcademicSession == activeSession) && m.Title.ToLower() == title.ToLower());
+                .AnyAsync(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (activeSession == null || m.Project.AcademicSession == activeSession) && m.Title.ToLower() == finalTitle.ToLower());
 
             if (isDuplicate)
             {
-                TempData["AddModalError"] = $"A milestone with the title '{title}' already exists for your students in the current session. Please choose a different name or edit the existing one.";
+                TempData["AddModalError"] = $"A milestone with the title '{finalTitle}' already exists for your students in the current session. Please choose a different name or edit the existing one.";
                 return Redirect($"/Supervisor/MyProjects?action=bulk-add");
             }
 
@@ -425,7 +436,7 @@ namespace FYPTracker.Controllers
                 if (firstProject != null)
                 {
                     var existingMilestones = await _context.FYPMilestones.Where(m => m.FYPProjectId == firstProject.Id).ToListAsync();
-                    string validationError = ValidateChronology(existingMilestones, title, dueDate);
+                    string validationError = ValidateChronology(existingMilestones, finalTitle, dueDate);
                     if (validationError != null)
                     {
                         TempData["AddModalError"] = validationError;
@@ -444,7 +455,7 @@ namespace FYPTracker.Controllers
                 var milestones = projects.Select(p => new FYPMilestone
                 {
                     FYPProjectId = p.Id,
-                    Title = title,
+                    Title = finalTitle,
                     Description = description,
                     DueDate = dueDate,
                     Status = "Pending",
@@ -758,6 +769,48 @@ namespace FYPTracker.Controllers
             return PhysicalFile(physicalPath, mimeType);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> DownloadMarksheet(int projectId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "Authentication");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user.Id);
+
+            if (project == null) return NotFound();
+
+            string templatePath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", "documents", "6002CMD - Marksheet.xlsx");
+            if (!System.IO.File.Exists(templatePath))
+            {
+                TempData["Error"] = "Marksheet template not found on server.";
+                return RedirectToAction(nameof(ReviewSubmissions));
+            }
+
+            using (var workbook = new ClosedXML.Excel.XLWorkbook(templatePath))
+            {
+                var worksheet = workbook.Worksheets.FirstOrDefault();
+                if (worksheet != null)
+                {
+                    // Fill data
+                    worksheet.Cell("D2").Value = project.Student?.FullName ?? "";
+                    worksheet.Cell("D3").Value = project.Student?.EmployeeId ?? "";
+                    worksheet.Cell("D4").Value = project.Title ?? "";
+                    worksheet.Cell("D5").Value = project.Supervisor?.FullName ?? "";
+                }
+
+                using (var stream = new System.IO.MemoryStream())
+                {
+                    workbook.SaveAs(stream);
+                    var content = stream.ToArray();
+                    string safeTitle = string.IsNullOrWhiteSpace(project.Title) ? "Project" : string.Join("_", project.Title.Split(System.IO.Path.GetInvalidFileNameChars()));
+                    return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Marksheet_{safeTitle}.xlsx");
+                }
+            }
+        }
+
         public async Task<IActionResult> ReviewSubmissions(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
@@ -860,7 +913,7 @@ namespace FYPTracker.Controllers
                     }
                 }
 
-                if (milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase))
+                if (milestone.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase))
                 {
                     
                     if (turnitinScore.HasValue)
@@ -890,10 +943,10 @@ namespace FYPTracker.Controllers
                 if (gradedFile != null && gradedFile.Length > 0)
                 {
                     var extCheck = System.IO.Path.GetExtension(gradedFile.FileName).ToLowerInvariant();
-                    var allowedExt = new[] { ".pdf", ".doc", ".docx" };
+                    var allowedExt = new[] { ".pdf", ".doc", ".docx", ".xls", ".xlsx" };
                     if (!allowedExt.Contains(extCheck))
                     {
-                        TempData["Error"] = "Only PDF and Word documents are allowed for graded files.";
+                        TempData["Error"] = "Only PDF, Word, and Excel documents are allowed for graded files.";
                         return RedirectToAction(nameof(GradeSubmission), new { id = milestone.Id });
                     }
                     if (gradedFile.Length > 20 * 1024 * 1024)
@@ -1487,32 +1540,37 @@ namespace FYPTracker.Controllers
             var iaf = simulated.FirstOrDefault(m => m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation"));
             var proposal = simulated.FirstOrDefault(m => m.Title.Contains("Proposal"));
             var final = simulated.FirstOrDefault(m => m.Title.Contains("Final"));
-            var progressList = simulated.Where(m => 
-                !(m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation") || m.Title.Contains("Proposal") || m.Title.Contains("Final")))
-                .Where(m => m.DueDate.HasValue).ToList();
+            var step1 = simulated.FirstOrDefault(m => m.Title.Contains("Step 1: Turnitin"));
+            var step5 = simulated.FirstOrDefault(m => m.Title.Contains("Step 5"));
+            
+            var targetMilestone = simulated.FirstOrDefault(m => m.Title == targetTitle);
+            if (targetMilestone == null || !targetMilestone.DueDate.HasValue) return null;
 
+            bool isCore = targetTitle.Contains("IAF") || targetTitle.Contains("Initial Project Allocation") || targetTitle.Contains("Proposal") || targetTitle.Contains("Final") || targetTitle.Contains("Step 5");
 
-
-            if (proposal?.DueDate.HasValue == true)
+            if (!isCore)
             {
-                foreach (var p in progressList)
+                if (step1?.DueDate.HasValue == true && targetTitle.StartsWith("Step ") && !targetTitle.Contains("Step 1") && targetMilestone.DueDate.Value.Date < step1.DueDate.Value.Date)
                 {
-                    if (p.DueDate.Value.Date < proposal.DueDate.Value.Date)
-                        return $"Date Validation Error: '{p.Title}' due date cannot be before the FYP 1: Proposal due date.";
+                    return $"Date Validation Error: '{targetTitle}' due date cannot be before the Step 1: Turnitin Checking due date ({step1.DueDate.Value:dd MMM yyyy}).";
+                }
+
+                if (proposal?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date < proposal.DueDate.Value.Date)
+                {
+                    return $"Date Validation Error: '{targetTitle}' due date cannot be before the FYP 1: Proposal due date ({proposal.DueDate.Value:dd MMM yyyy}).";
+                }
+
+                if (step5?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date > step5.DueDate.Value.Date)
+                {
+                    return $"Date Validation Error: '{targetTitle}' due date cannot be after the Step 5: Presentation Slides Submission due date ({step5.DueDate.Value:dd MMM yyyy}).";
                 }
             }
-
-            if (final?.DueDate.HasValue == true)
+            else
             {
-                foreach (var p in progressList)
+                // Only validate Proposal vs Final if one of them is the target being edited
+                if (proposal?.DueDate.HasValue == true && final?.DueDate.HasValue == true && proposal.DueDate.Value.Date > final.DueDate.Value.Date)
                 {
-                    if (p.DueDate.Value.Date > final.DueDate.Value.Date)
-                        return $"Date Validation Error: '{p.Title}' due date cannot be after the Step 2: Final Report Submission due date.";
-                }
-
-                if (proposal?.DueDate.HasValue == true && proposal.DueDate.Value.Date > final.DueDate.Value.Date)
-                {
-                    return "Date Validation Error: FYP 1: Proposal due date cannot be after the Step 2: Final Report Submission due date.";
+                    return $"Date Validation Error: FYP 1: Proposal due date cannot be after the Step 2: Final Report Submission due date ({final.DueDate.Value:dd MMM yyyy}).";
                 }
             }
 

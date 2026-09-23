@@ -3,11 +3,87 @@
 @{
     ViewData["Title"] = "My Students";
     var distinctMilestones = Model.SelectMany(p => p.Milestones).Select(m => m.Title).Distinct().OrderBy(t => t).ToList();
+    
+    var allMilestoneTemplates = Model.SelectMany(p => p.Milestones)
+                                    .GroupBy(m => m.Title)
+                                    .Select(g => g.First())
+                                    .OrderBy(m => m.DueDate ?? DateTime.MaxValue)
+                                    .ToList();
+                                    
+    var stage1Templates = allMilestoneTemplates.Where(m => !m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
+    var stage2Templates = allMilestoneTemplates.Where(m => m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
+    
+    var defaultMilestoneTitles = new List<string> {
+        "FYP 1: Initial Assessment Form (IAF)",
+        "FYP 1: Proposal",
+        "FYP 1: Interim Report",
+        "Step 1: Turnitin Checking",
+        "Step 2: Final Report Submission",
+        "Step 3: Marksheet Submission",
+        "Step 4: Record of Supervisor Meeting Form Submission",
+        "Step 5: Presentation Slides Submission"
+    };
 }
 
 <style>
     :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
 
+    /* Custom Timeline Stepper Horizontal */
+    .timeline-stepper {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        overflow-x: auto;
+        padding-bottom: 15px;
+        margin-bottom: 10px;
+        gap: 15px;
+    }
+    /* Horizontal Line drawn per item to support scrolling */
+    .stepper-item::before {
+        content: '';
+        position: absolute;
+        top: 12px;
+        left: 50%;
+        width: 100%;
+        height: 3px;
+        background: #e2e8f0;
+        z-index: 0;
+    }
+    .stepper-item:last-child::before {
+        display: none;
+    }
+    .stepper-item {
+        position: relative;
+        text-align: center;
+        flex: 1 1 150px;
+        min-width: 150px;
+        z-index: 1;
+        padding: 0 5px;
+    }
+    .stepper-icon {
+        margin: 0 auto 12px auto;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #3b82f6;
+        border: 4px solid #fff;
+        box-shadow: 0 0 0 2px #3b82f6;
+        position: relative;
+    }
+    .stepper-item.stage2 .stepper-icon {
+        background: #10b981;
+        box-shadow: 0 0 0 2px #10b981;
+    }
+    
+    /* Scrollbar styling for timeline */
+    .timeline-stepper::-webkit-scrollbar {
+        height: 6px;
+    }
+    .timeline-stepper::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+    }
+    
     .page-hero {
         background: var(--hero-grad);
         border-radius: 20px;
@@ -116,7 +192,7 @@
 
 <!-- Bulk Add Milestone Modal -->
 <div class="modal fade" id="bulkAddMilestoneModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered mw-650px">
+    <div class="modal-dialog modal-dialog-centered mw-1000px">
         <div class="modal-content">
             <form asp-action="BulkAddMilestone" asp-controller="Supervisor" method="post" id="bulkAddForm" onsubmit="return validateBulkAdd()" novalidate>
                 <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSession" />
@@ -137,12 +213,76 @@
                             </div>
                         </div>
                     }
-                    <div class="d-flex flex-column mb-7 fv-row">
+
+                    <!-- Current Timeline Visualization -->
+                    <div class="mb-8 p-5 rounded border border-light shadow-sm" style="background-color: #fafbfc;">
+                        <h4 class="fw-bolder text-dark mb-4 text-center">Current Project Timeline</h4>
+                        
+                        <!-- Stage 1 Row -->
+                        <div class="mb-6">
+                            <h6 class="text-primary fw-bold mb-3"><i class="fas fa-flag me-2"></i>Stage 1</h6>
+                            <div class="timeline-stepper pb-2">
+                                @if(stage1Templates.Any()) {
+                                    @foreach(var m in stage1Templates) {
+                                        <div class="stepper-item">
+                                            <div class="stepper-icon"></div>
+                                            <div class="stepper-content">
+                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
+                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
+                                            </div>
+                                        </div>
+                                    }
+                                } else {
+                                    <div class="text-muted fs-8 fst-italic">No Stage 1 milestones.</div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Stage 2 Row -->
+                        <div>
+                            <h6 class="text-success fw-bold mb-3"><i class="fas fa-graduation-cap me-2"></i>Stage 2</h6>
+                            <div class="timeline-stepper pb-2">
+                                @if(stage2Templates.Any()) {
+                                    @foreach(var m in stage2Templates) {
+                                        <div class="stepper-item stage2">
+                                            <div class="stepper-icon"></div>
+                                            <div class="stepper-content">
+                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
+                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
+                                            </div>
+                                        </div>
+                                    }
+                                } else {
+                                    <div class="text-muted fs-8 fst-italic">No Stage 2 milestones.</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-7">
+                        <div class="col-md-4 fv-row">
+                            <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
+                                <span class="required">Stage</span>
+                            </label>
+                            <select class="form-select form-select-solid" id="addStage" name="stageSelection" onchange="updateTitlePreview()">
+                                <option value="1">Stage 1</option>
+                                <option value="2">Stage 2</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8 fv-row">
+                            <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
+                                <span class="required">Custom Title</span>
+                            </label>
+                            <input type="text" class="form-control form-control-solid" placeholder="e.g. Demonstration Video" name="title" id="addTitle" oninput="updateTitlePreview()" />
+                            <div id="addTitleError" class="text-danger fw-bold small mt-1 d-none">Title must be at least 3 characters long.</div>
+                        </div>
+                    </div>
+                    <div class="mb-7 fv-row">
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
-                            <span class="required">Milestone Title</span>
+                            <span>Final Title Preview</span>
                         </label>
-                        <input type="text" class="form-control form-control-solid" placeholder="e.g. FYP 1: Final Report" name="title" id="addTitle" oninput="validateBulkAddRealtime()" />
-                        <div id="addTitleError" class="text-danger fw-bold small mt-1 d-none">Title must be at least 5 characters long.</div>
+                        <input type="text" class="form-control form-control-solid bg-light text-primary fw-bolder fs-6 border-primary border-dashed" style="background-color: #f8fbfd !important;" id="addTitlePreview" readonly />
+                        <small class="text-muted mt-2 d-block"><i class="fas fa-info-circle me-1"></i> The system will automatically add the correct prefix to place it in the correct stage.</small>
                     </div>
 
                     <div class="d-flex flex-column mb-7 fv-row">
@@ -172,7 +312,7 @@
 
 <!-- Bulk Edit Milestone Modal -->
 <div class="modal fade" id="bulkEditMilestoneModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered mw-650px">
+    <div class="modal-dialog modal-dialog-centered mw-1000px">
         <div class="modal-content">
             <form asp-action="BulkEditMilestone" asp-controller="Supervisor" method="post" id="bulkEditForm" onsubmit="return validateBulkEdit()" novalidate>
                 <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSession" />
@@ -193,6 +333,52 @@
                             </div>
                         </div>
                     }
+
+                    <!-- Current Timeline Visualization -->
+                    <div class="mb-8 p-5 rounded border border-light shadow-sm" style="background-color: #fafbfc;">
+                        <h4 class="fw-bolder text-dark mb-4 text-center">Current Project Timeline</h4>
+                        
+                        <!-- Stage 1 Row -->
+                        <div class="mb-6">
+                            <h6 class="text-primary fw-bold mb-3"><i class="fas fa-flag me-2"></i>Stage 1</h6>
+                            <div class="timeline-stepper pb-2">
+                                @if(stage1Templates.Any()) {
+                                    @foreach(var m in stage1Templates) {
+                                        <div class="stepper-item">
+                                            <div class="stepper-icon"></div>
+                                            <div class="stepper-content">
+                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
+                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
+                                            </div>
+                                        </div>
+                                    }
+                                } else {
+                                    <div class="text-muted fs-8 fst-italic">No Stage 1 milestones.</div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Stage 2 Row -->
+                        <div>
+                            <h6 class="text-success fw-bold mb-3"><i class="fas fa-graduation-cap me-2"></i>Stage 2</h6>
+                            <div class="timeline-stepper pb-2">
+                                @if(stage2Templates.Any()) {
+                                    @foreach(var m in stage2Templates) {
+                                        <div class="stepper-item stage2">
+                                            <div class="stepper-icon"></div>
+                                            <div class="stepper-content">
+                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
+                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
+                                            </div>
+                                        </div>
+                                    }
+                                } else {
+                                    <div class="text-muted fs-8 fst-italic">No Stage 2 milestones.</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="d-flex flex-column mb-7 fv-row">
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span class="required">Target Milestone to Edit</span>
@@ -201,7 +387,9 @@
                             <option value="">-- Select Milestone --</option>
                             @foreach(var t in distinctMilestones)
                             {
-                                <option value="@t">@t</option>
+                                if (!defaultMilestoneTitles.Contains(t)) {
+                                    <option value="@t">@t</option>
+                                }
                             }
                         </select>
                         <div id="editTargetError" class="text-danger fw-bold small mt-1 d-none">Please select a milestone to edit.</div>
@@ -241,7 +429,7 @@
 
 <!-- Bulk Delete Milestone Modal -->
 <div class="modal fade" id="bulkDeleteMilestoneModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered mw-650px">
+    <div class="modal-dialog modal-dialog-centered mw-1000px">
         <div class="modal-content">
             <form asp-action="BulkDeleteMilestone" asp-controller="Supervisor" method="post" id="bulkDeleteForm" onsubmit="return validateBulkDelete()" novalidate>
                 <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSession" />
@@ -252,15 +440,63 @@
                     </div>
                 </div>
                 <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
+                    
+                    <!-- Current Timeline Visualization -->
+                    <div class="mb-8 p-5 rounded border border-light shadow-sm" style="background-color: #fafbfc;">
+                        <h4 class="fw-bolder text-dark mb-4 text-center">Current Project Timeline</h4>
+                        
+                        <!-- Stage 1 Row -->
+                        <div class="mb-6">
+                            <h6 class="text-primary fw-bold mb-3"><i class="fas fa-flag me-2"></i>Stage 1</h6>
+                            <div class="timeline-stepper pb-2">
+                                @if(stage1Templates.Any()) {
+                                    @foreach(var m in stage1Templates) {
+                                        <div class="stepper-item">
+                                            <div class="stepper-icon"></div>
+                                            <div class="stepper-content">
+                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
+                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
+                                            </div>
+                                        </div>
+                                    }
+                                } else {
+                                    <div class="text-muted fs-8 fst-italic">No Stage 1 milestones.</div>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Stage 2 Row -->
+                        <div>
+                            <h6 class="text-success fw-bold mb-3"><i class="fas fa-graduation-cap me-2"></i>Stage 2</h6>
+                            <div class="timeline-stepper pb-2">
+                                @if(stage2Templates.Any()) {
+                                    @foreach(var m in stage2Templates) {
+                                        <div class="stepper-item stage2">
+                                            <div class="stepper-icon"></div>
+                                            <div class="stepper-content">
+                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
+                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
+                                            </div>
+                                        </div>
+                                    }
+                                } else {
+                                    <div class="text-muted fs-8 fst-italic">No Stage 2 milestones.</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="d-flex flex-column mb-7 fv-row">
                         <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
                             <span class="required text-danger">Target Milestone to Delete</span>
                         </label>
                         <select name="targetTitle" class="form-select form-select-solid" id="deleteTargetTitle" onchange="validateBulkDeleteRealtime()" required>
                             <option value="">-- Select Milestone --</option>
-                            @foreach(var t in distinctMilestones.Where(m => !m.Contains("IAF", StringComparison.OrdinalIgnoreCase) && !m.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) && !m.Contains("Proposal", StringComparison.OrdinalIgnoreCase) && !m.Contains("Final", StringComparison.OrdinalIgnoreCase)))
+                            @foreach(var t in distinctMilestones)
                             {
-                                <option value="@t">@t</option>
+                                if (!defaultMilestoneTitles.Contains(t)) {
+                                    <option value="@t">@t</option>
+                                }
                             }
                         </select>
                         <div id="deleteTargetError" class="text-danger fw-bold small mt-1 d-none">Please select a milestone to delete.</div>
@@ -277,6 +513,10 @@
 
 @section Scripts {
     <script>
+        var sysProposalDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Proposal"))?.DueDate?.ToString("yyyy-MM-dd"))";
+        var sysFinalDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Step 5"))?.DueDate?.ToString("yyyy-MM-dd"))";
+        var sysStep1Date = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Step 1"))?.DueDate?.ToString("yyyy-MM-dd"))";
+
         document.addEventListener('DOMContentLoaded', function() {
 
             function setupDynamicFiltering(formId, rowClass) {
@@ -375,6 +615,24 @@
             }
         });
 
+        window.updateTitlePreview = function() {
+            var stage = document.getElementById('addStage').value;
+            var titleInput = document.getElementById('addTitle');
+            var preview = document.getElementById('addTitlePreview');
+            
+            var baseTitle = titleInput.value.trim();
+            if (!baseTitle) {
+                preview.value = "";
+            } else {
+                if (stage === "1") {
+                    preview.value = "FYP 1: " + baseTitle;
+                } else {
+                    preview.value = "Step - " + baseTitle;
+                }
+            }
+            window.validateBulkAddRealtime();
+        };
+
         // --- Real-time Validation ---
         window.validateBulkAddRealtime = function(isSubmit = false) {
             var title = document.getElementById('addTitle');
@@ -385,58 +643,105 @@
             var descError = document.getElementById('addDescriptionError');
             var isValid = true;
 
-            if (!title.value.trim() && isSubmit) {
-                title.classList.add('is-invalid');
-                titleError.innerText = "Title is required.";
-                titleError.classList.remove('d-none');
+            // Title Validation
+            var titleVal = title.value.trim();
+            if (titleVal.length === 0) {
+                if (isSubmit || title.classList.contains('is-invalid') || title.classList.contains('is-valid')) {
+                    title.classList.remove('is-valid');
+                    title.classList.add('is-invalid');
+                    titleError.innerText = "Custom title is required.";
+                    titleError.classList.remove('d-none');
+                }
                 isValid = false;
-            } else if (title.value && title.value.trim().length < 5) {
-                title.classList.add('is-invalid');
+            } else if (titleVal.length < 3) {
                 title.classList.remove('is-valid');
-                titleError.innerText = "Title must be at least 5 characters long.";
+                title.classList.add('is-invalid');
+                titleError.innerText = "Title must be at least 3 characters long.";
                 titleError.classList.remove('d-none');
                 isValid = false;
-            } else if (title.value) {
+            } else {
                 title.classList.remove('is-invalid');
                 title.classList.add('is-valid');
                 titleError.classList.add('d-none');
-            } else {
-                title.classList.remove('is-invalid', 'is-valid');
-                titleError.classList.add('d-none');
             }
 
-            if (!date.value && isSubmit) {
-                date.classList.add('is-invalid');
-                dateError.innerText = "Due date is required.";
-                dateError.classList.remove('d-none');
+            // Date Validation
+            if (!date.value) {
+                if (isSubmit || date.classList.contains('is-invalid') || date.classList.contains('is-valid')) {
+                    date.classList.remove('is-valid');
+                    date.classList.add('is-invalid');
+                    dateError.innerText = "Due date is required.";
+                    dateError.classList.remove('d-none');
+                }
                 isValid = false;
-            } else if (date.value) {
+            } else {
                 var selectedDate = new Date(date.value);
                 var today = new Date();
                 today.setHours(0,0,0,0);
                 
+                var propDate = sysProposalDate ? new Date(sysProposalDate) : null;
+                var finalDate = sysFinalDate ? new Date(sysFinalDate) : null;
+                var step1Date = sysStep1Date ? new Date(sysStep1Date) : null;
+                var previewTitle = document.getElementById('addTitlePreview').value || "";
+                var isFinalReport = previewTitle.includes("Final");
+                var isProposal = previewTitle.includes("Proposal");
+                var isIaf = previewTitle.includes("IAF") || previewTitle.includes("Initial Project");
+                var isStage2 = previewTitle.startsWith("Step ");
+
+                // Helper to format date as dd-mmm-yyyy
+                var formatDate = function(d) {
+                    if (!d) return "";
+                    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
+                };
+
                 if (isNaN(selectedDate.getTime()) || selectedDate < today) {
-                    date.classList.add('is-invalid');
                     date.classList.remove('is-valid');
+                    date.classList.add('is-invalid');
                     dateError.innerText = selectedDate < today ? "Due date cannot be in the past." : "Please select a valid due date.";
                     dateError.classList.remove('d-none');
                     isValid = false;
+                } else if (isStage2 && !previewTitle.includes("Step 1") && step1Date && selectedDate < step1Date) {
+                    date.classList.remove('is-valid');
+                    date.classList.add('is-invalid');
+                    dateError.innerText = "Date Error: Stage 2 milestones cannot be before Step 1 (" + formatDate(step1Date) + ").";
+                    dateError.classList.remove('d-none');
+                    isValid = false;
+                } else if (!isFinalReport && !isProposal && !isIaf) {
+                    // Chronological Validation
+                    if (propDate && selectedDate < propDate) {
+                        date.classList.remove('is-valid');
+                        date.classList.add('is-invalid');
+                        dateError.innerText = "Date Error: Cannot be before the Proposal due date (" + formatDate(propDate) + ").";
+                        dateError.classList.remove('d-none');
+                        isValid = false;
+                    } else if (finalDate && selectedDate > finalDate) {
+                        date.classList.remove('is-valid');
+                        date.classList.add('is-invalid');
+                        dateError.innerText = "Date Error: Cannot be after the Presentation Slides due date (" + formatDate(finalDate) + ").";
+                        dateError.classList.remove('d-none');
+                        isValid = false;
+                    } else {
+                        date.classList.remove('is-invalid');
+                        date.classList.add('is-valid');
+                        dateError.classList.add('d-none');
+                    }
                 } else {
                     date.classList.remove('is-invalid');
                     date.classList.add('is-valid');
                     dateError.classList.add('d-none');
                 }
-            } else {
-                date.classList.remove('is-invalid', 'is-valid');
-                dateError.classList.add('d-none');
             }
 
-            if (desc.value && desc.value.trim().length < 10) {
-                desc.classList.add('is-invalid');
+            // Description Validation (Optional)
+            var descVal = desc.value.trim();
+            if (descVal.length > 0 && descVal.length < 10) {
                 desc.classList.remove('is-valid');
+                desc.classList.add('is-invalid');
+                descError.innerText = "Description must be at least 10 characters long.";
                 descError.classList.remove('d-none');
                 isValid = false;
-            } else if (desc.value) {
+            } else if (descVal.length >= 10) {
                 desc.classList.remove('is-invalid');
                 desc.classList.add('is-valid');
                 descError.classList.add('d-none');
@@ -500,12 +805,53 @@
                 var today = new Date();
                 today.setHours(0,0,0,0);
                 
+                var propDate = sysProposalDate ? new Date(sysProposalDate) : null;
+                var finalDate = sysFinalDate ? new Date(sysFinalDate) : null;
+                var step1Date = sysStep1Date ? new Date(sysStep1Date) : null;
+                var targetTitleToValidate = title.value.trim() || target.value || "";
+                
+                var isFinalReport = targetTitleToValidate.includes("Final");
+                var isProposal = targetTitleToValidate.includes("Proposal");
+                var isIaf = targetTitleToValidate.includes("IAF") || targetTitleToValidate.includes("Initial Project");
+                var isStage2 = targetTitleToValidate.startsWith("Step ");
+
+                var formatDate = function(d) {
+                    if (!d) return "";
+                    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
+                };
+
                 if (isNaN(selectedDate.getTime()) || selectedDate < today) {
                     date.classList.add('is-invalid');
                     date.classList.remove('is-valid');
                     dateError.innerText = selectedDate < today ? "Due date cannot be in the past." : "Please select a valid due date.";
                     dateError.style.display = 'block';
                     isValid = false;
+                } else if (isStage2 && !targetTitleToValidate.includes("Step 1") && step1Date && selectedDate < step1Date) {
+                    date.classList.remove('is-valid');
+                    date.classList.add('is-invalid');
+                    dateError.innerText = "Date Error: Stage 2 milestones cannot be before Step 1 (" + formatDate(step1Date) + ").";
+                    dateError.style.display = 'block';
+                    isValid = false;
+                } else if (!isFinalReport && !isProposal && !isIaf) {
+                    // Chronological Validation
+                    if (propDate && selectedDate < propDate) {
+                        date.classList.remove('is-valid');
+                        date.classList.add('is-invalid');
+                        dateError.innerText = "Date Error: Cannot be before the Proposal due date (" + formatDate(propDate) + ").";
+                        dateError.style.display = 'block';
+                        isValid = false;
+                    } else if (finalDate && selectedDate > finalDate) {
+                        date.classList.remove('is-valid');
+                        date.classList.add('is-invalid');
+                        dateError.innerText = "Date Error: Cannot be after the Presentation Slides due date (" + formatDate(finalDate) + ").";
+                        dateError.style.display = 'block';
+                        isValid = false;
+                    } else {
+                        date.classList.remove('is-invalid');
+                        date.classList.add('is-valid');
+                        dateError.style.display = 'none';
+                    }
                 } else {
                     date.classList.remove('is-invalid');
                     date.classList.add('is-valid');

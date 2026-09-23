@@ -4,22 +4,14 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 
     var milestones = Model.Milestones.ToList();
-    
     // Stage 2 Milestones
-    var s2Turnitin = milestones.FirstOrDefault(m => m.Title.Equals("Step 1: Turnitin", StringComparison.OrdinalIgnoreCase));
-    var s2Dpp = milestones.FirstOrDefault(m => m.Title.Equals("Step 2: DPP report full", StringComparison.OrdinalIgnoreCase));
-    var s2Marksheet = milestones.FirstOrDefault(m => m.Title.Equals("Step 3: Marksheet Submission", StringComparison.OrdinalIgnoreCase));
-    var s2Meeting = milestones.FirstOrDefault(m => m.Title.Equals("Step 4: Record of Supervisor Meeting Form Submission", StringComparison.OrdinalIgnoreCase));
-    var s2Slides = milestones.FirstOrDefault(m => m.Title.Equals("Step 5: Presentation Slides Submission", StringComparison.OrdinalIgnoreCase));
-
-    bool isTurnitinDone = s2Turnitin != null && (s2Turnitin.Status == "Submitted" || s2Turnitin.Status == "Approved" || s2Turnitin.Status == "Completed");
-    bool isDppDone = s2Dpp != null && (s2Dpp.Status == "Submitted" || s2Dpp.Status == "Approved" || s2Dpp.Status == "Completed");
-    bool isMarksheetDone = s2Marksheet != null && (s2Marksheet.Status == "Submitted" || s2Marksheet.Status == "Approved" || s2Marksheet.Status == "Completed");
-    bool isMeetingDone = s2Meeting != null && (s2Meeting.Status == "Submitted" || s2Meeting.Status == "Approved" || s2Meeting.Status == "Completed");
-    bool isSlidesDone = s2Slides != null && (s2Slides.Status == "Submitted" || s2Slides.Status == "Approved" || s2Slides.Status == "Completed");
+    var stage2Milestones = milestones
+        .Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
+        .OrderBy(m => m.DueDate ?? DateTime.MaxValue)
+        .ToList();
     
     // Overall completion check
-    bool isStage2Completed = isTurnitinDone && isDppDone && isMarksheetDone && isMeetingDone && isSlidesDone;
+    bool isStage2Completed = stage2Milestones.All(m => m.Status == "Submitted" || m.Status == "Approved" || m.Status == "Completed");
 }
 
 <div class="container py-4">
@@ -71,125 +63,82 @@
                 </div>
                 <div class="card-body p-4">
                     
-                    @* STEP 1: Turnitin *@
-                    <div class="mb-5">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="rounded-circle text-white d-flex align-items-center justify-content-center me-3 @(isTurnitinDone ? "bg-success" : "bg-primary")" style="width: 40px; height: 40px; font-weight: bold; font-size: 18px;">
-                                @(isTurnitinDone ? Html.Raw("<i class=\"fas fa-check\"></i>") : "1")
-                            </div>
-                            <h5 class="fw-bold mb-0 @(isTurnitinDone ? "text-success" : "text-dark")">Step 1: Turnitin Report</h5>
-                        </div>
-                        <div class="ms-5 ps-2 border-start border-2 @(isTurnitinDone ? "border-success" : "border-light")">
-                            <form asp-action="SubmitStage2Milestone" asp-controller="Student" enctype="multipart/form-data" method="post">
-                                <input type="hidden" name="stepTitle" value="Step 1: Turnitin" />
-                                <div class="mb-3">
-                                    <label class="form-label text-muted small fw-bold">Upload your Turnitin similarity report (PDF only)</label>
-                                    @if(isTurnitinDone) {
-                                        <div class="alert alert-light border shadow-sm p-3"><i class="fas fa-file-pdf text-danger me-2"></i> Turnitin Report Submitted</div>
-                                    } else {
-                                        <input class="form-control" type="file" name="file" accept=".pdf" required>
-                                        <button type="submit" class="btn btn-primary mt-3 px-4 rounded-pill shadow-sm"><i class="fas fa-upload me-2"></i> Submit Turnitin Report</button>
-                                    }
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+                    @{
+                        bool previousDone = true;
+                    }
+                    @for (int i = 0; i < stage2Milestones.Count; i++)
+                    {
+                        var step = stage2Milestones[i];
+                        bool isDone = step.Status == "Submitted" || step.Status == "Approved" || step.Status == "Completed";
+                        bool isRejected = step.Status == "Rejected" || step.Status == "Revision";
+                        bool isUnderReview = step.Status == "UnderReview";
+                        bool isUnlocked = previousDone || isRejected || isUnderReview;
+                        bool isLast = i == stage2Milestones.Count - 1;
 
-                    @* STEP 2: DPP Report *@
-                    <div class="mb-5" style="opacity: @(isTurnitinDone ? "1" : "0.5"); pointer-events: @(isTurnitinDone ? "auto" : "none");">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="rounded-circle text-white d-flex align-items-center justify-content-center me-3 @(isDppDone ? "bg-success" : (isTurnitinDone ? "bg-primary" : "bg-secondary"))" style="width: 40px; height: 40px; font-weight: bold; font-size: 18px;">
-                                @(isDppDone ? Html.Raw("<i class=\"fas fa-check\"></i>") : "2")
-                            </div>
-                            <h5 class="fw-bold mb-0 @(isDppDone ? "text-success" : "text-dark")">Step 2: DPP Report Full</h5>
-                        </div>
-                        <div class="ms-5 ps-2 border-start border-2 @(isDppDone ? "border-success" : "border-light")">
-                            <form asp-action="SubmitStage2Milestone" asp-controller="Student" enctype="multipart/form-data" method="post">
-                                <input type="hidden" name="stepTitle" value="Step 2: DPP report full" />
-                                <div class="mb-3">
-                                    <label class="form-label text-muted small fw-bold">Upload your full dissertation report (max 300-350 pages, PDF only)</label>
-                                    @if(isDppDone) {
-                                        <div class="alert alert-light border shadow-sm p-3"><i class="fas fa-file-pdf text-danger me-2"></i> DPP Report Submitted</div>
-                                    } else {
-                                        <input class="form-control" type="file" name="file" accept=".pdf" required>
-                                        <button type="submit" class="btn btn-primary mt-3 px-4 rounded-pill shadow-sm"><i class="fas fa-upload me-2"></i> Submit DPP Report</button>
-                                    }
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+                        string labelText = "Upload your document (PDF only)";
+                        string btnText = "Submit Document";
+                        if (step.Title.Contains("Turnitin")) { labelText = "Upload your Turnitin similarity report (PDF only)"; btnText = "Submit Turnitin Report"; }
+                        else if (step.Title.Contains("DPP")) { labelText = "Upload your full dissertation report (max 300-350 pages, PDF only)"; btnText = "Submit DPP Report"; }
+                        else if (step.Title.Contains("Marksheet")) { labelText = "Upload your evaluation marksheet template (PDF only)"; btnText = "Submit Marksheet Form"; }
+                        else if (step.Title.Contains("Meeting")) { labelText = "Upload your completed and signed supervisor meeting record (PDF only)"; btnText = "Submit Meeting Record"; }
+                        else if (step.Title.Contains("Presentation")) { labelText = "Upload your final presentation slides (PDF only)"; btnText = "Submit Presentation Slides"; }
 
-                    @* STEP 3: Marksheet Submission *@
-                    <div class="mb-5" style="opacity: @(isDppDone ? "1" : "0.5"); pointer-events: @(isDppDone ? "auto" : "none");">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="rounded-circle text-white d-flex align-items-center justify-content-center me-3 @(isMarksheetDone ? "bg-success" : (isDppDone ? "bg-primary" : "bg-secondary"))" style="width: 40px; height: 40px; font-weight: bold; font-size: 18px;">
-                                @(isMarksheetDone ? Html.Raw("<i class=\"fas fa-check\"></i>") : "3")
-                            </div>
-                            <h5 class="fw-bold mb-0 @(isMarksheetDone ? "text-success" : "text-dark")">Step 3: Marksheet Submission</h5>
-                        </div>
-                        <div class="ms-5 ps-2 border-start border-2 @(isMarksheetDone ? "border-success" : "border-light")">
-                            <form asp-action="SubmitStage2Milestone" asp-controller="Student" enctype="multipart/form-data" method="post">
-                                <input type="hidden" name="stepTitle" value="Step 3: Marksheet Submission" />
-                                <div class="mb-3">
-                                    <label class="form-label text-muted small fw-bold">Upload your evaluation marksheet template (PDF only)</label>
-                                    @if(isMarksheetDone) {
-                                        <div class="alert alert-light border shadow-sm p-3"><i class="fas fa-file-pdf text-danger me-2"></i> Marksheet Template Submitted</div>
-                                    } else {
-                                        <input class="form-control" type="file" name="file" accept=".pdf" required>
-                                        <button type="submit" class="btn btn-primary mt-3 px-4 rounded-pill shadow-sm"><i class="fas fa-upload me-2"></i> Submit Marksheet Form</button>
-                                    }
+                        <div class="@(isLast ? "" : "mb-5")" style="opacity: @(isUnlocked ? "1" : "0.5"); pointer-events: @(isUnlocked ? "auto" : "none");">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="rounded-circle text-white d-flex align-items-center justify-content-center me-3 @(isDone ? "bg-success" : (isUnlocked ? "bg-primary" : "bg-secondary"))" style="width: 40px; height: 40px; font-weight: bold; font-size: 18px;">
+                                    @(isDone ? Html.Raw("<i class=\"fas fa-check\"></i>") : (i + 1).ToString())
                                 </div>
-                            </form>
-                        </div>
-                    </div>
-                    
-                    @* STEP 4: Meeting Form *@
-                    <div class="mb-5" style="opacity: @(isMarksheetDone ? "1" : "0.5"); pointer-events: @(isMarksheetDone ? "auto" : "none");">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="rounded-circle text-white d-flex align-items-center justify-content-center me-3 @(isMeetingDone ? "bg-success" : (isMarksheetDone ? "bg-primary" : "bg-secondary"))" style="width: 40px; height: 40px; font-weight: bold; font-size: 18px;">
-                                @(isMeetingDone ? Html.Raw("<i class=\"fas fa-check\"></i>") : "4")
+                                <h5 class="fw-bold mb-0 @(isDone ? "text-success" : (isRejected ? "text-danger" : (isUnderReview ? "text-warning" : "text-dark")))">@step.Title</h5>
                             </div>
-                            <h5 class="fw-bold mb-0 @(isMeetingDone ? "text-success" : "text-dark")">Step 4: Record of Supervisor Meeting Form</h5>
-                        </div>
-                        <div class="ms-5 ps-2 border-start border-2 @(isMeetingDone ? "border-success" : "border-light")">
-                            <form asp-action="SubmitStage2Milestone" asp-controller="Student" enctype="multipart/form-data" method="post">
-                                <input type="hidden" name="stepTitle" value="Step 4: Record of Supervisor Meeting Form Submission" />
-                                <div class="mb-3">
-                                    <label class="form-label text-muted small fw-bold">Upload your completed and signed supervisor meeting record (PDF only)</label>
-                                    @if(isMeetingDone) {
-                                        <div class="alert alert-light border shadow-sm p-3"><i class="fas fa-file-pdf text-danger me-2"></i> Meeting Record Submitted</div>
-                                    } else {
-                                        <input class="form-control" type="file" name="file" accept=".pdf" required>
-                                        <button type="submit" class="btn btn-primary mt-3 px-4 rounded-pill shadow-sm"><i class="fas fa-upload me-2"></i> Submit Meeting Record</button>
-                                    }
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+                            <div class="ms-5 ps-2 @(isLast ? "" : "border-start border-2 " + (isDone ? "border-success" : (isRejected ? "border-danger" : (isUnderReview ? "border-warning" : "border-light"))))">
+                                <form asp-action="SubmitStage2Milestone" asp-controller="Student" enctype="multipart/form-data" method="post">
+                                    <input type="hidden" name="stepTitle" value="@step.Title" />
+                                    <div class="mb-3">
+                                        <label class="form-label text-muted small fw-bold">@labelText</label>
+                                        @{ var latestFile = step.SubmissionFiles?.OrderByDescending(f => f.UploadedDate).FirstOrDefault(); }
+                                        @if(isDone) {
+                                            <div class="alert alert-light border shadow-sm p-3 mb-0 d-flex justify-content-between align-items-center">
+                                                <span><i class="fas fa-file-pdf text-danger me-2"></i> Document Submitted</span>
+                                                @if(latestFile != null && !string.IsNullOrEmpty(latestFile.FilePath)) {
+                                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = latestFile.Id })" target="_blank" class="btn btn-sm btn-outline-secondary">View File</a>
+                                                }
+                                            </div>
+                                            @if(step.Status == "Approved" || step.Status == "Completed") {
+                                                <div class="text-success mt-2 small fw-bold"><i class="fas fa-check-circle me-1"></i> Approved</div>
+                                            }
 
-                    @* STEP 5: Presentation Slides *@
-                    <div style="opacity: @(isMeetingDone ? "1" : "0.5"); pointer-events: @(isMeetingDone ? "auto" : "none");">
-                        <div class="d-flex align-items-center mb-3">
-                            <div class="rounded-circle text-white d-flex align-items-center justify-content-center me-3 @(isSlidesDone ? "bg-success" : (isMeetingDone ? "bg-primary" : "bg-secondary"))" style="width: 40px; height: 40px; font-weight: bold; font-size: 18px;">
-                                @(isSlidesDone ? Html.Raw("<i class=\"fas fa-check\"></i>") : "5")
+                                            @if (step.SubmissionFiles != null && step.SubmissionFiles.Any(f => f.UploadedBy != Model.StudentId))
+                                            {
+                                                <div class="mt-3 p-3 bg-light-primary rounded border border-primary border-opacity-25">
+                                                    <h6 class="fw-bold text-primary mb-2 small"><i class="fas fa-comment-dots me-1"></i>Supervisor Feedback Files</h6>
+                                                    @foreach (var sFile in step.SubmissionFiles.Where(f => f.UploadedBy != Model.StudentId).ToList())
+                                                    {
+                                                        <a href="@Url.Action("ViewFile", "Student", new { fileId = sFile.Id })" target="_blank" class="btn btn-sm btn-white border shadow-sm w-100 text-start mb-1 text-truncate">
+                                                            <i class="fas fa-file-download text-primary me-2"></i>@sFile.FileName
+                                                        </a>
+                                                    }
+                                                </div>
+                                            }
+                                        } else {
+                                            @if (isRejected || isUnderReview) {
+                                                <div class="alert @(isRejected ? "alert-danger" : "alert-warning") shadow-sm p-3 mb-3 border-0" style="border-left: 4px solid @(isRejected ? "#dc3545" : "#ffc107") !important;">
+                                                    <h6 class="fw-bold mb-2"><i class="fas fa-exclamation-triangle me-2"></i>@(isRejected ? "Revision Required" : "Needs Attention")</h6>
+                                                    <p class="mb-2 text-dark small">@(string.IsNullOrEmpty(step.SupervisorFeedback) ? "Please check your document." : step.SupervisorFeedback)</p>
+                                                    @if(latestFile != null && !string.IsNullOrEmpty(latestFile.FilePath)) {
+                                                        <a href="@Url.Action("ViewFile", "Student", new { fileId = latestFile.Id })" target="_blank" class="btn btn-sm @(isRejected ? "btn-outline-danger" : "btn-outline-warning") mt-1"><i class="fas fa-eye me-1"></i> View Previous Submission</a>
+                                                    }
+                                                </div>
+                                            }
+                                            <input class="form-control" type="file" name="file" accept=".pdf" required>
+                                            <button type="submit" class="btn btn-primary mt-3 px-4 rounded-pill shadow-sm"><i class="fas fa-upload me-2"></i> @btnText</button>
+                                        }
+                                    </div>
+                                </form>
                             </div>
-                            <h5 class="fw-bold mb-0 @(isSlidesDone ? "text-success" : "text-dark")">Step 5: Presentation Slides</h5>
                         </div>
-                        <div class="ms-5 ps-2">
-                            <form asp-action="SubmitStage2Milestone" asp-controller="Student" enctype="multipart/form-data" method="post">
-                                <input type="hidden" name="stepTitle" value="Step 5: Presentation Slides Submission" />
-                                <div class="mb-3">
-                                    <label class="form-label text-muted small fw-bold">Upload your final presentation slides (PDF only)</label>
-                                    @if(isSlidesDone) {
-                                        <div class="alert alert-light border shadow-sm p-3"><i class="fas fa-file-pdf text-danger me-2"></i> Presentation Slides Submitted</div>
-                                    } else {
-                                        <input class="form-control" type="file" name="file" accept=".pdf" required>
-                                        <button type="submit" class="btn btn-primary mt-3 px-4 rounded-pill shadow-sm"><i class="fas fa-upload me-2"></i> Submit Presentation Slides</button>
-                                    }
-                                </div>
-                            </form>
-                        </div>
-                    </div>
+
+                        previousDone = isDone;
+                    }
 
                 </div>
             </div>

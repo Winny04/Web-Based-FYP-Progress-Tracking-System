@@ -619,7 +619,7 @@
     }
 
     @* ── EXAMINER FEEDBACK ── *@
-    @if (Model != null && !string.IsNullOrEmpty(Model.FinalGrade) && (!string.IsNullOrEmpty(Model.ExaminerStrengths) || !string.IsNullOrEmpty(Model.ExaminerImprovements) || !string.IsNullOrEmpty(Model.ExaminerComments)))
+    @if (Model != null && !string.IsNullOrEmpty(Model.FinalGrade))
     {
         var gradeColorHex = "#16a34a"; // Default Green
         var gradeTextColor = "text-success";
@@ -641,9 +641,23 @@
         }
 
         <div class="premium-card p-4 mb-4" style="border-left: 5px solid @gradeColorHex;">
-            <h5 class="fw-bold @gradeTextColor mb-3"><i class="fas fa-award me-2"></i> Examiner Feedback & Results</h5>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h5 class="fw-bold @gradeTextColor mb-0"><i class="fas fa-award me-2"></i> Stage 2 Final Result</h5>
+                    @if (!string.IsNullOrEmpty(Model.ExaminerMarksheetPath))
+                    {
+                        <a href="@Model.ExaminerMarksheetPath" target="_blank" class="btn btn-sm btn-outline-primary mt-2">
+                            <i class="fas fa-file-excel me-1"></i> Download Raw Marksheet
+                        </a>
+                    }
+                </div>
+                <span class="badge text-white shadow-sm" style="background-color: @gradeColorHex; font-size: 0.95rem; padding: 6px 16px;">@Model.FinalGrade</span>
+            </div>
             
-            <div class="row gy-4">
+            @if (!string.IsNullOrEmpty(Model.ExaminerStrengths) || !string.IsNullOrEmpty(Model.ExaminerImprovements) || !string.IsNullOrEmpty(Model.ExaminerComments))
+            {
+                <h6 class="fw-bold text-dark mt-4 mb-3 border-top pt-4">Examiner Feedback</h6>
+                <div class="row gy-4">
                 @if (!string.IsNullOrEmpty(Model.ExaminerStrengths))
                 {
                     <div class="col-md-12">
@@ -666,6 +680,7 @@
                     </div>
                 }
             </div>
+            }
         </div>
     }
 
@@ -812,9 +827,8 @@
 
                     <div class="border rounded-3 overflow-hidden bg-white">
                         @{
-                            var upcomingMilestones = milestones.Where(m => m.DueDate.HasValue && m.DueDate.Value >= DateTime.Today).OrderBy(m => m.DueDate).ToList();
-                            var undatedMilestones = milestones.Where(m => !m.DueDate.HasValue).OrderBy(m => m.Title).ToList();
-                            var pastMilestones = milestones.Where(m => m.DueDate.HasValue && m.DueDate.Value < DateTime.Today).OrderByDescending(m => m.DueDate).ToList();
+                            var stage1Milestones = milestones.Where(m => !m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).OrderBy(m => m.DueDate).ToList();
+                            var stage2Milestones = milestones.Where(m => m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).OrderBy(m => m.DueDate).ToList();
                         }
 
                         <style>
@@ -829,21 +843,22 @@
                             }
                         </style>
 
-                        @if (upcomingMilestones.Any())
+                        @if (stage1Milestones.Any())
                         {
-                            <div class="assignment-group-header" style="border-top: none;" data-bs-toggle="collapse" data-bs-target="#collapse-upcoming" aria-expanded="true" aria-controls="collapse-upcoming">
-                                <i class="fas fa-caret-down me-2" style="font-size: 0.85em;"></i> Upcoming Assignments
+                            <div class="assignment-group-header" style="border-top: none;" data-bs-toggle="collapse" data-bs-target="#collapse-stage1" aria-expanded="true" aria-controls="collapse-stage1">
+                                <i class="fas fa-caret-down me-2" style="font-size: 0.85em;"></i> Stage 1: Progress & Reports
                             </div>
-                            <div class="collapse show" id="collapse-upcoming">
-                                @foreach (var m in upcomingMilestones)
+                            <div class="collapse show" id="collapse-stage1">
+                                @foreach (var m in stage1Milestones)
                                 {
                                     var statusText = string.IsNullOrEmpty(m.Status) || (m.Status == "Pending" && !m.SubmittedDate.HasValue) ? "Not Started" : m.Status;
                                     var iconClass = (m.Title.Contains("Quiz", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) ? "fas fa-rocket" : "far fa-edit";
-                                    
+                                    var isPast = m.DueDate.HasValue && m.DueDate.Value < DateTime.Today && m.Status != "Approved" && m.Status != "Completed";
+
                                     <div class="assignment-item">
                                         <i class="@iconClass assignment-icon"></i>
                                         <div class="flex-grow-1">
-                                            @if (m.Status == "Approved" || statusText == "Not Started" || m.Status == "Rejected" || m.Status == "Revision")
+                                            @if (m.Status == "Approved" || m.Status == "Completed" || statusText == "Not Started" || m.Status == "Rejected" || m.Status == "Revision")
                                             {
                                                 <a href="/Student/Forms" class="assignment-title action-link">@m.Title</a>
                                             }
@@ -853,10 +868,15 @@
                                             }
                                             
                                             <div class="assignment-meta">
-                                                <span>Due @m.DueDate!.Value.ToString("MMM dd") at 11:59pm</span> <span class="assignment-meta-separator">|</span>
+                                                @if (isPast) {
+                                                    <strong class="text-danger fw-bold">Overdue</strong> <span class="assignment-meta-separator">|</span>
+                                                }
+                                                @if (m.DueDate.HasValue) {
+                                                    <span>Due @m.DueDate.Value.ToString("MMM dd") at 11:59pm</span> <span class="assignment-meta-separator">|</span>
+                                                }
                                                 
-                                                @if (statusText == "Approved") {
-                                                    <span>Approved</span>
+                                                @if (statusText == "Approved" || statusText == "Completed") {
+                                                    <span class="text-success fw-bold">@statusText</span>
                                                 } else if (statusText == "Rejected" || statusText == "Revision") {
                                                     <span class="text-danger fw-bold">Revision Needed</span>
                                                 } else if (statusText == "Not Started") {
@@ -867,9 +887,9 @@
                                             </div>
                                         </div>
                                         <div>
-                                            @if (m.Status == "Approved" || m.Status == "Rejected" || m.Status == "Revision")
+                                            @if (m.Status == "Approved" || m.Status == "Completed" || m.Status == "Rejected" || m.Status == "Revision")
                                             {
-                                                var fallbackFeedback = (m.Status == "Approved") ? "No feedback provided yet." : "Please revise according to guidelines.";
+                                                var fallbackFeedback = (m.Status == "Approved" || m.Status == "Completed") ? "No feedback provided yet." : "Please revise according to guidelines.";
                                                 <button type="button" class="btn btn-sm text-primary p-0 border-0 ms-3 hover-elevate-up" style="background: transparent; cursor: default;" title="Supervisor Feedback" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="left" data-bs-content="@Html.Raw(System.Web.HttpUtility.HtmlAttributeEncode(!string.IsNullOrEmpty(m.SupervisorFeedback) ? m.SupervisorFeedback : fallbackFeedback))">
                                                     <i class="far fa-comment-dots fs-5"></i>
                                                 </button>
@@ -880,70 +900,22 @@
                             </div>
                         }
 
-                        @if (undatedMilestones.Any())
+                        @if (stage2Milestones.Any())
                         {
-                            <div class="assignment-group-header @(upcomingMilestones.Any() ? "" : "border-top-0")" data-bs-toggle="collapse" data-bs-target="#collapse-undated" aria-expanded="true" aria-controls="collapse-undated">
-                                <i class="fas fa-caret-down me-2" style="font-size: 0.85em;"></i> Undated Assignments
+                            <div class="assignment-group-header @(stage1Milestones.Any() ? "" : "border-top-0")" data-bs-toggle="collapse" data-bs-target="#collapse-stage2" aria-expanded="true" aria-controls="collapse-stage2">
+                                <i class="fas fa-caret-down me-2" style="font-size: 0.85em;"></i> Stage 2: Final Submission
                             </div>
-                            <div class="collapse show" id="collapse-undated">
-                                @foreach (var m in undatedMilestones)
+                            <div class="collapse show" id="collapse-stage2">
+                                @foreach (var m in stage2Milestones)
                                 {
                                     var statusText = string.IsNullOrEmpty(m.Status) || (m.Status == "Pending" && !m.SubmittedDate.HasValue) ? "Not Started" : m.Status;
                                     var iconClass = (m.Title.Contains("Quiz", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) ? "fas fa-rocket" : "far fa-edit";
-                                    
-                                    <div class="assignment-item">
-                                        <i class="@iconClass assignment-icon"></i>
-                                        <div class="flex-grow-1">
-                                            @if (m.Status == "Approved" || statusText == "Not Started" || m.Status == "Rejected" || m.Status == "Revision")
-                                            {
-                                                <a href="/Student/Forms" class="assignment-title action-link">@m.Title</a>
-                                            }
-                                            else
-                                            {
-                                                <span class="assignment-title">@m.Title</span>
-                                            }
-                                            
-                                            <div class="assignment-meta">
-                                                @if (statusText == "Approved") {
-                                                    <span>Approved</span>
-                                                } else if (statusText == "Rejected" || statusText == "Revision") {
-                                                    <span class="text-danger fw-bold">Revision Needed</span>
-                                                } else if (statusText == "Not Started") {
-                                                    <span>Not Yet Submitted</span>
-                                                } else {
-                                                    <span>@statusText</span>
-                                                }
-                                            </div>
-                                        </div>
-                                        <div>
-                                            @if (m.Status == "Approved" || m.Status == "Rejected" || m.Status == "Revision")
-                                            {
-                                                var fallbackFeedback = (m.Status == "Approved") ? "No feedback provided yet." : "Please revise according to guidelines.";
-                                                <button type="button" class="btn btn-sm text-primary p-0 border-0 ms-3 hover-elevate-up" style="background: transparent; cursor: default;" title="Supervisor Feedback" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="left" data-bs-content="@Html.Raw(System.Web.HttpUtility.HtmlAttributeEncode(!string.IsNullOrEmpty(m.SupervisorFeedback) ? m.SupervisorFeedback : fallbackFeedback))">
-                                                    <i class="far fa-comment-dots fs-5"></i>
-                                                </button>
-                                            }
-                                        </div>
-                                    </div>
-                                }
-                            </div>
-                        }
+                                    var isPast = m.DueDate.HasValue && m.DueDate.Value < DateTime.Today && m.Status != "Approved" && m.Status != "Completed";
 
-                        @if (pastMilestones.Any())
-                        {
-                            <div class="assignment-group-header @(!upcomingMilestones.Any() && !undatedMilestones.Any() ? "border-top-0" : "")" data-bs-toggle="collapse" data-bs-target="#collapse-past" aria-expanded="true" aria-controls="collapse-past">
-                                <i class="fas fa-caret-down me-2" style="font-size: 0.85em;"></i> Past Assignments
-                            </div>
-                            <div class="collapse show" id="collapse-past">
-                                @foreach (var m in pastMilestones)
-                                {
-                                    var statusText = string.IsNullOrEmpty(m.Status) || (m.Status == "Pending" && !m.SubmittedDate.HasValue) ? "Not Started" : m.Status;
-                                    var iconClass = (m.Title.Contains("Quiz", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) ? "fas fa-rocket" : "far fa-edit";
-                                    
                                     <div class="assignment-item">
                                         <i class="@iconClass assignment-icon"></i>
                                         <div class="flex-grow-1">
-                                            @if (m.Status == "Approved" || statusText == "Not Started" || m.Status == "Rejected" || m.Status == "Revision")
+                                            @if (m.Status == "Approved" || m.Status == "Completed" || statusText == "Not Started" || m.Status == "Rejected" || m.Status == "Revision")
                                             {
                                                 <a href="/Student/Forms" class="assignment-title action-link">@m.Title</a>
                                             }
@@ -953,11 +925,15 @@
                                             }
                                             
                                             <div class="assignment-meta">
-                                                <strong class="text-dark">Closed</strong> <span class="assignment-meta-separator">|</span>
-                                                <span>Due @m.DueDate!.Value.ToString("MMM dd") at 11:59pm</span> <span class="assignment-meta-separator">|</span>
+                                                @if (isPast) {
+                                                    <strong class="text-danger fw-bold">Overdue</strong> <span class="assignment-meta-separator">|</span>
+                                                }
+                                                @if (m.DueDate.HasValue) {
+                                                    <span>Due @m.DueDate.Value.ToString("MMM dd") at 11:59pm</span> <span class="assignment-meta-separator">|</span>
+                                                }
                                                 
-                                                @if (statusText == "Approved") {
-                                                    <span>Approved</span>
+                                                @if (statusText == "Approved" || statusText == "Completed") {
+                                                    <span class="text-success fw-bold">@statusText</span>
                                                 } else if (statusText == "Rejected" || statusText == "Revision") {
                                                     <span class="text-danger fw-bold">Revision Needed</span>
                                                 } else if (statusText == "Not Started") {
@@ -968,9 +944,9 @@
                                             </div>
                                         </div>
                                         <div>
-                                            @if (m.Status == "Approved" || m.Status == "Rejected" || m.Status == "Revision")
+                                            @if (m.Status == "Approved" || m.Status == "Completed" || m.Status == "Rejected" || m.Status == "Revision")
                                             {
-                                                var fallbackFeedback = (m.Status == "Approved") ? "No feedback provided yet." : "Please revise according to guidelines.";
+                                                var fallbackFeedback = (m.Status == "Approved" || m.Status == "Completed") ? "No feedback provided yet." : "Please revise according to guidelines.";
                                                 <button type="button" class="btn btn-sm text-primary p-0 border-0 ms-3 hover-elevate-up" style="background: transparent; cursor: default;" title="Supervisor Feedback" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="left" data-bs-content="@Html.Raw(System.Web.HttpUtility.HtmlAttributeEncode(!string.IsNullOrEmpty(m.SupervisorFeedback) ? m.SupervisorFeedback : fallbackFeedback))">
                                                     <i class="far fa-comment-dots fs-5"></i>
                                                 </button>

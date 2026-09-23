@@ -136,7 +136,8 @@
                                         }
                                     </td>
                                     <td>
-                                        @if (ms.Status == "Submitted" || ms.Status == "UnderReview") { <span class="badge badge-light-warning">Needs Attention</span> }
+                                        @if (ms.Status == "Submitted") { <span class="badge badge-light-primary">Submitted</span> }
+                                        else if (ms.Status == "UnderReview") { <span class="badge badge-light-warning">Needs Attention</span> }
                                         else if (ms.Status == "Completed") { <span class="badge badge-light-primary">Completed</span> }
                                         else if (ms.Status == "Approved") { <span class="badge badge-light-success">Approved</span> }
                                         else if (ms.Status == "Pending") { <span class="badge badge-light-info">Pending</span> }
@@ -171,19 +172,14 @@
                                         <td><span class="text-dark fw-bold d-block fs-6">@(ms.SubmittedDate?.ToString("dd MMM yyyy HH:mm") ?? "-")</span></td>
                                         <td>
                                             @{
-                                                var activeFiles = ms.SubmissionFiles?.Where(f => !f.IsDeleted).ToList();
-                                                var maxAttempt = activeFiles?.Any() == true ? activeFiles.Max(f => f.AttemptNumber) : 1;
-                                                var latestFiles = activeFiles?.Where(f => f.AttemptNumber == maxAttempt).OrderByDescending(f => f.UploadedDate).ToList();
+                                                var latestFile = ms.SubmissionFiles?.Where(f => !f.IsDeleted).OrderByDescending(f => f.UploadedDate).FirstOrDefault();
                                             }
-                                            @if (latestFiles != null && latestFiles.Any())
+                                            @if (latestFile != null)
                                             {
-                                                @foreach(var f in latestFiles)
-                                                {
-                                                    <div class="d-inline-flex align-items-center mb-1">
-                                                        <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = f.Id })" target="_blank" class="badge badge-light-primary"><i class="fas fa-file-download me-1 text-primary"></i> @f.FileName</a>
-                                                        <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = f.Id })" target="_blank" class="btn btn-icon btn-active-light-primary w-20px h-20px ms-1" title="Preview in new tab"><i class="fas fa-external-link-alt text-info" style="font-size: 0.85rem;"></i></a>
-                                                    </div><br/>
-                                                }
+                                                <div class="d-inline-flex align-items-center mb-1">
+                                                    <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = latestFile.Id })" target="_blank" class="badge badge-light-primary"><i class="fas fa-file-download me-1 text-primary"></i> @latestFile.FileName</a>
+                                                    <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = latestFile.Id })" target="_blank" class="btn btn-icon btn-active-light-primary w-20px h-20px ms-1" title="Preview in new tab"><i class="fas fa-external-link-alt text-info" style="font-size: 0.85rem;"></i></a>
+                                                </div>
                                             }
                                             else
                                             {
@@ -191,7 +187,8 @@
                                             }
                                         </td>
                                         <td>
-                                            @if (ms.Status == "Submitted" || ms.Status == "UnderReview") { <span class="badge badge-light-warning">Needs Attention</span> }
+                                            @if (ms.Status == "Submitted") { <span class="badge badge-light-primary">Submitted</span> }
+                                            else if (ms.Status == "UnderReview") { <span class="badge badge-light-warning">Needs Attention</span> }
                                             else if (ms.Status == "Completed") { <span class="badge badge-light-primary">Completed</span> }
                                             else if (ms.Status == "Approved") { <span class="badge badge-light-success">Approved</span> }
                                             else if (ms.Status == "Pending") { <span class="badge badge-light-info">Pending</span> }

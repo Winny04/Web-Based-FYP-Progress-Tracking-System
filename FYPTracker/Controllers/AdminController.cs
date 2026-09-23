@@ -1,4 +1,4 @@
-﻿using FYPTracker.Models;
+using FYPTracker.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text;

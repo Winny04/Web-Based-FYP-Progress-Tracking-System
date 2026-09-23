@@ -3,7 +3,7 @@
     ViewData["Title"] = "Stage 2 Final Evaluation";
     Layout = "~/Views/Shared/_Layout.cshtml";
 
-    var dppFile = Model.Milestones.FirstOrDefault(m => m.Title.StartsWith("Step 2"))?.SubmissionFiles?.OrderByDescending(f => f.UploadedDate).FirstOrDefault();
+    var dppFile = Model.Milestones.FirstOrDefault(m => m.Title.StartsWith("Step 2"))?.SubmissionFiles?.Where(f => !f.IsDeleted).OrderByDescending(f => f.UploadedDate).FirstOrDefault();
     var existingMarks = Model.Stage2ExaminerMarksheetData;
 }
 

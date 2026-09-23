@@ -221,16 +221,12 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var finalMilestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Final"));
-            if (finalMilestone == null || finalMilestone.Status != "Approved")
-            {
-                TempData["Error"] = "The Final Report must be approved by the supervisor before you can submit your marksheet.";
-                return RedirectToAction(nameof(StudentDetails), new { projectId });
-            }
+            var stage2Milestones = project.Milestones.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
+            bool isAllStage2Approved = stage2Milestones.Any() && stage2Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
 
-            if (!project.IsTurnitinApproved)
+            if (!isAllStage2Approved)
             {
-                TempData["Error"] = "The Supervisor must approve the Turnitin similarity score before you can upload the final grade.";
+                TempData["Error"] = "The supervisor must approve ALL Stage 2 milestones (including the Final Report and Turnitin Score) before you can submit the final Excel marksheet.";
                 return RedirectToAction(nameof(StudentDetails), new { projectId });
             }
 
@@ -574,51 +570,5 @@ namespace FYPTracker.Controllers
             return "Fail";
         }
 
-        // --- Stage 2 Joint Evaluation Marksheet ---
-        [HttpGet]
-        public async Task<IActionResult> GradeMarksheetStage2(int projectId)
-        {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
-            if (user == null) return RedirectToAction("Login", "User");
-
-            var project = await _context.FYPProjects
-                .Include(p => p.Student)
-                .Include(p => p.Milestones)
-                .FirstOrDefaultAsync(p => p.Id == projectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
-
-            if (project == null)
-            {
-                TempData["Error"] = "Project not found.";
-                return RedirectToAction("Index");
-            }
-
-            return View(project);
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> GradeMarksheetStage2(int projectId, string marksheetData, string finalGrade, string examinerComments)
-        {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
-            if (user == null) return RedirectToAction("Login", "User");
-
-            var project = await _context.FYPProjects
-                .FirstOrDefaultAsync(p => p.Id == projectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
-
-            if (project == null)
-            {
-                TempData["Error"] = "Project not found.";
-                return RedirectToAction("Index");
-            }
-
-            project.Stage2ExaminerMarksheetData = marksheetData;
-            project.FinalGrade = finalGrade;
-            project.ExaminerComments = examinerComments;
-
-            await _context.SaveChangesAsync();
-
-            TempData["Success"] = "Stage 2 final marks have been saved successfully.";
-            return RedirectToAction("StudentDetails", new { projectId = project.Id });
-        }
     }
 }
