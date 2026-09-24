@@ -1555,9 +1555,9 @@ namespace FYPTracker.Controllers
                     return $"Date Validation Error: '{targetTitle}' due date cannot be before the Step 1: Turnitin Checking due date ({step1.DueDate.Value:dd MMM yyyy}).";
                 }
 
-                if (proposal?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date < proposal.DueDate.Value.Date)
+                if (proposal?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date > proposal.DueDate.Value.Date)
                 {
-                    return $"Date Validation Error: '{targetTitle}' due date cannot be before the FYP 1: Proposal due date ({proposal.DueDate.Value:dd MMM yyyy}).";
+                    return $"Date Validation Error: '{targetTitle}' due date cannot be after the FYP 1: Proposal due date ({proposal.DueDate.Value:dd MMM yyyy}).";
                 }
 
                 if (step5?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date > step5.DueDate.Value.Date)

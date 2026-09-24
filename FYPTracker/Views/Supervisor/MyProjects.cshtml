@@ -709,10 +709,10 @@
                     isValid = false;
                 } else if (!isFinalReport && !isProposal && !isIaf) {
                     // Chronological Validation
-                    if (propDate && selectedDate < propDate) {
+                    if (propDate && selectedDate > propDate) {
                         date.classList.remove('is-valid');
                         date.classList.add('is-invalid');
-                        dateError.innerText = "Date Error: Cannot be before the Proposal due date (" + formatDate(propDate) + ").";
+                        dateError.innerText = "Date Error: Cannot be after the Proposal due date (" + formatDate(propDate) + ").";
                         dateError.classList.remove('d-none');
                         isValid = false;
                     } else if (finalDate && selectedDate > finalDate) {
@@ -835,10 +835,10 @@
                     isValid = false;
                 } else if (!isFinalReport && !isProposal && !isIaf) {
                     // Chronological Validation
-                    if (propDate && selectedDate < propDate) {
+                    if (propDate && selectedDate > propDate) {
                         date.classList.remove('is-valid');
                         date.classList.add('is-invalid');
-                        dateError.innerText = "Date Error: Cannot be before the Proposal due date (" + formatDate(propDate) + ").";
+                        dateError.innerText = "Date Error: Cannot be after the Proposal due date (" + formatDate(propDate) + ").";
                         dateError.style.display = 'block';
                         isValid = false;
                     } else if (finalDate && selectedDate > finalDate) {

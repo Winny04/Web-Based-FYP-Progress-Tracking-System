@@ -969,13 +969,29 @@ public ActionResult ManageUsersData()
                     .Where(l => l.StudentId == id || l.AdminId == id).ToListAsync();
                 _context.InvitationLogs.RemoveRange(inviteLogs);
 
+                // 8. UserRoleMappings
+                var userRoles = await _context.UserRoleMappings
+                    .Where(r => r.UserId == id).ToListAsync();
+                _context.UserRoleMappings.RemoveRange(userRoles);
+
                 if (user.UserType == "Student" || user.UserType == "STUDENT")
                 {
-                    // Student's project: Milestones → Feedbacks/Files cascade automatically
                     var project = await _context.FYPProjects
                         .FirstOrDefaultAsync(p => p.StudentId == id);
                     if (project != null)
+                    {
+                        // Remove Project Examiners
+                        var projectExaminers = await _context.FYPProjectExaminers
+                            .Where(e => e.FYPProjectId == project.Id).ToListAsync();
+                        _context.FYPProjectExaminers.RemoveRange(projectExaminers);
+
+                        // Remove Milestones
+                        var milestones = await _context.FYPMilestones
+                            .Where(m => m.FYPProjectId == project.Id).ToListAsync();
+                        _context.FYPMilestones.RemoveRange(milestones);
+
                         _context.FYPProjects.Remove(project);
+                    }
                 }
                 else if (user.UserType == "Supervisor" || user.UserType == "SUPERVISOR")
                 {
@@ -998,14 +1014,17 @@ public ActionResult ManageUsersData()
                     _context.FYPProjectExaminers.RemoveRange(examinerAssignments);
                 }
 
-                // 8. Submission files uploaded by this user — Restrict FK
+                // 9. Submission files uploaded by this user — Restrict FK
                 var uploadedFiles = await _context.FYPSubmissionFiles
                     .Where(f => f.UploadedBy == id).ToListAsync();
                 _context.FYPSubmissionFiles.RemoveRange(uploadedFiles);
 
-                // 9. Remove user (FYPNotifications + FYPActivities cascade automatically)
-                _context.ApplicationUsers.Remove(user);
+                // Save all child deletions first
                 await _context.SaveChangesAsync();
+
+                // 10. Remove user via Raw SQL to completely bypass EF Core tracking conflicts
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM ApplicationUser WHERE Id = {0}", id);
+
 
                 return Json(new { status = true, msg = "User permanently deleted." });
             }
