@@ -1173,6 +1173,64 @@ public ActionResult ManageUsersData()
             }
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateDefaultMilestoneDate(DateTime? deadline, string sessionFilter, string milestoneTitle)
+        {
+            try
+            {
+                if (!deadline.HasValue)
+                {
+                    TempData["BulkUpdateError"] = "The date provided was invalid or empty.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                if (string.IsNullOrEmpty(sessionFilter))
+                {
+                    TempData["BulkUpdateError"] = "An academic session must be selected.";
+                    return RedirectToAction(nameof(Settings));
+                }
+                
+                if (string.IsNullOrEmpty(milestoneTitle))
+                {
+                    TempData["BulkUpdateError"] = "A milestone title must be selected.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                // Set the time to 11:59:59 PM of the selected date
+                var endOfDayDeadline = new DateTime(deadline.Value.Year, deadline.Value.Month, deadline.Value.Day, 23, 59, 59);
+
+                var milestones = await _context.FYPMilestones
+                    .Include(m => m.Project)
+                    .Where(m => m.Project.AcademicSession == sessionFilter && m.Title.Contains(milestoneTitle))
+                    .ToListAsync();
+
+                int count = 0;
+                foreach (var m in milestones)
+                {
+                    m.DueDate = endOfDayDeadline;
+                    count++;
+                }
+
+                if (count > 0)
+                {
+                    await _context.SaveChangesAsync();
+                    TempData["BulkUpdateSuccess"] = $"Successfully updated the deadline for '{milestoneTitle}' for {count} student project(s) in {sessionFilter}.";
+                }
+                else
+                {
+                    TempData["BulkUpdateInfo"] = $"No '{milestoneTitle}' milestones found in {sessionFilter} to update.";
+                }
+
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+            catch (Exception)
+            {
+                TempData["BulkUpdateError"] = "An unexpected error occurred while updating the milestone due date.";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+        }
+
 
         [HttpPost]
         [ValidateAntiForgeryToken]

@@ -94,7 +94,7 @@
                 
                 <!-- Stage 1 Upload Section -->
                 <div class="mb-5">
-                    <h4 class="fw-bolder text-dark mb-4 mt-2">Stage 1: Interim Report</h4>
+                    <h4 class="fw-bolder text-dark mb-4 mt-2">Stage 1: Proposal</h4>
                     @if (Model.Stage1MarksheetUploadCount >= 5)
                     {
                         <div class="alert alert-danger d-flex align-items-center p-4">
@@ -141,7 +141,7 @@
                     }
                     
                     @{
-                            var interim = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Interim Report"));
+                            var interim = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Proposal"));
                             string exStrengths = "", exImprovements = "", exComments = "";
                             if (interim != null && !string.IsNullOrEmpty(interim.ExaminerMarksheetData) && interim.ExaminerMarksheetData.StartsWith("{"))
                             {
@@ -192,7 +192,7 @@
                     <h4 class="fw-bolder text-dark mb-4 mt-2">Stage 2: Final Assessment</h4>
                     @{
                         var stage2Milestones = Model.Milestones
-                            .Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
+                            .Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase) && !m.Title.StartsWith("Step -", StringComparison.OrdinalIgnoreCase))
                             .ToList();
                         bool isAllStage2Approved = stage2Milestones.Any() && stage2Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
                     }
@@ -309,11 +309,11 @@
             <div class="card-body py-3">
                 @{
                     var stage1Milestones = Model.Milestones
-                        .Where(m => !m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
+                        .Where(m => m.Title.Contains("IAF") || m.Title.Contains("Proposal"))
                         .OrderBy(m => m.DueDate ?? m.CreatedDate)
                         .ToList();
-                    bool isAllStage1Approved = stage1Milestones.Count >= 3 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
-                    var finalStage1Milestone = stage1Milestones.FirstOrDefault(m => m.Title.Contains("Interim Report", StringComparison.OrdinalIgnoreCase));
+                    bool isAllStage1Approved = stage1Milestones.Count >= 2 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+                    var finalStage1Milestone = stage1Milestones.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
                 }
 
                 @if(stage1Milestones.Any())

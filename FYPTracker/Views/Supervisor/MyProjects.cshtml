@@ -16,7 +16,6 @@
     var defaultMilestoneTitles = new List<string> {
         "FYP 1: Initial Assessment Form (IAF)",
         "FYP 1: Proposal",
-        "FYP 1: Interim Report",
         "Step 1: Turnitin Checking",
         "Step 2: Final Report Submission",
         "Step 3: Marksheet Submission",
@@ -154,11 +153,7 @@
                         </div>
                         <a href="/Supervisor/ProjectDetails/@proj.Id" class="text-dark fw-bolder text-hover-primary fs-3">Title: @proj.Title</a>
                         <p class="text-gray-600 fw-bold fs-6 mt-3 mb-1">Student: @proj.Student?.FullName</p>
-                        @if (proj.AssignedExaminers == null || !proj.AssignedExaminers.Any())
-                        {
-                            <span class="badge bg-warning text-dark fw-bolder mt-1"><i class="fas fa-exclamation-triangle me-1"></i> Pending Examiner Assignment</span>
-                        }
-                        else
+                        @if (proj.AssignedExaminers != null && proj.AssignedExaminers.Any())
                         {
                             var examinerName = proj.AssignedExaminers.FirstOrDefault()?.Examiner?.FullName;
                             <span class="badge bg-light-success text-success fw-bolder mt-1"><i class="fas fa-user-check me-1"></i> @(string.IsNullOrEmpty(examinerName) ? "Examiner Assigned" : $"Examiner: {examinerName}")</span>
@@ -514,7 +509,7 @@
 @section Scripts {
     <script>
         var sysProposalDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Proposal"))?.DueDate?.ToString("yyyy-MM-dd"))";
-        var sysInterimDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Interim Report"))?.DueDate?.ToString("yyyy-MM-dd"))";
+
         var sysFinalDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Step 5"))?.DueDate?.ToString("yyyy-MM-dd"))";
         var sysStep1Date = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Step 1"))?.DueDate?.ToString("yyyy-MM-dd"))";
 
@@ -681,7 +676,8 @@
                 today.setHours(0,0,0,0);
                 
                 var propDate = sysProposalDate ? new Date(sysProposalDate) : null;
-                var interimDate = sysInterimDate ? new Date(sysInterimDate) : null;
+                var sysIafDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("IAF"))?.DueDate?.ToString("yyyy-MM-dd"))";
+                var iafDate = sysIafDate ? new Date(sysIafDate) : null;
                 var finalDate = sysFinalDate ? new Date(sysFinalDate) : null;
                 var step1Date = sysStep1Date ? new Date(sysStep1Date) : null;
                 var previewTitle = document.getElementById('addTitlePreview').value || "";
@@ -696,7 +692,7 @@
                     var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
                     return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
                 };
-
+                
                 if (isNaN(selectedDate.getTime()) || selectedDate < today) {
                     date.classList.remove('is-valid');
                     date.classList.add('is-invalid');
@@ -712,16 +708,16 @@
                 } else if (!isFinalReport && !isProposal && !isIaf) {
                     // Chronological Validation
                     if (!isStage2) {
-                        if (propDate && selectedDate < propDate) {
+                        if (iafDate && selectedDate < iafDate) {
                             date.classList.remove('is-valid');
                             date.classList.add('is-invalid');
-                            dateError.innerText = "Date Error: Cannot be before the Proposal due date (" + formatDate(propDate) + ").";
+                            dateError.innerText = "Date Error: Cannot be before the Initial Assessment Form due date (" + formatDate(iafDate) + ").";
                             dateError.classList.remove('d-none');
                             isValid = false;
-                        } else if (interimDate && selectedDate > interimDate) {
+                        } else if (propDate && selectedDate > propDate) {
                             date.classList.remove('is-valid');
                             date.classList.add('is-invalid');
-                            dateError.innerText = "Date Error: Cannot be after the Interim Report due date (" + formatDate(interimDate) + ").";
+                            dateError.innerText = "Date Error: Cannot be after the FYP 1: Proposal due date (" + formatDate(propDate) + ").";
                             dateError.classList.remove('d-none');
                             isValid = false;
                         } else {
@@ -822,7 +818,8 @@
                 today.setHours(0,0,0,0);
                 
                 var propDate = sysProposalDate ? new Date(sysProposalDate) : null;
-                var interimDate = sysInterimDate ? new Date(sysInterimDate) : null;
+                var sysIafDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("IAF"))?.DueDate?.ToString("yyyy-MM-dd"))";
+                var iafDate = sysIafDate ? new Date(sysIafDate) : null;
                 var finalDate = sysFinalDate ? new Date(sysFinalDate) : null;
                 var step1Date = sysStep1Date ? new Date(sysStep1Date) : null;
                 var targetTitleToValidate = title.value.trim() || target.value || "";
@@ -853,16 +850,16 @@
                 } else if (!isFinalReport && !isProposal && !isIaf) {
                     // Chronological Validation
                     if (!isStage2) {
-                        if (propDate && selectedDate < propDate) {
+                        if (iafDate && selectedDate < iafDate) {
                             date.classList.remove('is-valid');
                             date.classList.add('is-invalid');
-                            dateError.innerText = "Date Error: Cannot be before the Proposal due date (" + formatDate(propDate) + ").";
+                            dateError.innerText = "Date Error: Cannot be before the Initial Assessment Form due date (" + formatDate(iafDate) + ").";
                             dateError.style.display = 'block';
                             isValid = false;
-                        } else if (interimDate && selectedDate > interimDate) {
+                        } else if (propDate && selectedDate > propDate) {
                             date.classList.remove('is-valid');
                             date.classList.add('is-invalid');
-                            dateError.innerText = "Date Error: Cannot be after the Interim Report due date (" + formatDate(interimDate) + ").";
+                            dateError.innerText = "Date Error: Cannot be after the FYP 1: Proposal due date (" + formatDate(propDate) + ").";
                             dateError.style.display = 'block';
                             isValid = false;
                         } else {

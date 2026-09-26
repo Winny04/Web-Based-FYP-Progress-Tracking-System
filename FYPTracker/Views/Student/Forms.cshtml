@@ -192,22 +192,15 @@
         
         var stage2Milestones = milestones.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
 
-        // Any milestone that isn't IAF, Proposal, or Stage 2 is considered an intermediate "Progress" milestone
         var allProgressMilestones = milestones.Where(m => 
             m.Id != (iafMilestone?.Id ?? -1) && 
             m.Id != (proposalMilestone?.Id ?? -1) && 
             !stage2Milestones.Any(s2 => s2.Id == m.Id)).ToList();
             
-        // Check if Stage 1 marking is completed (if a joint evaluation milestone exists, it MUST be fully marked)
-        bool hasStage1JointEvaluation = allProgressMilestones.Any(m => m.IsReadyForJointEvaluation);
-        bool isStage1MarkingComplete = hasStage1JointEvaluation && allProgressMilestones
-            .Where(m => m.IsReadyForJointEvaluation)
-            .All(m => !string.IsNullOrEmpty(m.SupervisorMarksheetData) && !string.IsNullOrEmpty(m.ExaminerMarksheetData));
-
-        // If there are intermediate milestones, they must all be approved AND joint marked.
+        // Check if all custom progress milestones are approved
         bool isAllProgressApproved = allProgressMilestones.Any() 
-            ? (allProgressMilestones.All(m => m.Status == "Approved") && isStage1MarkingComplete) 
-            : false;
+            ? allProgressMilestones.All(m => m.Status == "Approved")
+            : true; // If there are none, they are technically "completed" and we can proceed to Proposal
 
         // NEW: Stage 2 unlock logic depends on Stage1Grade == "Pass"
         bool isStage2Unlocked = Model?.Stage1Grade == "Pass";
@@ -215,17 +208,19 @@
 
         // Force logical cascade: if a later milestone is approved, logically treat the previous ones as approved
         // so the UI doesn't break into multiple active tabs.
-        if (isAllProgressApproved || isStage2Unlocked) { isProposalApproved = true; }
-        if (isProposalApproved) { isIafApproved = true; }
+        if (isStage2Unlocked) { isProposalApproved = true; }
+        if (isProposalApproved) { isAllProgressApproved = true; }
+        if (isAllProgressApproved && allProgressMilestones.Any()) { isIafApproved = true; }
 
         string iafTooltip = isIafApproved ? "data-toggle=\"tooltip\" title=\"IAF Form has been approved and locked\"" : "";
         
-        string proposalTooltip = "";
-        if (!isIafApproved) proposalTooltip = "data-toggle=\"tooltip\" title=\"Requires IAF Approval first\"";
-        else if (isProposalApproved) proposalTooltip = "data-toggle=\"tooltip\" title=\"Proposal Form has been approved and locked\"";
-
         string progressTooltip = "";
-        if (!isProposalApproved) progressTooltip = "data-toggle=\"tooltip\" title=\"Requires Proposal Approval first\"";
+        if (!isIafApproved) progressTooltip = "data-toggle=\"tooltip\" title=\"Requires IAF Approval first\"";
+        else if (isAllProgressApproved && allProgressMilestones.Any()) progressTooltip = "data-toggle=\"tooltip\" title=\"Progress Reports have been approved and locked\"";
+
+        string proposalTooltip = "";
+        if (!isIafApproved || !isAllProgressApproved) proposalTooltip = "data-toggle=\"tooltip\" title=\"Requires IAF and any Progress Reports to be approved first\"";
+        else if (isProposalApproved) proposalTooltip = "data-toggle=\"tooltip\" title=\"Proposal Form has been approved and locked\"";
 
         string finalTooltip = "";
         if (!isAllProgressApproved) finalTooltip = "data-toggle=\"tooltip\" title=\"Requires all Progress Reports to be Approved and marked by Supervisor and Examiner\"";
@@ -274,16 +269,16 @@
                             <div class="step-text">1. IAF Form</div>
                         </button>
                     </li>
-                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(proposalTooltip)>
-                        <button class="stepper-btn nav-link @(isIafApproved && !isProposalApproved && !isAllProgressApproved ? "active" : "")" id="proposal-form-tab" data-toggle="pill" data-target="#proposal-form-pane" type="button" role="tab" @(!isIafApproved ? "disabled" : "") style="@(!isIafApproved ? "pointer-events: none;" : "")">
-                            <div class="step-icon"><i class="fas fa-feather-alt"></i></div>
-                            <div class="step-text">A. Proposal Form</div>
+                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(progressTooltip)>
+                        <button class="stepper-btn nav-link @(isIafApproved && !isAllProgressApproved ? "active" : "")" id="progress-form-tab" data-toggle="pill" data-target="#progress-form-pane" type="button" role="tab" @(!isIafApproved ? "disabled" : "") style="@(!isIafApproved ? "pointer-events: none;" : "")">
+                            <div class="step-icon"><i class="fas fa-tasks"></i></div>
+                            <div class="step-text">A. Progress Report</div>
                         </button>
                     </li>
-                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(progressTooltip)>
-                        <button class="stepper-btn nav-link @(isProposalApproved && !isAllProgressApproved ? "active" : "")" id="progress-form-tab" data-toggle="pill" data-target="#progress-form-pane" type="button" role="tab" @(!isProposalApproved ? "disabled" : "") style="@(!isProposalApproved ? "pointer-events: none;" : "")">
-                            <div class="step-icon"><i class="fas fa-tasks"></i></div>
-                            <div class="step-text">B. Progress Report</div>
+                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(proposalTooltip)>
+                        <button class="stepper-btn nav-link @(isIafApproved && isAllProgressApproved && !isProposalApproved ? "active" : "")" id="proposal-form-tab" data-toggle="pill" data-target="#proposal-form-pane" type="button" role="tab" @(!isIafApproved || !isAllProgressApproved ? "disabled" : "") style="@(!isIafApproved || !isAllProgressApproved ? "pointer-events: none;" : "")">
+                            <div class="step-icon"><i class="fas fa-feather-alt"></i></div>
+                            <div class="step-text">B. Proposal Form</div>
                         </button>
                     </li>
                     <!-- Stage 2 is now a separate page, Final Submission tab removed -->
@@ -556,9 +551,9 @@
 
                     
                     @* ── A. PROPOSAL FORM ────────────────────────────── *@
-                    <div class="tab-pane fade @(isIafApproved && !isProposalApproved ? "show active" : "")" id="proposal-form-pane" role="tabpanel" tabindex="0">
+                    <div class="tab-pane fade @(isIafApproved && isAllProgressApproved && !isProposalApproved ? "show active" : "")" id="proposal-form-pane" role="tabpanel" tabindex="0">
                         <div class="premium-card p-4">
-                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>A. Final Year Project Proposal</h4>
+                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>B. Final Year Project Proposal</h4>
                             
                                 @* Select corresponding Milestone *@
                                 @{
@@ -685,9 +680,9 @@
                     </div>
 
                     @* ── B. PROGRESS REPORT FORM ─────────────────────── *@
-                    <div class="tab-pane fade @(isProposalApproved && !isAllProgressApproved ? "show active" : "")" id="progress-form-pane" role="tabpanel" tabindex="0">
+                    <div class="tab-pane fade @(isIafApproved && !isAllProgressApproved ? "show active" : "")" id="progress-form-pane" role="tabpanel" tabindex="0">
                         <div class="premium-card p-4">
-                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-chart-line text-orange me-2"></i>B. FYP Progress Report Form</h4>
+                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-chart-line text-orange me-2"></i>A. FYP Progress Report Form</h4>
                             
                             @{
                                 var progressMilestones = milestones.Where(x => 

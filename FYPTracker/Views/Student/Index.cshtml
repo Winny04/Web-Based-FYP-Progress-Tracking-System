@@ -592,7 +592,7 @@
         var stg1ColorHex = Model.Stage1Grade == "Pass" ? "#16a34a" : "#dc2626";
         var stg1TextColor = Model.Stage1Grade == "Pass" ? "text-success" : "text-danger";
 
-        var interim = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Interim Report"));
+        var interim = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
         double supScore = 0;
         double exScore = 0;
         string supStrengths = "", supImprovements = "", supComments = "";

@@ -12,14 +12,32 @@
 
     <div class="row g-4">
         <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm border-0 rounded-4 p-4 h-100">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="fw-bold mb-0"><i class="fas fa-calendar-alt text-primary me-2"></i>IAF Submission Deadline</h5>
-                    
-                    @if (ViewBag.DistinctSessions != null && ((IEnumerable<string>)ViewBag.DistinctSessions).Any())
+            <div class="card shadow-sm border-0 rounded-4 p-4 h-100 border-top border-4" style="border-top-color: #8b5cf6 !important;">
+                <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-graduation-cap me-2 text-purple"></i>Bulk Update Milestone Dates</h5>
+                <p class="text-muted small mb-4">Set the global due date for a specific default milestone across all students in the current session.</p>
+                <form asp-action="UpdateDefaultMilestoneDate" method="post" class="mt-auto">
+                    @if (TempData["BulkUpdateSuccess"] != null)
                     {
-                        <form method="get" asp-action="Settings" id="sessionFilterForm" class="ms-2">
-                            <select name="sessionFilter" class="form-select form-select-sm" onchange="document.getElementById('sessionFilterForm').submit()">
+                        <div class="alert alert-success border-0 p-2 small mb-3">@TempData["BulkUpdateSuccess"]</div>
+                    }
+                    @if (TempData["BulkUpdateInfo"] != null)
+                    {
+                        <div class="alert alert-info border-0 p-2 small mb-3">@TempData["BulkUpdateInfo"]</div>
+                    }
+                    @if (TempData["BulkUpdateError"] != null)
+                    {
+                        <div class="alert alert-danger border-0 p-2 small mb-3">@TempData["BulkUpdateError"]</div>
+                    }
+                    @if(ViewBag.DistinctSessions == null || !((IEnumerable<string>)ViewBag.DistinctSessions).Any())
+                    {
+                        <div class="alert alert-warning border-0 p-2 small mb-3">No active academic session found.</div>
+                    }
+                    else
+                    {
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted">Select Academic Session</label>
+                            <select name="sessionFilter" class="form-select bg-light" required>
+                                <option value="">-- Choose Session --</option>
                                 @foreach (var sessionName in (IEnumerable<string>)ViewBag.DistinctSessions)
                                 {
                                     if (ViewBag.CurrentSessionFilter == sessionName)
@@ -32,84 +50,32 @@
                                     }
                                 }
                             </select>
-                        </form>
-                    }
-                </div>
-                
-                <p class="text-muted small mb-4">Configure the submission deadline date visible to students on their forms page for the selected session.</p>
-                <form asp-action="UpdateIAFDeadline" method="post" class="mt-auto">
-                    <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
-                    @if (TempData["Success"] != null)
-                    {
-                        <div class="alert alert-success border-0 p-2 small mb-3">@TempData["Success"]</div>
-                    }
-                    @if (TempData["Info"] != null)
-                    {
-                        <div class="alert alert-info border-0 p-2 small mb-3">@TempData["Info"]</div>
-                    }
-                    @if (TempData["Error"] != null)
-                    {
-                        <div class="alert alert-danger border-0 p-2 small mb-3">@TempData["Error"]</div>
-                    }
-                    
-                    @if(string.IsNullOrEmpty(ViewBag.CurrentSessionFilter))
-                    {
-                        <div class="alert alert-warning border-0 p-2 small mb-3">No active academic session found. Students must register first.</div>
-                    }
-                    else
-                    {
-                        <div class="mb-3">
-                            <input type="date" name="deadline" class="form-control bg-light" value="@ViewBag.IAFDeadline" min="@DateTime.Now.ToString("yyyy-MM-dd")" required />
-                            <div class="form-text text-muted small mt-1"><i class="fas fa-info-circle me-1"></i>Time will be automatically set to 11:59 PM.</div>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 fw-bold">Save Deadline</button>
-                    }
-                </form>
-            </div>
-        </div>
-
-        @* ── STAGE 2: Final Evaluation Cards (commented out — uncomment when ready) ────────────
-        <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm border-0 rounded-4 p-4 h-100 border-top border-4" style="border-top-color: #8b5cf6 !important;">
-                <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-graduation-cap me-2 text-purple"></i>Final Evaluation Dates</h5>
-                <p class="text-muted small mb-4">Set the global due dates for the FYP 2 Final Evaluation submission steps for the current session.</p>
-                <form asp-action="UpdateFinalEvaluationDeadlines" method="post" class="mt-auto">
-                    <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
-                    
-                    @if(string.IsNullOrEmpty(ViewBag.CurrentSessionFilter))
-                    {
-                        <div class="alert alert-warning border-0 p-2 small mb-3">No active academic session found.</div>
-                    }
-                    else
-                    {
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted">Steps 1-4 Deadline</label>
-                            <input type="date" name="step1to4Deadline" class="form-control bg-light" value="@ViewBag.Step1to4Deadline" required />
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted">Step 5 (Slides) Deadline</label>
-                            <input type="date" name="step5Deadline" class="form-control bg-light" value="@ViewBag.Step5Deadline" required />
+                            <label class="form-label fw-bold small text-muted">Select Milestone</label>
+                            <select name="milestoneTitle" class="form-select bg-light" required>
+                                <option value="">-- Choose Milestone --</option>
+                                <option value="IAF">FYP 1: Initial Assessment Form (IAF)</option>
+                                <option value="Proposal">FYP 1: Proposal</option>
+                                <option value="Step 1:">Step 1: Turnitin Checking</option>
+                                <option value="Step 2:">Step 2: Final Report Submission</option>
+                                <option value="Step 3:">Step 3: Marksheet Submission</option>
+                                <option value="Step 4:">Step 4: Record of Supervisor Meeting Form</option>
+                                <option value="Step 5:">Step 5: Presentation Slides Submission</option>
+                            </select>
                         </div>
-                        <button type="submit" class="btn text-white w-100 fw-bold" style="background: #8b5cf6;">Save Deadlines</button>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted">New Due Date</label>
+                            <input type="date" name="deadline" class="form-control bg-light" required />
+                            <div class="form-text text-muted small mt-1"><i class="fas fa-info-circle me-1"></i>Time will be set to 11:59 PM.</div>
+                        </div>
+                        <button type="submit" class="btn text-white w-100 fw-bold" style="background: #8b5cf6;">Update Deadlines</button>
                     }
                 </form>
             </div>
         </div>
         
-        <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm border-0 rounded-4 p-4 h-100 border-top border-4" style="border-top-color: #f59e0b !important;">
-                <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-magic me-2 text-warning"></i>Generate Step Milestones</h5>
-                <p class="text-muted small mb-4">Retroactively create the 5 Final Evaluation steps for all existing projects with an approved Final/Thesis milestone that don't have steps yet.</p>
-                <form asp-action="SeedFinalEvaluationSteps" method="post" class="mt-auto">
-                    <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
-                    <button type="submit" class="btn w-100 fw-bold text-dark" style="background: #fef3c7; border: 2px solid #f59e0b;"
-                        onclick="return confirm('This will create Step 1-5 milestones for all eligible projects in @ViewBag.CurrentSessionFilter. Continue?')">
-                        <i class="fas fa-bolt me-1 text-warning"></i>Generate Step Milestones Now
-                    </button>
-                </form>
-            </div>
-        </div>
-        ── END STAGE 2 ── *@
+
 
         <div class="col-md-6 col-lg-4">
             <div class="card shadow-sm border-0 rounded-4 p-4 h-100">

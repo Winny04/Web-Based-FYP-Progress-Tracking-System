@@ -252,8 +252,8 @@ namespace FYPTracker.Controllers
                     await marksheetFile.CopyToAsync(fileStream);
                 }
 
-                // Keep the Interim Report milestone up to date for Examiner's end
-                var interimMilestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Interim Report", StringComparison.OrdinalIgnoreCase));
+                // Keep the Proposal milestone up to date for Examiner's end
+                var proposalMilestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
                 
                 // Extract final grade from J16 for Stage 1
                 try
@@ -264,13 +264,21 @@ namespace FYPTracker.Controllers
                         if (worksheet != null)
                         {
                             var cellValue = worksheet.Cell("J16").Value;
-                            if (cellValue != null && interimMilestone != null)
+                            if (cellValue != null && proposalMilestone != null)
                             {
                                 string extractedScore = "";
                                 string stringValue = cellValue.ToString();
                                 if (double.TryParse(stringValue, out double numericScore)) extractedScore = numericScore.ToString();
                                 else if (stringValue.Contains("-") && double.TryParse(stringValue.Split('-').Last().Trim(), out double scoreFromText)) extractedScore = scoreFromText.ToString();
                                 else extractedScore = stringValue.Trim();
+                                
+                                if (!double.TryParse(extractedScore, out _))
+                                {
+                                    TempData["Error"] = "Invalid Marksheet: Could not extract a valid numeric score. Please ensure you are using the predefined template and have filled in the marks.";
+                                    System.IO.File.Delete(filePath);
+                                    project.Stage1MarksheetUploadCount--;
+                                    return RedirectToAction(nameof(StudentDetails), new { projectId });
+                                }
                                 
                                 var strengthsCell = worksheet.Cell("C19").Value;
                                 var improvementsCell = worksheet.Cell("C22").Value;
@@ -282,27 +290,27 @@ namespace FYPTracker.Controllers
                                     Improvements = improvementsCell?.ToString().Trim() ?? "",
                                     Comments = commentsCell?.ToString().Trim() ?? ""
                                 };
-                                interimMilestone.ExaminerMarksheetData = System.Text.Json.JsonSerializer.Serialize(feedbackData);
+                                proposalMilestone.ExaminerMarksheetData = System.Text.Json.JsonSerializer.Serialize(feedbackData);
                                 
                                 // Calculate Joint Evaluation
                                 double exScore = 0;
-                                if (!string.IsNullOrEmpty(interimMilestone.ExaminerMarksheetData)) {
-                                    if (interimMilestone.ExaminerMarksheetData.StartsWith("{")) {
-                                        using var doc = System.Text.Json.JsonDocument.Parse(interimMilestone.ExaminerMarksheetData);
+                                if (!string.IsNullOrEmpty(proposalMilestone.ExaminerMarksheetData)) {
+                                    if (proposalMilestone.ExaminerMarksheetData.StartsWith("{")) {
+                                        using var doc = System.Text.Json.JsonDocument.Parse(proposalMilestone.ExaminerMarksheetData);
                                         if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double e)) exScore = e;
                                     } else {
-                                        double.TryParse(interimMilestone.ExaminerMarksheetData, out exScore);
+                                        double.TryParse(proposalMilestone.ExaminerMarksheetData, out exScore);
                                     }
                                 }
 
                                 double supScore = 0;
                                 bool hasSupScore = false;
-                                if (!string.IsNullOrEmpty(interimMilestone.SupervisorMarksheetData)) {
-                                    if (interimMilestone.SupervisorMarksheetData.StartsWith("{")) {
-                                        using var doc = System.Text.Json.JsonDocument.Parse(interimMilestone.SupervisorMarksheetData);
+                                if (!string.IsNullOrEmpty(proposalMilestone.SupervisorMarksheetData)) {
+                                    if (proposalMilestone.SupervisorMarksheetData.StartsWith("{")) {
+                                        using var doc = System.Text.Json.JsonDocument.Parse(proposalMilestone.SupervisorMarksheetData);
                                         if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double s)) { supScore = s; hasSupScore = true; }
                                     } else {
-                                        hasSupScore = double.TryParse(interimMilestone.SupervisorMarksheetData, out supScore);
+                                        hasSupScore = double.TryParse(proposalMilestone.SupervisorMarksheetData, out supScore);
                                     }
                                 }
 
@@ -324,7 +332,10 @@ namespace FYPTracker.Controllers
                 }
                 catch (Exception ex)
                 {
-                    // Ignore parsing errors
+                    TempData["Error"] = "Invalid Marksheet: The uploaded Excel file is either corrupted or not the predefined template.";
+                    System.IO.File.Delete(filePath);
+                    project.Stage1MarksheetUploadCount--;
+                    return RedirectToAction(nameof(StudentDetails), new { projectId });
                 }
 
                 project.Stage1ExaminerMarksheetPath = "/uploads/marksheets/" + uniqueFileName;
@@ -627,11 +638,11 @@ namespace FYPTracker.Controllers
             var stage1Milestones = await _context.FYPMilestones
                 .Where(m => m.FYPProjectId == milestone.FYPProjectId && !m.Title.StartsWith("Step"))
                 .ToListAsync();
-            bool isAllStage1Approved = stage1Milestones.Count >= 3 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+            bool isAllStage1Approved = stage1Milestones.Count >= 2 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
 
             if (!milestone.IsReadyForJointEvaluation && !isAllStage1Approved)
             {
-                TempData["Error"] = "All 3 Stage 1 milestones must be approved by the supervisor before joint evaluation.";
+                TempData["Error"] = "Both Stage 1 milestones must be approved by the supervisor before joint evaluation.";
                 return RedirectToAction("StudentDetails", new { projectId = milestone.FYPProjectId });
             }
 
@@ -659,11 +670,11 @@ namespace FYPTracker.Controllers
             var stage1Milestones = await _context.FYPMilestones
                 .Where(m => m.FYPProjectId == milestone.FYPProjectId && !m.Title.StartsWith("Step"))
                 .ToListAsync();
-            bool isAllStage1Approved = stage1Milestones.Count >= 3 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+            bool isAllStage1Approved = stage1Milestones.Count >= 2 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
 
             if (!isAllStage1Approved)
             {
-                TempData["Error"] = "All 3 Stage 1 milestones must be approved by the supervisor before joint evaluation.";
+                TempData["Error"] = "Both Stage 1 milestones must be approved by the supervisor before joint evaluation.";
                 return RedirectToAction("StudentDetails", new { projectId = milestone.FYPProjectId });
             }
 

@@ -246,7 +246,6 @@ namespace FYPTracker.Controllers
                         {
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Initial Assessment Form (IAF)", DueDate = DateTime.Now.AddDays(14), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Proposal", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Interim Report", DueDate = DateTime.Now.AddMonths(3), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 1: Turnitin Checking", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 2: Final Report Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 3: Marksheet Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
@@ -944,16 +943,20 @@ namespace FYPTracker.Controllers
                 if (gradedFile != null && gradedFile.Length > 0)
                 {
                     var extCheck = System.IO.Path.GetExtension(gradedFile.FileName).ToLowerInvariant();
-                    var allowedExt = new[] { ".pdf", ".doc", ".docx", ".xls", ".xlsx" };
+                    bool isMarksheetStage = milestone.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase);
+                    
+                    var allowedExt = isMarksheetStage 
+                        ? new[] { ".xls", ".xlsx" } 
+                        : new[] { ".pdf", ".doc", ".docx", ".xls", ".xlsx" };
+
                     if (!allowedExt.Contains(extCheck))
                     {
-                        TempData["Error"] = "Only PDF, Word, and Excel documents are allowed for graded files.";
-                        return RedirectToAction(nameof(GradeSubmission), new { id = milestone.Id });
+                        string msg = isMarksheetStage ? "Only Excel (.xls, .xlsx) files are allowed for the graded marksheet." : "Only PDF, Word, and Excel documents are allowed for graded files.";
+                        return BadRequest(new { message = msg });
                     }
                     if (gradedFile.Length > 20 * 1024 * 1024)
                     {
-                        TempData["Error"] = "File size must not exceed 20 MB.";
-                        return RedirectToAction(nameof(GradeSubmission), new { id = milestone.Id });
+                        return BadRequest(new { message = "File size must not exceed 20 MB." });
                     }
 
                     string uniqueFileName = Guid.NewGuid().ToString() + "_" + gradedFile.FileName;
@@ -977,8 +980,8 @@ namespace FYPTracker.Controllers
                         UploadedDate = DateTime.Now
                     });
 
-                    // Parse the Interim Report score if applicable
-                    if (milestone.Title.Contains("Interim Report", StringComparison.OrdinalIgnoreCase) && (extCheck == ".xls" || extCheck == ".xlsx"))
+                    // Parse the Proposal/Marksheet score if applicable
+                    if (milestone.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) && (extCheck == ".xls" || extCheck == ".xlsx"))
                     {
                         try
                         {
@@ -995,6 +998,12 @@ namespace FYPTracker.Controllers
                                         if (double.TryParse(stringValue, out double numericScore)) extractedScore = numericScore.ToString();
                                         else if (stringValue.Contains("-") && double.TryParse(stringValue.Split('-').Last().Trim(), out double scoreFromText)) extractedScore = scoreFromText.ToString();
                                         else extractedScore = stringValue.Trim();
+                                    }
+                                    
+                                    if (!double.TryParse(extractedScore, out _))
+                                    {
+                                        System.IO.File.Delete(filePath);
+                                        return BadRequest(new { message = "Invalid Marksheet: Could not extract a valid numeric score. Please ensure you are using the predefined template and have filled in the marks." });
                                     }
                                     
                                     var strengthsCell = worksheet.Cell("C19").Value;
@@ -1046,7 +1055,11 @@ namespace FYPTracker.Controllers
                                 }
                             }
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            System.IO.File.Delete(filePath);
+                            return BadRequest(new { message = "Invalid Marksheet: The uploaded Excel file is either corrupted or not the predefined template." });
+                        }
                     }
                 }
 
@@ -1610,19 +1623,16 @@ namespace FYPTracker.Controllers
 
             var simulated = existingMilestones.Select(m => new { Title = m.Title, DueDate = m.DueDate }).ToList();
             
-            // Remove the target if it exists (for edit)
             if (originalTitle != null) {
                 simulated.RemoveAll(m => m.Title == originalTitle);
             } else {
                 simulated.RemoveAll(m => m.Title == targetTitle);
             }
             
-            // Add the new state
             simulated.Add(new { Title = targetTitle, DueDate = newDueDate });
 
             var iaf = simulated.FirstOrDefault(m => m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation"));
             var proposal = simulated.FirstOrDefault(m => m.Title.Contains("Proposal"));
-            var interim = simulated.FirstOrDefault(m => m.Title.Contains("Interim Report"));
             var final = simulated.FirstOrDefault(m => m.Title.Contains("Final"));
             var step1 = simulated.FirstOrDefault(m => m.Title.Contains("Step 1: Turnitin"));
             var step5 = simulated.FirstOrDefault(m => m.Title.Contains("Step 5"));
@@ -1630,7 +1640,7 @@ namespace FYPTracker.Controllers
             var targetMilestone = simulated.FirstOrDefault(m => m.Title == targetTitle);
             if (targetMilestone == null || !targetMilestone.DueDate.HasValue) return null;
 
-            bool isCore = targetTitle.Contains("IAF") || targetTitle.Contains("Initial Project Allocation") || targetTitle.Contains("Proposal") || targetTitle.Contains("Interim Report") || targetTitle.Contains("Final") || targetTitle.Contains("Step 5");
+            bool isCore = targetTitle.Contains("IAF") || targetTitle.Contains("Initial Project Allocation") || targetTitle.Contains("Proposal") || targetTitle.Contains("Final") || targetTitle.Contains("Step 5");
 
             if (!isCore)
             {
@@ -1638,13 +1648,14 @@ namespace FYPTracker.Controllers
                 if (!isStage2)
                 {
                     // Stage 1 Custom Milestones
-                    if (proposal?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date < proposal.DueDate.Value.Date)
+                    // Custom Stage 1 milestones must be AFTER IAF.
+                    if (iaf?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date < iaf.DueDate.Value.Date)
                     {
-                        return $"Date Validation Error: '{targetTitle}' due date cannot be before the FYP 1: Proposal due date ({proposal.DueDate.Value:dd MMM yyyy}).";
+                        return $"Date Validation Error: '{targetTitle}' due date cannot be before the FYP 1: Initial Assessment Form due date ({iaf.DueDate.Value:dd MMM yyyy}).";
                     }
-                    if (interim?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date > interim.DueDate.Value.Date)
+                    if (proposal?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date > proposal.DueDate.Value.Date)
                     {
-                        return $"Date Validation Error: '{targetTitle}' due date cannot be after the FYP 1: Interim Report due date ({interim.DueDate.Value:dd MMM yyyy}).";
+                        return $"Date Validation Error: '{targetTitle}' due date cannot be after the FYP 1: Proposal due date ({proposal.DueDate.Value:dd MMM yyyy}).";
                     }
                 }
                 else
@@ -1662,7 +1673,6 @@ namespace FYPTracker.Controllers
             }
             else
             {
-                // Only validate Proposal vs Final if one of them is the target being edited
                 if (proposal?.DueDate.HasValue == true && final?.DueDate.HasValue == true && proposal.DueDate.Value.Date > final.DueDate.Value.Date)
                 {
                     return $"Date Validation Error: FYP 1: Proposal due date cannot be after the Step 2: Final Report Submission due date ({final.DueDate.Value:dd MMM yyyy}).";
@@ -1888,11 +1898,11 @@ namespace FYPTracker.Controllers
             var stage1Milestones = await _context.FYPMilestones
                 .Where(m => m.FYPProjectId == milestone.FYPProjectId && !m.Title.StartsWith("Step"))
                 .ToListAsync();
-            bool isAllStage1Approved = stage1Milestones.Count >= 3 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+            bool isAllStage1Approved = stage1Milestones.Count >= 2 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
 
             if (!isAllStage1Approved && milestone.Status != "Completed")
             {
-                TempData["Error"] = "All 3 Stage 1 milestones must be approved before joint evaluation.";
+                TempData["Error"] = "Both Stage 1 milestones must be approved before joint evaluation.";
                 return RedirectToAction("ReviewSubmissions");
             }
 

@@ -10,9 +10,8 @@
     int pendingRequestsCount = ViewBag.PendingRequests ?? 0;
     int pendingReviewsCount = ViewBag.PendingReviews ?? 0;
     int pendingMeetingCount = pendingMeetingsList.Count;
-    int pendingExaminersCount = ViewBag.PendingExaminers ?? 0;
 
-    bool hasActionRequired = pendingRequestsCount > 0 || pendingReviewsCount > 0 || pendingMeetingCount > 0 || pendingExaminersCount > 0;
+    bool hasActionRequired = pendingRequestsCount > 0 || pendingReviewsCount > 0 || pendingMeetingCount > 0;
 }
 
 <style>
@@ -247,18 +246,6 @@
                             <p class="mb-0 text-muted" style="font-size: 0.9rem;">You have <strong>@pendingReviewsCount</strong> document(s) waiting for your feedback or approval.</p>
                         </div>
                         <a href="/Supervisor/ReviewSubmissions" class="btn btn-sm btn-monochrome px-4 rounded-pill">Review Submissions</a>
-                    </div>
-                }
-
-                @if (pendingExaminersCount > 0)
-                {
-                    <div class="action-alert shadow-sm">
-                        <i class="fas fa-user-clock action-alert-icon text-warning"></i>
-                        <div class="flex-grow-1">
-                            <h6 class="fw-bold mb-1">Pending Examiner Assignments</h6>
-                            <p class="mb-0 text-muted" style="font-size: 0.9rem;">You have <strong>@pendingExaminersCount</strong> project(s) that require an examiner assignment.</p>
-                        </div>
-                        <a href="/Supervisor/MyProjects" class="btn btn-sm btn-outline-monochrome px-4 rounded-pill">Assign Examiners</a>
                     </div>
                 }
 
