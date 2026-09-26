@@ -64,6 +64,9 @@ namespace FYPTracker.Migrations
                     b.Property<string>("Image")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("IsMfaEnabled")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsNotificationOn")
                         .HasColumnType("bit");
 
@@ -72,6 +75,9 @@ namespace FYPTracker.Migrations
 
                     b.Property<int?>("MaxStudentSlots")
                         .HasColumnType("int");
+
+                    b.Property<string>("MfaSecretKey")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("MsAccessToken")
                         .HasColumnType("nvarchar(max)");

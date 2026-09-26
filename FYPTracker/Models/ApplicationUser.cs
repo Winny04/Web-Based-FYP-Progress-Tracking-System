@@ -64,6 +64,10 @@ namespace FYPTracker.Models
         public string? MsRefreshToken { get; set; }
         public DateTime? MsTokenExpiry { get; set; }
 
+        // MFA fields
+        public bool IsMfaEnabled { get; set; } = false;
+        public string? MfaSecretKey { get; set; }
+
         [ForeignKey(nameof(DepartmentId))]
         public Department? EmpDepartment { get; set; }
     }

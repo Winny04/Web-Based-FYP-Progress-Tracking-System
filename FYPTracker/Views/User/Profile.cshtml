@@ -282,6 +282,35 @@
                         </button>
                     </div>
                 </form>
+                
+                <hr class="my-5" />
+
+                <h5 class="fw-bold text-dark mb-3"><i class="fas fa-lock text-primary me-2"></i>Two-Factor Authentication</h5>
+                @if (Model.IsMfaEnabled)
+                {
+                    <div class="alert alert-success d-flex align-items-center p-4">
+                        <i class="fas fa-check-circle fs-2hx text-success me-4"></i>
+                        <div class="d-flex flex-column">
+                            <h4 class="mb-1 text-success">2FA is Enabled</h4>
+                            <span>Your account is protected with an authenticator app.</span>
+                        </div>
+                    </div>
+                    <form action="@Url.Action("DisableMfa", "User")" method="post" onsubmit="return confirm('Are you sure you want to disable Two-Factor Authentication? This will make your account less secure.');">
+                        <button type="submit" class="btn btn-outline-danger w-100 fw-bold">Disable 2FA</button>
+                    </form>
+                }
+                else
+                {
+                    <div class="alert alert-warning d-flex align-items-center p-4">
+                        <i class="fas fa-exclamation-triangle fs-2hx text-warning me-4"></i>
+                        <div class="d-flex flex-column">
+                            <h4 class="mb-1 text-warning">2FA is Disabled</h4>
+                            <span>Protect your account by enabling Two-Factor Authentication.</span>
+                        </div>
+                    </div>
+                    <a href="@Url.Action("SetupMfa", "User")" class="btn btn-primary w-100 fw-bold">Enable 2FA</a>
+                }
+
             </div>
         </div>
     </div>

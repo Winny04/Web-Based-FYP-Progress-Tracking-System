@@ -248,7 +248,73 @@ namespace FYPTracker.Controllers
 
                 return View(model);
             }
-            return View();
+            return RedirectToAction("Index", "Home");
+        }
+
+        [Authorize]
+        [HttpGet]
+        public async Task<IActionResult> SetupMfa()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == User.Identity.Name);
+            if (user == null) return RedirectToAction("Login");
+
+            string key = Guid.NewGuid().ToString().Replace("-", "").Substring(0, 10);
+            var authenticator = new Google.Authenticator.TwoFactorAuthenticator();
+            var setupInfo = authenticator.GenerateSetupCode("FYP Tracker", user.Email ?? user.UserName, key, false, 3);
+            
+            HttpContext.Session.SetString("PendingMfaSecret", key);
+
+            ViewBag.QrCodeImageUrl = setupInfo.QrCodeSetupImageUrl;
+            ViewBag.ManualEntryKey = setupInfo.ManualEntryKey;
+
+            return View(user);
+        }
+
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> VerifyMfaSetup(string code)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == User.Identity.Name);
+            if (user == null) return RedirectToAction("Login");
+
+            var key = HttpContext.Session.GetString("PendingMfaSecret");
+            if (string.IsNullOrEmpty(key))
+            {
+                TempData["error"] = "Session expired. Please try again.";
+                return RedirectToAction("SetupMfa");
+            }
+
+            var authenticator = new Google.Authenticator.TwoFactorAuthenticator();
+            bool isValid = authenticator.ValidateTwoFactorPIN(key, code);
+
+            if (isValid)
+            {
+                user.MfaSecretKey = key;
+                user.IsMfaEnabled = true;
+                await _context.SaveChangesAsync();
+                HttpContext.Session.Remove("PendingMfaSecret");
+                TempData["Success"] = "Two-Factor Authentication has been successfully enabled!";
+                return RedirectToAction("Profile", new { name = user.UserName });
+            }
+
+            TempData["error"] = "Invalid code. Please try again.";
+            return RedirectToAction("SetupMfa");
+        }
+
+        [Authorize]
+        [HttpPost]
+        public async Task<IActionResult> DisableMfa()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == User.Identity.Name);
+            if (user != null)
+            {
+                user.IsMfaEnabled = false;
+                user.MfaSecretKey = null;
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Two-Factor Authentication has been disabled.";
+                return RedirectToAction("Profile", new { name = user.UserName });
+            }
+            return RedirectToAction("Login");
         }
 
         [Authorize]
@@ -475,6 +541,18 @@ namespace FYPTracker.Controllers
                 }
             }
 
+            if (emp.IsMfaEnabled)
+            {
+                var expectedCookie = Encryption.GetHash(emp.UserName + emp.MfaSecretKey);
+                if (Request.Cookies["MfaRemember"] != expectedCookie)
+                {
+                    HttpContext.Session.SetInt32("PendingMfaUserId", emp.Id);
+                    HttpContext.Session.SetString("PendingMfaReturnUrl", returnUrl ?? "");
+                    HttpContext.Session.SetString("PendingMfaRmbMe", rmbMe.ToString());
+                    return RedirectToAction("MfaChallenge");
+                }
+            }
+
             await _userService.SignInEmployeeAsync(emp, rmbMe);
 
             if (emp.RequirePasswordChange)
@@ -485,6 +563,71 @@ namespace FYPTracker.Controllers
             if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
 
             // Redirect based on role
+            if (emp.UserType == "Student")
+                return RedirectToAction("Index", "Student");
+            else if (emp.UserType == "Supervisor")
+                return RedirectToAction("Index", "Supervisor");
+            else if (emp.UserType == "SuperAdmin" || emp.UserType == "Admin")
+                return RedirectToAction("Index", "Admin");
+            else if (emp.UserType == "Examiner")
+                return RedirectToAction("Index", "Examiner");
+
+            return RedirectToAction("Index", "Home");
+        }
+
+        [AllowAnonymous]
+        public IActionResult MfaChallenge()
+        {
+            var userId = HttpContext.Session.GetInt32("PendingMfaUserId");
+            if (userId == null) return RedirectToAction("Login");
+            return View();
+        }
+
+        [HttpPost]
+        [AllowAnonymous]
+        public async Task<IActionResult> MfaChallenge(string code, bool rememberDevice)
+        {
+            var userId = HttpContext.Session.GetInt32("PendingMfaUserId");
+            if (userId == null) return RedirectToAction("Login");
+
+            var emp = await _context.ApplicationUsers.FindAsync(userId);
+            if (emp == null || string.IsNullOrEmpty(emp.MfaSecretKey)) return RedirectToAction("Login");
+
+            var authenticator = new Google.Authenticator.TwoFactorAuthenticator();
+            bool isValid = authenticator.ValidateTwoFactorPIN(emp.MfaSecretKey, code);
+
+            if (!isValid)
+            {
+                TempData["error"] = "Invalid Authenticator code. Please try again.";
+                return View();
+            }
+
+            if (rememberDevice)
+            {
+                var cookieValue = Encryption.GetHash(emp.UserName + emp.MfaSecretKey);
+                Response.Cookies.Append("MfaRemember", cookieValue, new CookieOptions 
+                { 
+                    Expires = DateTime.Now.AddDays(30), 
+                    HttpOnly = true,
+                    Secure = true
+                });
+            }
+
+            // Clear session
+            HttpContext.Session.Remove("PendingMfaUserId");
+            var returnUrl = HttpContext.Session.GetString("PendingMfaReturnUrl");
+            var rmbMeStr = HttpContext.Session.GetString("PendingMfaRmbMe");
+            bool rmbMe = !string.IsNullOrEmpty(rmbMeStr) && bool.Parse(rmbMeStr);
+
+            await _userService.SignInEmployeeAsync(emp, rmbMe);
+
+            if (emp.RequirePasswordChange)
+            {
+                return RedirectToAction("ForceChangePassword", "User");
+            }
+
+            if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
+
             if (emp.UserType == "Student")
                 return RedirectToAction("Index", "Student");
             else if (emp.UserType == "Supervisor")
