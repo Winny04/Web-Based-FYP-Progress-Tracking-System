@@ -37,6 +37,7 @@ builder.Services.AddHttpContextAccessor();
 #region register services
 
 builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
+builder.Services.AddHttpClient();
 
 builder.Services.AddScoped<IWebHelper, WebHelper>();
 builder.Services.AddScoped<IAuthenticationService, CookieAuthenticationService>();

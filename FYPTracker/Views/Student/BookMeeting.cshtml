@@ -154,7 +154,9 @@
                 <div>
                     <h5 class="mb-1 fw-bold text-primary">Reminder: Upcoming Meeting Tomorrow!</h5>
                     <p class="mb-0 text-dark">You have an approved meeting scheduled for tomorrow at <strong>@tm.MeetingTime</strong>.</p>
-                    @if(!string.IsNullOrEmpty(tm.Location)) {
+                    @if(!string.IsNullOrEmpty(tm.MeetingLink)) {
+                        <p class="mb-0 mt-1"><a href="@tm.MeetingLink" target="_blank" class="btn btn-sm btn-primary"><i class="fas fa-video me-1"></i> Join Online Meeting</a></p>
+                    } else if(!string.IsNullOrEmpty(tm.Location)) {
                         <p class="mb-0 mt-1 text-dark"><i class="fas fa-map-marker-alt text-danger me-1"></i> <strong>Location / Link:</strong> @tm.Location</p>
                     }
                 </div>
@@ -324,6 +326,8 @@
                                             data-date="@m.MeetingDate.ToString("dd MMM yyyy")"
                                             data-proposed-date="@(m.ProposedNewDate?.ToString("dd MMM yyyy") ?? "")"
                                             data-proposed-iso="@(m.ProposedNewDate?.ToString("yyyy-MM-dd") ?? "")"
+                                            data-location="@m.Location"
+                                            data-meetinglink="@m.MeetingLink"
                                             onclick="viewMeetingDetails(this)">
                                         Details
                                     </button>
@@ -660,6 +664,7 @@
         const originalDate = btn.getAttribute('data-date');
         const proposedDate = btn.getAttribute('data-proposed-date');
         const location     = btn.getAttribute('data-location');
+        const meetingLink  = btn.getAttribute('data-meetinglink');
 
         let iconType = 'info';
         if (status === 'Approved')  iconType = 'success';
@@ -686,7 +691,9 @@
         }
 
         let locationHtml = '';
-        if (location) {
+        if (meetingLink) {
+            locationHtml = `<p class="mb-2"><a href="${meetingLink}" target="_blank" class="btn btn-sm btn-primary w-100"><i class="fas fa-video me-1"></i> Join Online Meeting</a></p>`;
+        } else if (location) {
             locationHtml = `<p class="mb-2"><i class="fas fa-map-marker-alt text-danger me-1"></i><strong>Location / Link:</strong> ${location}</p>`;
         }
 

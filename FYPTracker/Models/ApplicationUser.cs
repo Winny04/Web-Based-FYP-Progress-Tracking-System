@@ -59,6 +59,11 @@ namespace FYPTracker.Models
         public string? TempPassword { get; set; }   // Stored for resend-invite scenarios
         public DateTime? AccountExpiry { get; set; } // Auto-calculated from AcademicSession
 
+        // Microsoft Teams OAuth fields
+        public string? MsAccessToken { get; set; }
+        public string? MsRefreshToken { get; set; }
+        public DateTime? MsTokenExpiry { get; set; }
+
         [ForeignKey(nameof(DepartmentId))]
         public Department? EmpDepartment { get; set; }
     }

@@ -73,6 +73,15 @@ namespace FYPTracker.Migrations
                     b.Property<int?>("MaxStudentSlots")
                         .HasColumnType("int");
 
+                    b.Property<string>("MsAccessToken")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MsRefreshToken")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("MsTokenExpiry")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("PassCode")
                         .HasColumnType("nvarchar(max)");
 
@@ -789,6 +798,9 @@ namespace FYPTracker.Migrations
                     b.Property<string>("MeetingDay")
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("MeetingLink")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("MeetingTime")
                         .HasMaxLength(10)

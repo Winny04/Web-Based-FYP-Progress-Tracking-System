@@ -1271,6 +1271,8 @@ namespace FYPTracker.Controllers
                 .OrderByDescending(m => m.CreatedDate)
                 .ToListAsync();
 
+            ViewBag.MsAccountConnected = !string.IsNullOrEmpty(user.MsAccessToken);
+
             return View(meetings);
         }
 
@@ -1292,8 +1294,16 @@ namespace FYPTracker.Controllers
                 }
                 meeting.Location = location;
                 meeting.RespondedDate = DateTime.Now;
-                await _context.SaveChangesAsync();
+                
+                if (status == "Approved" && location == "Online")
+                {
+                    // Automatically generate a Jitsi Meet link instead of Microsoft Teams
+                    string uniqueId = Guid.NewGuid().ToString("N").Substring(0, 8);
+                    string safeStudentName = meeting.Student?.FullName != null ? new string(meeting.Student.FullName.Where(char.IsLetterOrDigit).ToArray()) : "Student";
+                    meeting.MeetingLink = $"https://meet.jit.si/FYP_Meeting_{safeStudentName}_{uniqueId}";
+                }
 
+                await _context.SaveChangesAsync();
                 if (status == "Approved" && recurringWeeks > 1)
                 {
                     // Check if it's the first meeting by looking at how many approved meetings exist before we auto-generate

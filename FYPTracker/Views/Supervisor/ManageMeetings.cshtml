@@ -76,6 +76,15 @@
         </div>
     }
 
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2">
+            <i class="fas fa-exclamation-circle fs-4"></i> <span>@TempData["Error"]</span>
+        </div>
+    }
+
+
+
     <!-- Tomorrow's Meeting Reminder -->
     @{
         var tomorrowMeetings = Model.Where(m => m.Status == "Approved" && m.MeetingDate.Date == DateTime.Today.AddDays(1).Date).ToList();
@@ -89,7 +98,9 @@
                 <div>
                     <h5 class="mb-1 fw-bold text-primary">Reminder: Upcoming Meeting Tomorrow!</h5>
                     <p class="mb-0 text-dark">You have an approved meeting scheduled for tomorrow with <strong>@tm.Student?.FullName</strong> at <strong>@tm.MeetingTime</strong>.</p>
-                    @if(!string.IsNullOrEmpty(tm.Location)) {
+                    @if(!string.IsNullOrEmpty(tm.MeetingLink)) {
+                        <p class="mb-0 mt-1"><a href="@tm.MeetingLink" target="_blank" class="btn btn-sm btn-primary"><i class="fas fa-video me-1"></i> Join Online Meeting</a></p>
+                    } else if(!string.IsNullOrEmpty(tm.Location)) {
                         <p class="mb-0 mt-1 text-dark"><i class="fas fa-map-marker-alt text-danger me-1"></i> <strong>Location / Link:</strong> @tm.Location</p>
                     }
                 </div>
@@ -216,7 +227,7 @@
                                 </td>
                                 <td class="text-end pe-4">
                                     <button type="button" class="btn btn-sm btn-light-primary rounded-3" 
-                                            onclick="showMeetingDetails(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")', '@m.MeetingTime', '@(m.Student?.FullName)', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Reason ?? "No agenda provided."))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.SupervisorNote ?? "No notes added."))', '@m.Status', '@(m.ProposedNewDate?.ToString("yyyy-MM-dd") ?? "")', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Location ?? ""))')">
+                                            onclick="showMeetingDetails(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")', '@m.MeetingTime', '@(m.Student?.FullName)', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Reason ?? "No agenda provided."))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.SupervisorNote ?? "No notes added."))', '@m.Status', '@(m.ProposedNewDate?.ToString("yyyy-MM-dd") ?? "")', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Location ?? ""))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLink ?? ""))')">
                                         <i class="fas fa-info-circle"></i> View Details
                                     </button>
                                     
@@ -278,7 +289,7 @@
                                                                 <div class="mt-2 d-flex flex-wrap gap-2">
                                                                     <button type="button" class="btn btn-sm btn-light border text-dark fw-semibold" onclick="document.getElementById('location_@m.Id').value = 'Lab 1'; validateRespondModalRealtime(@m.Id)">Lab 1</button>
                                                                     <button type="button" class="btn btn-sm btn-light border text-dark fw-semibold" onclick="document.getElementById('location_@m.Id').value = 'Room 402'; validateRespondModalRealtime(@m.Id)">Room 402</button>
-                                                                    <button type="button" class="btn btn-sm btn-light border text-dark fw-semibold" onclick="document.getElementById('location_@m.Id').value = 'MS Teams'; validateRespondModalRealtime(@m.Id)">MS Teams</button>
+                                                                    <button type="button" class="btn btn-sm btn-primary border-0 fw-semibold" onclick="document.getElementById('location_@m.Id').value = 'Online'; validateRespondModalRealtime(@m.Id)"><i class="fas fa-video me-1"></i> Auto-Generate Online Link</button>
                                                                 </div>
                                                                 <div id="locationError_@m.Id" class="text-danger fw-bold small mt-1 d-none">Location is required when approving.</div>
                                                             </div>
@@ -369,6 +380,9 @@
                         </div>
                     </div>
 
+                    <div id="detMeetingLinkContainer" class="alert alert-info py-2 px-3 mb-3" style="display: none;">
+                        <a id="detMeetingLinkBtn" href="#" target="_blank" class="btn btn-sm btn-primary w-100"><i class="fas fa-video me-2"></i>Join Online Meeting</a>
+                    </div>
                     <div id="detLocationContainer" class="alert alert-info py-2 px-3 mb-3" style="display: none;">
                         <i class="fas fa-map-marker-alt text-danger me-2"></i><strong>Location/Link: </strong><span id="detLocation"></span>
                     </div>
@@ -580,7 +594,7 @@
         editTimeError.style.display = 'none';
     }
 
-    function showMeetingDetails(id, date, time, user, reason, notes, status, proposedDate, location) {
+    function showMeetingDetails(id, date, time, user, reason, notes, status, proposedDate, location, meetingLink) {
         const d = new Date(date + 'T00:00:00');
         const formattedDate = d.toLocaleDateString('en-US', { day:'2-digit', month:'short', year:'numeric' });
         
@@ -590,11 +604,18 @@
         document.getElementById('detNotes').textContent = notes;
 
         const locContainer = document.getElementById('detLocationContainer');
-        if (location) {
+        const linkContainer = document.getElementById('detMeetingLinkContainer');
+        if (meetingLink) {
+            document.getElementById('detMeetingLinkBtn').href = meetingLink;
+            linkContainer.style.display = 'block';
+            locContainer.style.display = 'none';
+        } else if (location) {
             document.getElementById('detLocation').textContent = location;
             locContainer.style.display = 'block';
+            if (linkContainer) linkContainer.style.display = 'none';
         } else {
             locContainer.style.display = 'none';
+            if (linkContainer) linkContainer.style.display = 'none';
         }
 
         const postponeContainer = document.getElementById('detPostponedContainer');
