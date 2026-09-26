@@ -43,6 +43,7 @@ namespace FYPTracker.Controllers
                 .Include(p => p.AssignedExaminers)
                     .ThenInclude(ae => ae.Examiner)
                 .Include(p => p.Milestones)
+                    .ThenInclude(m => m.SubmissionFiles)
                 .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
             // Fetch recent activities

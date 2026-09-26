@@ -95,7 +95,7 @@
                                     <input type="hidden" name="stepTitle" value="@step.Title" />
                                     <div class="mb-3">
                                         <label class="form-label text-muted small fw-bold">@labelText</label>
-                                        @{ var latestFile = step.SubmissionFiles?.OrderByDescending(f => f.UploadedDate).FirstOrDefault(); }
+                                        @{ var latestFile = step.SubmissionFiles?.Where(f => f.UploadedBy == Model.StudentId).OrderByDescending(f => f.UploadedDate).FirstOrDefault(); }
                                         @if(isDone) {
                                             <div class="alert alert-light border shadow-sm p-3 mb-0 d-flex justify-content-between align-items-center">
                                                 <span><i class="fas fa-file-pdf text-danger me-2"></i> Document Submitted</span>

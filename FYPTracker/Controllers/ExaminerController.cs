@@ -200,6 +200,149 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UploadMarksheetStage1(int projectId, IFormFile marksheetFile, string idempotencyToken)
+        {
+            if (string.IsNullOrEmpty(idempotencyToken) || TempData["IdempotencyToken"]?.ToString() != idempotencyToken)
+            {
+                TempData["Error"] = "Duplicate submission detected. Your request has already been processed.";
+                return RedirectToAction(nameof(Index));
+            }
+            TempData.Remove("IdempotencyToken");
+
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Milestones)
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found or unauthorized.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (project.Stage1MarksheetUploadCount >= 5)
+            {
+                TempData["Error"] = "You have reached the maximum allowed number of Stage 1 marksheet uploads (5) for this project.";
+                return RedirectToAction(nameof(StudentDetails), new { projectId });
+            }
+
+            if (marksheetFile != null && marksheetFile.Length > 0)
+            {
+                var extension = Path.GetExtension(marksheetFile.FileName).ToLower();
+                if (extension != ".xls" && extension != ".xlsx")
+                {
+                    TempData["Error"] = "Only Excel files (.xls, .xlsx) are allowed.";
+                    return RedirectToAction(nameof(StudentDetails), new { projectId });
+                }
+
+                project.Stage1MarksheetUploadCount++;
+
+                string uploadsFolder = Path.Combine(_env.WebRootPath, "uploads", "marksheets");
+                if (!Directory.Exists(uploadsFolder))
+                {
+                    Directory.CreateDirectory(uploadsFolder);
+                }
+
+                string uniqueFileName = Guid.NewGuid().ToString() + "_Stage1_" + Path.GetFileName(marksheetFile.FileName);
+                string filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                using (var fileStream = new FileStream(filePath, FileMode.Create))
+                {
+                    await marksheetFile.CopyToAsync(fileStream);
+                }
+
+                // Keep the Interim Report milestone up to date for Examiner's end
+                var interimMilestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Interim Report", StringComparison.OrdinalIgnoreCase));
+                
+                // Extract final grade from J16 for Stage 1
+                try
+                {
+                    using (var workbook = new XLWorkbook(filePath))
+                    {
+                        var worksheet = workbook.Worksheets.FirstOrDefault();
+                        if (worksheet != null)
+                        {
+                            var cellValue = worksheet.Cell("J16").Value;
+                            if (cellValue != null && interimMilestone != null)
+                            {
+                                string extractedScore = "";
+                                string stringValue = cellValue.ToString();
+                                if (double.TryParse(stringValue, out double numericScore)) extractedScore = numericScore.ToString();
+                                else if (stringValue.Contains("-") && double.TryParse(stringValue.Split('-').Last().Trim(), out double scoreFromText)) extractedScore = scoreFromText.ToString();
+                                else extractedScore = stringValue.Trim();
+                                
+                                var strengthsCell = worksheet.Cell("C19").Value;
+                                var improvementsCell = worksheet.Cell("C22").Value;
+                                var commentsCell = worksheet.Cell("C25").Value;
+                                
+                                var feedbackData = new {
+                                    Score = extractedScore,
+                                    Strengths = strengthsCell?.ToString().Trim() ?? "",
+                                    Improvements = improvementsCell?.ToString().Trim() ?? "",
+                                    Comments = commentsCell?.ToString().Trim() ?? ""
+                                };
+                                interimMilestone.ExaminerMarksheetData = System.Text.Json.JsonSerializer.Serialize(feedbackData);
+                                
+                                // Calculate Joint Evaluation
+                                double exScore = 0;
+                                if (!string.IsNullOrEmpty(interimMilestone.ExaminerMarksheetData)) {
+                                    if (interimMilestone.ExaminerMarksheetData.StartsWith("{")) {
+                                        using var doc = System.Text.Json.JsonDocument.Parse(interimMilestone.ExaminerMarksheetData);
+                                        if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double e)) exScore = e;
+                                    } else {
+                                        double.TryParse(interimMilestone.ExaminerMarksheetData, out exScore);
+                                    }
+                                }
+
+                                double supScore = 0;
+                                bool hasSupScore = false;
+                                if (!string.IsNullOrEmpty(interimMilestone.SupervisorMarksheetData)) {
+                                    if (interimMilestone.SupervisorMarksheetData.StartsWith("{")) {
+                                        using var doc = System.Text.Json.JsonDocument.Parse(interimMilestone.SupervisorMarksheetData);
+                                        if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double s)) { supScore = s; hasSupScore = true; }
+                                    } else {
+                                        hasSupScore = double.TryParse(interimMilestone.SupervisorMarksheetData, out supScore);
+                                    }
+                                }
+
+                                if (exScore > 0)
+                                {
+                                    if (hasSupScore)
+                                    {
+                                        project.Stage1TotalScore = (supScore + exScore) / 2.0;
+                                        project.Stage1Grade = project.Stage1TotalScore >= 40.0 ? "Pass" : "Fail";
+                                    }
+                                    else
+                                    {
+                                        project.Stage1TotalScore = exScore;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Ignore parsing errors
+                }
+
+                project.Stage1ExaminerMarksheetPath = "/uploads/marksheets/" + uniqueFileName;
+
+                await _context.SaveChangesAsync();
+                
+                TempData["Success"] = "Stage 1 marksheet uploaded successfully" + (project.Stage1TotalScore.HasValue ? $" and score {project.Stage1TotalScore} recorded." : ".");
+            }
+            else
+            {
+                TempData["Error"] = "Please select a file to upload.";
+            }
+
+            return RedirectToAction(nameof(StudentDetails), new { projectId });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> UploadMarksheet(int projectId, IFormFile marksheetFile, string idempotencyToken)
         {
             if (string.IsNullOrEmpty(idempotencyToken) || TempData["IdempotencyToken"]?.ToString() != idempotencyToken)

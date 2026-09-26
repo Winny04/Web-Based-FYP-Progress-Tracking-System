@@ -348,74 +348,85 @@
                         @if (stage2Milestones.Any()) {
                             <h6 class="text-success fw-bold mb-3"><i class="fas fa-graduation-cap me-2"></i>Stage 2: Final Submission</h6>
                             <div class="timeline-container">
-                                @foreach (var ms in stage2Milestones)
+                                @if (Model.Stage1Grade != "Pass")
                                 {
-                                    var rowCls = ms.Status.ToLower() switch {
-                                        "approved"    => "approved",
-                                        "completed"   => "approved",
-                                        "rejected"    => "rejected",
-                                        "submitted"   => "submitted",
-                                        "underreview" => "submitted",
-                                        _             => "pending"
-                                    };
-                                    var pillCls = ms.Status switch {
-                                        "Approved"    => "pill-approved",
-                                        "Completed"   => "pill-approved",
-                                        "Rejected"    => "pill-rejected",
-                                        "Submitted"   => "pill-submitted",
-                                        "UnderReview" => "pill-underreview",
-                                        _             => "pill-pending"
-                                    };
-                                    int? daysLeft = ms.DueDate.HasValue
-                                        ? (int)(ms.DueDate.Value - DateTime.Today).TotalDays
-                                        : null;
+                                    <div class="text-center py-4 bg-light text-muted" style="border-radius: 8px; border: 1px dashed #cbd5e1;">
+                                        <i class="fas fa-lock fs-3 mb-2 text-secondary opacity-50"></i>
+                                        <div class="fw-bold fs-7">Stage 2 is locked.</div>
+                                        <div class="small opacity-75">You have not passed Stage 1 yet.</div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    @foreach (var ms in stage2Milestones)
+                                    {
+                                        var rowCls = ms.Status.ToLower() switch {
+                                            "approved"    => "approved",
+                                            "completed"   => "approved",
+                                            "rejected"    => "rejected",
+                                            "submitted"   => "submitted",
+                                            "underreview" => "submitted",
+                                            _             => "pending"
+                                        };
+                                        var pillCls = ms.Status switch {
+                                            "Approved"    => "pill-approved",
+                                            "Completed"   => "pill-approved",
+                                            "Rejected"    => "pill-rejected",
+                                            "Submitted"   => "pill-submitted",
+                                            "UnderReview" => "pill-underreview",
+                                            _             => "pill-pending"
+                                        };
+                                        int? daysLeft = ms.DueDate.HasValue
+                                            ? (int)(ms.DueDate.Value - DateTime.Today).TotalDays
+                                            : null;
 
-                                    <div class="milestone-row @rowCls">
-                                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 bg-light p-3 rounded-3 border">
-                                            <div>
-                                                <div class="fw-bold text-dark">@ms.Title</div>
-                                                @if (!string.IsNullOrEmpty(ms.Description))
-                                                {
-                                                    <div class="text-muted mt-1" style="font-size:.85rem;">@ms.Description</div>
-                                                }
-                                                @if (ms.DueDate.HasValue)
-                                                {
-                                                    <div class="mt-2 text-muted small fw-semibold">
-                                                        <i class="far fa-calendar-alt me-1"></i> Due: @ms.DueDate.Value.ToString("dd MMM yyyy")
-                                                        @if (daysLeft.HasValue && ms.Status != "Approved" && ms.Status != "Completed")
-                                                        {
-                                                            if (daysLeft < 0)
-                                                            { <span class="text-danger ms-2"><i class="fas fa-exclamation-circle"></i> Overdue by @Math.Abs(daysLeft.Value) days</span> }
-                                                            else if (daysLeft <= 3)
-                                                            { <span class="text-warning ms-2"><i class="fas fa-exclamation-triangle"></i> @daysLeft days left</span> }
-                                                        }
-                                                    </div>
-                                                }
-                                                
-                                                @if (!string.IsNullOrEmpty(ms.SupervisorFeedback))
-                                                {
-                                                    var isRejected = ms.Status == "Rejected";
-                                                    var bgStyle = isRejected ? "background-color: #fef2f2; border-color: #f87171;" : "background-color: #f0f9ff; border-color: #7dd3fc;";
-                                                    var textColor = isRejected ? "color: #991b1b;" : "color: #0c4a6e;";
-                                                    var titleColor = isRejected ? "color: #b91c1c;" : "color: #0284c7;";
+                                        <div class="milestone-row @rowCls">
+                                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 bg-light p-3 rounded-3 border">
+                                                <div>
+                                                    <div class="fw-bold text-dark">@ms.Title</div>
+                                                    @if (!string.IsNullOrEmpty(ms.Description))
+                                                    {
+                                                        <div class="text-muted mt-1" style="font-size:.85rem;">@ms.Description</div>
+                                                    }
+                                                    @if (ms.DueDate.HasValue)
+                                                    {
+                                                        <div class="mt-2 text-muted small fw-semibold">
+                                                            <i class="far fa-calendar-alt me-1"></i> Due: @ms.DueDate.Value.ToString("dd MMM yyyy")
+                                                            @if (daysLeft.HasValue && ms.Status != "Approved" && ms.Status != "Completed")
+                                                            {
+                                                                if (daysLeft < 0)
+                                                                { <span class="text-danger ms-2"><i class="fas fa-exclamation-circle"></i> Overdue by @Math.Abs(daysLeft.Value) days</span> }
+                                                                else if (daysLeft <= 3)
+                                                                { <span class="text-warning ms-2"><i class="fas fa-exclamation-triangle"></i> @daysLeft days left</span> }
+                                                            }
+                                                        </div>
+                                                    }
                                                     
-                                                    <div class="mt-3 p-3 rounded-3 border" style="font-size: 0.85rem; max-width: 600px; @bgStyle">
-                                                        <strong class="d-block mb-1" style="@titleColor"><i class="fas fa-comment-dots me-1"></i>Supervisor Feedback:</strong>
-                                                        <span class="fw-semibold" style="white-space: pre-wrap; @textColor">@ms.SupervisorFeedback</span>
-                                                    </div>
-                                                }
-                                            </div>
-                                            <div class="d-flex flex-column align-items-end gap-2">
-                                                <span class="status-pill @pillCls shadow-sm">@ms.Status</span>
-                                                @if (!string.IsNullOrEmpty(ms.Remarks) || !string.IsNullOrEmpty(ms.SupervisorFeedback))
-                                                {
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary mt-1 py-1 px-3 fw-bold" data-bs-toggle="modal" data-bs-target="#viewMs_@ms.Id">
-                                                        <i class="fas fa-folder-open me-1"></i> Details
-                                                    </button>
-                                                }
+                                                    @if (!string.IsNullOrEmpty(ms.SupervisorFeedback))
+                                                    {
+                                                        var isRejected = ms.Status == "Rejected";
+                                                        var bgStyle = isRejected ? "background-color: #fef2f2; border-color: #f87171;" : "background-color: #f0f9ff; border-color: #7dd3fc;";
+                                                        var textColor = isRejected ? "color: #991b1b;" : "color: #0c4a6e;";
+                                                        var titleColor = isRejected ? "color: #b91c1c;" : "color: #0284c7;";
+                                                        
+                                                        <div class="mt-3 p-3 rounded-3 border" style="font-size: 0.85rem; max-width: 600px; @bgStyle">
+                                                            <strong class="d-block mb-1" style="@titleColor"><i class="fas fa-comment-dots me-1"></i>Supervisor Feedback:</strong>
+                                                            <span class="fw-semibold" style="white-space: pre-wrap; @textColor">@ms.SupervisorFeedback</span>
+                                                        </div>
+                                                    }
+                                                </div>
+                                                <div class="d-flex flex-column align-items-end gap-2">
+                                                    <span class="status-pill @pillCls shadow-sm">@ms.Status</span>
+                                                    @if (!string.IsNullOrEmpty(ms.Remarks) || !string.IsNullOrEmpty(ms.SupervisorFeedback))
+                                                    {
+                                                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1 py-1 px-3 fw-bold" data-bs-toggle="modal" data-bs-target="#viewMs_@ms.Id">
+                                                            <i class="fas fa-folder-open me-1"></i> Details
+                                                        </button>
+                                                    }
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
+                                    }
                                 }
                             </div>
                         }

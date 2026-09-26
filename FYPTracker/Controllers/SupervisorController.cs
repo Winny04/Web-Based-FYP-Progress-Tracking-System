@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using FYPTracker.Services.Others.Interfaces;
 using Microsoft.AspNetCore.SignalR;
 using FYPTracker.Hubs;
+using ClosedXML.Excel;
 
 namespace FYPTracker.Controllers
 {
@@ -975,6 +976,78 @@ namespace FYPTracker.Controllers
                         UploadedBy = user.Id,
                         UploadedDate = DateTime.Now
                     });
+
+                    // Parse the Interim Report score if applicable
+                    if (milestone.Title.Contains("Interim Report", StringComparison.OrdinalIgnoreCase) && (extCheck == ".xls" || extCheck == ".xlsx"))
+                    {
+                        try
+                        {
+                            using (var workbook = new XLWorkbook(filePath))
+                            {
+                                var worksheet = workbook.Worksheets.FirstOrDefault();
+                                if (worksheet != null)
+                                {
+                                    var cellValue = worksheet.Cell("J16").Value;
+                                    string extractedScore = "";
+                                    if (cellValue != null)
+                                    {
+                                        string stringValue = cellValue.ToString();
+                                        if (double.TryParse(stringValue, out double numericScore)) extractedScore = numericScore.ToString();
+                                        else if (stringValue.Contains("-") && double.TryParse(stringValue.Split('-').Last().Trim(), out double scoreFromText)) extractedScore = scoreFromText.ToString();
+                                        else extractedScore = stringValue.Trim();
+                                    }
+                                    
+                                    var strengthsCell = worksheet.Cell("C19").Value;
+                                    var improvementsCell = worksheet.Cell("C22").Value;
+                                    var commentsCell = worksheet.Cell("C25").Value;
+                                    
+                                    var feedbackData = new {
+                                        Score = extractedScore,
+                                        Strengths = strengthsCell?.ToString().Trim() ?? "",
+                                        Improvements = improvementsCell?.ToString().Trim() ?? "",
+                                        Comments = commentsCell?.ToString().Trim() ?? ""
+                                    };
+                                    milestone.SupervisorMarksheetData = System.Text.Json.JsonSerializer.Serialize(feedbackData);
+                                }
+                            }
+
+                            // Calculate Joint Evaluation
+                            double supScore = 0;
+                            if (!string.IsNullOrEmpty(milestone.SupervisorMarksheetData)) {
+                                if (milestone.SupervisorMarksheetData.StartsWith("{")) {
+                                    using var doc = System.Text.Json.JsonDocument.Parse(milestone.SupervisorMarksheetData);
+                                    if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double s)) supScore = s;
+                                } else {
+                                    double.TryParse(milestone.SupervisorMarksheetData, out supScore);
+                                }
+                            }
+
+                            double exScore = 0;
+                            bool hasExScore = false;
+                            if (!string.IsNullOrEmpty(milestone.ExaminerMarksheetData)) {
+                                if (milestone.ExaminerMarksheetData.StartsWith("{")) {
+                                    using var doc = System.Text.Json.JsonDocument.Parse(milestone.ExaminerMarksheetData);
+                                    if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double e)) { exScore = e; hasExScore = true; }
+                                } else {
+                                    hasExScore = double.TryParse(milestone.ExaminerMarksheetData, out exScore);
+                                }
+                            }
+
+                            if (supScore > 0)
+                            {
+                                if (hasExScore)
+                                {
+                                    milestone.Project.Stage1TotalScore = (supScore + exScore) / 2.0;
+                                    milestone.Project.Stage1Grade = milestone.Project.Stage1TotalScore >= 40.0 ? "Pass" : "Fail";
+                                }
+                                else 
+                                {
+                                    milestone.Project.Stage1TotalScore = supScore;
+                                }
+                            }
+                        }
+                        catch { }
+                    }
                 }
 
                 await _context.SaveChangesAsync();
@@ -1539,6 +1612,7 @@ namespace FYPTracker.Controllers
 
             var iaf = simulated.FirstOrDefault(m => m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation"));
             var proposal = simulated.FirstOrDefault(m => m.Title.Contains("Proposal"));
+            var interim = simulated.FirstOrDefault(m => m.Title.Contains("Interim Report"));
             var final = simulated.FirstOrDefault(m => m.Title.Contains("Final"));
             var step1 = simulated.FirstOrDefault(m => m.Title.Contains("Step 1: Turnitin"));
             var step5 = simulated.FirstOrDefault(m => m.Title.Contains("Step 5"));
@@ -1546,23 +1620,34 @@ namespace FYPTracker.Controllers
             var targetMilestone = simulated.FirstOrDefault(m => m.Title == targetTitle);
             if (targetMilestone == null || !targetMilestone.DueDate.HasValue) return null;
 
-            bool isCore = targetTitle.Contains("IAF") || targetTitle.Contains("Initial Project Allocation") || targetTitle.Contains("Proposal") || targetTitle.Contains("Final") || targetTitle.Contains("Step 5");
+            bool isCore = targetTitle.Contains("IAF") || targetTitle.Contains("Initial Project Allocation") || targetTitle.Contains("Proposal") || targetTitle.Contains("Interim Report") || targetTitle.Contains("Final") || targetTitle.Contains("Step 5");
 
             if (!isCore)
             {
-                if (step1?.DueDate.HasValue == true && targetTitle.StartsWith("Step ") && !targetTitle.Contains("Step 1") && targetMilestone.DueDate.Value.Date < step1.DueDate.Value.Date)
+                bool isStage2 = targetTitle.StartsWith("Step ");
+                if (!isStage2)
                 {
-                    return $"Date Validation Error: '{targetTitle}' due date cannot be before the Step 1: Turnitin Checking due date ({step1.DueDate.Value:dd MMM yyyy}).";
+                    // Stage 1 Custom Milestones
+                    if (proposal?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date < proposal.DueDate.Value.Date)
+                    {
+                        return $"Date Validation Error: '{targetTitle}' due date cannot be before the FYP 1: Proposal due date ({proposal.DueDate.Value:dd MMM yyyy}).";
+                    }
+                    if (interim?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date > interim.DueDate.Value.Date)
+                    {
+                        return $"Date Validation Error: '{targetTitle}' due date cannot be after the FYP 1: Interim Report due date ({interim.DueDate.Value:dd MMM yyyy}).";
+                    }
                 }
-
-                if (proposal?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date > proposal.DueDate.Value.Date)
+                else
                 {
-                    return $"Date Validation Error: '{targetTitle}' due date cannot be after the FYP 1: Proposal due date ({proposal.DueDate.Value:dd MMM yyyy}).";
-                }
-
-                if (step5?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date > step5.DueDate.Value.Date)
-                {
-                    return $"Date Validation Error: '{targetTitle}' due date cannot be after the Step 5: Presentation Slides Submission due date ({step5.DueDate.Value:dd MMM yyyy}).";
+                    // Stage 2 Custom Milestones
+                    if (step1?.DueDate.HasValue == true && !targetTitle.Contains("Step 1") && targetMilestone.DueDate.Value.Date < step1.DueDate.Value.Date)
+                    {
+                        return $"Date Validation Error: '{targetTitle}' due date cannot be before the Step 1: Turnitin Checking due date ({step1.DueDate.Value:dd MMM yyyy}).";
+                    }
+                    if (step5?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date > step5.DueDate.Value.Date)
+                    {
+                        return $"Date Validation Error: '{targetTitle}' due date cannot be after the Step 5: Presentation Slides Submission due date ({step5.DueDate.Value:dd MMM yyyy}).";
+                    }
                 }
             }
             else
@@ -1841,8 +1926,8 @@ namespace FYPTracker.Controllers
                         double exTotal = 0;
                         if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(exTotalProp.GetString(), out double e)) { exTotal = e; }
                         else if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { exTotal = exTotalProp.GetDouble(); }
-                        
                         milestone.Project.Stage1TotalScore = (supTotal + exTotal) / 2.0;
+                        milestone.Project.Stage1Grade = milestone.Project.Stage1TotalScore >= 40.0 ? "Pass" : "Fail";
                     }
                 }
                 catch { }

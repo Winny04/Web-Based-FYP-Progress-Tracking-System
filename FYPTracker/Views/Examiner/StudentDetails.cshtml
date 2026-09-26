@@ -92,109 +92,208 @@
                 
                 <div class="separator mb-5"></div>
                 
-                @{
-                    var stage2Milestones = Model.Milestones
-                        .Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-                    bool isAllStage2Approved = stage2Milestones.Any() && stage2Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
-                }
-
-                @if (isAllStage2Approved)
-                {
-                    if (Model.MarksheetUploadCount >= 5)
+                <!-- Stage 1 Upload Section -->
+                <div class="mb-5">
+                    <h4 class="fw-bolder text-dark mb-4 mt-2">Stage 1: Interim Report</h4>
+                    @if (Model.Stage1MarksheetUploadCount >= 5)
                     {
                         <div class="alert alert-danger d-flex align-items-center p-4">
                             <i class="bi bi-x-circle fs-2 text-danger me-3"></i>
                             <div class="d-flex flex-column">
                                 <h4 class="fw-bolder text-dark mb-1">Limit Reached</h4>
-                                <span class="text-dark">You have reached the maximum of 5 marksheet uploads for this project. If you need to make further changes, please contact the administrator.</span>
+                                <span class="text-dark">You have reached the maximum of 5 marksheet uploads for Stage 1.</span>
                             </div>
                         </div>
                     }
                     else
                     {
-                        <form action="/Examiner/UploadMarksheet" method="post" enctype="multipart/form-data">
+                        <form action="/Examiner/UploadMarksheetStage1" method="post" enctype="multipart/form-data">
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="projectId" value="@Model.Id" />
                             <input type="hidden" name="idempotencyToken" value="@ViewBag.IdempotencyToken" />
                             
                             <div class="mb-3">
-                                <label for="marksheetFile" class="form-label">Upload Completed Marksheet (Excel)</label>
-                                <input class="form-control" type="file" id="marksheetFile" name="marksheetFile" accept=".xls,.xlsx" required>
+                                <label for="marksheetFile1" class="form-label">Upload Completed Stage 1 Marksheet (Excel)</label>
+                                <input class="form-control" type="file" id="marksheetFile1" name="marksheetFile" accept=".xls,.xlsx" required>
                                 <div class="form-text text-muted">
                                     You can upload a new marksheet up to 5 times. 
-                                    <strong class="@(Model.MarksheetUploadCount >= 4 ? "text-danger" : "text-primary")">
-                                        @(5 - Model.MarksheetUploadCount) attempt(s) remaining.
+                                    <strong class="@(Model.Stage1MarksheetUploadCount >= 4 ? "text-danger" : "text-primary")">
+                                        @(5 - Model.Stage1MarksheetUploadCount) attempt(s) remaining.
                                     </strong>
                                 </div>
                             </div>
-                            <button type="submit" class="btn btn-success w-100">
-                                <i class="bi bi-upload fs-4 me-2"></i> Submit Marksheet
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-upload fs-4 me-2"></i> Submit Stage 1 Marksheet
                             </button>
                         </form>
                     }
-                }
-                else
-                {
-                    <div class="alert alert-warning d-flex align-items-center p-4">
-                        <i class="bi bi-exclamation-triangle fs-2 text-warning me-3"></i>
-                        <div class="d-flex flex-column">
-                            <h4 class="fw-bolder text-dark mb-1">Upload Locked</h4>
-                            <span class="text-dark">The supervisor must approve ALL Stage 2 milestones (including the Final Report and Turnitin Score) before you can submit the final Excel marksheet.</span>
-                        </div>
-                    </div>
-                }
 
-                @if (!string.IsNullOrEmpty(Model.ExaminerMarksheetPath))
-                {
-                    <div class="alert alert-success mt-5 p-3 d-flex align-items-center">
-                        <i class="bi bi-check-circle-fill text-success fs-3 me-3"></i>
-                        <div class="d-flex flex-column">
-                            <span class="fw-bolder">Evaluation Submitted</span>
-                            <a href="@Model.ExaminerMarksheetPath" target="_blank" class="text-hover-primary text-decoration-underline text-success fw-bold">View Uploaded File</a>
-                        </div>
-                    </div>
-                    
-                    @if (!string.IsNullOrEmpty(Model.FinalGrade))
+                    @if (!string.IsNullOrEmpty(Model.Stage1ExaminerMarksheetPath))
                     {
-                        <div class="alert alert-primary mt-3 p-3 d-flex align-items-center">
-                            <i class="bi bi-award-fill text-primary fs-3 me-3"></i>
+                        <div class="alert alert-success mt-3 p-3 d-flex align-items-center justify-content-between">
                             <div class="d-flex flex-column">
-                                <span class="fw-bolder fs-6">Auto-Graded Result</span>
-                                <span class="text-dark fs-4 fw-bold">Final Grade: <span class="text-primary">@Model.FinalGrade</span></span>
+                                <h4 class="fw-bolder text-dark mb-1">Stage 1 Marksheet Uploaded</h4>
+                                <span><a href="@Model.Stage1ExaminerMarksheetPath" target="_blank" class="fw-bold text-success">Download your uploaded file</a></span>
+                                <span class="text-dark mt-1">Total Score extracted: <strong>@(Model.Stage1TotalScore?.ToString() ?? "N/A")</strong></span>
+                            </div>
+                            <i class="bi bi-check-circle-fill fs-1 text-success"></i>
+                        </div>
+                    }
+                    
+                    @{
+                            var interim = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Interim Report"));
+                            string exStrengths = "", exImprovements = "", exComments = "";
+                            if (interim != null && !string.IsNullOrEmpty(interim.ExaminerMarksheetData) && interim.ExaminerMarksheetData.StartsWith("{"))
+                            {
+                                using var doc = System.Text.Json.JsonDocument.Parse(interim.ExaminerMarksheetData);
+                                if (doc.RootElement.TryGetProperty("Strengths", out var sProp)) exStrengths = sProp.GetString();
+                                if (doc.RootElement.TryGetProperty("Improvements", out var iProp)) exImprovements = iProp.GetString();
+                                if (doc.RootElement.TryGetProperty("Comments", out var cProp)) exComments = cProp.GetString();
+                            }
+                        }
+                        
+                        @if (!string.IsNullOrEmpty(exStrengths) || !string.IsNullOrEmpty(exImprovements) || !string.IsNullOrEmpty(exComments))
+                        {
+                            <!-- Extracted Feedback -->
+                            <div class="mt-4">
+                                <h5 class="fw-bolder text-dark mb-3">Extracted Feedback</h5>
+                                
+                                @if (!string.IsNullOrEmpty(exStrengths))
+                                {
+                                    <div class="mb-3">
+                                        <h6 class="text-gray-800 fw-bold mb-1">Strengths of Report</h6>
+                                        <div class="p-2 bg-light rounded text-gray-700 fs-7">@exStrengths</div>
+                                    </div>
+                                }
+                                
+                                @if (!string.IsNullOrEmpty(exImprovements))
+                                {
+                                    <div class="mb-3">
+                                        <h6 class="text-gray-800 fw-bold mb-1">Areas for Improvement</h6>
+                                        <div class="p-2 bg-light rounded text-gray-700 fs-7">@exImprovements</div>
+                                    </div>
+                                }
+                                
+                                @if (!string.IsNullOrEmpty(exComments))
+                                {
+                                    <div class="mb-3">
+                                        <h6 class="text-gray-800 fw-bold mb-1">Additional Comments</h6>
+                                        <div class="p-2 bg-light rounded text-gray-700 fs-7">@exComments</div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                </div>
+
+                <div class="separator mb-5"></div>
+                
+                <!-- Stage 2 Upload Section -->
+                <div class="mb-5">
+                    <h4 class="fw-bolder text-dark mb-4 mt-2">Stage 2: Final Assessment</h4>
+                    @{
+                        var stage2Milestones = Model.Milestones
+                            .Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+                        bool isAllStage2Approved = stage2Milestones.Any() && stage2Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+                    }
+
+                    @if (isAllStage2Approved)
+                    {
+                        if (Model.MarksheetUploadCount >= 5)
+                        {
+                            <div class="alert alert-danger d-flex align-items-center p-4">
+                                <i class="bi bi-x-circle fs-2 text-danger me-3"></i>
+                                <div class="d-flex flex-column">
+                                    <h4 class="fw-bolder text-dark mb-1">Limit Reached</h4>
+                                    <span class="text-dark">You have reached the maximum of 5 marksheet uploads for Stage 2.</span>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <form action="/Examiner/UploadMarksheet" method="post" enctype="multipart/form-data">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="projectId" value="@Model.Id" />
+                                <input type="hidden" name="idempotencyToken" value="@ViewBag.IdempotencyToken" />
+                                
+                                <div class="mb-3">
+                                    <label for="marksheetFile" class="form-label">Upload Completed Stage 2 Marksheet (Excel)</label>
+                                    <input class="form-control" type="file" id="marksheetFile" name="marksheetFile" accept=".xls,.xlsx" required>
+                                    <div class="form-text text-muted">
+                                        You can upload a new marksheet up to 5 times. 
+                                        <strong class="@(Model.MarksheetUploadCount >= 4 ? "text-danger" : "text-primary")">
+                                            @(5 - Model.MarksheetUploadCount) attempt(s) remaining.
+                                        </strong>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-success w-100">
+                                    <i class="bi bi-upload fs-4 me-2"></i> Submit Stage 2 Marksheet
+                                </button>
+                            </form>
+                        }
+                    }
+                    else
+                    {
+                        <div class="alert alert-warning d-flex align-items-center p-4">
+                            <i class="bi bi-exclamation-triangle fs-2 text-warning me-3"></i>
+                            <div class="d-flex flex-column">
+                                <h4 class="fw-bolder text-dark mb-1">Upload Locked</h4>
+                                <span class="text-dark">The supervisor must approve ALL Stage 2 milestones before you can submit the final Excel marksheet.</span>
+                            </div>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(Model.ExaminerMarksheetPath))
+                    {
+                        <div class="alert alert-success mt-3 p-3 d-flex align-items-center">
+                            <i class="bi bi-check-circle-fill text-success fs-3 me-3"></i>
+                            <div class="d-flex flex-column">
+                                <span class="fw-bolder">Stage 2 Evaluation Submitted</span>
+                                <a href="@Model.ExaminerMarksheetPath" target="_blank" class="text-hover-primary text-decoration-underline text-success fw-bold">View Uploaded File</a>
                             </div>
                         </div>
                         
-                        <!-- Extracted Feedback -->
-                        <div class="mt-5">
-                            <h4 class="fw-bolder text-dark mb-4">Extracted Feedback</h4>
-                            
-                            @if (!string.IsNullOrEmpty(Model.ExaminerStrengths))
-                            {
-                                <div class="mb-4">
-                                    <h5 class="text-gray-800 fw-bold">Strengths of Report</h5>
-                                    <div class="p-3 bg-light rounded text-gray-700">@Model.ExaminerStrengths</div>
+                        @if (!string.IsNullOrEmpty(Model.FinalGrade))
+                        {
+                            <div class="alert alert-primary mt-3 p-3 d-flex align-items-center">
+                                <i class="bi bi-award-fill text-primary fs-3 me-3"></i>
+                                <div class="d-flex flex-column">
+                                    <span class="fw-bolder fs-6">Auto-Graded Result</span>
+                                    <span class="text-dark fs-4 fw-bold">Final Grade: <span class="text-primary">@Model.FinalGrade</span></span>
                                 </div>
-                            }
+                            </div>
                             
-                            @if (!string.IsNullOrEmpty(Model.ExaminerImprovements))
-                            {
-                                <div class="mb-4">
-                                    <h5 class="text-gray-800 fw-bold">Areas for Improvement</h5>
-                                    <div class="p-3 bg-light rounded text-gray-700">@Model.ExaminerImprovements</div>
-                                </div>
-                            }
-                            
-                            @if (!string.IsNullOrEmpty(Model.ExaminerComments))
-                            {
-                                <div class="mb-4">
-                                    <h5 class="text-gray-800 fw-bold">Additional Comments</h5>
-                                    <div class="p-3 bg-light rounded text-gray-700">@Model.ExaminerComments</div>
-                                </div>
-                            }
-                        </div>
+                            <!-- Extracted Feedback -->
+                            <div class="mt-4">
+                                <h5 class="fw-bolder text-dark mb-3">Extracted Feedback</h5>
+                                
+                                @if (!string.IsNullOrEmpty(Model.ExaminerStrengths))
+                                {
+                                    <div class="mb-3">
+                                        <h6 class="text-gray-800 fw-bold mb-1">Strengths of Report</h6>
+                                        <div class="p-2 bg-light rounded text-gray-700 fs-7">@Model.ExaminerStrengths</div>
+                                    </div>
+                                }
+                                
+                                @if (!string.IsNullOrEmpty(Model.ExaminerImprovements))
+                                {
+                                    <div class="mb-3">
+                                        <h6 class="text-gray-800 fw-bold mb-1">Areas for Improvement</h6>
+                                        <div class="p-2 bg-light rounded text-gray-700 fs-7">@Model.ExaminerImprovements</div>
+                                    </div>
+                                }
+                                
+                                @if (!string.IsNullOrEmpty(Model.ExaminerComments))
+                                {
+                                    <div class="mb-3">
+                                        <h6 class="text-gray-800 fw-bold mb-1">Additional Comments</h6>
+                                        <div class="p-2 bg-light rounded text-gray-700 fs-7">@Model.ExaminerComments</div>
+                                    </div>
+                                }
+                            </div>
+                        }
                     }
-                }
+                </div>
             </div>
         </div>
     </div>
@@ -246,16 +345,9 @@
                                         </td>
                                         <td>@milestone.SubmittedDate?.ToString("dd MMM yyyy")</td>
                                         <td class="text-end">
-                                            @if (isAllStage1Approved && milestone.Id == finalStage1Milestone?.Id)
-                                            {
-                                                bool hasGraded = !string.IsNullOrEmpty(milestone.ExaminerMarksheetData);
-                                                <a href="@Url.Action("GradeMarksheet", "Examiner", new { milestoneId = milestone.Id })" class="btn btn-sm @(hasGraded ? "btn-success" : "btn-primary") me-2 mb-2">
-                                                    <i class="fas @(hasGraded ? "fa-check-double" : "fa-edit") me-1"></i> @(hasGraded ? "View / Edit Stage 1 Marks" : "Grade Stage 1")
-                                                </a>
-                                            }
 
                                             @{
-                                                var activeFiles = milestone.SubmissionFiles?.Where(f => !f.IsDeleted).ToList();
+                                                var activeFiles = milestone.SubmissionFiles?.Where(f => !f.IsDeleted && f.UploadedBy == Model.StudentId).ToList();
                                                 var maxAttempt = activeFiles?.Any() == true ? activeFiles.Max(f => f.AttemptNumber) : 1;
                                                 var latestFiles = activeFiles?.Where(f => f.AttemptNumber == maxAttempt).OrderByDescending(f => f.UploadedDate).ToList();
                                             }
@@ -312,7 +404,7 @@
 
 
                                             @{
-                                                var activeFiles = milestone.SubmissionFiles?.Where(f => !f.IsDeleted).ToList();
+                                                var activeFiles = milestone.SubmissionFiles?.Where(f => !f.IsDeleted && f.UploadedBy == Model.StudentId).ToList();
                                                 var latestFile = activeFiles?.OrderByDescending(f => f.UploadedDate).FirstOrDefault();
                                             }
                                             @if(latestFile != null)

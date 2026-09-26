@@ -116,7 +116,7 @@
                                     <td><span class="text-dark fw-bold d-block fs-6">@(ms.SubmittedDate?.ToString("dd MMM yyyy HH:mm") ?? "-")</span></td>
                                     <td>
                                         @{
-                                            var activeFiles = ms.SubmissionFiles?.Where(f => !f.IsDeleted).ToList();
+                                            var activeFiles = ms.SubmissionFiles?.Where(f => !f.IsDeleted && f.UploadedBy == project?.StudentId).ToList();
                                             var maxAttempt = activeFiles?.Any() == true ? activeFiles.Max(f => f.AttemptNumber) : 1;
                                             var latestFiles = activeFiles?.Where(f => f.AttemptNumber == maxAttempt).OrderByDescending(f => f.UploadedDate).ToList();
                                         }
@@ -144,12 +144,7 @@
                                         else { <span class="badge badge-light-danger">Rejected / Revise</span> }
                                     </td>
                                     <td class="text-end pe-4">
-                                        @if (!string.IsNullOrEmpty(ms.SupervisorMarksheetData)) { 
-                                            <a href="@Url.Action("GradeMarksheet", "Supervisor", new { milestoneId = ms.Id })" class="btn btn-sm btn-success"><i class="fas fa-check-double me-1"></i> View/Edit Marks</a>
-                                            <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-info ms-1" title="View Details"><i class="fas fa-eye"></i></a>
-                                        }
-                                        else if (isAllStage1Approved && ms.Title.Contains("Interim Report", StringComparison.OrdinalIgnoreCase)) { <a href="@Url.Action("GradeMarksheet", "Supervisor", new { milestoneId = ms.Id })" class="btn btn-sm btn-primary"><i class="fas fa-edit me-1"></i> Grade Marksheet</a> }
-                                        else if (ms.Status == "Submitted" || ms.Status == "UnderReview") { <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-primary">Review</a> }
+                                        @if (ms.Status == "Submitted" || ms.Status == "UnderReview") { <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-primary">Review</a> }
                                         else if (ms.Status == "Approved" || ms.Status == "Rejected" || ms.Status == "Completed") { <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-info">View Details</a> }
                                         else { <button class="btn btn-sm btn-light text-muted" disabled>Waiting</button> }
                                     </td>
@@ -172,7 +167,7 @@
                                         <td><span class="text-dark fw-bold d-block fs-6">@(ms.SubmittedDate?.ToString("dd MMM yyyy HH:mm") ?? "-")</span></td>
                                         <td>
                                             @{
-                                                var latestFile = ms.SubmissionFiles?.Where(f => !f.IsDeleted).OrderByDescending(f => f.UploadedDate).FirstOrDefault();
+                                                var latestFile = ms.SubmissionFiles?.Where(f => !f.IsDeleted && f.UploadedBy == project?.StudentId).OrderByDescending(f => f.UploadedDate).FirstOrDefault();
                                             }
                                             @if (latestFile != null)
                                             {

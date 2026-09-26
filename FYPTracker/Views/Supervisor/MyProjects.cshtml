@@ -514,6 +514,7 @@
 @section Scripts {
     <script>
         var sysProposalDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Proposal"))?.DueDate?.ToString("yyyy-MM-dd"))";
+        var sysInterimDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Interim Report"))?.DueDate?.ToString("yyyy-MM-dd"))";
         var sysFinalDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Step 5"))?.DueDate?.ToString("yyyy-MM-dd"))";
         var sysStep1Date = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Step 1"))?.DueDate?.ToString("yyyy-MM-dd"))";
 
@@ -680,6 +681,7 @@
                 today.setHours(0,0,0,0);
                 
                 var propDate = sysProposalDate ? new Date(sysProposalDate) : null;
+                var interimDate = sysInterimDate ? new Date(sysInterimDate) : null;
                 var finalDate = sysFinalDate ? new Date(sysFinalDate) : null;
                 var step1Date = sysStep1Date ? new Date(sysStep1Date) : null;
                 var previewTitle = document.getElementById('addTitlePreview').value || "";
@@ -709,22 +711,36 @@
                     isValid = false;
                 } else if (!isFinalReport && !isProposal && !isIaf) {
                     // Chronological Validation
-                    if (propDate && selectedDate > propDate) {
-                        date.classList.remove('is-valid');
-                        date.classList.add('is-invalid');
-                        dateError.innerText = "Date Error: Cannot be after the Proposal due date (" + formatDate(propDate) + ").";
-                        dateError.classList.remove('d-none');
-                        isValid = false;
-                    } else if (finalDate && selectedDate > finalDate) {
-                        date.classList.remove('is-valid');
-                        date.classList.add('is-invalid');
-                        dateError.innerText = "Date Error: Cannot be after the Presentation Slides due date (" + formatDate(finalDate) + ").";
-                        dateError.classList.remove('d-none');
-                        isValid = false;
+                    if (!isStage2) {
+                        if (propDate && selectedDate < propDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be before the Proposal due date (" + formatDate(propDate) + ").";
+                            dateError.classList.remove('d-none');
+                            isValid = false;
+                        } else if (interimDate && selectedDate > interimDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be after the Interim Report due date (" + formatDate(interimDate) + ").";
+                            dateError.classList.remove('d-none');
+                            isValid = false;
+                        } else {
+                            date.classList.remove('is-invalid');
+                            date.classList.add('is-valid');
+                            dateError.classList.add('d-none');
+                        }
                     } else {
-                        date.classList.remove('is-invalid');
-                        date.classList.add('is-valid');
-                        dateError.classList.add('d-none');
+                        if (finalDate && selectedDate > finalDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be after the Presentation Slides due date (" + formatDate(finalDate) + ").";
+                            dateError.classList.remove('d-none');
+                            isValid = false;
+                        } else {
+                            date.classList.remove('is-invalid');
+                            date.classList.add('is-valid');
+                            dateError.classList.add('d-none');
+                        }
                     }
                 } else {
                     date.classList.remove('is-invalid');
@@ -806,6 +822,7 @@
                 today.setHours(0,0,0,0);
                 
                 var propDate = sysProposalDate ? new Date(sysProposalDate) : null;
+                var interimDate = sysInterimDate ? new Date(sysInterimDate) : null;
                 var finalDate = sysFinalDate ? new Date(sysFinalDate) : null;
                 var step1Date = sysStep1Date ? new Date(sysStep1Date) : null;
                 var targetTitleToValidate = title.value.trim() || target.value || "";
@@ -835,22 +852,36 @@
                     isValid = false;
                 } else if (!isFinalReport && !isProposal && !isIaf) {
                     // Chronological Validation
-                    if (propDate && selectedDate > propDate) {
-                        date.classList.remove('is-valid');
-                        date.classList.add('is-invalid');
-                        dateError.innerText = "Date Error: Cannot be after the Proposal due date (" + formatDate(propDate) + ").";
-                        dateError.style.display = 'block';
-                        isValid = false;
-                    } else if (finalDate && selectedDate > finalDate) {
-                        date.classList.remove('is-valid');
-                        date.classList.add('is-invalid');
-                        dateError.innerText = "Date Error: Cannot be after the Presentation Slides due date (" + formatDate(finalDate) + ").";
-                        dateError.style.display = 'block';
-                        isValid = false;
+                    if (!isStage2) {
+                        if (propDate && selectedDate < propDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be before the Proposal due date (" + formatDate(propDate) + ").";
+                            dateError.style.display = 'block';
+                            isValid = false;
+                        } else if (interimDate && selectedDate > interimDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be after the Interim Report due date (" + formatDate(interimDate) + ").";
+                            dateError.style.display = 'block';
+                            isValid = false;
+                        } else {
+                            date.classList.remove('is-invalid');
+                            date.classList.add('is-valid');
+                            dateError.style.display = 'none';
+                        }
                     } else {
-                        date.classList.remove('is-invalid');
-                        date.classList.add('is-valid');
-                        dateError.style.display = 'none';
+                        if (finalDate && selectedDate > finalDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be after the Presentation Slides due date (" + formatDate(finalDate) + ").";
+                            dateError.style.display = 'block';
+                            isValid = false;
+                        } else {
+                            date.classList.remove('is-invalid');
+                            date.classList.add('is-valid');
+                            dateError.style.display = 'none';
+                        }
                     }
                 } else {
                     date.classList.remove('is-invalid');

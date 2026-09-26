@@ -372,6 +372,7 @@ namespace FYPTracker.Controllers
 
             var projects = await _context.FYPProjects
                 .Include(p => p.Supervisor)
+                .Include(p => p.AssignedExaminers).ThenInclude(ae => ae.Examiner)
                 .ToListAsync();
 
             var withSupervisor = new List<FYPTracker.ViewModels.ManageProjectItemVM>();
@@ -412,12 +413,17 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             // Headers
             ws.Cell(1, 1).Value = "Student Name";
             ws.Cell(1, 2).Value = "Student ID";
-            ws.Cell(1, 3).Value = "Supervisor Name";
-            ws.Cell(1, 4).Value = "Project Title";
-            ws.Cell(1, 5).Value = "Status";
-            ws.Cell(1, 6).Value = "Started Date";
+            ws.Cell(1, 3).Value = "Academic Session";
+            ws.Cell(1, 4).Value = "Supervisor Name";
+            ws.Cell(1, 5).Value = "Examiner Name";
+            ws.Cell(1, 6).Value = "Project Title";
+            ws.Cell(1, 7).Value = "Status";
+            ws.Cell(1, 8).Value = "Stage 1 Score";
+            ws.Cell(1, 9).Value = "Stage 1 Grade";
+            ws.Cell(1, 10).Value = "Stage 2 Final Grade";
+            ws.Cell(1, 11).Value = "Started Date";
 
-            var headerRange = ws.Range("A1:F1");
+            var headerRange = ws.Range("A1:K1");
             headerRange.Style.Font.Bold = true;
             headerRange.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
             headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.DarkSlateBlue;
@@ -426,23 +432,31 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             int row = 2;
             foreach(var item in data)
             {
+                var assignedExaminer = item.Project?.AssignedExaminers?.FirstOrDefault()?.Examiner;
                 ws.Cell(row, 1).Value = item.Student.FullName;
                 ws.Cell(row, 2).Value = item.Student.EmployeeId;
-                ws.Cell(row, 3).Value = item.Project?.Supervisor?.FullName ?? "Not Assigned";
-                ws.Cell(row, 4).Value = item.Project?.Title ?? "No Project";
+                ws.Cell(row, 3).Value = item.Student.AcademicSession ?? "-";
+                ws.Cell(row, 4).Value = item.Project?.Supervisor?.FullName ?? "Not Assigned";
+                ws.Cell(row, 5).Value = assignedExaminer?.FullName ?? "Not Assigned";
+                ws.Cell(row, 6).Value = item.Project?.Title ?? "No Project";
                 
                 string status = item.Student.IsResign ? "Inactive" : (item.Project != null ? item.Project.Status : "Inactive");
-                ws.Cell(row, 5).Value = status;
-                ws.Cell(row, 6).Value = item.Project?.StartDate?.ToString("dd MMM yyyy") ?? "-";
+                ws.Cell(row, 7).Value = status;
+                
+                ws.Cell(row, 8).Value = item.Project?.Stage1TotalScore?.ToString("0.0") ?? "-";
+                ws.Cell(row, 9).Value = item.Project?.Stage1Grade ?? "-";
+                ws.Cell(row, 10).Value = item.Project?.FinalGrade ?? "-";
+                
+                ws.Cell(row, 11).Value = item.Project?.StartDate?.ToString("dd MMM yyyy") ?? "-";
                 
                 // Alternate row coloring
                 if (row % 2 == 0)
                 {
-                    ws.Range($"A{row}:F{row}").Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.AliceBlue;
+                    ws.Range($"A{row}:K{row}").Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.AliceBlue;
                 }
 
                 // Status coloring
-                var statusCell = ws.Cell(row, 5);
+                var statusCell = ws.Cell(row, 7);
                 statusCell.Style.Font.Bold = true;
                 if (status == "Active" || status == "Approved" || status == "Completed")
                     statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.ForestGreen;
@@ -450,6 +464,11 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.DimGray;
                 else if (status == "Proposed")
                     statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.DarkOrange;
+                
+                // Stage 1 Grade coloring
+                var stg1Cell = ws.Cell(row, 9);
+                if (stg1Cell.GetString() == "Pass") stg1Cell.Style.Font.FontColor = ClosedXML.Excel.XLColor.ForestGreen;
+                else if (stg1Cell.GetString() == "Fail") stg1Cell.Style.Font.FontColor = ClosedXML.Excel.XLColor.Red;
                 
                 row++;
             }

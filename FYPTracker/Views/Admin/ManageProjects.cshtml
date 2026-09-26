@@ -165,13 +165,15 @@
                 <table id="projectsTable" class="table table-hover align-middle">
                     <thead class="bg-light text-muted text-uppercase fs-7 fw-bold">
                         <tr>
-                            <th>Student</th>
-                            <th>Supervisor</th>
-                            <th>Examiner</th>
-                            <th>Project Title</th>
-                            <th>Status</th>
-                            <th>Started</th>
-                            <th class="text-end">Actions</th>
+                            <th class="min-w-150px">Student</th>
+                            <th class="min-w-100px">Session</th>
+                            <th class="min-w-200px">Project Title</th>
+                            <th class="min-w-150px">Supervisor</th>
+                            <th class="min-w-150px">Examiner</th>
+                            <th class="min-w-100px">Stage 1</th>
+                            <th class="min-w-100px">Stage 2</th>
+                            <th class="min-w-100px">Status</th>
+                            <th class="text-end min-w-150px">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -186,33 +188,40 @@
                                     <div class="text-muted small">@student.UserName</div>
                                 </td>
                                 <td>
-                                    @if (project != null && project.Supervisor != null)
-                                    {
-                                        <div class="badge badge-light-primary">@project.Supervisor.FullName</div>
-                                    }
-                                    else
-                                    {
+                                    <div class="text-primary fw-bold">@(student.AcademicSession ?? "-")</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark text-truncate" style="max-width: 250px;" title="@(project?.Title ?? "No Project")">@(project?.Title ?? "No Project")</div>
+                                </td>
+                                <td>
+                                    @if (project != null && project.Supervisor != null) {
+                                        <span class="badge badge-light-primary"><i class="fas fa-user-tie me-1"></i> @project.Supervisor.FullName</span>
+                                    } else {
                                         <span class="text-danger small"><i class="fas fa-exclamation-triangle me-1"></i> Not Assigned</span>
                                     }
                                 </td>
                                 <td>
-                                    @if (project != null)
-                                    {
-                                        if (assignedExaminer != null)
-                                        {
-                                            <div class="badge badge-light-info"><i class="fas fa-user-check me-1 text-info"></i>@assignedExaminer.FullName</div>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge badge-light-danger"><i class="fas fa-user-slash me-1"></i> Not Assigned</span>
-                                        }
+                                    @if (assignedExaminer != null) {
+                                        <span class="badge badge-light-info"><i class="fas fa-user-check me-1"></i> @assignedExaminer.FullName</span>
+                                    } else {
+                                        <span class="badge badge-light-danger"><i class="fas fa-user-slash me-1"></i> Not Assigned</span>
                                     }
-                                    else
-                                    {
+                                </td>
+                                <td>
+                                    @if (project != null && project.Stage1TotalScore.HasValue) {
+                                        var passCls = project.Stage1Grade == "Pass" ? "badge-light-success" : "badge-light-danger";
+                                        <span class="badge @passCls fs-7 fw-bold">@project.Stage1TotalScore.Value.ToString("0.0") (@project.Stage1Grade)</span>
+                                    } else {
                                         <span class="text-muted small">-</span>
                                     }
                                 </td>
-                                <td class="fw-bold text-dark">@(project?.Title ?? "No Project")</td>
+                                <td>
+                                    @if (project != null && !string.IsNullOrEmpty(project.FinalGrade)) {
+                                        <span class="badge badge-light-success fs-7 fw-bold">@project.FinalGrade</span>
+                                    } else {
+                                        <span class="text-muted small">-</span>
+                                    }
+                                </td>
                                 <td>
                                     @if(student.IsResign)
                                     {
@@ -233,19 +242,24 @@
                                         <span class="badge bg-danger rounded-pill px-3 text-white">Inactive</span>
                                     }
                                 </td>
-                                <td>@(project?.StartDate?.ToString("dd MMM yyyy") ?? "-")</td>
                                 <td class="text-end">
                                     @if(project != null)
                                     {
-                                        <button type="button" class="btn btn-sm btn-primary rounded-3 me-1 btn-open-assign-modal"
-                                                data-bs-toggle="modal" data-bs-target="#assignExaminerModal"
-                                                data-project-id="@project.Id"
-                                                data-project-title="@project.Title"
-                                                data-student-name="@student.FullName"
-                                                data-examiner-id="@(assignedExaminer?.Id ?? 0)"
-                                                data-examiner-name="@(assignedExaminer?.FullName ?? "")">
-                                            <i class="fas fa-user-tag me-1"></i> Assign Examiner
-                                        </button>
+                                        @if (!string.IsNullOrEmpty(project.Stage1ExaminerMarksheetPath)) {
+                                            <button type="button" class="btn btn-sm btn-secondary rounded-3 me-1" disabled title="Examiner locked after grading Stage 1">
+                                                <i class="fas fa-lock me-1"></i> Examiner Locked
+                                            </button>
+                                        } else {
+                                            <button type="button" class="btn btn-sm btn-primary rounded-3 me-1 btn-open-assign-modal"
+                                                    data-bs-toggle="modal" data-bs-target="#assignExaminerModal"
+                                                    data-project-id="@project.Id"
+                                                    data-project-title="@project.Title"
+                                                    data-student-name="@student.FullName"
+                                                    data-examiner-id="@(assignedExaminer?.Id ?? 0)"
+                                                    data-examiner-name="@(assignedExaminer?.FullName ?? "")">
+                                                <i class="fas fa-user-tag me-1"></i> Assign Examiner
+                                            </button>
+                                        }
                                         <button type="button" class="btn btn-sm btn-light-primary rounded-3" data-bs-toggle="modal" data-bs-target="#projectModal-@project.Id">Details</button>
                                     }
                                     else
@@ -479,7 +493,7 @@
                     "searchPlaceholder": "Search projects..."
                 },
                 "columnDefs": [
-                    { "orderable": false, "targets": 6 }
+                    { "orderable": false, "targets": 8 }
                 ]
             });
 
@@ -490,8 +504,8 @@
             $('.dataTables_filter').hide();
             $('.dataTables_length select').addClass('form-select form-select-solid');
 
-            // Handle Opening Assign Examiner Modal
-            $('.btn-open-assign-modal').on('click', function () {
+            // Handle Opening Assign Examiner Modal via delegation to support DataTables pagination
+            $('#projectsTable').on('click', '.btn-open-assign-modal', function () {
                 const projectId = $(this).data('project-id');
                 const projectTitle = $(this).data('project-title');
                 const studentName = $(this).data('student-name');

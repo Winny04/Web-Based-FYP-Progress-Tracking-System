@@ -516,9 +516,16 @@ namespace FYPTracker.Migrations
                     b.Property<string>("Scope")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Stage1ExaminerMarksheetPath")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.Property<string>("Stage1Grade")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("Stage1MarksheetUploadCount")
+                        .HasColumnType("int");
 
                     b.Property<double?>("Stage1TotalScore")
                         .HasColumnType("float");
