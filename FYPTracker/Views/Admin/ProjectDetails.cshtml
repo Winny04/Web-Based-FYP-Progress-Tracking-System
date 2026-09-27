@@ -142,7 +142,7 @@
                                             <i class="fas fa-edit"></i> Edit
                                         </button>
                                     }
-                                    @if (m.Status == "Pending" && !m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) && !m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase))
+                                    @if (m.Status == "Pending" && !m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) && !m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase))
                                     {
                                         <form asp-action="DeleteMilestone" method="post" onsubmit="confirmDelete(event, this)">
                                             <input type="hidden" name="milestoneId" value="@m.Id" />

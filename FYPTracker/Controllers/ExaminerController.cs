@@ -253,7 +253,7 @@ namespace FYPTracker.Controllers
                 }
 
                 // Keep the Proposal milestone up to date for Examiner's end
-                var proposalMilestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
+                var proposalMilestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
                 
                 // Extract final grade from J16 for Stage 1
                 try

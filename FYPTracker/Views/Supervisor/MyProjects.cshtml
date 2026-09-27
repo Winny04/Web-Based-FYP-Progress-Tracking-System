@@ -15,7 +15,7 @@
     
     var defaultMilestoneTitles = new List<string> {
         "FYP 1: Initial Assessment Form (IAF)",
-        "FYP 1: Proposal",
+        "FYP 1: Stage 1 Final Submission",
         "Step 1: Turnitin Checking",
         "Step 2: Final Report Submission",
         "Step 3: Marksheet Submission",
@@ -508,7 +508,7 @@
 
 @section Scripts {
     <script>
-        var sysProposalDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Proposal"))?.DueDate?.ToString("yyyy-MM-dd"))";
+        var sysProposalDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission"))?.DueDate?.ToString("yyyy-MM-dd"))";
 
         var sysFinalDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Step 5"))?.DueDate?.ToString("yyyy-MM-dd"))";
         var sysStep1Date = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Step 1"))?.DueDate?.ToString("yyyy-MM-dd"))";
@@ -540,7 +540,7 @@
 
                                     if (selectedTitle) {
                                         var isIaf = selectedTitle.includes('IAF') || selectedTitle.includes('Initial Project');
-                                        var isSystem = isIaf || selectedTitle.includes('Proposal') || selectedTitle.includes('Progress') || selectedTitle.includes('Final');
+                                        var isSystem = isIaf || selectedTitle.includes('Stage 1 Final Submission') || selectedTitle.includes('Progress') || selectedTitle.includes('Final');
 
                                         if (isSystem) {
                                             titleInput.readOnly = true;
@@ -682,7 +682,7 @@
                 var step1Date = sysStep1Date ? new Date(sysStep1Date) : null;
                 var previewTitle = document.getElementById('addTitlePreview').value || "";
                 var isFinalReport = previewTitle.includes("Final");
-                var isProposal = previewTitle.includes("Proposal");
+                var isProposal = previewTitle.includes("Stage 1 Final Submission");
                 var isIaf = previewTitle.includes("IAF") || previewTitle.includes("Initial Project");
                 var isStage2 = previewTitle.startsWith("Step ");
 
@@ -717,7 +717,7 @@
                         } else if (propDate && selectedDate > propDate) {
                             date.classList.remove('is-valid');
                             date.classList.add('is-invalid');
-                            dateError.innerText = "Date Error: Cannot be after the FYP 1: Proposal due date (" + formatDate(propDate) + ").";
+                            dateError.innerText = "Date Error: Cannot be after the FYP 1: Stage 1 Final Submission due date (" + formatDate(propDate) + ").";
                             dateError.classList.remove('d-none');
                             isValid = false;
                         } else {
@@ -825,7 +825,7 @@
                 var targetTitleToValidate = title.value.trim() || target.value || "";
                 
                 var isFinalReport = targetTitleToValidate.includes("Final");
-                var isProposal = targetTitleToValidate.includes("Proposal");
+                var isProposal = targetTitleToValidate.includes("Stage 1 Final Submission");
                 var isIaf = targetTitleToValidate.includes("IAF") || targetTitleToValidate.includes("Initial Project");
                 var isStage2 = targetTitleToValidate.startsWith("Step ");
 
@@ -859,7 +859,7 @@
                         } else if (propDate && selectedDate > propDate) {
                             date.classList.remove('is-valid');
                             date.classList.add('is-invalid');
-                            dateError.innerText = "Date Error: Cannot be after the FYP 1: Proposal due date (" + formatDate(propDate) + ").";
+                            dateError.innerText = "Date Error: Cannot be after the FYP 1: Stage 1 Final Submission due date (" + formatDate(propDate) + ").";
                             dateError.style.display = 'block';
                             isValid = false;
                         } else {

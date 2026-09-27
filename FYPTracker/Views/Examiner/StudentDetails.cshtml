@@ -141,7 +141,7 @@
                     }
                     
                     @{
-                            var interim = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Proposal"));
+                            var interim = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission"));
                             string exStrengths = "", exImprovements = "", exComments = "";
                             if (interim != null && !string.IsNullOrEmpty(interim.ExaminerMarksheetData) && interim.ExaminerMarksheetData.StartsWith("{"))
                             {
@@ -309,11 +309,11 @@
             <div class="card-body py-3">
                 @{
                     var stage1Milestones = Model.Milestones
-                        .Where(m => m.Title.Contains("IAF") || m.Title.Contains("Proposal"))
+                        .Where(m => m.Title.Contains("IAF") || m.Title.Contains("Stage 1 Final Submission"))
                         .OrderBy(m => m.DueDate ?? m.CreatedDate)
                         .ToList();
                     bool isAllStage1Approved = stage1Milestones.Count >= 2 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
-                    var finalStage1Milestone = stage1Milestones.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
+                    var finalStage1Milestone = stage1Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
                 }
 
                 @if(stage1Milestones.Any())

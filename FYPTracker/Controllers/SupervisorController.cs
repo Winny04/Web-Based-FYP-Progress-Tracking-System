@@ -164,6 +164,17 @@ namespace FYPTracker.Controllers
             ViewBag.PendingMilestones = pendingMilestones;
             ViewBag.PendingMeetingsList = pendingMeetingsList;
 
+            var upcomingDefenses = await _context.FYPMilestones
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .Where(m => m.Project.SupervisorId == user.Id 
+                            && m.RejectionCount >= 3 
+                            && m.DefenseDate.HasValue
+                            && (activeSession == null || m.Project.AcademicSession == activeSession))
+                .OrderBy(m => m.DefenseDate)
+                .ToListAsync();
+            ViewBag.UpcomingDefenses = upcomingDefenses;
+
             // Unread Notification Count (for bell icon)
             ViewBag.UnreadNotificationCount = await _context.FYPNotifications
                 .CountAsync(n => n.RecipientId == user.Id && !n.IsRead);
@@ -245,7 +256,7 @@ namespace FYPTracker.Controllers
                         var milestones = new List<FYPMilestone>
                         {
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Initial Assessment Form (IAF)", DueDate = DateTime.Now.AddDays(14), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Proposal", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Stage 1 Final Submission", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 1: Turnitin Checking", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 2: Final Report Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 3: Marksheet Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
@@ -540,7 +551,7 @@ namespace FYPTracker.Controllers
                 foreach (var milestone in milestones)
                 {
                     bool isIaf = milestone.Title.Contains("IAF") || milestone.Title.Contains("Initial Project Allocation");
-                    bool isSystemMilestone = isIaf || milestone.Title.Contains("Proposal") || milestone.Title.Contains("Progress") || milestone.Title.Contains("Final");
+                    bool isSystemMilestone = isIaf || milestone.Title.Contains("Stage 1 Final Submission") || milestone.Title.Contains("Progress") || milestone.Title.Contains("Final");
 
                     if (isIaf && newDueDate.HasValue)
                     {
@@ -623,7 +634,7 @@ namespace FYPTracker.Controllers
 
             if (milestones.Any())
             {
-                if (targetTitle.Contains("Proposal", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("Final", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("IAF", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase))
+                if (targetTitle.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("Final", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("IAF", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase))
                 {
                     TempData["Error"] = "Core system milestones (IAF, Proposal, and Final Report) cannot be deleted.";
                     return RedirectToAction(nameof(MyProjects));
@@ -715,7 +726,7 @@ namespace FYPTracker.Controllers
 
             if (milestone != null)
             {
-                if (milestone.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase))
+                if (milestone.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase))
                 {
                     TempData["Error"] = "Core system milestones (Proposal and Final Report) cannot be deleted.";
                     return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
@@ -943,7 +954,7 @@ namespace FYPTracker.Controllers
                 if (gradedFile != null && gradedFile.Length > 0)
                 {
                     var extCheck = System.IO.Path.GetExtension(gradedFile.FileName).ToLowerInvariant();
-                    bool isMarksheetStage = milestone.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase);
+                    bool isMarksheetStage = milestone.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase);
                     
                     var allowedExt = isMarksheetStage 
                         ? new[] { ".xls", ".xlsx" } 
@@ -981,7 +992,7 @@ namespace FYPTracker.Controllers
                     });
 
                     // Parse the Proposal/Marksheet score if applicable
-                    if (milestone.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) && (extCheck == ".xls" || extCheck == ".xlsx"))
+                    if (milestone.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) && (extCheck == ".xls" || extCheck == ".xlsx"))
                     {
                         try
                         {
@@ -1632,7 +1643,7 @@ namespace FYPTracker.Controllers
             simulated.Add(new { Title = targetTitle, DueDate = newDueDate });
 
             var iaf = simulated.FirstOrDefault(m => m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation"));
-            var proposal = simulated.FirstOrDefault(m => m.Title.Contains("Proposal"));
+            var proposal = simulated.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission"));
             var final = simulated.FirstOrDefault(m => m.Title.Contains("Final"));
             var step1 = simulated.FirstOrDefault(m => m.Title.Contains("Step 1: Turnitin"));
             var step5 = simulated.FirstOrDefault(m => m.Title.Contains("Step 5"));
@@ -1640,7 +1651,7 @@ namespace FYPTracker.Controllers
             var targetMilestone = simulated.FirstOrDefault(m => m.Title == targetTitle);
             if (targetMilestone == null || !targetMilestone.DueDate.HasValue) return null;
 
-            bool isCore = targetTitle.Contains("IAF") || targetTitle.Contains("Initial Project Allocation") || targetTitle.Contains("Proposal") || targetTitle.Contains("Final") || targetTitle.Contains("Step 5");
+            bool isCore = targetTitle.Contains("IAF") || targetTitle.Contains("Initial Project Allocation") || targetTitle.Contains("Stage 1 Final Submission") || targetTitle.Contains("Final") || targetTitle.Contains("Step 5");
 
             if (!isCore)
             {
@@ -1655,7 +1666,7 @@ namespace FYPTracker.Controllers
                     }
                     if (proposal?.DueDate.HasValue == true && targetMilestone.DueDate.Value.Date > proposal.DueDate.Value.Date)
                     {
-                        return $"Date Validation Error: '{targetTitle}' due date cannot be after the FYP 1: Proposal due date ({proposal.DueDate.Value:dd MMM yyyy}).";
+                        return $"Date Validation Error: '{targetTitle}' due date cannot be after the FYP 1: Stage 1 Final Submission due date ({proposal.DueDate.Value:dd MMM yyyy}).";
                     }
                 }
                 else
@@ -1675,11 +1686,29 @@ namespace FYPTracker.Controllers
             {
                 if (proposal?.DueDate.HasValue == true && final?.DueDate.HasValue == true && proposal.DueDate.Value.Date > final.DueDate.Value.Date)
                 {
-                    return $"Date Validation Error: FYP 1: Proposal due date cannot be after the Step 2: Final Report Submission due date ({final.DueDate.Value:dd MMM yyyy}).";
+                    return $"Date Validation Error: FYP 1: Stage 1 Final Submission due date cannot be after the Step 2: Final Report Submission due date ({final.DueDate.Value:dd MMM yyyy}).";
                 }
             }
 
             return null;
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UnlockSubmission(int id)
+        {
+            var user = await GetCurrentUserAsync();
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == id && m.Project.SupervisorId == user!.Id);
+
+            if (milestone != null)
+            {
+                milestone.RejectionCount = 0;
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "The submission has been unlocked and the rejection counter reset to 0. The student can now re-submit the form.";
+            }
+            return RedirectToAction(nameof(GradeSubmission), new { id = id });
         }
 
         // ────────────────────────────────────────────────────────
@@ -1960,5 +1989,6 @@ namespace FYPTracker.Controllers
         }
     }
 }
+
 
 

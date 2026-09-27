@@ -1403,7 +1403,12 @@ public ActionResult ManageUsersData()
             var defenseList = await _context.FYPMilestones
                 .Include(m => m.Project)
                     .ThenInclude(p => p.Student)
-                .Where(m => m.Title == "Initial Project Allocation Form (IAF)" && m.RejectionCount >= 3)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Supervisor)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.AssignedExaminers)
+                        .ThenInclude(e => e.Examiner)
+                .Where(m => m.Title.Contains("IAF") && m.RejectionCount >= 3)
                 .ToListAsync();
 
             return View(defenseList);
@@ -1411,15 +1416,21 @@ public ActionResult ManageUsersData()
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> NotifyDefenseList(DateTime defenseDate, TimeSpan startTime, string venue)
+        public async Task<IActionResult> NotifyDefenseList(DateTime defenseDate, TimeSpan startTime, string venue, List<int>? selectedMilestones)
         {
-            var defenseList = await _context.FYPMilestones
+            var query = _context.FYPMilestones
                 .Include(m => m.Project)
                     .ThenInclude(p => p.Student)
                 .Include(m => m.Project)
                     .ThenInclude(p => p.Supervisor)
-                .Where(m => m.Title == "Initial Project Allocation Form (IAF)" && m.RejectionCount >= 3)
-                .ToListAsync();
+                .Where(m => m.Title.Contains("IAF") && m.RejectionCount >= 3);
+
+            if (selectedMilestones != null && selectedMilestones.Any())
+            {
+                query = query.Where(m => selectedMilestones.Contains(m.Id));
+            }
+
+            var defenseList = await query.ToListAsync();
 
             int count = 0;
             var currentTime = startTime;
@@ -1433,14 +1444,22 @@ public ActionResult ManageUsersData()
                     var formattedDate = defenseDate.ToString("dd MMM yyyy");
                     var formattedTime = new DateTime(currentTime.Ticks).ToString("hh:mm tt");
                     
-                    var notificationMessage = $"Your Initial Project Allocation Form has been rejected 3 times. You are required to attend a defense session.\n\nDate: {formattedDate}\nTime: {formattedTime}\nVenue: {venue}";
+                    string finalVenue = venue;
+                    if (venue != null && venue.Contains("Online", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string uniqueId = Guid.NewGuid().ToString("N").Substring(0, 8);
+                        string safeStudentName = student.FullName != null ? new string(student.FullName.Where(char.IsLetterOrDigit).ToArray()) : "Student";
+                        finalVenue = $"Online (Link: https://meet.jit.si/FYP_Defense_{safeStudentName}_{uniqueId})";
+                    }
+
+                    var notificationMessage = $"Your Initial Project Allocation Form has been rejected 3 times. You are required to attend a defense session.\n\nDate: {formattedDate}\nTime: {formattedTime}\nVenue: {finalVenue}";
                     var emailHtml = $@"
                         <p>Dear {student.FullName},</p>
                         <p>Your Initial Project Allocation Form has been rejected 3 times. You are required to attend a defense session.</p>
                         <ul>
                             <li><strong>Date:</strong> {formattedDate}</li>
                             <li><strong>Time:</strong> {formattedTime}</li>
-                            <li><strong>Venue:</strong> {venue}</li>
+                            <li><strong>Venue:</strong> {finalVenue}</li>
                         </ul>
                         <p>Please be prepared for a 15-minute presentation.</p>";
 
@@ -1483,7 +1502,7 @@ public ActionResult ManageUsersData()
                             <ul>
                                 <li><strong>Date:</strong> {formattedDate}</li>
                                 <li><strong>Time:</strong> {formattedTime}</li>
-                                <li><strong>Venue:</strong> {venue}</li>
+                                <li><strong>Venue:</strong> {finalVenue}</li>
                             </ul>
                             <p>As their supervisor, your attendance is highly encouraged.</p>";
 
@@ -1501,7 +1520,7 @@ public ActionResult ManageUsersData()
                     // Save schedule to database
                     milestone.DefenseDate = defenseDate;
                     milestone.DefenseTime = formattedTime;
-                    milestone.DefenseVenue = venue;
+                    milestone.DefenseVenue = finalVenue;
 
                     // Increment time by 15 minutes for the next student
                     currentTime = currentTime.Add(TimeSpan.FromMinutes(15));
@@ -2014,7 +2033,7 @@ public ActionResult ManageUsersData()
             var milestoneStatusData = milestones
                 .Select(m => new {
                     Category = m.Title.Contains("IAF") || m.Title.Contains("Initial") ? "IAF" :
-                               m.Title.Contains("Proposal") ? "Proposal" :
+                               m.Title.Contains("Stage 1 Final Submission") ? "Proposal" :
                                m.Title.Contains("Final") ? "Final Report" : "Other",
                     m.Status
                 })

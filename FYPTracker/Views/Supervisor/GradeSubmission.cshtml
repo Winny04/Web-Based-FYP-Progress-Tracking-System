@@ -28,6 +28,17 @@
         </div>
     }
 
+    @if (Model.RejectionCount >= 3)
+    {
+        <div class="alert alert-danger mb-4 rounded-3 shadow-sm d-flex justify-content-between align-items-center" style="border: 2px solid #f1416c;">
+            <div>
+                <h5 class="fw-bold mb-1"><i class="fas fa-lock me-2"></i>Submission Locked (Max Rejections Reached)</h5>
+                <p class="mb-0">This student has reached the maximum of 3 rejections. They cannot re-submit the digital form until the Admin unlocks it after their Defense Session.</p>
+            </div>
+            
+        </div>
+    }
+
     <div class="row g-4">
         <!-- Details Column -->
         <div class="col-lg-7">
@@ -278,7 +289,7 @@
                         @{
                             // Lock the form if the milestone has already been graded
                             bool isLocked = Model.Status == "Approved" || Model.Status == "Rejected";
-                            bool isMarksheetStage = !string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
+                            bool isMarksheetStage = !string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
                         }
                         
                         @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)))
@@ -356,7 +367,7 @@
                         <div class="mb-4">
                             <label class="form-label fw-bold text-dark"><i class="fas fa-file-upload text-danger me-2"></i>Upload Feedback File / Graded Marksheet</label>
                             
-                            @if (Model.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase))
+                            @if (Model.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase))
                             {
                                 <div class="mb-3 p-3 bg-light rounded border">
                                     <div class="d-flex justify-content-between align-items-center">
@@ -590,7 +601,7 @@
             const gradedFileInput = document.getElementById('gradedFile');
             const statusSelectElem = document.querySelector('select[name="status"]');
             
-            if (gradedFileInput && statusSelectElem && @((!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase))).ToString().ToLower())) {
+            if (gradedFileInput && statusSelectElem && @((!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase))).ToString().ToLower())) {
                 function updateGradedFileRequirement() {
                     if (statusSelectElem.value === 'Approved' || statusSelectElem.value === 'Rejected') {
                         gradedFileInput.setAttribute('required', 'required');
@@ -633,4 +644,5 @@
         </div>
     </div>
 </div>
+
 

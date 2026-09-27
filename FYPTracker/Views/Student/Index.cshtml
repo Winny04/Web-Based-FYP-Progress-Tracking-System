@@ -36,7 +36,7 @@
         : milestones.Where(m => !m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase));
 
     FYPMilestone? upcomingUrgent = activeMilestonesForDeadlines
-        .Where(m => m.DueDate.HasValue && m.Status != "Approved")
+        .Where(m => m.DueDate.HasValue && m.Status != "Approved" && m.RejectionCount < 3)
         .OrderBy(m => m.DueDate)
         .FirstOrDefault();
         
@@ -77,12 +77,24 @@
         var rejectedMilestone = milestones.FirstOrDefault(m => m.Status == "Rejected" || m.Status == "Revision");
         if (rejectedMilestone != null)
         {
-            nextStepTitle = $"Revision Required: {rejectedMilestone.Title}";
-            nextStepDesc = $"Your supervisor has requested revisions for your {rejectedMilestone.Title}. Please review the feedback and resubmit.";
-            nextStepIcon = "fas fa-exclamation-triangle";
-            nextStepBtnText = "View Feedback & Revise";
-            nextStepLink = "/Student/Forms";
-            nextStepDueDate = rejectedMilestone.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+            if (rejectedMilestone.RejectionCount >= 3)
+            {
+                nextStepTitle = $"Form Locked: {rejectedMilestone.Title}";
+                nextStepDesc = $"Your {rejectedMilestone.Title} has been rejected 3 times and is locked. You are required to attend a mandatory Defense session scheduled by the Administrator.";
+                nextStepIcon = "fas fa-lock";
+                nextStepBtnText = "View Dashboard";
+                nextStepLink = "/Student/Index";
+                nextStepDueDate = rejectedMilestone.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+            }
+            else
+            {
+                nextStepTitle = $"Revision Required: {rejectedMilestone.Title}";
+                nextStepDesc = $"Your supervisor has requested revisions for your {rejectedMilestone.Title}. Please review the feedback and resubmit.";
+                nextStepIcon = "fas fa-exclamation-triangle";
+                nextStepBtnText = "View Feedback & Revise";
+                nextStepLink = "/Student/Forms";
+                nextStepDueDate = rejectedMilestone.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+            }
         }
         else if (isStage1Failed)
         {
@@ -524,25 +536,7 @@
         </div>
     }
 
-    @if (scheduledDefense != null && scheduledDefense.DefenseDate.HasValue)
-    {
-        <div class="action-alert" style="border-left-color: #ef4444;">
-            <div class="action-alert-icon text-danger">
-                <i class="fas fa-shield-alt"></i>
-            </div>
-            <div class="flex-grow-1">
-                <h6 class="fw-bold mb-1 text-danger">Defense Presentation Scheduled</h6>
-                <div class="text-muted mb-2" style="font-size: 0.9rem;">
-                    Your IAF has been rejected 3 times. You are required to attend a mandatory Defense session.
-                </div>
-                <div class="d-flex flex-wrap gap-4 fw-bold" style="font-size: 0.9rem; color: #1e293b;">
-                    <span><i class="fas fa-calendar-day me-2 text-muted"></i>@scheduledDefense.DefenseDate.Value.ToString("dd MMM yyyy")</span>
-                    <span><i class="fas fa-clock me-2 text-muted"></i>@scheduledDefense.DefenseTime</span>
-                    <span><i class="fas fa-map-marker-alt me-2 text-muted"></i>@scheduledDefense.DefenseVenue</span>
-                </div>
-            </div>
-        </div>
-    }
+
 
     @if (Model != null && Model.Status == "Failed")
     {
@@ -592,7 +586,7 @@
         var stg1ColorHex = Model.Stage1Grade == "Pass" ? "#16a34a" : "#dc2626";
         var stg1TextColor = Model.Stage1Grade == "Pass" ? "text-success" : "text-danger";
 
-        var interim = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
+        var interim = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
         double supScore = 0;
         double exScore = 0;
         string supStrengths = "", supImprovements = "", supComments = "";
@@ -861,7 +855,7 @@
                 {
                     <div class="text-center py-5">
                         <p class="text-muted">No milestones/chapters defined for your project.</p>
-                        <a href="/Student/Forms" class="btn btn-outline-monochrome rounded-3 px-4 mt-2">Submit Proposal</a>
+                        <a href="/Student/Forms" class="btn btn-outline-monochrome rounded-3 px-4 mt-2">Submit Stage 1 Final Submission</a>
                     </div>
                 }
                 else
@@ -1069,7 +1063,37 @@
         </div>
 
         @* ── UPCOMING MEETING & ACTIVITIES (Right Sidebar) ── *@
-        <div class="col-lg-4">
+        <div class="col-lg-4 d-flex flex-column">
+            @if (scheduledDefense != null && scheduledDefense.DefenseDate.HasValue)
+            {
+                <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="background-color: #fff1f2; border-left: 6px solid #e11d48 !important;">
+                    <h5 class="fw-bold text-danger mb-3"><i class="fas fa-shield-alt me-2 text-danger"></i>Mandatory Defense Session</h5>
+                    <div class="d-flex flex-column gap-2">
+                        <div class="d-flex align-items-center text-dark fw-bold">
+                            <i class="far fa-calendar-alt text-danger me-3 fs-5"></i>
+                            @scheduledDefense.DefenseDate.Value.ToString("dd MMMM yyyy")
+                        </div>
+                        <div class="d-flex align-items-center text-dark fw-bold">
+                            <i class="far fa-clock text-danger me-3 fs-5"></i>
+                            @scheduledDefense.DefenseTime
+                        </div>
+                        <div class="d-flex align-items-start text-dark mt-2 fw-bold">
+                            <i class="fas fa-map-marker-alt text-danger me-3 mt-1 fs-5"></i>
+                            <span style="line-height: 1.4;">
+                                @if (!string.IsNullOrEmpty(scheduledDefense.DefenseVenue) && scheduledDefense.DefenseVenue.Contains("http"))
+                                {
+                                    <a href="@scheduledDefense.DefenseVenue.Substring(scheduledDefense.DefenseVenue.IndexOf("http"))" target="_blank" class="text-primary text-decoration-underline">Join Online Defense Meeting</a>
+                                }
+                                else
+                                {
+                                    @scheduledDefense.DefenseVenue
+                                }
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            }
+
             @if (upcomingMeeting != null && (Model == null || Model.Status != "Failed"))
             {
                 <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="background-color: #f8fafc; border-left: 6px solid #1e293b !important;">
@@ -1145,7 +1169,7 @@
                 }
             </div>
 
-            <div class="premium-card p-4 h-100 d-flex flex-column">
+            <div class="premium-card p-4 flex-grow-1 d-flex flex-column">
                 <h5 class="fw-bold text-dark mb-4"><i class="fas fa-history text-indigo me-2"></i>Recent Activities</h5>
                 <div class="flex-grow-1 overflow-auto pe-2" style="max-height: 450px;">
                     @if (!activities.Any())

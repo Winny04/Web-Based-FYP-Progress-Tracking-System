@@ -95,7 +95,7 @@
                 <h4 class="fw-bold text-muted">No Project Found</h4>
                 <p class="text-muted mb-4">You have not submitted a project proposal yet.</p>
                 <a href="/Student/Forms" class="btn btn-primary rounded-3 px-4" style="background:var(--hero-grad);border:none;">
-                    <i class="fas fa-plus me-1"></i> Submit Proposal
+                    <i class="fas fa-plus me-1"></i> Submit Stage 1 Final Submission
                 </a>
             </div>
         </div>
@@ -706,7 +706,7 @@ td.value { white-space: pre-wrap; }
 <div class="footer">FYP Tracking System &mdash; @DateTime.Now.ToString("dd MMMM yyyy")</div>
 </body></html></script>
                         }
-                        @if (ms.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Progress", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Final Submission", StringComparison.OrdinalIgnoreCase))
+                        @if (ms.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Progress", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Final Submission", StringComparison.OrdinalIgnoreCase))
                         {
                             <div class="mt-4 pt-3 border-top text-end">
                                 <a href="@Url.Action("Forms", "Student")" class="btn btn-primary fw-bold px-4">

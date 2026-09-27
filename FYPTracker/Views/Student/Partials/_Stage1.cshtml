@@ -9,7 +9,7 @@
     int iafMilestoneId = iafMilestone?.Id ?? 0;
     bool isIafLocked = iafMilestone != null && (iafMilestone.Status == "Submitted" || iafMilestone.Status == "UnderReview" || iafMilestone.Status == "Approved");
 
-    var proposalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase));
+    var proposalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
     bool isProposalApproved = proposalMilestone != null && proposalMilestone.Status == "Approved";
     
     var finalMsRef = milestones.FirstOrDefault(m => m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase));
@@ -279,11 +279,11 @@
                     @* ── A. PROPOSAL FORM ────────────────────────────── *@
                     <div class="tab-pane fade @(isIafApproved && !isProposalApproved ? "show active" : "")" id="proposal-form-pane" role="tabpanel" tabindex="0">
                         <div class="premium-card p-4">
-                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>A. Final Year Project Proposal</h4>
+                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>A. Stage 1 Final Submission</h4>
                             
                                 @* Select corresponding Milestone *@
                                 @{
-                                    var propMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase)) ?? milestones.FirstOrDefault();
+                                    var propMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase)) ?? milestones.FirstOrDefault();
                                     int propMilestoneId = propMilestone?.Id ?? 0;
                                     bool isPropLocked = propMilestone != null && (propMilestone.Status == "Submitted" || propMilestone.Status == "UnderReview" || propMilestone.Status == "Approved");
                                 }
@@ -293,7 +293,7 @@
                                     <div class="alert alert-danger d-flex align-items-center mt-3 border-danger shadow-sm">
                                         <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
                                         <div>
-                                            <h5 class="fw-bold text-dark mb-1">Proposal Form Rejected (Needs Revision)</h5>
+                                            <h5 class="fw-bold text-dark mb-1">Stage 1 Final Submission Rejected (Needs Revision)</h5>
                                             <p class="mb-0 text-muted"><strong>Feedback:</strong> @propMilestone.SupervisorFeedback</p>
                                         </div>
                                     </div>
@@ -303,7 +303,7 @@
                                     <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
                                         <i class="fas fa-lock fs-2 me-3 text-info"></i>
                                         <div>
-                                            <h5 class="fw-bold text-dark mb-1">Proposal Form Locked</h5>
+                                            <h5 class="fw-bold text-dark mb-1">Stage 1 Final Submission Locked</h5>
                                             <p class="mb-0 text-muted">Your proposal has already been submitted. Current Status: <span class="badge bg-white text-dark ms-1 shadow-sm border">@propMilestone.Status</span></p>
                                             @if (!string.IsNullOrEmpty(propMilestone?.SupervisorFeedback))
                                             {
@@ -360,7 +360,7 @@
                                 <div class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1;">
                                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
                                         <div>
-                                            <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>FYP Proposal Template</div>
+                                            <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>Stage 1 Final Submission Template</div>
                                             <div class="text-muted small">Download the official Word template pre-filled with your student & project info. Complete it and upload as PDF below.</div>
                                         </div>
                                         <a href="@Url.Action("DownloadProposalTemplate", "Student")"
@@ -398,7 +398,7 @@
 
                                 <div class="d-flex gap-3 justify-content-end">
                                     <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
-                                    <button type="submit" class="btn-submit" onclick="return validateProposalForm()">Submit Proposal</button>
+                                    <button type="submit" class="btn-submit" onclick="return validateProposalForm()">Submit Stage 1 Final Submission</button>
                                 </div>
                             </form>
                             }
@@ -413,7 +413,7 @@
                             @{
                                 var progressMilestones = milestones.Where(x => 
                                     (x.Status == "Pending" || x.Status == "Rejected")
-                                    && !x.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase) 
+                                    && !x.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) 
                                     && !x.Title.Contains("Final", StringComparison.OrdinalIgnoreCase)).ToList();
                             }
                             

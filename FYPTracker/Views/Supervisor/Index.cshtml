@@ -6,6 +6,7 @@
     var nextMeetings   = ViewBag.NextMeetings as List<MeetingBooking> ?? new();
     var pendingMilestones = ViewBag.PendingMilestones as List<FYPMilestone> ?? new();
     var pendingMeetingsList = ViewBag.PendingMeetingsList as List<MeetingBooking> ?? new();
+    var upcomingDefenses = ViewBag.UpcomingDefenses as List<FYPMilestone> ?? new();
     
     int pendingRequestsCount = ViewBag.PendingRequests ?? 0;
     int pendingReviewsCount = ViewBag.PendingReviews ?? 0;
@@ -387,6 +388,55 @@
         @* RIGHT COLUMN: Sidebar *@
         <div class="col-lg-5">
             
+            <!-- Upcoming Defenses -->
+            @if (upcomingDefenses.Any())
+            {
+                <div class="premium-card mb-4 shadow-sm" style="border-left: 6px solid #e11d48 !important; background-color: #fff1f2;">
+                    <div class="p-4 border-bottom border-danger bg-white" style="border-radius: 10px 10px 0 0;">
+                        <h5 class="fw-bold mb-0 text-danger"><i class="fas fa-shield-alt me-2"></i>Scheduled Student Defenses</h5>
+                    </div>
+                    <div class="p-0">
+                        @foreach (var defense in upcomingDefenses)
+                        {
+                            <div class="list-item-clean">
+                                <div class="d-flex align-items-center mb-2">
+                                    <div class="avatar-circle-sm bg-danger text-white me-3">
+                                        @(defense.Project?.Student?.FullName?.Substring(0, 1) ?? "S")
+                                    </div>
+                                    <div>
+                                        <h6 class="fw-bold mb-0">@(defense.Project?.Student?.FullName ?? "Unknown Student")</h6>
+                                        <div class="small text-muted">@defense.Title</div>
+                                    </div>
+                                </div>
+                                <div class="bg-white rounded p-3 mt-2 border">
+                                    <div class="d-flex align-items-center text-dark fw-bold mb-1">
+                                        <i class="far fa-calendar-alt text-danger me-2"></i>
+                                        @(defense.DefenseDate?.ToString("dd MMMM yyyy"))
+                                    </div>
+                                    <div class="d-flex align-items-center text-dark fw-bold mb-1">
+                                        <i class="far fa-clock text-danger me-2"></i>
+                                        @defense.DefenseTime
+                                    </div>
+                                    <div class="d-flex align-items-start text-dark mt-2 fw-bold">
+                                        <i class="fas fa-map-marker-alt text-danger me-2 mt-1"></i>
+                                        <span style="line-height: 1.4;">
+                                            @if (!string.IsNullOrEmpty(defense.DefenseVenue) && defense.DefenseVenue.Contains("http"))
+                                            {
+                                                <a href="@defense.DefenseVenue.Substring(defense.DefenseVenue.IndexOf("http"))" target="_blank" class="text-primary text-decoration-underline">Join Online Defense Meeting</a>
+                                            }
+                                            else
+                                            {
+                                                @defense.DefenseVenue
+                                            }
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
             <!-- Upcoming Meetings Agenda -->
             <div class="premium-card mb-4 shadow-sm">
                 <div class="p-4 border-bottom bg-light" style="border-radius: 16px 16px 0 0;">

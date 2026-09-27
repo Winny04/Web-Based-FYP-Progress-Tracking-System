@@ -89,6 +89,13 @@ builder.Services.AddAuthentication(AuthenticationDefaults.AuthenticationScheme)
     options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     options.LoginPath = AuthenticationDefaults.LoginPath;
     options.AccessDeniedPath = AuthenticationDefaults.AccessDeniedPath;
+})
+.AddCookie("ExternalCookie")
+.AddGoogle(options =>
+{
+    options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? "placeholder";
+    options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? "placeholder";
+    options.SignInScheme = "ExternalCookie";
 });
 
 builder.Services.AddAuthorization(options =>

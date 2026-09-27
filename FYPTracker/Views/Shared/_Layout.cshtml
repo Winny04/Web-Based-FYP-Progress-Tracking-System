@@ -401,8 +401,8 @@
                     @await Component.InvokeAsync(typeof(PageTitleViewComponent))
                     </div>*@
 
-                <div class="container-fluid">
-                    <main role="main" class="pb-3">
+                <div class="container-fluid d-flex flex-column flex-column-fluid">
+                    <main role="main" class="pb-3 flex-column-fluid">
                         @RenderBody()
                     </main>
                 </div>

@@ -13,7 +13,7 @@
     <div class="row g-4">
         <div class="col-md-6 col-lg-4">
             <div class="card shadow-sm border-0 rounded-4 p-4 h-100 border-top border-4" style="border-top-color: #8b5cf6 !important;">
-                <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-graduation-cap me-2 text-purple"></i>Bulk Update Milestone Dates</h5>
+                <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-graduation-cap me-2 text-purple"></i>Update Milestone Dates</h5>
                 <p class="text-muted small mb-4">Set the global due date for a specific default milestone across all students in the current session.</p>
                 <form asp-action="UpdateDefaultMilestoneDate" method="post" class="mt-auto">
                     @if (TempData["BulkUpdateSuccess"] != null)
@@ -56,7 +56,7 @@
                             <select name="milestoneTitle" class="form-select bg-light" required>
                                 <option value="">-- Choose Milestone --</option>
                                 <option value="IAF">FYP 1: Initial Assessment Form (IAF)</option>
-                                <option value="Proposal">FYP 1: Proposal</option>
+                                <option value="Proposal">FYP 1: Stage 1 Final Submission</option>
                                 <option value="Step 1:">Step 1: Turnitin Checking</option>
                                 <option value="Step 2:">Step 2: Final Report Submission</option>
                                 <option value="Step 3:">Step 3: Marksheet Submission</option>
