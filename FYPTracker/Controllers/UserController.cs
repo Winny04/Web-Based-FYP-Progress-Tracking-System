@@ -16,8 +16,6 @@ using FYPTracker.Configuration;
 using FYPTracker.Helpers;
 using FYPTracker.ViewModels;
 using Newtonsoft.Json;
-using System.Security.Claims;
-using Microsoft.AspNetCore.Authentication;
 
 namespace FYPTracker.Controllers
 {
@@ -25,7 +23,7 @@ namespace FYPTracker.Controllers
     {
         private readonly FYPTrackerContext _context;
         private readonly IUserService _userService;
-        private readonly FYPTracker.Services.Authentication.IAuthenticationService _authenticationService;
+        private readonly IAuthenticationService _authenticationService;
         private readonly IEmailService _emailService;
 
         private IWebHostEnvironment Environment;
@@ -34,7 +32,7 @@ namespace FYPTracker.Controllers
             IWebHostEnvironment _environment,
             IUserService empService,
             IEmailService emailService,
-            FYPTracker.Services.Authentication.IAuthenticationService authenticationService
+            IAuthenticationService authenticationService
             )
         {
             _context = context;
@@ -511,69 +509,6 @@ namespace FYPTracker.Controllers
 
 
 
-        [AllowAnonymous]
-        public IActionResult ExternalLogin(string provider, string returnUrl = null)
-        {
-            var redirectUrl = Url.Action("ExternalLoginCallback", "User", new { ReturnUrl = returnUrl });
-            var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
-            return Challenge(properties, provider);
-        }
-
-        [AllowAnonymous]
-        public async Task<IActionResult> ExternalLoginCallback(string returnUrl = null, string remoteError = null)
-        {
-            returnUrl = returnUrl ?? Url.Content("~/");
-            if (remoteError != null)
-            {
-                TempData["error"] = $"Error from external provider: {remoteError}";
-                return RedirectToAction("Login");
-            }
-
-            var info = await HttpContext.AuthenticateAsync("ExternalCookie");
-            if (!info.Succeeded)
-            {
-                return RedirectToAction("Login");
-            }
-
-            var email = info.Principal.FindFirstValue(ClaimTypes.Email);
-            if (string.IsNullOrEmpty(email))
-            {
-                TempData["error"] = "Error: External provider did not return an email address.";
-                return RedirectToAction("Login");
-            }
-
-            // Find user by email
-            var emp = await _userService.GetEmpByUserNameAsync(email);
-            if (emp == null)
-            {
-                // Option A: Deny Access
-                await HttpContext.SignOutAsync("ExternalCookie");
-                TempData["error"] = $"Access Denied: The email address '{email}' is not registered in the FYP Tracking System. Please contact your administrator.";
-                return RedirectToAction("Login");
-            }
-
-            // Clear external cookie
-            await HttpContext.SignOutAsync("ExternalCookie");
-
-            // Complete login logic exactly as in normal login (Check MFA, etc)
-            if (emp.IsMfaEnabled)
-            {
-                HttpContext.Session.SetInt32("PendingMfaUserId", emp.Id);
-                
-                var rememberCookie = Request.Cookies["MfaRemember"];
-                if (!string.IsNullOrEmpty(rememberCookie) && rememberCookie == Encryption.GetHash(emp.UserName + emp.MfaSecretKey))
-                {
-                    // Skip MFA
-                }
-                else
-                {
-                    return RedirectToAction("MfaChallenge");
-                }
-            }
-
-            await _authenticationService.SignInAsync(emp, false);
-            return LocalRedirect(returnUrl);
-        }
 
         public IActionResult Login()
         {
