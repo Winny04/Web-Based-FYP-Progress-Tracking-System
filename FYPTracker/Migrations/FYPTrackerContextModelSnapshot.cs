@@ -576,6 +576,10 @@ namespace FYPTracker.Migrations
                     b.Property<DateTime?>("VivaDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("VivaVenue")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("StudentId");

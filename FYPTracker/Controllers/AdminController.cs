@@ -15,6 +15,8 @@ using System.IO;
 using System;
 using System.Collections.Generic;
 using FYPTracker.Common;
+using Microsoft.AspNetCore.SignalR;
+using FYPTracker.Hubs;
 
 
 namespace FYPTracker.Controllers
@@ -25,11 +27,13 @@ namespace FYPTracker.Controllers
     {
         private readonly FYPTrackerContext _context;
         private readonly IEmailService _emailService;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
-        public AdminController(FYPTrackerContext context, IEmailService emailService)
+        public AdminController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext)
         {
             _context = context;
             _emailService = emailService;
+            _hubContext = hubContext;
         }
         
         private void RemoveImage(ApplicationUser model)
@@ -262,6 +266,159 @@ namespace FYPTracker.Controllers
             .ToList();
 
             return View(viewModels);
+        }
+
+        // ── Admin: View project details & schedule Viva ──────────────
+        public async Task<IActionResult> ProjectDetails(int id)
+        {
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .Include(p => p.Milestones)
+                .Include(p => p.AssignedExaminers).ThenInclude(ae => ae.Examiner)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (project == null) return NotFound();
+            return View(project);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SetVivaDate(int projectId, DateTime vivaDate, string? vivaVenue)
+        {
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .Include(p => p.AssignedExaminers).ThenInclude(ae => ae.Examiner)
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            project.VivaDate = vivaDate;
+            project.VivaVenue = vivaVenue;
+            await _context.SaveChangesAsync();
+
+            string formattedDate = vivaDate.ToString("dd MMMM yyyy, hh:mm tt");
+            string venueDisplay = string.IsNullOrWhiteSpace(vivaVenue) ? "TBA" : vivaVenue;
+
+            // ── In-app notification: Student ─────────────────────────
+            if (project.StudentId > 0)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = project.StudentId,
+                    Type = "VivaScheduled",
+                    Title = "Viva Scheduled",
+                    Message = $"Your Viva Oral Examination has been scheduled for {formattedDate} at {venueDisplay}.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+            }
+
+            // ── In-app notification: Supervisor ──────────────────────
+            if (project.SupervisorId.HasValue)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = project.SupervisorId.Value,
+                    Type = "VivaScheduled",
+                    Title = "Viva Scheduled",
+                    Message = $"Viva for {project.Student?.FullName} has been scheduled for {formattedDate} at {venueDisplay}.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+            }
+
+            // ── In-app notification: Examiner ────────────────────────
+            var examiner = project.AssignedExaminers?.FirstOrDefault()?.Examiner;
+            if (examiner != null)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = examiner.Id,
+                    Type = "VivaScheduled",
+                    Title = "Viva Scheduled",
+                    Message = $"Viva for {project.Student?.FullName} has been scheduled for {formattedDate} at {venueDisplay}.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+            }
+
+            await _context.SaveChangesAsync();
+
+            // ── Email: Student ───────────────────────────────────────
+            if (project.Student != null && !string.IsNullOrEmpty(project.Student.Email))
+            {
+                string subject = "FYP Viva Oral Examination Scheduled";
+                string body = $@"<div style='font-family: Arial, sans-serif;'>
+                    <h3>Viva Oral Examination Scheduled</h3>
+                    <p>Dear <strong>{project.Student.FullName}</strong>,</p>
+                    <p>Your Final Year Project Viva Oral Examination has been scheduled by the Admin.</p>
+                    <ul>
+                        <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
+                        <li><strong>Venue:</strong> {venueDisplay}</li>
+                        <li><strong>Project Title:</strong> {project.Title}</li>
+                    </ul>
+                    <p>Please ensure you are fully prepared. Log in to the FYP Tracker for more details.</p>
+                </div>";
+                try { _emailService.Send(project.Student.Email, subject, body); } catch { }
+            }
+
+            // ── Email: Supervisor ────────────────────────────────────
+            if (project.Supervisor != null && !string.IsNullOrEmpty(project.Supervisor.Email))
+            {
+                string subject = "FYP Viva Scheduled – Student Notification";
+                string body = $@"<div style='font-family: Arial, sans-serif;'>
+                    <h3>Viva Scheduled</h3>
+                    <p>Dear <strong>{project.Supervisor.FullName}</strong>,</p>
+                    <p>The Admin has scheduled the Viva Oral Examination for your student.</p>
+                    <ul>
+                        <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
+                        <li><strong>Project Title:</strong> {project.Title}</li>
+                        <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
+                        <li><strong>Venue:</strong> {venueDisplay}</li>
+                    </ul>
+                    <p>Please log in to the FYP Tracker for more details.</p>
+                </div>";
+                try { _emailService.Send(project.Supervisor.Email, subject, body); } catch { }
+            }
+
+            // ── Email: Examiner ──────────────────────────────────────
+            if (examiner != null && !string.IsNullOrEmpty(examiner.Email))
+            {
+                string subject = "FYP Viva Scheduled – Examiner Notification";
+                string body = $@"<div style='font-family: Arial, sans-serif;'>
+                    <h3>Viva Scheduled</h3>
+                    <p>Dear <strong>{examiner.FullName}</strong>,</p>
+                    <p>The Admin has scheduled the Viva Oral Examination for a student you are examining.</p>
+                    <ul>
+                        <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
+                        <li><strong>Project Title:</strong> {project.Title}</li>
+                        <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
+                        <li><strong>Venue:</strong> {venueDisplay}</li>
+                    </ul>
+                    <p>Please log in to the FYP Tracker for more details.</p>
+                </div>";
+                try { _emailService.Send(examiner.Email, subject, body); } catch { }
+            }
+
+            // ── SignalR real-time push to Student ────────────────────
+            var payload = new { Type = "VivaScheduled", Message = $"Your Viva has been scheduled for {formattedDate} at {venueDisplay}." };
+            await _hubContext.Clients.Group($"User_{project.StudentId}").SendAsync("ReceiveMilestoneUpdate", payload);
+
+            TempData["Success"] = $"Viva date set to {formattedDate}. The student, supervisor, and examiner have been notified.";
+            
+            string referer = Request.Headers["Referer"].ToString();
+            if (!string.IsNullOrEmpty(referer) && referer.Contains("ManageProjects", StringComparison.OrdinalIgnoreCase))
+            {
+                return RedirectToAction(nameof(ManageProjects));
+            }
+            
+            return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
         }
 
         [HttpPost]
