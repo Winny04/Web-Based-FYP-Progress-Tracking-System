@@ -417,6 +417,29 @@
     {
         RenderSection("scripts");
     }
+
+    @if (TempData["success"] != null || TempData["Success"] != null)
+    {
+        var successMsg = TempData["success"] ?? TempData["Success"];
+        <script>
+            window.addEventListener('DOMContentLoaded', (event) => {
+                if (typeof toastr !== 'undefined') {
+                    toastr.success('@Html.Raw(successMsg)');
+                } else if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        text: '@Html.Raw(successMsg)',
+                        icon: "success",
+                        buttonsStyling: false,
+                        confirmButtonText: "Ok, got it!",
+                        customClass: { confirmButton: "btn btn-primary" }
+                    });
+                } else {
+                    alert('@Html.Raw(successMsg)');
+                }
+            });
+        </script>
+    }
+
     <ejs-scripts></ejs-scripts>
 </body>
 </html>

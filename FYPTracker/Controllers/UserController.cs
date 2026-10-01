@@ -555,6 +555,8 @@ namespace FYPTracker.Controllers
 
             await _userService.SignInEmployeeAsync(emp, rmbMe);
 
+            TempData["success"] = "Login successful! Welcome back.";
+
             if (emp.RequirePasswordChange)
             {
                 return RedirectToAction("ForceChangePassword", "User");
@@ -646,6 +648,8 @@ namespace FYPTracker.Controllers
             await _authenticationService.SignOutAsync();
 
             Response.Cookies.Delete(CookieDefaults.CookieImageKey);
+
+            TempData["success"] = "You have been logged out successfully.";
 
             return RedirectToRoute("Login");
         }
