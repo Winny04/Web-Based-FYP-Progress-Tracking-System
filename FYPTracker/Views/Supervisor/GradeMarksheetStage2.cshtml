@@ -1,0 +1,209 @@
+@model FYPTracker.Models.FYPProject
+@{
+    ViewData["Title"] = "Stage 2 Final Evaluation";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var dppFile = Model.Milestones.FirstOrDefault(m => m.Title.StartsWith("Step 2"))?.SubmissionFiles?.Where(f => !f.IsDeleted).OrderByDescending(f => f.UploadedDate).FirstOrDefault();
+    var existingMarks = Model.Stage2SupervisorMarksheetData;
+}
+
+<div class="d-flex flex-column h-100" style="background: #f8fafc; min-height: calc(100vh - 100px);">
+    <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center shadow-sm">
+        <div>
+            <h3 class="fw-bold mb-1 text-dark"><i class="fas fa-graduation-cap text-success me-2"></i> Stage 2 Final Evaluation</h3>
+            <p class="mb-0 text-muted">
+                Candidate: <span class="fw-bold text-dark">@Model.Student?.FullName</span> | 
+                Dissertation: <span class="fw-bold text-dark">@Model.Title</span>
+            </p>
+        </div>
+        <div>
+            <a href="javascript:history.back()" class="btn btn-outline-secondary rounded-pill px-4"><i class="fas fa-arrow-left me-2"></i>Back</a>
+        </div>
+    </div>
+
+    <div class="row g-0 flex-grow-1">
+        <!-- PDF Viewer (Left Side) -->
+        <div class="col-lg-6 border-end bg-dark">
+            @if (dppFile != null)
+            {
+                <iframe src="@dppFile.FilePath" style="width: 100%; height: calc(100vh - 180px); border: none;" allowfullscreen></iframe>
+            }
+            else
+            {
+                <div class="d-flex align-items-center justify-content-center h-100 text-white flex-column">
+                    <i class="fas fa-file-pdf fa-4x mb-3 text-secondary"></i>
+                    <h5>No final document uploaded</h5>
+                </div>
+            }
+        </div>
+
+        <!-- Evaluation Form (Right Side) -->
+        <div class="col-lg-6 bg-white overflow-auto" style="height: calc(100vh - 180px);">
+            <div class="p-5">
+                <form asp-controller="Supervisor" asp-action="GradeMarksheetStage2" method="post" id="marksheetForm">
+                    <input type="hidden" name="projectId" value="@Model.Id" />
+                    <!-- We'll store the JSON data here -->
+                    <input type="hidden" name="marksheetData" id="marksheetData" value="@existingMarks" />
+
+                    <!-- 1. Understanding of Problem Domain -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <label class="fw-bold fs-5 text-dark">Understanding of Problem Domain</label>
+                            <span class="badge bg-dark fs-6" id="valCrit1">0/10</span>
+                        </div>
+                        <p class="text-muted small mb-2">Demonstrates clear understanding of problem, formulates appropriate objectives, identifies relevant legal/social/ethical issues.</p>
+                        <input type="range" class="form-range custom-range" min="0" max="10" step="1" id="scoreCrit1" oninput="updateScore('Crit1')">
+                    </div>
+
+                    <!-- 2. Literature Review -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <label class="fw-bold fs-5 text-dark">Literature Review</label>
+                            <span class="badge bg-dark fs-6" id="valCrit2">0/20</span>
+                        </div>
+                        <p class="text-muted small mb-2">Critical investigation of relevant area, comparison with similar products, use of relevant and recent references.</p>
+                        <input type="range" class="form-range custom-range" min="0" max="20" step="1" id="scoreCrit2" oninput="updateScore('Crit2')">
+                    </div>
+
+                    <!-- 3. Research Methodology -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <label class="fw-bold fs-5 text-dark">Research Methodology</label>
+                            <span class="badge bg-dark fs-6" id="valCrit3">0/10</span>
+                        </div>
+                        <p class="text-muted small mb-2">Appropriate methods chosen, executed effectively, suitable project plan developed and documented.</p>
+                        <input type="range" class="form-range custom-range" min="0" max="10" step="1" id="scoreCrit3" oninput="updateScore('Crit3')">
+                    </div>
+
+                    <!-- 4. Analysis & Outcome -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <label class="fw-bold fs-5 text-dark">Analysis & Outcome</label>
+                            <span class="badge bg-dark fs-6" id="valCrit4">0/20</span>
+                        </div>
+                        <p class="text-muted small mb-2">Appropriate evaluation/testing methods, valid results, originality, ownership, clear analysis.</p>
+                        <input type="range" class="form-range custom-range" min="0" max="20" step="1" id="scoreCrit4" oninput="updateScore('Crit4')">
+                    </div>
+
+                    <!-- 5. Report structure and clarity -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <label class="fw-bold fs-5 text-dark">Report Structure & Clarity</label>
+                            <span class="badge bg-dark fs-6" id="valCrit5">0/5</span>
+                        </div>
+                        <p class="text-muted small mb-2">Logical structure, correct grammar, citation formats, critical evaluation.</p>
+                        <input type="range" class="form-range custom-range" min="0" max="5" step="1" id="scoreCrit5" oninput="updateScore('Crit5')">
+                    </div>
+
+                    <!-- 6. Project Management -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <label class="fw-bold fs-5 text-dark">Project Management</label>
+                            <span class="badge bg-dark fs-6" id="valCrit6">0/5</span>
+                        </div>
+                        <p class="text-muted small mb-2">Evidence of management (meeting logs), problem solving, ability to deliver.</p>
+                        <input type="range" class="form-range custom-range" min="0" max="5" step="1" id="scoreCrit6" oninput="updateScore('Crit6')">
+                    </div>
+
+                    <!-- 7. Project Demonstration -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <label class="fw-bold fs-5 text-dark">Project Demonstration & Presentation</label>
+                            <span class="badge bg-dark fs-6" id="valCrit7">0/30</span>
+                        </div>
+                        <p class="text-muted small mb-2">Delivery techniques, use of language, answering questions, clear ownership shown during viva.</p>
+                        <input type="range" class="form-range custom-range" min="0" max="30" step="1" id="scoreCrit7" oninput="updateScore('Crit7')">
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                        <div class="fs-4 fw-bold text-dark">
+                            Total Score: <span id="totalScore" class="text-primary">0</span><span class="text-muted fs-5">/100</span>
+                        </div>
+                        <button type="button" class="btn btn-success btn-lg px-5 rounded-pill shadow-sm d-flex align-items-center" onclick="submitMarksheet()">
+                            <i class="fas fa-check-double me-2"></i> Submit Stage 2 Marks
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Custom Range Sliders */
+    .custom-range::-webkit-slider-thumb {
+        background: #0f172a;
+        width: 24px;
+        height: 24px;
+        border: 4px solid white;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    .custom-range::-webkit-slider-runnable-track {
+        background: #cbd5e1;
+        height: 8px;
+        border-radius: 4px;
+    }
+</style>
+
+@section Scripts {
+    <script>
+        // Init scores from existing data if any
+        let existing = document.getElementById('marksheetData').value;
+        if (existing) {
+            try {
+                let data = JSON.parse(existing);
+                document.getElementById('scoreCrit1').value = data.Crit1 || 0;
+                document.getElementById('scoreCrit2').value = data.Crit2 || 0;
+                document.getElementById('scoreCrit3').value = data.Crit3 || 0;
+                document.getElementById('scoreCrit4').value = data.Crit4 || 0;
+                document.getElementById('scoreCrit5').value = data.Crit5 || 0;
+                document.getElementById('scoreCrit6').value = data.Crit6 || 0;
+                document.getElementById('scoreCrit7').value = data.Crit7 || 0;
+                
+                ['Crit1', 'Crit2', 'Crit3', 'Crit4', 'Crit5', 'Crit6', 'Crit7'].forEach(cat => {
+                    if(document.getElementById('val' + cat)) updateScore(cat, false);
+                });
+            } catch(e) {}
+        }
+
+        function updateScore(category, updateAvg = true) {
+            let val = document.getElementById('score' + category).value;
+            let max = document.getElementById('score' + category).max;
+            document.getElementById('val' + category).innerText = val + "/" + max;
+            
+            if (updateAvg) calculateTotal();
+        }
+
+        function calculateTotal() {
+            let total = 0;
+            ['Crit1', 'Crit2', 'Crit3', 'Crit4', 'Crit5', 'Crit6', 'Crit7'].forEach(cat => {
+                total += parseInt(document.getElementById('score' + cat).value) || 0;
+            });
+            
+            document.getElementById('totalScore').innerText = total;
+        }
+
+        function submitMarksheet() {
+            let data = {
+                Crit1: document.getElementById('scoreCrit1').value,
+                Crit2: document.getElementById('scoreCrit2').value,
+                Crit3: document.getElementById('scoreCrit3').value,
+                Crit4: document.getElementById('scoreCrit4').value,
+                Crit5: document.getElementById('scoreCrit5').value,
+                Crit6: document.getElementById('scoreCrit6').value,
+                Crit7: document.getElementById('scoreCrit7').value,
+                Total: document.getElementById('totalScore').innerText
+            };
+
+            document.getElementById('marksheetData').value = JSON.stringify(data);
+            document.getElementById('marksheetForm').submit();
+        }
+        
+        // Initial calculation
+        calculateTotal();
+        
+        // Initial label setup
+        ['Crit1', 'Crit2', 'Crit3', 'Crit4', 'Crit5', 'Crit6', 'Crit7'].forEach(cat => updateScore(cat, false));
+    </script>
+    </script>
+}

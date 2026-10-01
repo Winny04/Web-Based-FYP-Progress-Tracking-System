@@ -548,6 +548,9 @@ namespace FYPTracker.Migrations
                     b.Property<string>("Stage2ExaminerMarksheetData")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Stage2SupervisorMarksheetData")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime?>("StartDate")
                         .HasColumnType("datetime2");
 

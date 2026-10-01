@@ -378,3 +378,5 @@ FYPTracker/FYPTracker.db
 
 # Ignore uploaded files
 FYPTracker/wwwroot/uploads/
+
+old_forms.txt

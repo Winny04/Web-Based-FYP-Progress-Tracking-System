@@ -158,7 +158,95 @@
 
         <div class="col-lg-8">
             <div class="glass-card">
-                <h5 class="fw-bold text-dark mb-4"><i class="fas fa-stream text-primary me-2"></i>Project Milestones</h5>
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h5 class="fw-bold text-dark mb-0"><i class="fas fa-stream text-primary me-2"></i>Project Milestones</h5>
+                    
+                    @{
+                        var stage1Milestone = Model.Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
+                        var stage2Milestones = Model.Milestones.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
+                        bool isAllStage2Approved = stage2Milestones.Any() && stage2Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+                    }
+                    <div>
+                        @if (stage1Milestone != null && (stage1Milestone.Status == "Approved" || stage1Milestone.Status == "Completed"))
+                        {
+                            <button type="button" class="btn btn-primary shadow-sm btn-sm px-4 me-2" data-bs-toggle="modal" data-bs-target="#uploadMarksheetModal_@Model.Id">
+                                <i class="fas fa-file-excel me-2"></i> Upload Stage 1 Marksheet
+                            </button>
+                            
+                            <!-- Upload Marksheet Modal for Stage 1 -->
+                            <div class="modal fade" id="uploadMarksheetModal_@Model.Id" tabindex="-1" aria-labelledby="uploadMarksheetModalLabel_@Model.Id" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content border-0 shadow-lg rounded-4">
+                                        <div class="modal-header border-bottom-0 pb-0">
+                                            <h5 class="modal-title fw-bold text-dark" id="uploadMarksheetModalLabel_@Model.Id">Upload Stage 1 Marksheet</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body pt-3">
+                                            <p class="text-muted small mb-4">Upload the completed <strong>6002CMD - Marksheet.xlsx</strong> file for Stage 1. The system will automatically extract your total score.</p>
+                                            
+                                            <div class="mb-4">
+                                                <a href="/documents/6002CMD - Marksheet.xlsx" class="btn btn-outline-secondary btn-sm" download>
+                                                    <i class="fas fa-download me-2"></i> Download Blank Template
+                                                </a>
+                                            </div>
+                                            
+                                            <form asp-controller="Supervisor" asp-action="UploadMarksheetStage1" method="post" enctype="multipart/form-data">
+                                                <input type="hidden" name="projectId" value="@Model.Id" />
+                                                @{ var idempotencyToken = Guid.NewGuid().ToString(); TempData["IdempotencyToken"] = idempotencyToken; }
+                                                <input type="hidden" name="idempotencyToken" value="@idempotencyToken" />
+                                                
+                                                <div class="mb-4">
+                                                    <label for="marksheetFile" class="form-label fw-bold">Select Excel File</label>
+                                                    <input class="form-control" type="file" id="marksheetFile" name="marksheetFile" accept=".xls,.xlsx" required>
+                                                    <div class="form-text mt-2"><i class="fas fa-info-circle me-1"></i> Only .xls and .xlsx formats are accepted.</div>
+                                                </div>
+                                                
+                                                <div class="d-grid mt-4">
+                                                    <button type="submit" class="btn btn-primary rounded-3 py-2 fw-bold">
+                                                        <i class="fas fa-cloud-upload-alt me-2"></i> Upload & Extract Score
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (isAllStage2Approved)
+                        {
+                            <a href="@Url.Action("GradeMarksheetStage2", "Supervisor", new { id = Model.Id })" class="btn btn-success shadow-sm btn-sm px-4">
+                                <i class="fas fa-clipboard-check me-2"></i> Grade Stage 2 Final Report
+                            </a>
+                        }
+                    </div>
+                </div>
+                
+                @if (stage1Milestone != null && !string.IsNullOrEmpty(stage1Milestone.SupervisorMarksheetData))
+                {
+                    string supFilePath = "";
+                    string supScore = "";
+                    if (stage1Milestone.SupervisorMarksheetData.StartsWith("{"))
+                    {
+                        try
+                        {
+                            using var doc = System.Text.Json.JsonDocument.Parse(stage1Milestone.SupervisorMarksheetData);
+                            if (doc.RootElement.TryGetProperty("FilePath", out var fp)) supFilePath = fp.GetString();
+                            if (doc.RootElement.TryGetProperty("Score", out var sc)) supScore = sc.GetString();
+                        } catch { }
+                    }
+                    
+                    if (!string.IsNullOrEmpty(supFilePath))
+                    {
+                        <div class="alert alert-success mb-4 p-3 d-flex align-items-center justify-content-between rounded-3 border-0 shadow-sm">
+                            <div class="d-flex flex-column">
+                                <h6 class="fw-bolder text-dark mb-1"><i class="fas fa-check-circle text-success me-2"></i>Stage 1 Marksheet Uploaded</h6>
+                                <span><a href="@supFilePath" target="_blank" class="fw-bold text-success text-decoration-none"><i class="fas fa-download me-1"></i>Download your uploaded file</a></span>
+                                <span class="text-dark mt-1 small">Score extracted: <strong class="badge bg-success">@(supScore ?? "N/A")</strong></span>
+                            </div>
+                        </div>
+                    }
+                }
                 
                 @if (!Model.Milestones.Any())
                 {

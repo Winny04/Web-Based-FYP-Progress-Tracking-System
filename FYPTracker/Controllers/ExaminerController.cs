@@ -352,6 +352,98 @@ namespace FYPTracker.Controllers
             return RedirectToAction(nameof(StudentDetails), new { projectId });
         }
 
+        [HttpGet]
+        public async Task<IActionResult> GradeMarksheetStage2(int id)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+            ViewBag.CurrentUser = user;
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Milestones)
+                .ThenInclude(m => m.SubmissionFiles)
+                .FirstOrDefaultAsync(p => p.Id == id && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
+                
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found or unauthorized.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var stage2Milestones = project.Milestones.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
+            bool isAllStage2Approved = stage2Milestones.Any() && stage2Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+
+            if (!isAllStage2Approved)
+            {
+                TempData["Error"] = "The supervisor must approve ALL Stage 2 milestones (including the Final Report and Turnitin Score) before you can submit the final marksheet.";
+                return RedirectToAction(nameof(StudentDetails), new { projectId = id });
+            }
+
+            return View(project);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> GradeMarksheetStage2(int projectId, string marksheetData, string finalGrade, string examinerComments)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
+                
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found or unauthorized.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            project.Stage2ExaminerMarksheetData = marksheetData;
+            project.ExaminerComments = examinerComments;
+
+            // Optional: Calculate Joint Final Grade if Supervisor has also submitted
+            if (!string.IsNullOrEmpty(project.Stage2SupervisorMarksheetData))
+            {
+                try
+                {
+                    using var exDoc = System.Text.Json.JsonDocument.Parse(marksheetData);
+                    using var supDoc = System.Text.Json.JsonDocument.Parse(project.Stage2SupervisorMarksheetData);
+                    
+                    if (exDoc.RootElement.TryGetProperty("Total", out var exTotalProp) && supDoc.RootElement.TryGetProperty("Total", out var supTotalProp))
+                    {
+                        double exTotal = 0;
+                        if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(exTotalProp.GetString(), out double e1)) { exTotal = e1; }
+                        else if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { exTotal = exTotalProp.GetDouble(); }
+
+                        double supTotal = 0;
+                        if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(supTotalProp.GetString(), out double s1)) { supTotal = s1; }
+                        else if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { supTotal = supTotalProp.GetDouble(); }
+
+                        // Using the stakeholder formula: examiner component = 70%; supervisor component = 80%; combined value = 150%, then divide by 100% (1.5) to obtain the total mark.
+                        double finalScore = (exTotal + supTotal) / 2.0;
+                        
+                        project.FinalGrade = GetGradeLabel(finalScore);
+                        TempData["Success"] = $"Stage 2 grading complete! Final joint score calculated as {finalScore:F1}%.";
+                    }
+                }
+                catch (Exception)
+                {
+                    // Fallback to submitted finalGrade if JSON parsing fails
+                    project.FinalGrade = finalGrade;
+                    TempData["Success"] = "Stage 2 marks submitted. Supervisor marks could not be parsed for joint calculation.";
+                }
+            }
+            else
+            {
+                project.FinalGrade = finalGrade;
+                TempData["Success"] = "Stage 2 marks submitted successfully! Waiting for Supervisor to submit their marks for the final joint calculation.";
+            }
+
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(StudentDetails), new { projectId });
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> UploadMarksheet(int projectId, IFormFile marksheetFile, string idempotencyToken)

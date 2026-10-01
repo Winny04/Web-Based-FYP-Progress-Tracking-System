@@ -87,6 +87,8 @@ namespace FYPTracker.Models
         public int Stage1MarksheetUploadCount { get; set; } = 0;
 
         public string? Stage2ExaminerMarksheetData { get; set; }
+        
+        public string? Stage2SupervisorMarksheetData { get; set; }
 
         // Navigation
         [ForeignKey(nameof(StudentId))]

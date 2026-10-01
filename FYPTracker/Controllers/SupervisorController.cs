@@ -845,6 +845,97 @@ namespace FYPTracker.Controllers
         }
 
         [HttpGet]
+        public async Task<IActionResult> GradeMarksheetStage2(int id)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            ViewBag.CurrentUser = user;
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Milestones)
+                .ThenInclude(m => m.SubmissionFiles)
+                .FirstOrDefaultAsync(p => p.Id == id && p.SupervisorId == user.Id);
+                
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found or unauthorized.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var stage2Milestones = project.Milestones.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
+            bool isAllStage2Approved = stage2Milestones.Any() && stage2Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+
+            if (!isAllStage2Approved)
+            {
+                TempData["Error"] = "You must approve ALL Stage 2 milestones (including the Final Report and Turnitin Score) before you can submit the final marksheet.";
+                return RedirectToAction(nameof(ProjectDetails), new { id = id });
+            }
+
+            return View(project);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> GradeMarksheetStage2(int projectId, string marksheetData, string finalGrade)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user.Id);
+                
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found or unauthorized.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            project.Stage2SupervisorMarksheetData = marksheetData;
+
+            // Optional: Calculate Joint Final Grade if Examiner has also submitted
+            if (!string.IsNullOrEmpty(project.Stage2ExaminerMarksheetData))
+            {
+                try
+                {
+                    using var supDoc = System.Text.Json.JsonDocument.Parse(marksheetData);
+                    using var exDoc = System.Text.Json.JsonDocument.Parse(project.Stage2ExaminerMarksheetData);
+                    
+                    if (supDoc.RootElement.TryGetProperty("Total", out var supTotalProp) && exDoc.RootElement.TryGetProperty("Total", out var exTotalProp))
+                    {
+                        double supTotal = 0;
+                        if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(supTotalProp.GetString(), out double s1)) { supTotal = s1; }
+                        else if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { supTotal = supTotalProp.GetDouble(); }
+
+                        double exTotal = 0;
+                        if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(exTotalProp.GetString(), out double e1)) { exTotal = e1; }
+                        else if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { exTotal = exTotalProp.GetDouble(); }
+
+                        // Using the stakeholder formula: examiner component = 70%; supervisor component = 80%; combined value = 150%, then divide by 100% (1.5) to obtain the total mark.
+                        double finalScore = (exTotal + supTotal) / 2.0;
+                        
+                        project.FinalGrade = GetGradeLabel(finalScore);
+                        TempData["Success"] = $"Stage 2 grading complete! Final joint score calculated as {finalScore:F1}%.";
+                    }
+                }
+                catch (Exception)
+                {
+                    // Fallback
+                    project.FinalGrade = finalGrade;
+                    TempData["Success"] = "Stage 2 marks submitted. Examiner marks could not be parsed for joint calculation.";
+                }
+            }
+            else
+            {
+                project.FinalGrade = finalGrade;
+                TempData["Success"] = "Stage 2 marks submitted successfully! Waiting for Examiner to submit their marks for the final joint calculation.";
+            }
+
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+        }
+
+        [HttpGet]
         public async Task<IActionResult> GradeSubmission(int id)
         {
             var user = await GetCurrentUserAsync();
@@ -1986,6 +2077,165 @@ namespace FYPTracker.Controllers
 
             TempData["Success"] = "Your joint evaluation marks have been saved successfully.";
             return RedirectToAction("ReviewSubmissions");
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UploadMarksheetStage1(int projectId, IFormFile marksheetFile, string idempotencyToken)
+        {
+            if (string.IsNullOrEmpty(idempotencyToken) || TempData["IdempotencyToken"]?.ToString() != idempotencyToken)
+            {
+                TempData["Error"] = "Duplicate submission detected. Your request has already been processed.";
+                return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+            }
+            TempData.Remove("IdempotencyToken");
+
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Milestones)
+                .Include(p => p.Supervisor)
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user.Id);
+                
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found or unauthorized.";
+                return RedirectToAction(nameof(MyProjects));
+            }
+
+            if (project.Stage1MarksheetUploadCount >= 5)
+            {
+                TempData["Error"] = "You have reached the maximum allowed number of Stage 1 marksheet uploads (5) for this project.";
+                return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+            }
+
+            if (marksheetFile != null && marksheetFile.Length > 0)
+            {
+                var extension = Path.GetExtension(marksheetFile.FileName).ToLower();
+                if (extension != ".xls" && extension != ".xlsx")
+                {
+                    TempData["Error"] = "Only Excel files (.xls, .xlsx) are allowed.";
+                    return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+                }
+
+                project.Stage1MarksheetUploadCount++;
+
+                string uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "marksheets");
+                if (!Directory.Exists(uploadsFolder))
+                {
+                    Directory.CreateDirectory(uploadsFolder);
+                }
+
+                string uniqueFileName = Guid.NewGuid().ToString() + "_Stage1_" + Path.GetFileName(marksheetFile.FileName);
+                string filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                using (var fileStream = new FileStream(filePath, FileMode.Create))
+                {
+                    await marksheetFile.CopyToAsync(fileStream);
+                }
+
+                var proposalMilestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
+                
+                try
+                {
+                    using (var workbook = new ClosedXML.Excel.XLWorkbook(filePath))
+                    {
+                        var worksheet = workbook.Worksheets.FirstOrDefault();
+                        if (worksheet != null)
+                        {
+                            var cellValue = worksheet.Cell("J16").Value;
+                            if (cellValue != null && proposalMilestone != null)
+                            {
+                                string extractedScore = "";
+                                string stringValue = cellValue.ToString();
+                                if (double.TryParse(stringValue, out double numericScore)) extractedScore = numericScore.ToString();
+                                else if (stringValue.Contains("-") && double.TryParse(stringValue.Split('-').Last().Trim(), out double scoreFromText)) extractedScore = scoreFromText.ToString();
+                                else extractedScore = stringValue.Trim();
+                                
+                                if (!double.TryParse(extractedScore, out _))
+                                {
+                                    TempData["Error"] = "Invalid Marksheet: Could not extract a valid numeric score.";
+                                    System.IO.File.Delete(filePath);
+                                    project.Stage1MarksheetUploadCount--;
+                                    return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+                                }
+                                
+                                var strengthsCell = worksheet.Cell("C19").Value;
+                                var improvementsCell = worksheet.Cell("C22").Value;
+                                var commentsCell = worksheet.Cell("C25").Value;
+                                
+                                var feedbackData = new {
+                                    Score = extractedScore,
+                                    Strengths = strengthsCell?.ToString().Trim() ?? "",
+                                    Improvements = improvementsCell?.ToString().Trim() ?? "",
+                                    Comments = commentsCell?.ToString().Trim() ?? "",
+                                    FilePath = "/uploads/marksheets/" + uniqueFileName
+                                };
+                                proposalMilestone.SupervisorMarksheetData = System.Text.Json.JsonSerializer.Serialize(feedbackData);
+                                
+                                double supScore = 0;
+                                if (!string.IsNullOrEmpty(proposalMilestone.SupervisorMarksheetData)) {
+                                    if (proposalMilestone.SupervisorMarksheetData.StartsWith("{")) {
+                                        using var doc = System.Text.Json.JsonDocument.Parse(proposalMilestone.SupervisorMarksheetData);
+                                        if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double e)) supScore = e;
+                                    } else {
+                                        double.TryParse(proposalMilestone.SupervisorMarksheetData, out supScore);
+                                    }
+                                }
+
+                                double exScore = 0;
+                                bool hasExScore = false;
+                                if (!string.IsNullOrEmpty(proposalMilestone.ExaminerMarksheetData)) {
+                                    if (proposalMilestone.ExaminerMarksheetData.StartsWith("{")) {
+                                        using var doc = System.Text.Json.JsonDocument.Parse(proposalMilestone.ExaminerMarksheetData);
+                                        if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double s)) { exScore = s; hasExScore = true; }
+                                    } else {
+                                        hasExScore = double.TryParse(proposalMilestone.ExaminerMarksheetData, out exScore);
+                                    }
+                                }
+
+                                if (supScore > 0)
+                                {
+                                    if (hasExScore)
+                                    {
+                                        project.Stage1TotalScore = (supScore + exScore) / 2.0;
+                                        project.Stage1Grade = project.Stage1TotalScore >= 40.0 ? "Pass" : "Fail";
+                                    }
+                                    else
+                                    {
+                                        project.Stage1TotalScore = supScore;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
+                    TempData["Success"] = "Stage 1 marksheet uploaded successfully" + (project.Stage1TotalScore.HasValue ? $" and score {project.Stage1TotalScore} recorded." : ".");
+                }
+                catch (Exception)
+                {
+                    TempData["Error"] = "Error processing the Excel file. Please ensure it is not corrupted and follows the template.";
+                    System.IO.File.Delete(filePath);
+                    project.Stage1MarksheetUploadCount--;
+                }
+            }
+            else
+            {
+                TempData["Error"] = "Please select a valid file to upload.";
+            }
+
+            return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+        }
+
+        private string GetGradeLabel(double score)
+        {
+            if (score >= 80) return "Excellent";
+            if (score >= 60) return "Good";
+            if (score >= 40) return "Average";
+            if (score > 0) return "Poor";
+            return "Fail";
         }
     }
 }

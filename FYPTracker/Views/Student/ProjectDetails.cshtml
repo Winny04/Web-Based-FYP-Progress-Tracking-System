@@ -4,9 +4,31 @@
     ViewData["Title"] = "Project Details";
     var currentUser = ViewBag.CurrentUser as ApplicationUser;
     var milestones  = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
-    int total       = milestones.Count;
-    int approved    = milestones.Count(m => m.Status == "Approved" || m.Status == "Completed");
-    int pct         = total > 0 ? (int)((double)approved / total * 100) : 0;
+    
+    /* 
+     * PROGRESS BAR MATHEMATICAL FORMULA:
+     * - The progress bar tracks submission completion, not academic marks.
+     * - Total Progress (100%) = Stage 1 Progress (50%) + Stage 2 Progress (50%)
+     * 
+     * Stage 1 Formula: (Approved Stage 1 Submissions / Total Stage 1 Submissions) * 50
+     * Stage 2 Formula: (Approved Stage 2 Submissions / 5 Total Stage 2 Steps) * 50
+     * 
+     * Note: Meeting-log marks (12%) follow the official marksheet and are EXCLUDED from this bar.
+     */
+     
+    // Differentiate milestones by their prefix (Stage 2 steps start with "Step ")
+    var calcStage1Milestones = milestones.Where(m => !m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
+    var calcStage2Milestones = milestones.Where(m => m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
+
+    int totalStage1 = calcStage1Milestones.Count;
+    int approvedStage1 = calcStage1Milestones.Count(m => m.Status == "Approved" || m.Status == "Completed");
+    double stage1Pct = totalStage1 > 0 ? ((double)approvedStage1 / totalStage1) * 50.0 : 0;
+
+    int totalStage2 = 5; // Stage 2 always has exactly 5 required steps
+    int approvedStage2 = calcStage2Milestones.Count(m => m.Status == "Approved" || m.Status == "Completed");
+    double stage2Pct = ((double)approvedStage2 / totalStage2) * 50.0;
+
+    int pct = (int)Math.Round(stage1Pct + stage2Pct);
 }
 
 <style>
