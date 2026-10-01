@@ -45,6 +45,8 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddTransient<IFileWriter, FileWriter>();
 builder.Services.AddHostedService<MeetingReminderService>();
+// Runs daily: auto-rejects supervisor requests with no response beyond the configured timeout
+builder.Services.AddHostedService<SupervisorRequestTimeoutService>();
 
 //register smtp
 var smtpSettings = new SmtpSettings();

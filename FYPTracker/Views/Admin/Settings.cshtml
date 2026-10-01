@@ -135,9 +135,28 @@
                             <div class="form-text small">e.g. 13:00 (1pm)</div>
                         </div>
                     </div>
+
+                    @* ── Supervisor Request Timeout Setting ── *@
+                    <hr class="my-4" />
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-6 col-lg-4">
+                            <label class="form-label fw-semibold small text-muted text-uppercase">
+                                <i class="fas fa-hourglass-half text-danger me-1"></i>Supervisor Request Timeout (Days)
+                            </label>
+                            <input type="number" name="supervisorRequestTimeoutDays"
+                                   class="form-control" min="1" max="30"
+                                   value="@ViewBag.SupervisorRequestTimeoutDays" />
+                            <div class="form-text small text-muted">
+                                Pending requests with no supervisor response after this many days are
+                                <strong>automatically rejected</strong> and the student is notified.
+                                Current requirement: <strong>3 days</strong>.
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="mt-4">
                         <button type="submit" class="btn btn-success fw-bold px-4">
-                            <i class="fas fa-save me-2"></i>Save Dates
+                            <i class="fas fa-save me-2"></i>Save Dates &amp; Settings
                         </button>
                     </div>
                 </form>

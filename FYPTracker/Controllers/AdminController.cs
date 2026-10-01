@@ -1116,7 +1116,8 @@ public ActionResult ManageUsersData()
             ViewBag.ExhibitionDate    = GetSetting("ExhibitionDate");
             ViewBag.ExhibitionTimeStart = GetSetting("ExhibitionTimeStart");
             ViewBag.ExhibitionTimeEnd   = GetSetting("ExhibitionTimeEnd");
-
+            // Configurable supervisor request auto-rejection timeout (in days, default 3)
+            ViewBag.SupervisorRequestTimeoutDays = GetSetting("SupervisorRequestTimeoutDays") is string v && v != "" ? v : "3";
 
             return View();
         }
@@ -1350,7 +1351,10 @@ public ActionResult ManageUsersData()
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UpdateFYPSettings(string dppDeadline, string exhibitionDate, string exhibitionTimeStart, string exhibitionTimeEnd)
+        public async Task<IActionResult> UpdateFYPSettings(
+            string dppDeadline, string exhibitionDate,
+            string exhibitionTimeStart, string exhibitionTimeEnd,
+            string supervisorRequestTimeoutDays)
         {
             try
             {
@@ -1359,7 +1363,9 @@ public ActionResult ManageUsersData()
                     { "DPPDeadline",         (dppDeadline ?? "",         "DPP Submission Deadline") },
                     { "ExhibitionDate",      (exhibitionDate ?? "",      "FYP Exhibition Date") },
                     { "ExhibitionTimeStart", (exhibitionTimeStart ?? "", "Exhibition Start Time") },
-                    { "ExhibitionTimeEnd",   (exhibitionTimeEnd ?? "",   "Exhibition End Time") }
+                    { "ExhibitionTimeEnd",   (exhibitionTimeEnd ?? "",   "Exhibition End Time") },
+                    // Supervisor request auto-rejection timeout – must be a positive integer (days)
+                    { "SupervisorRequestTimeoutDays", (supervisorRequestTimeoutDays ?? "3", "Supervisor Request Timeout (Days)") },
                 };
 
                 foreach (var kv in updates)

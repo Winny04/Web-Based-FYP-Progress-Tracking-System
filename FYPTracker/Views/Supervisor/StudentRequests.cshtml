@@ -103,9 +103,9 @@
                                         <form asp-action="RespondRequest" method="post" id="acceptForm_@req.Id">
                                             <input type="hidden" name="requestId" value="@req.Id" />
                                             <input type="hidden" name="status" value="Approved" />
-                                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3" onclick="openAcceptModal(@req.Id, '@req.Student?.FullName')">Accept</button>
+                                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3" onclick="openAcceptModal(@req.Id)">Accept</button>
                                         </form>
-                                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3" onclick="openRejectModal(@req.Id, '@req.Student?.FullName')">Reject</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3" onclick="openRejectModal(@req.Id)">Reject</button>
                                     </div>
                                 }
                                 else
@@ -257,15 +257,23 @@
     }
 
     function openAcceptModal(id, name) {
+        if (!name) {
+            const dataEl = document.getElementById('formData_' + id);
+            if (dataEl) name = dataEl.dataset.name;
+        }
         document.getElementById('acceptRequestId').value = id;
         document.getElementById('acceptStudentName').textContent = name;
-        new bootstrap.Modal(document.getElementById('acceptModal')).show();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('acceptModal')).show();
     }
 
     function openRejectModal(id, name) {
+        if (!name) {
+            const dataEl = document.getElementById('formData_' + id);
+            if (dataEl) name = dataEl.dataset.name;
+        }
         document.getElementById('rejectRequestId').value = id;
         document.getElementById('rejectStudentName').textContent = name;
-        new bootstrap.Modal(document.getElementById('rejectModal')).show();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectModal')).show();
     }
 
     document.addEventListener("DOMContentLoaded", function() {
@@ -332,9 +340,9 @@
                             ${tokenHtml}
                             <input type="hidden" name="requestId" value="${d.id}" />
                             <input type="hidden" name="status" value="Approved" />
-                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3" onclick="confirmAccept(${d.id}, '${d.studentName}')">Accept</button>
+                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3" onclick="openAcceptModal(${d.id})">Accept</button>
                         </form>
-                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3" onclick="openRejectModal(${d.id}, '${d.studentName}')">Reject</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3" onclick="openRejectModal(${d.id})">Reject</button>
                     </div>
                 </td>
             </tr>

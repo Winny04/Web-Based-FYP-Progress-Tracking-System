@@ -283,14 +283,21 @@ namespace FYPTracker.Controllers
                 return RedirectToAction("Index");
             }
 
-            // 1. Auto-Expiry (2 Days)
+            // 1. Auto-Expiry: Read the configured timeout from FYPSettings (default 3 days)
+            //    Note: The SupervisorRequestTimeoutService background worker handles daily bulk
+            //    rejection. This inline check is a safety net when the student visits the page.
+            var timeoutSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "SupervisorRequestTimeoutDays");
+            int timeoutDays = (timeoutSetting != null && int.TryParse(timeoutSetting.Value, out int t) && t > 0) ? t : 3;
+
             var expired = await _context.SupervisorRequests
-                .Where(r => r.Status == "Pending" && r.ExpiryDate < DateTime.Now)
+                .Where(r => r.Status == "Pending" && r.RequestedDate <= DateTime.Now.AddDays(-timeoutDays))
                 .ToListAsync();
             foreach (var e in expired)
             {
                 e.Status = "Rejected";
-                e.ResponseNote = "Auto-rejected: No response within 2 days.";
+                e.ResponseNote = $"Auto-rejected: No supervisor response within the configured {timeoutDays}-day period.";
                 e.RespondedDate = DateTime.Now;
             }
             if (expired.Any()) await _context.SaveChangesAsync();
@@ -331,6 +338,7 @@ namespace FYPTracker.Controllers
             ViewBag.CurrentUser     = user;
             ViewBag.Departments     = departments;
             ViewBag.IsProfileIncomplete = isProfileIncomplete;
+            ViewBag.SupervisorRequestTimeoutDays = timeoutDays;
 
             return View();
         }
@@ -430,13 +438,19 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(SelectSupervisor));
             }
 
+            // Read the configured timeout to set the correct ExpiryDate on the new request
+            var timeoutSettingForNew = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "SupervisorRequestTimeoutDays");
+            int timeoutDaysForNew = (timeoutSettingForNew != null && int.TryParse(timeoutSettingForNew.Value, out int td) && td > 0) ? td : 3;
+
             var request = new SupervisorRequest
             {
                 StudentId       = user.Id,
                 SupervisorId    = supervisorId,
                 Status          = "Pending",
                 RequestedDate   = DateTime.Now,
-                ExpiryDate      = DateTime.Now.AddDays(2),
+                ExpiryDate      = DateTime.Now.AddDays(timeoutDaysForNew), // Uses configured timeout, not hardcoded
                 Priority        = myRequests.Count(r => r.Status == "Pending") + 1,
                 
                 MatricNumber    = matricNumber,
