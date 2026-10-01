@@ -1558,12 +1558,12 @@ public ActionResult ManageUsersData()
         }
 
 
-        public async Task<IActionResult> DefenseList()
+        public async Task<IActionResult> ApprovedIafList()
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             ViewBag.CurrentUser = user;
 
-            var defenseList = await _context.FYPMilestones
+            var approvedList = await _context.FYPMilestones
                 .Include(m => m.Project)
                     .ThenInclude(p => p.Student)
                 .Include(m => m.Project)
@@ -1571,181 +1571,157 @@ public ActionResult ManageUsersData()
                 .Include(m => m.Project)
                     .ThenInclude(p => p.AssignedExaminers)
                         .ThenInclude(e => e.Examiner)
-                .Where(m => m.Title.Contains("IAF") && m.RejectionCount >= 3)
+                .Where(m => (m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation")) && (m.Status == "Approved" || m.Status == "AdminApproved" || m.Status == "DefenseScheduled"))
                 .ToListAsync();
 
-            return View(defenseList);
+            return View(approvedList);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> NotifyDefenseList(DateTime defenseDate, TimeSpan startTime, string venue, List<int>? selectedMilestones)
+        public async Task<IActionResult> AdminFinalApproveIaf(int milestoneId)
         {
-            var query = _context.FYPMilestones
-                .Include(m => m.Project)
-                    .ThenInclude(p => p.Student)
-                .Include(m => m.Project)
-                    .ThenInclude(p => p.Supervisor)
-                .Where(m => m.Title.Contains("IAF") && m.RejectionCount >= 3);
-
-            if (selectedMilestones != null && selectedMilestones.Any())
+            var milestone = await _context.FYPMilestones.FindAsync(milestoneId);
+            if (milestone != null)
             {
-                query = query.Where(m => selectedMilestones.Contains(m.Id));
-            }
-
-            var defenseList = await query.ToListAsync();
-
-            int count = 0;
-            var currentTime = startTime;
-
-            foreach (var milestone in defenseList)
-            {
-                var student = milestone.Project?.Student;
-                if (student != null)
-                {
-                    // Format the scheduled datetime
-                    var formattedDate = defenseDate.ToString("dd MMM yyyy");
-                    var formattedTime = new DateTime(currentTime.Ticks).ToString("hh:mm tt");
-                    
-                    string finalVenue = venue;
-                    if (venue != null && venue.Contains("Online", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string uniqueId = Guid.NewGuid().ToString("N").Substring(0, 8);
-                        string safeStudentName = student.FullName != null ? new string(student.FullName.Where(char.IsLetterOrDigit).ToArray()) : "Student";
-                        finalVenue = $"Online (Link: https://meet.jit.si/FYP_Defense_{safeStudentName}_{uniqueId})";
-                    }
-
-                    var notificationMessage = $"Your Initial Project Allocation Form has been rejected 3 times. You are required to attend a defense session.\n\nDate: {formattedDate}\nTime: {formattedTime}\nVenue: {finalVenue}";
-                    var emailHtml = $@"
-                        <p>Dear {student.FullName},</p>
-                        <p>Your Initial Project Allocation Form has been rejected 3 times. You are required to attend a defense session.</p>
-                        <ul>
-                            <li><strong>Date:</strong> {formattedDate}</li>
-                            <li><strong>Time:</strong> {formattedTime}</li>
-                            <li><strong>Venue:</strong> {finalVenue}</li>
-                        </ul>
-                        <p>Please be prepared for a 15-minute presentation.</p>";
-
-                    // Add in-app notification
-                    var notification = new FYPNotification
-                    {
-                        RecipientId = student.Id,
-                        Type = "RevisionRequest",
-                        Title = "Defense Scheduled",
-                        Message = notificationMessage,
-                        IsRead = false,
-                        CreatedDate = DateTime.Now
-                    };
-                    _context.FYPNotifications.Add(notification);
-
-                    // Optional: Email
-                    if (!string.IsNullOrEmpty(student.Email))
-                    {
-                        try
-                        {
-                            _emailService.Send(
-                                to: student.Email,
-                                subject: "Defense Scheduled for FYP",
-                                html: emailHtml
-                            );
-                        }
-                        catch (Exception ex)
-                        {
-                            // Log email failure if needed, continue notifying others
-                        }
-                    }
-
-                    // Notify Supervisor
-                    var supervisor = milestone.Project?.Supervisor;
-                    if (supervisor != null && !string.IsNullOrEmpty(supervisor.Email))
-                    {
-                        var supEmailHtml = $@"
-                            <p>Dear {supervisor.FullName},</p>
-                            <p>Your student <strong>{student.FullName}</strong> is required to attend a defense session for their Initial Project Allocation Form.</p>
-                            <ul>
-                                <li><strong>Date:</strong> {formattedDate}</li>
-                                <li><strong>Time:</strong> {formattedTime}</li>
-                                <li><strong>Venue:</strong> {finalVenue}</li>
-                            </ul>
-                            <p>As their supervisor, your attendance is highly encouraged.</p>";
-
-                        try
-                        {
-                            _emailService.Send(
-                                to: supervisor.Email,
-                                subject: "Student Defense Scheduled for FYP",
-                                html: supEmailHtml
-                            );
-                        }
-                        catch (Exception ex) {}
-                    }
-
-                    // Save schedule to database
-                    milestone.DefenseDate = defenseDate;
-                    milestone.DefenseTime = formattedTime;
-                    milestone.DefenseVenue = finalVenue;
-
-                    // Increment time by 15 minutes for the next student
-                    currentTime = currentTime.Add(TimeSpan.FromMinutes(15));
-                    count++;
-                }
-            }
-            
-            if (count > 0)
-            {
+                milestone.Status = "AdminApproved";
                 await _context.SaveChangesAsync();
-                TempData["Success"] = $"Successfully scheduled defense and sent notifications to {count} student(s).";
+                TempData["Success"] = "Successfully granted final approval for the IAF.";
             }
-            else
-            {
-                TempData["Error"] = "No students found in the defense list to notify.";
-            }
-
-            return RedirectToAction(nameof(DefenseList));
+            return RedirectToAction(nameof(ApprovedIafList));
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AllowIafResubmission(int milestoneId)
+        public async Task<IActionResult> AdminScheduleDefense(int milestoneId, DateTime defenseDate, TimeSpan defenseTime, string venue)
         {
             var milestone = await _context.FYPMilestones
                 .Include(m => m.Project)
                     .ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Supervisor)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.AssignedExaminers)
+                        .ThenInclude(e => e.Examiner)
                 .FirstOrDefaultAsync(m => m.Id == milestoneId);
 
             if (milestone != null)
             {
-                // Reset RejectionCount so they can submit again
-                milestone.RejectionCount = 0;
-                milestone.DefenseDate = null;
-                milestone.DefenseTime = null;
-                milestone.DefenseVenue = null;
-                milestone.Status = "Pending";
-                milestone.Remarks = "Defense completed. Student is allowed to resubmit the IAF with a new title/proposal.";
+                var formattedDate = defenseDate.ToString("dd MMM yyyy");
+                var formattedTime = new DateTime(defenseTime.Ticks).ToString("hh:mm tt");
+                
+                milestone.Status = "DefenseScheduled";
+                milestone.DefenseDate = defenseDate;
+                milestone.DefenseTime = formattedTime;
+                milestone.DefenseVenue = venue;
+                
+                var notificationMessage = $"Your IAF requires a defense session.\nDate: {formattedDate}\nTime: {formattedTime}\nVenue: {venue}";
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = milestone.Project.StudentId,
+                    Type = "RevisionRequest",
+                    Title = "IAF Defense Scheduled",
+                    Message = notificationMessage,
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
 
                 var student = milestone.Project?.Student;
-                if (student != null)
+                var supervisor = milestone.Project?.Supervisor;
+                var examiner = milestone.Project?.AssignedExaminers?.FirstOrDefault()?.Examiner;
+
+                string subject = "FYP IAF Defense Scheduled";
+                string htmlBody = $@"
+                    <p>An Initial Allocation Form (IAF) defense session has been scheduled.</p>
+                    <ul>
+                        <li><strong>Student:</strong> {student?.FullName ?? "Unknown"}</li>
+                        <li><strong>Date:</strong> {formattedDate}</li>
+                        <li><strong>Time:</strong> {formattedTime}</li>
+                        <li><strong>Venue/Link:</strong> {venue}</li>
+                    </ul>
+                    <p>Please ensure your attendance. Log in to the FYP Tracker for more details.</p>";
+
+                if (student != null && !string.IsNullOrEmpty(student.Email))
                 {
+                    try { _emailService.Send(student.Email, subject, htmlBody); } catch { }
+                }
+
+                if (supervisor != null && !string.IsNullOrEmpty(supervisor.Email))
+                {
+                    try { _emailService.Send(supervisor.Email, subject, htmlBody); } catch { }
                     _context.FYPNotifications.Add(new FYPNotification
                     {
-                        RecipientId = student.Id,
-                        Type = "General",
-                        Title = "IAF Resubmission Allowed",
-                        Message = "Following your defense, you are now permitted to propose a new title and resubmit your Initial Project Allocation Form.",
+                        RecipientId = supervisor.Id,
+                        Type = "Meeting",
+                        Title = "Student Defense Scheduled",
+                        Message = $"Defense for {student?.FullName} is scheduled on {formattedDate} at {formattedTime}.",
+                        IsRead = false,
+                        CreatedDate = DateTime.Now
+                    });
+                }
+
+                if (examiner != null && !string.IsNullOrEmpty(examiner.Email))
+                {
+                    try { _emailService.Send(examiner.Email, subject, htmlBody); } catch { }
+                    _context.FYPNotifications.Add(new FYPNotification
+                    {
+                        RecipientId = examiner.Id,
+                        Type = "Meeting",
+                        Title = "Examiner Duty: IAF Defense",
+                        Message = $"Defense for {student?.FullName} is scheduled on {formattedDate} at {formattedTime}.",
                         IsRead = false,
                         CreatedDate = DateTime.Now
                     });
                 }
 
                 await _context.SaveChangesAsync();
-                TempData["Success"] = $"Successfully granted resubmission access to {student?.FullName}.";
+                TempData["Success"] = "Successfully scheduled defense and sent invitations to the student, supervisor, and examiner.";
             }
-            else
-            {
-                TempData["Error"] = "Milestone not found.";
-            }
+            return RedirectToAction(nameof(ApprovedIafList));
+        }
 
-            return RedirectToAction(nameof(DefenseList));
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AdminPassDefense(int milestoneId)
+        {
+            var milestone = await _context.FYPMilestones.FindAsync(milestoneId);
+            if (milestone != null)
+            {
+                milestone.Status = "AdminApproved";
+                milestone.Remarks = "Passed Defense Session";
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Successfully recorded defense pass. The IAF is now fully approved.";
+            }
+            return RedirectToAction(nameof(ApprovedIafList));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AdminFailDefense(int milestoneId)
+        {
+            var milestone = await _context.FYPMilestones.Include(m => m.Project).ThenInclude(p => p.Student).FirstOrDefaultAsync(m => m.Id == milestoneId);
+            if (milestone != null)
+            {
+                milestone.Status = "Pending"; // Reset to allow them to resubmit
+                milestone.Remarks = "Defense Failed. Please submit a new Initial Allocation Form with a change of topic.";
+                milestone.DefenseDate = null;
+                milestone.DefenseTime = null;
+                milestone.DefenseVenue = null;
+                
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = milestone.Project.StudentId,
+                    Type = "RevisionRequest",
+                    Title = "IAF Defense Failed",
+                    Message = "Your IAF defense was unsuccessful. You are required to submit a new Initial Allocation Form with a change of topic.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Successfully recorded defense failure. The student must now submit a new IAF topic.";
+            }
+            return RedirectToAction(nameof(ApprovedIafList));
         }
 
         [HttpPost]

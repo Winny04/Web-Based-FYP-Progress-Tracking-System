@@ -661,12 +661,6 @@ namespace FYPTracker.Controllers
                 return RedirectToAction("Forms");
             }
 
-            if (milestone.RejectionCount >= 3 && (formType == "Initial Project Allocation Form (IAF)" || milestone.Title.Contains("IAF")))
-            {
-                TempData["Error"] = "This form has been rejected 3 times and is now locked. Kindly arrange a meeting with your supervisor to discuss the necessary revisions.";
-                return RedirectToAction("Forms");
-            }
-
             var allFiles = new List<IFormFile>();
             if (attachedFile != null && attachedFile.Length > 0) allFiles.Add(attachedFile);
             if (attachedFiles != null && attachedFiles.Any()) allFiles.AddRange(attachedFiles.Where(f => f.Length > 0));

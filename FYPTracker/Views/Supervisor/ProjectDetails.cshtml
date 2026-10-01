@@ -182,12 +182,23 @@
                                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                         </div>
                                         <div class="modal-body pt-3">
-                                            <p class="text-muted small mb-4">Upload the completed <strong>6002CMD - Marksheet.xlsx</strong> file for Stage 1. The system will automatically extract your total score.</p>
+                                            <p class="text-muted small mb-3">Please download the student's submitted marksheet, fill in your marks, and upload it back here.</p>
                                             
-                                            <div class="mb-4">
-                                                <a href="/documents/6002CMD - Marksheet.xlsx" class="btn btn-outline-secondary btn-sm" download>
-                                                    <i class="fas fa-download me-2"></i> Download Blank Template
-                                                </a>
+                                            <div class="mb-4 bg-light p-3 rounded">
+                                                <h6 class="fw-bold fs-7 mb-2 text-dark">Student's Submitted Files:</h6>
+                                                @if (stage1Milestone.SubmissionFiles != null && stage1Milestone.SubmissionFiles.Any())
+                                                {
+                                                    foreach (var file in stage1Milestone.SubmissionFiles)
+                                                    {
+                                                        <a href="@file.FilePath" class="btn btn-sm btn-outline-secondary me-2 mb-2" target="_blank" download>
+                                                            <i class="fas fa-file-download me-1"></i> @file.FileName
+                                                        </a>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small">No files submitted by student yet.</span>
+                                                }
                                             </div>
                                             
                                             <form asp-controller="Supervisor" asp-action="UploadMarksheetStage1" method="post" enctype="multipart/form-data">

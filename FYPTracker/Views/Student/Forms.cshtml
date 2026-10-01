@@ -183,9 +183,9 @@
     else
     {
         var iafMilestone = milestones.FirstOrDefault(m => (m.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) && !m.Title.Contains("Industrial", StringComparison.OrdinalIgnoreCase));
-        bool isIafApproved = iafMilestone != null && iafMilestone.Status == "Approved";
+        bool isIafApproved = iafMilestone != null && (iafMilestone.Status == "AdminApproved" || iafMilestone.Status == "Approved");
         int iafMilestoneId = iafMilestone?.Id ?? 0;
-        bool isIafLocked = iafMilestone != null && (iafMilestone.Status == "Submitted" || iafMilestone.Status == "UnderReview" || iafMilestone.Status == "Approved" || iafMilestone.RejectionCount >= 3);
+        bool isIafLocked = iafMilestone != null && (iafMilestone.Status == "Submitted" || iafMilestone.Status == "UnderReview" || iafMilestone.Status == "Approved" || iafMilestone.Status == "AdminApproved" || iafMilestone.Status == "DefenseScheduled");
 
         var proposalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
         bool isProposalApproved = proposalMilestone != null && proposalMilestone.Status == "Approved";
@@ -305,13 +305,13 @@
                             
                             @if (isIafLocked)
                             {
-                                if (iafMilestone?.RejectionCount >= 3)
+                                if (iafMilestone?.Status == "DefenseScheduled")
                                 {
                                     <div class="alert alert-danger d-flex align-items-center mt-3 border-danger mb-4">
-                                        <i class="fas fa-lock fs-2 me-3 text-danger"></i>
+                                        <i class="fas fa-gavel fs-2 me-3 text-danger"></i>
                                         <div>
-                                            <h5 class="fw-bold text-dark mb-1">IAF Form Locked (Max Rejections Reached)</h5>
-                                            <p class="mb-0 text-muted">This form has been rejected 3 times and is now locked. You are required to attend a mandatory Defense session scheduled by the Administrator.</p>
+                                            <h5 class="fw-bold text-dark mb-1">IAF Rejected by Admin (Defense Required)</h5>
+                                            <p class="mb-0 text-muted">The administrator has rejected your approved IAF and mandated a defense session.</p>
                                             
                                             @if (iafMilestone.DefenseDate.HasValue)
                                             {
@@ -338,11 +338,25 @@
                                 }
                                 else
                                 {
-                                    <div class="alert alert-info d-flex align-items-center mt-3 border-info mb-4">
-                                        <i class="fas fa-lock fs-2 me-3 text-info"></i>
+                                    string displayStatus = iafMilestone.Status;
+                                    string alertColor = "info";
+                                    string icon = "fa-lock";
+                                    
+                                    if(iafMilestone.Status == "Approved") {
+                                        displayStatus = "Approved by Supervisor, Pending Admin";
+                                        alertColor = "warning";
+                                        icon = "fa-hourglass-half";
+                                    } else if (iafMilestone.Status == "AdminApproved") {
+                                        displayStatus = "Fully Approved";
+                                        alertColor = "success";
+                                        icon = "fa-check-circle";
+                                    }
+
+                                    <div class="alert alert-@alertColor d-flex align-items-center mt-3 border-@alertColor mb-4 shadow-sm">
+                                        <i class="fas @icon fs-2 me-3 text-@alertColor"></i>
                                         <div>
-                                            <h5 class="fw-bold text-dark mb-1">IAF Form Submitted / Locked</h5>
-                                            <p class="mb-0 text-muted">Your Initial Project Allocation Form has been submitted. Current Status: <span class="badge bg-white text-dark ms-1 shadow-sm border">@iafMilestone.Status</span></p>
+                                            <h5 class="fw-bold text-dark mb-1">IAF Form Status</h5>
+                                            <p class="mb-0 text-muted">Your Initial Project Allocation Form has been submitted. Current Status: <span class="badge bg-white text-dark ms-1 shadow-sm border">@displayStatus</span></p>
                                         </div>
                                     </div>
                                 }

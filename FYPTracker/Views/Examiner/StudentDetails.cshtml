@@ -73,13 +73,29 @@
                 </h3>
             </div>
             <div class="card-body py-3">
-                <div class="mb-5">
-                    <p class="text-muted fs-6">
-                        Please download the marksheet template (once provided in the project folder), fill it out, and upload it back here.
+                <div class="mb-5 bg-light p-4 rounded">
+                    <p class="text-muted fs-6 mb-3">
+                        Please download the student's submitted marksheet, fill it out, and upload it back here.
                     </p>
-                    <a href="/Examiner/DownloadMarksheet?projectId=@Model.Id" class="btn btn-primary w-100 mb-3">
-                        <i class="bi bi-download fs-4 me-2"></i> Download Template
-                    </a>
+                    <h6 class="fw-bold fs-7 mb-2 text-dark">Student's Submitted Files:</h6>
+                    @{
+                        var stage1Milestone = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission"));
+                        if (stage1Milestone != null && stage1Milestone.SubmissionFiles != null && stage1Milestone.SubmissionFiles.Any())
+                        {
+                            <div class="d-flex flex-wrap gap-2 mt-2">
+                                @foreach (var file in stage1Milestone.SubmissionFiles)
+                                {
+                                    <a href="@file.FilePath" class="btn btn-sm btn-outline-primary" target="_blank" download>
+                                        <i class="fas fa-file-download me-1"></i> @file.FileName
+                                    </a>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-muted small">No files submitted by student yet.</div>
+                        }
+                    }
                 </div>
                 
                 <div class="separator mb-5"></div>

@@ -179,7 +179,7 @@
             bool isUsers = currentPath.StartsWith("/Admin/ManageUsers", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/EditUser", StringComparison.OrdinalIgnoreCase);
             bool isProjects = currentPath.StartsWith("/Admin/ManageProjects", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/ProjectDetails", StringComparison.OrdinalIgnoreCase);
             bool isReporting = currentPath.StartsWith("/Admin/Reporting", StringComparison.OrdinalIgnoreCase);
-            bool isSettings = currentPath.StartsWith("/Admin/Settings", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/DefenseList", StringComparison.OrdinalIgnoreCase);
+            bool isSettings = currentPath.StartsWith("/Admin/Settings", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/ApprovedIafList", StringComparison.OrdinalIgnoreCase);
             bool isLookups = currentPath.StartsWith("/Admin/ManageLookups", StringComparison.OrdinalIgnoreCase);
 
             <div class="menu-item @(isDashboard ? "here show" : "")">
