@@ -1,28 +1,38 @@
 @using FYPTracker.Models
 @model FYPProject
 @{
-    ViewData["Title"] = "Manage Project Milestones";
+    ViewData["Title"] = "Project Milestones";
 }
 
 <style>
-    :root { --blue-grad: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%); }
+    :root { --blue-grad: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
 
     .page-hero {
         background: var(--blue-grad);
-        border-radius: 20px;
-        padding: 28px 32px;
+        border-radius: 24px;
+        padding: 40px 48px;
         color: white;
-        margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(37, 99, 235, 0.25);
+        margin-bottom: 32px;
+        box-shadow: 0 15px 35px -5px rgba(15, 23, 42, 0.4);
+        position: relative;
+        overflow: hidden;
     }
 
     .glass-card {
-        background: #fff;
-        border-radius: 16px;
-        border: 1px solid rgba(37, 99, 235, 0.1);
-        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        border: 1px solid rgba(0,0,0,0.05);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
         padding: 24px;
         margin-bottom: 20px;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .glass-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+        border-color: rgba(37, 99, 235, 0.2);
     }
 
     .milestone-item {
@@ -52,27 +62,39 @@
     .btn-delete:hover { background: #fecaca; }
     .btn-add { background: #2563eb; color: white; border-radius: 10px; padding: 10px 20px; font-weight: 600; }
     .btn-add:hover { background: #1d4ed8; color: white;}
+    .z-index-1 { z-index: 1; }
 </style>
 
 <div class="container-fluid py-4">
     
     @if (TempData["Success"] != null)
     {
-        <div class="alert alert-success border-0 shadow-sm rounded-3 mb-4">@TempData["Success"]</div>
+        <div class="alert alert-light-success border border-success border-opacity-25 shadow-sm p-4 mb-4 rounded-4 d-flex align-items-center">
+            <i class="fas fa-check-circle text-success fs-2 me-3"></i>
+            <div class="fs-6 fw-bold text-dark">@TempData["Success"]</div>
+        </div>
     }
     @if (TempData["Error"] != null)
     {
-        <div class="alert alert-danger border-0 shadow-sm rounded-3 mb-4">@TempData["Error"]</div>
+        <div class="alert alert-light-danger border border-danger border-opacity-25 shadow-sm p-4 mb-4 rounded-4 d-flex align-items-center">
+            <i class="fas fa-exclamation-circle text-danger fs-2 me-3"></i>
+            <div class="fs-6 fw-bold text-dark">@TempData["Error"]</div>
+        </div>
     }
 
-    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <div>
-            <a href="/Admin/ManageProjects" class="text-white text-decoration-none opacity-75 mb-2 d-inline-block"><i class="fas fa-arrow-left me-2"></i>Back to Projects</a>
-            <h2 class="fw-bold mb-1"><i class="fas fa-tasks me-2"></i>Milestone Management</h2>
-            <p class="mb-0 opacity-80">Configure tracking milestones for this student.</p>
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-4 position-relative">
+        <div class="position-absolute top-0 end-0 opacity-10 pe-none" style="transform: translate(10%, -10%);">
+            <i class="fas fa-project-diagram" style="font-size: 15rem; color: #ffffff;"></i>
         </div>
-        <div class="text-end">
-            <button class="btn btn-light text-primary fw-bold rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#addMilestoneModal">
+        <div class="position-relative z-index-1">
+            <a href="/Admin/ManageProjects" class="text-white text-decoration-none opacity-75 mb-3 d-inline-block"><i class="fas fa-arrow-left me-2"></i>Back to Projects</a>
+            <h1 class="display-5 fw-bolder mb-2 text-white" style="letter-spacing: -1px;">
+                Milestone <span style="background: linear-gradient(to right, #60a5fa, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Management</span>
+            </h1>
+            <p class="text-white-50 fs-5 mt-1 mb-0" style="font-weight: 300;">Configure tracking milestones for this student.</p>
+        </div>
+        <div class="text-end position-relative z-index-1">
+            <button class="btn btn-light text-primary fw-bold rounded-pill px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#addMilestoneModal">
                 <i class="fas fa-plus me-1"></i> Add Milestone
             </button>
         </div>

@@ -2,52 +2,81 @@
     ViewData["Title"] = "Manage Lookups";
 }
 
-<div class="card shadow-sm">
-    <div class="card-header border-0 pt-5">
-        <h3 class="card-title align-items-start flex-column">
-            <span class="card-label fw-bolder fs-3 mb-1">Lookup Data Maintenance</span>
-            <span class="text-muted fw-bold fs-7">Manage Departments, Programmes, and Specializations</span>
-        </h3>
-    </div>
-    <div class="card-body">
-        <ul class="nav nav-tabs nav-line-tabs mb-5 fs-6">
-            <li class="nav-item">
-                <a class="nav-link active" data-bs-toggle="tab" href="#tab_departments" onclick="loadData('Department')">Departments</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" data-bs-toggle="tab" href="#tab_programmes" onclick="loadData('Programme')">Programmes</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" data-bs-toggle="tab" href="#tab_specializations" onclick="loadData('Specialization')">Specializations</a>
-            </li>
-        </ul>
+<style>
+    .premium-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        border-radius: 20px;
+    }
+    .table-premium tbody tr {
+        transition: all 0.3s ease;
+    }
+    .table-premium tbody tr:hover {
+        background-color: #f8fafc !important;
+        transform: scale(1.002);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        z-index: 10;
+        position: relative;
+        border-radius: 12px;
+    }
+</style>
 
-        <div class="tab-content" id="myTabContent">
-            <!-- Dynamic Content Area -->
-            <div class="d-flex justify-content-between mb-4">
-                <div class="d-flex align-items-center position-relative my-1">
-                    <i class="bi bi-search fs-3 position-absolute ms-4"></i>
-                    <input type="text" id="searchInput" class="form-control form-control-solid w-250px ps-12" placeholder="Search...">
-                </div>
-                <button type="button" class="btn btn-primary" onclick="showAddModal()">
-                    <i class="bi bi-plus fs-4 me-2"></i> Add New <span id="addTypeLabel">Department</span>
+<div class="container-fluid py-4">
+    <div class="card premium-card border-0 mb-5">
+        <div class="card-header border-0 pt-5 px-5 d-flex justify-content-between align-items-center flex-wrap gap-3 bg-transparent">
+            <div>
+                <h2 class="fw-bolder text-dark mb-1" style="letter-spacing: -0.5px;">
+                    <i class="fas fa-list-alt text-primary me-2"></i>Lookup Data Maintenance
+                </h2>
+                <p class="text-muted mb-0" style="font-size: 0.95rem;">Manage Departments, Programmes, and Specializations.</p>
+            </div>
+            <div class="card-toolbar d-flex align-items-center flex-wrap gap-3">
+                <button type="button" class="btn btn-primary shadow-sm fw-bold align-self-center h-40px d-flex align-items-center" style="border-radius: 10px;" onclick="showAddModal()">
+                    <i class="bi bi-plus fs-4 me-2"></i> Add New <span id="addTypeLabel" class="ms-1">Department</span>
                 </button>
             </div>
-            
-            <div class="table-responsive">
-                <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4" id="lookupTable">
-                    <thead>
-                        <tr class="fw-bolder text-muted">
-                            <th class="w-50px">ID</th>
-                            <th class="min-w-200px">Name</th>
-                            <th class="min-w-100px">Status</th>
-                            <th class="min-w-150px text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="lookupTableBody">
-                        <!-- Data injected via JS -->
-                    </tbody>
-                </table>
+        </div>
+        <div class="card-body p-5 pt-0">
+            <ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x mb-5 fs-5 fw-bolder border-0">
+                <li class="nav-item">
+                    <a class="nav-link active text-primary" data-bs-toggle="tab" href="#tab_departments" onclick="loadData('Department')">Departments</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link text-muted" data-bs-toggle="tab" href="#tab_programmes" onclick="loadData('Programme')">Programmes</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link text-muted" data-bs-toggle="tab" href="#tab_specializations" onclick="loadData('Specialization')">Specializations</a>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="myTabContent">
+                <!-- Dynamic Content Area -->
+                <div class="d-flex justify-content-start mb-4">
+                    <div class="d-flex align-items-center position-relative my-1">
+                        <span class="svg-icon svg-icon-1 position-absolute px-1 ms-3 text-muted">
+                            <i class="fas fa-search"></i>
+                        </span>
+                        <input type="text" id="searchInput" class="form-control form-control-solid w-250px shadow-sm border-0 bg-light" placeholder="Search..." style="padding-left:2.8rem !important; border-radius: 10px;">
+                    </div>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-premium align-middle mb-0 gs-0 gy-4" id="lookupTable">
+                        <thead class="bg-light text-muted text-uppercase fw-bolder" style="font-size: 0.75rem; letter-spacing: 0.5px;">
+                            <tr>
+                                <th class="w-50px ps-4 border-bottom-0">ID</th>
+                                <th class="min-w-200px border-bottom-0">Name</th>
+                                <th class="min-w-100px border-bottom-0">Status</th>
+                                <th class="min-w-150px text-end pe-4 border-bottom-0">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lookupTableBody" class="border-top-0">
+                            <!-- Data injected via JS -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

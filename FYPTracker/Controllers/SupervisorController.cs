@@ -256,7 +256,12 @@ namespace FYPTracker.Controllers
                         var milestones = new List<FYPMilestone>
                         {
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Initial Assessment Form (IAF)", DueDate = DateTime.Now.AddDays(14), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Stage 1 Final Submission", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Progress Report: Chapter 1", DueDate = DateTime.Now.AddDays(21), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Progress Report: Chapter 2", DueDate = DateTime.Now.AddDays(28), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Progress Report: Chapter 3", DueDate = DateTime.Now.AddDays(35), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Submission of Ethic Form", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Turnitin Checking - DPP", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Stage 1 Final Submission (DPP)", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 1: Turnitin Checking", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 2: Final Report Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 3: Marksheet Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },

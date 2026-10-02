@@ -1,28 +1,38 @@
 @{
-    ViewData["Title"] = "Global Analytics Dashboard";
+    ViewData["Title"] = "Global Analytics";
 }
 
 <style>
-    :root { --hero-grad-admin: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
+    :root { --hero-grad-admin: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
 
     .page-hero {
         background: var(--hero-grad-admin);
-        border-radius: 20px;
-        padding: 28px 32px;
+        border-radius: 24px;
+        padding: 40px 48px;
         color: white;
-        margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(15,23,42,.25);
+        margin-bottom: 32px;
+        box-shadow: 0 15px 35px -5px rgba(15, 23, 42, 0.4);
+        position: relative;
+        overflow: hidden;
     }
 
     .glass-card {
-        background: #fff;
-        border-radius: 16px;
-        border: 1px solid #f1f5f9;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        border: 1px solid rgba(0,0,0,0.05);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
         padding: 24px;
         height: 100%;
         display: flex;
         flex-direction: column;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .glass-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+        border-color: rgba(37, 99, 235, 0.2);
     }
 
     .chart-container {
@@ -34,13 +44,45 @@
         align-items: center;
         justify-content: center;
     }
+    .z-index-1 { z-index: 1; }
 </style>
 
 <div class="container-fluid py-4">
 
-    <div class="page-hero">
-        <h2 class="fw-bold mb-1"><i class="fas fa-globe-asia me-2"></i>Global Analytics Dashboard</h2>
-        <p class="mb-0 opacity-80">System-wide overview of student allocation, supervisor capacity, and academic bottlenecks.</p>
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-4 position-relative">
+        <!-- Abstract background elements for premium feel -->
+        <div class="position-absolute top-0 end-0 opacity-10 pe-none" style="transform: translate(10%, -10%);">
+            <i class="fas fa-chart-pie" style="font-size: 15rem; color: #ffffff;"></i>
+        </div>
+        <div class="position-relative z-index-1 flex-grow-1">
+            <h1 class="display-5 fw-bolder mb-2 text-white" style="letter-spacing: -1px;">
+                Global <span style="background: linear-gradient(to right, #60a5fa, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Analytics</span>
+            </h1>
+            <p class="text-white-50 fs-5 mt-1 mb-0" style="font-weight: 300;">System-wide overview of student allocation, supervisor capacity, and academic bottlenecks.</p>
+        </div>
+        
+        <div class="position-relative z-index-1 mt-3 mt-md-0">
+            <form method="get" asp-action="Reporting" class="d-flex align-items-center gap-2 bg-white p-2 rounded-3 shadow-sm border-0">
+                <i class="fas fa-filter text-primary ms-2"></i>
+                <select name="sessionFilter" class="form-select form-select-sm border-0 fw-bold shadow-none text-dark bg-white" onchange="this.form.submit()" style="cursor: pointer; width: auto; min-width: 180px; font-size: 0.95rem;">
+                    <option value="">All Sessions (Global)</option>
+                    @if(ViewBag.DistinctSessions != null)
+                    {
+                        foreach(var s in (IEnumerable<string>)ViewBag.DistinctSessions)
+                        {
+                            if(ViewBag.CurrentSessionFilter == s)
+                            {
+                                <option value="@s" selected>Session: @s</option>
+                            }
+                            else
+                            {
+                                <option value="@s">Session: @s</option>
+                            }
+                        }
+                    }
+                </select>
+            </form>
+        </div>
     </div>
 
     <div class="row g-4 mb-4">

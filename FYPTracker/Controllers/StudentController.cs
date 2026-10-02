@@ -102,9 +102,9 @@ namespace FYPTracker.Controllers
                     .ThenInclude(m => m.SubmissionFiles)
                 .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
-            if (project == null || project.Stage1Grade != "Pass")
+            if (project == null || (project.Stage1Grade != "Pass" && project.Stage1Grade != "Fail"))
             {
-                TempData["Error"] = "You must pass Stage 1 before accessing Stage 2.";
+                TempData["Error"] = "You must pass Stage 1 before accessing Stage 2. (Or if failed, you may access it to repeat concurrently).";
                 return RedirectToAction("Forms");
             }
 

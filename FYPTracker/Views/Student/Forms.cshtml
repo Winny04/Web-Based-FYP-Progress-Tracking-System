@@ -231,11 +231,18 @@
             @if (isStage1Failed)
             {
                 <div class="col-12 mb-2">
-                    <div class="alert alert-danger d-flex align-items-center shadow-sm" role="alert">
-                        <i class="fas fa-times-circle fs-3 me-3"></i>
+                    <div class="alert alert-warning d-flex justify-content-between align-items-center shadow-sm" role="alert" style="border-left: 5px solid #f59e0b;">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-exclamation-triangle fs-3 me-3 text-warning"></i>
+                            <div>
+                                <h5 class="alert-heading fw-bold mb-1 text-dark">Stage 1 Failed (Repeat Required)</h5>
+                                <p class="mb-0 text-dark">You have failed Stage 1. However, you are permitted to proceed to Stage 2 concurrently while you retake Stage 1.</p>
+                            </div>
+                        </div>
                         <div>
-                            <h5 class="alert-heading fw-bold mb-1">Stage 1 Failed</h5>
-                            <p class="mb-0">You have failed Stage 1. Please contact your supervisor to retake Stage 1.</p>
+                            <a href="@Url.Action("Stage2", "Student")" class="btn btn-warning btn-lg shadow-sm fw-bold rounded-pill px-4 text-dark">
+                                Proceed to Stage 2 <i class="fas fa-arrow-right ms-2"></i>
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -261,40 +268,45 @@
             }
 
             @* ── WIZARD STEPPER (Navigation) ────────────────── *@
-            <div class="col-12">
-                <ul class="wizard-stepper nav nav-pills m-0 p-0" style="list-style: none;" id="forms-tab" role="tablist">
-                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(iafTooltip)>
-                        <button class="stepper-btn nav-link @(!isIafApproved && !isProposalApproved && !isAllProgressApproved ? "active" : "")" id="iaf-form-tab" data-toggle="pill" data-target="#iaf-form-pane" type="button" role="tab">
-                            <div class="step-icon"><i class="fas fa-clipboard-list"></i></div>
-                            <div class="step-text">1. IAF Form</div>
-                        </button>
-                    </li>
-                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(progressTooltip)>
-                        <button class="stepper-btn nav-link @(isIafApproved && !isAllProgressApproved ? "active" : "")" id="progress-form-tab" data-toggle="pill" data-target="#progress-form-pane" type="button" role="tab" @(!isIafApproved ? "disabled" : "") style="@(!isIafApproved ? "pointer-events: none;" : "")">
-                            <div class="step-icon"><i class="fas fa-tasks"></i></div>
-                            <div class="step-text">A. Progress Report</div>
-                        </button>
-                    </li>
-                    <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(proposalTooltip)>
-                        <button class="stepper-btn nav-link @(isIafApproved && isAllProgressApproved && !isProposalApproved ? "active" : "")" id="proposal-form-tab" data-toggle="pill" data-target="#proposal-form-pane" type="button" role="tab" @(!isIafApproved || !isAllProgressApproved ? "disabled" : "") style="@(!isIafApproved || !isAllProgressApproved ? "pointer-events: none;" : "")">
-                            <div class="step-icon"><i class="fas fa-feather-alt"></i></div>
-                            <div class="step-text">B. Proposal Form</div>
-                        </button>
-                    </li>
-                    <!-- Stage 2 is now a separate page, Final Submission tab removed -->
-                </ul>
+            @if (!isStage2Unlocked)
+            {
+                <div class="col-12">
+                    <ul class="wizard-stepper nav nav-pills m-0 p-0" style="list-style: none;" id="forms-tab" role="tablist">
+                        <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(iafTooltip)>
+                            <button class="stepper-btn nav-link @(!isIafApproved && !isProposalApproved && !isAllProgressApproved ? "active" : "")" id="iaf-form-tab" data-toggle="pill" data-target="#iaf-form-pane" type="button" role="tab">
+                                <div class="step-icon"><i class="fas fa-clipboard-list"></i></div>
+                                <div class="step-text">1. IAF Form</div>
+                            </button>
+                        </li>
+                        <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(progressTooltip)>
+                            <button class="stepper-btn nav-link @(isIafApproved && !isAllProgressApproved ? "active" : "")" id="progress-form-tab" data-toggle="pill" data-target="#progress-form-pane" type="button" role="tab" @(!isIafApproved ? "disabled" : "") style="@(!isIafApproved ? "pointer-events: none;" : "")">
+                                <div class="step-icon"><i class="fas fa-tasks"></i></div>
+                                <div class="step-text">A. Progress Report</div>
+                            </button>
+                        </li>
+                        <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(proposalTooltip)>
+                            <button class="stepper-btn nav-link @(isIafApproved && isAllProgressApproved && !isProposalApproved ? "active" : "")" id="proposal-form-tab" data-toggle="pill" data-target="#proposal-form-pane" type="button" role="tab" @(!isIafApproved || !isAllProgressApproved ? "disabled" : "") style="@(!isIafApproved || !isAllProgressApproved ? "pointer-events: none;" : "")">
+                                <div class="step-icon"><i class="fas fa-feather-alt"></i></div>
+                                <div class="step-text">B. Proposal Form</div>
+                            </button>
+                        </li>
+                        <!-- Stage 2 is now a separate page, Final Submission tab removed -->
+                    </ul>
 
-                <div class="premium-card p-3 mb-2 bg-light d-flex align-items-center gap-3">
-                    <i class="fas fa-info-circle text-orange fs-4" style="color:var(--primary-orange);"></i>
-                    <div class="small text-muted">
-                        <strong>Guidelines:</strong> Ensure all mandatory fields are fully populated before submission. 
-                        <span class="text-success fw-bold"><i class="fas fa-save ms-2 me-1"></i>Auto-Save is active.</span> Your progress is automatically stored locally in your browser.
+                    <div class="premium-card p-3 mb-2 bg-light d-flex align-items-center gap-3">
+                        <i class="fas fa-info-circle text-orange fs-4" style="color:var(--primary-orange);"></i>
+                        <div class="small text-muted">
+                            <strong>Guidelines:</strong> Ensure all mandatory fields are fully populated before submission. 
+                            <span class="text-success fw-bold"><i class="fas fa-save ms-2 me-1"></i>Auto-Save is active.</span> Your progress is automatically stored locally in your browser.
+                        </div>
                     </div>
                 </div>
-            </div>
+            }
 
             @* ── FORM DETAILED PANES ────────────────────────────── *@
-            <div class="col-12">
+            @if (!isStage2Unlocked)
+            {
+                <div class="col-12">
                 <div class="tab-content" id="forms-tabContent">
 
                     @* ── 1. INITIAL PROJECT ALLOCATION FORM (IAF) ──────── *@
@@ -601,7 +613,7 @@
                     @* ── A. PROPOSAL FORM ────────────────────────────── *@
                     <div class="tab-pane fade @(isIafApproved && isAllProgressApproved && !isProposalApproved ? "show active" : "")" id="proposal-form-pane" role="tabpanel" tabindex="0">
                         <div class="premium-card p-4">
-                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>B. Stage 1 Final Submission</h4>
+                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>B. Stage 1 Detailed Project Proposal (DPP)</h4>
                             
                                 @* Select corresponding Milestone *@
                                 @{
@@ -843,7 +855,7 @@
 
                                         <div class="d-flex gap-3 justify-content-end">
                                             <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
-                                            <button type="submit" class="btn-submit" onclick="return validateProgressForm()">Submit Progress Report</button>
+                                            <button type="submit" class="btn-submit" onclick="return validateProgressForm(event)">Submit Progress Report</button>
                                         </div>
                                     </form>
                                 }
@@ -865,6 +877,7 @@
 
                 </div>
             </div>
+            }
             
         </div>
     }
@@ -1396,7 +1409,7 @@
             return true; // Allow form submission
         }
 
-        function validateProgressForm() {
+        function validateProgressForm(event) {
             var isValid = true;
             
             // Validate File
@@ -1425,6 +1438,41 @@
                 }
             } else {
                 dateErrorDiv.classList.add('d-none');
+            }
+
+            // Turnitin Mock Scan
+            var selectObj = document.getElementById('progressMilestoneSelect');
+            if (isValid && selectObj) {
+                var selectedText = selectObj.options[selectObj.selectedIndex].text;
+                if (selectedText.includes("Turnitin")) {
+                    if (event) event.preventDefault();
+                    Swal.fire({
+                        title: 'Turnitin AI Scanner',
+                        html: '<div class="text-start mt-3 fw-semibold text-secondary" style="font-size:0.95rem;">' +
+                              '<i class="fas fa-satellite-dish me-2 text-primary"></i>Connecting to Turnitin Core API...<br><br>' +
+                              '<i class="fas fa-search me-2 text-info"></i>Scanning document for similarity...<br><br>' +
+                              '<i class="fas fa-globe me-2 text-success"></i>Cross-referencing global databases...<br><br>' +
+                              '<div class="progress mt-3"><div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 100%"></div></div>' +
+                              '</div>',
+                        showConfirmButton: false,
+                        allowOutsideClick: false,
+                        timer: 4500
+                    }).then(() => {
+                        var randScore = Math.floor(Math.random() * 15) + 4; // 4% to 18%
+                        Swal.fire({
+                            title: 'Scan Complete!',
+                            html: '<h2 class="text-success fw-bold mb-3">' + randScore + '%</h2><p class="mb-0 text-muted">Similarity Index (Acceptable)</p>',
+                            icon: 'success',
+                            confirmButtonText: 'Upload Report to Supervisor',
+                            confirmButtonColor: '#10b981'
+                        }).then((result) => {
+                            if(result.isConfirmed) {
+                                selectObj.form.submit();
+                            }
+                        });
+                    });
+                    return false; // Wait for sweetalert to finish
+                }
             }
 
             return isValid;

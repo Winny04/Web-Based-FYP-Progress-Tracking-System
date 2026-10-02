@@ -17,24 +17,54 @@
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/styles/ag-grid.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/styles/ag-theme-quartz.css" />
-<div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2 class="fw-bold mb-1"><i class="fas fa-file-signature me-2 text-success"></i>Approved IAF List</h2>
-            <p class="text-muted mb-0">Students who have had their Initial Project Allocation Form (IAF) approved by their supervisors. Admin can grant final approval or schedule a defense.</p>
-        </div>
-    </div>
 
-    @if (TempData["Success"] != null)
-    {
-        <div class="alert alert-success border-0 shadow-sm p-3 mb-4 rounded-3">
-            <i class="fas fa-check-circle me-2"></i>@TempData["Success"]
-        </div>
+<style>
+    .premium-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        border-radius: 20px;
     }
+    
+    /* Ag Grid styling tweaks for premium feel */
+    .ag-theme-quartz {
+        --ag-header-background-color: #f8fafc;
+        --ag-header-foreground-color: #64748b;
+        --ag-font-family: 'Inter', sans-serif;
+        --ag-font-size: 13px;
+        --ag-row-hover-color: #f1f5f9;
+        --ag-borders: solid 1px #e2e8f0;
+        --ag-header-column-separator-display: block;
+        --ag-header-column-separator-height: 100%;
+        --ag-header-column-separator-width: 1px;
+        --ag-header-column-separator-color: #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+</style>
 
-    <div class="card shadow-sm border-0 rounded-4">
-        <div class="card-body p-0">
-            <div id="iafGrid" class="ag-theme-quartz" style="height: 600px; width: 100%;"></div>
+<div class="container-fluid py-4">
+    <div class="card premium-card border-0 mb-5">
+        <div class="card-header border-0 pt-5 px-5 d-flex justify-content-between align-items-center flex-wrap gap-3 bg-transparent">
+            <div>
+                <h2 class="fw-bolder text-dark mb-1" style="letter-spacing: -0.5px;">
+                    <i class="fas fa-file-signature text-success me-2"></i>Approved IAF List
+                </h2>
+                <p class="text-muted mb-0" style="font-size: 0.95rem;">Students who have had their Initial Project Allocation Form (IAF) approved by their supervisors. Admin can grant final approval or schedule a defense.</p>
+            </div>
+        </div>
+
+        <div class="card-body p-5 pt-4">
+            @if (TempData["Success"] != null)
+            {
+                <div class="alert alert-light-success border border-success border-opacity-25 shadow-sm p-4 mb-4 rounded-4 d-flex align-items-center">
+                    <i class="fas fa-check-circle text-success fs-2 me-3"></i>
+                    <div class="fs-6 fw-bold text-dark">@TempData["Success"]</div>
+                </div>
+            }
+            
+            <div id="iafGrid" class="ag-theme-quartz border shadow-sm" style="height: 600px; width: 100%;"></div>
         </div>
     </div>
 </div>

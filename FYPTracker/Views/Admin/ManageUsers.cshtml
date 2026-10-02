@@ -18,6 +18,24 @@
     };
 }
 <style>
+    .premium-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        border-radius: 20px;
+    }
+    .table-premium tbody tr {
+        transition: all 0.3s ease;
+    }
+    .table-premium tbody tr:hover {
+        background-color: #f8fafc !important;
+        transform: scale(1.002);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        z-index: 10;
+        position: relative;
+        border-radius: 12px;
+    }
     .tableBorder {
         border-right: 2px solid #D3D3D3;
         color: black;
@@ -56,32 +74,37 @@
 </style>
 
 <div class="container-fluid py-4">
-    <div class="card shadow-sm border-0 rounded-4">
-        <div class="card-header border-0 pt-4 px-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <h4 class="fw-bolder text-dark mb-0"><i class="fas fa-users-cog text-primary me-2"></i>User Management</h4>
-            <div class="card-toolbar d-flex align-items-center gap-3">
+    <div class="card premium-card border-0 mb-5">
+        <div class="card-header border-0 pt-5 px-5 d-flex justify-content-between align-items-center flex-wrap gap-3 bg-transparent">
+            <div>
+                <h2 class="fw-bolder text-dark mb-1" style="letter-spacing: -0.5px;">
+                    <i class="fas fa-users-cog text-primary me-2"></i>User Management
+                </h2>
+                <p class="text-muted mb-0" style="font-size: 0.95rem;">Manage all user accounts for the system.</p>
+            </div>
+            <div class="card-toolbar d-flex align-items-center flex-wrap gap-3">
                 <div class="d-flex align-items-center position-relative my-1">
-                    <span class="svg-icon svg-icon-1 position-absolute px-1" style="margin-right:1.5rem !important;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                            <rect opacity="0.5" x="17.0365" y="15.1223" width="8.15546" height="2" rx="1" transform="rotate(45 17.0365 15.1223)" fill="black" />
-                            <path d="M11 19C6.55556 19 3 15.4444 3 11C3 6.55556 6.55556 3 11 3C15.4444 3 19 6.55556 19 11C19 15.4444 15.4444 19 11 19ZM11 5C7.53333 5 5 7.53333 5 11C5 14.4667 7.53333 17 11 17C14.4667 17 17 14.4667 17 11C17 7.53333 14.4667 5 11 5Z" fill="black" />
-                        </svg>
+                    <span class="svg-icon svg-icon-1 position-absolute px-1 ms-3 text-muted">
+                        <i class="fas fa-search"></i>
                     </span>
-                    <input type="text" id="searchBar" class="form-control form-control-solid w-250px" placeholder="Search user" style="padding-left:2.8rem !important;" />
+                    <input type="text" id="searchBar" class="form-control form-control-solid w-250px shadow-sm border-0 bg-light" placeholder="Search user" style="padding-left:2.8rem !important; border-radius: 10px;" />
                 </div>
                 <!--start:: Btn Bulk Invite-->
-                <a href="#" id="btn-BulkInvite" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#bulkInviteModal"><i class="fas fa-envelope me-1"></i>Invite</a>
+                <a href="#" id="btn-BulkInvite" class="btn btn-primary shadow-sm fw-bold align-self-center h-40px d-flex align-items-center" style="border-radius: 10px;" data-bs-toggle="modal" data-bs-target="#bulkInviteModal">
+                    <i class="fas fa-envelope me-1"></i>Invite
+                </a>
                 <!--end:: Btn Bulk Invite-->
                 <!--start:: Btn CSV Upload-->
-                <a href="#" id="btn-CSVUpload" class="btn btn-light-success" data-bs-toggle="modal" data-bs-target="#csvUploadModal"><i class="fas fa-file-csv me-1"></i>CSV Upload</a>
+                <a href="#" id="btn-CSVUpload" class="btn btn-light-success shadow-sm fw-bold align-self-center h-40px d-flex align-items-center" style="border-radius: 10px;" data-bs-toggle="modal" data-bs-target="#csvUploadModal">
+                    <i class="fas fa-file-csv me-1"></i>CSV Upload
+                </a>
                 <!--end:: Btn CSV Upload-->
             </div>
         </div>
 
-    <div class="card-body py-0">
-        
+    <div class="card-body p-5 pt-0">
         <!-- User Role Nav Tabs -->
-        <ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x mb-5 fs-5 fw-bold" id="userRoleTabs">
+        <ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x mb-5 fs-5 fw-bolder border-0" id="userRoleTabs">
             <li class="nav-item">
                 <a class="nav-link active text-primary" data-bs-toggle="tab" href="#all_users" onclick="filterUserType(event, '')">All Users</a>
             </li>
@@ -95,21 +118,20 @@
                 <a class="nav-link text-muted" data-bs-toggle="tab" href="#examiners" onclick="filterUserType(event, 'Examiner')">Examiners</a>
             </li>
         </ul>
-        @* <label>@Html.ValidationMessageFor(model => model.EmplooyeeInfoID, "", new { @class = "text-danger" })</label>*@
         <div class="table-responsive">
-            <table id="mytable" class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-3 fs-7">
-                <thead>
-                    <tr class="text-start text-muted fw-bolder fs-8 text-uppercase gs-0">
-                        <th class="w-20px">ID</th>
-                        <th style="min-width: 180px;">User</th>
-                        <th style="min-width: 80px;">Role</th>
-                        <th style="min-width: 120px;">Supervisor</th>
-                        <th style="min-width: 130px;">Assigned</th>
-                        <th style="min-width: 60px;" class="text-center">Count</th>
-                        <th style="min-width: 110px;">Created</th>
-                        <th style="min-width: 70px;">Status</th>
-                        <th style="min-width: 90px;">Login</th>
-                        <th style="min-width: 120px;" class="text-end">Action</th>
+            <table id="mytable" class="table table-premium align-middle mb-0 gs-0 gy-3 fs-7">
+                <thead class="bg-light text-muted text-uppercase fw-bolder" style="font-size: 0.75rem; letter-spacing: 0.5px;">
+                    <tr>
+                        <th class="w-20px ps-4 border-bottom-0">ID</th>
+                        <th style="min-width: 180px;" class="border-bottom-0">User</th>
+                        <th style="min-width: 80px;" class="border-bottom-0">Role</th>
+                        <th style="min-width: 120px;" class="border-bottom-0">Supervisor</th>
+                        <th style="min-width: 130px;" class="border-bottom-0">Assigned</th>
+                        <th style="min-width: 60px;" class="text-center border-bottom-0">Count</th>
+                        <th style="min-width: 110px;" class="border-bottom-0">Created</th>
+                        <th style="min-width: 70px;" class="border-bottom-0">Status</th>
+                        <th style="min-width: 90px;" class="border-bottom-0">Login</th>
+                        <th style="min-width: 120px;" class="text-end pe-4 border-bottom-0">Action</th>
                     </tr>
                 </thead>
             </table>

@@ -5,61 +5,67 @@
 
 <div class="container-fluid py-4">
 
-
     @* ── Welcome Hero ───────────────────────────────────────── *@
-    <div class="taskbar mb-4 d-flex justify-content-between align-items-center flex-wrap gap-4">
-        <div>
-            <h1 class="display-6 fw-bold mb-2">Welcome back, @currentUser?.FullName!</h1>
+    <div class="taskbar mb-5 d-flex justify-content-between align-items-center flex-wrap gap-4 position-relative overflow-hidden" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);">
+        <!-- Abstract background elements for premium feel -->
+        <div class="position-absolute top-0 end-0 opacity-10 pe-none" style="transform: translate(20%, -20%);">
+            <i class="fas fa-project-diagram" style="font-size: 15rem; color: #ffffff;"></i>
+        </div>
+        <div class="position-relative z-index-1">
+            <h1 class="display-5 fw-bolder mb-2 text-white" style="letter-spacing: -1px;">
+                Welcome back, <span style="background: linear-gradient(to right, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">@currentUser?.FullName</span>!
+            </h1>
+            <p class="text-white-50 fs-5 mt-1 mb-0" style="font-weight: 300;">Here's what's happening with the Final Year Projects today.</p>
         </div>
     </div>
 
     @* ── Stats Grid ─────────────────────────────────────────── *@
-    <div class="row g-4 mb-4">
+    <div class="row g-4 mb-5">
         <!-- Students -->
         <div class="col-md-3">
-            <div class="stat-card-clean">
-                <div class="stat-icon-wrapper">
+            <div class="stat-card-premium">
+                <div class="stat-icon-wrapper text-primary bg-light-primary">
                     <i class="fas fa-user-graduate"></i>
                 </div>
                 <div>
                     <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Total Students</h6>
-                    <h3 class="fw-bold text-dark mb-0">@ViewBag.TotalStudents</h3>
+                    <h2 class="fw-bolder text-dark mb-0">@ViewBag.TotalStudents</h2>
                 </div>
             </div>
         </div>
         <!-- Supervisors -->
         <div class="col-md-3">
-            <div class="stat-card-clean">
-                <div class="stat-icon-wrapper">
+            <div class="stat-card-premium">
+                <div class="stat-icon-wrapper text-info bg-light-info">
                     <i class="fas fa-chalkboard-teacher"></i>
                 </div>
                 <div>
                     <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Supervisors</h6>
-                    <h3 class="fw-bold text-dark mb-0">@ViewBag.TotalSupervisors</h3>
+                    <h2 class="fw-bolder text-dark mb-0">@ViewBag.TotalSupervisors</h2>
                 </div>
             </div>
         </div>
         <!-- Projects -->
         <div class="col-md-3">
-            <div class="stat-card-clean">
-                <div class="stat-icon-wrapper">
+            <div class="stat-card-premium">
+                <div class="stat-icon-wrapper text-success bg-light-success">
                     <i class="fas fa-project-diagram"></i>
                 </div>
                 <div>
                     <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Total Projects</h6>
-                    <h3 class="fw-bold text-dark mb-0">@ViewBag.TotalProjects</h3>
+                    <h2 class="fw-bolder text-dark mb-0">@ViewBag.TotalProjects</h2>
                 </div>
             </div>
         </div>
         <!-- Pending Requests -->
         <div class="col-md-3">
-            <div class="stat-card-clean">
-                <div class="stat-icon-wrapper">
+            <div class="stat-card-premium">
+                <div class="stat-icon-wrapper text-warning bg-light-warning">
                     <i class="fas fa-clock"></i>
                 </div>
                 <div>
                     <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Pending Requests</h6>
-                    <h3 class="fw-bold text-dark mb-0">@ViewBag.PendingRequests</h3>
+                    <h2 class="fw-bolder text-dark mb-0">@ViewBag.PendingRequests</h2>
                 </div>
             </div>
         </div>
@@ -67,44 +73,44 @@
     
     @* ── Quick Actions ──────────────────────────────────────── *@
     <div class="row g-4">
-        <div class="col-12">
-            <h4 class="fw-bold mb-3">Quick Actions</h4>
+        <div class="col-12 mb-2">
+            <h4 class="fw-bolder text-dark mb-0" style="letter-spacing: -0.5px;">Quick Actions</h4>
         </div>
         <div class="col-md-4">
-            <a href="/Admin/ManageUsers" class="premium-card text-decoration-none h-100 hover-elevate-up d-block">
-                <div class="p-4 d-flex align-items-center gap-3">
-                    <div class="stat-icon-wrapper">
-                        <i class="fas fa-users"></i>
+            <a href="/Admin/ManageUsers" class="action-card-premium text-decoration-none h-100 d-block">
+                <div class="p-4 d-flex align-items-center gap-4">
+                    <div class="action-icon bg-gradient-primary">
+                        <i class="fas fa-users text-white"></i>
                     </div>
                     <div>
-                        <h5 class="fw-bold text-dark mb-1">Manage Users</h5>
-                        <p class="text-muted mb-0 small">Add, edit, or remove system users</p>
+                        <h5 class="fw-bolder text-dark mb-1">Manage Users</h5>
+                        <p class="text-muted mb-0 fs-7">Add, edit, or remove system users</p>
                     </div>
                 </div>
             </a>
         </div>
         <div class="col-md-4">
-            <a href="/Admin/ManageProjects" class="premium-card text-decoration-none h-100 hover-elevate-up d-block">
-                <div class="p-4 d-flex align-items-center gap-3">
-                    <div class="stat-icon-wrapper">
-                        <i class="fas fa-project-diagram"></i>
+            <a href="/Admin/ManageProjects" class="action-card-premium text-decoration-none h-100 d-block">
+                <div class="p-4 d-flex align-items-center gap-4">
+                    <div class="action-icon bg-gradient-info">
+                        <i class="fas fa-tasks text-white"></i>
                     </div>
                     <div>
-                        <h5 class="fw-bold text-dark mb-1">Manage Projects</h5>
-                        <p class="text-muted mb-0 small">View all final year projects</p>
+                        <h5 class="fw-bolder text-dark mb-1">Manage Projects</h5>
+                        <p class="text-muted mb-0 fs-7">Track all FYP milestones & assign examiners</p>
                     </div>
                 </div>
             </a>
         </div>
         <div class="col-md-4">
-            <a href="/Admin/ApprovedIafList" class="premium-card text-decoration-none h-100 hover-elevate-up d-block">
-                <div class="p-4 d-flex align-items-center gap-3">
-                    <div class="stat-icon-wrapper" style="background: rgba(34, 197, 94, 0.1); color: #22c55e;">
-                        <i class="fas fa-file-signature"></i>
+            <a href="/Admin/ApprovedIafList" class="action-card-premium text-decoration-none h-100 d-block">
+                <div class="p-4 d-flex align-items-center gap-4">
+                    <div class="action-icon bg-gradient-success">
+                        <i class="fas fa-file-signature text-white"></i>
                     </div>
                     <div>
-                        <h5 class="fw-bold text-dark mb-1">Approved IAFs</h5>
-                        <p class="text-muted mb-0 small">View finalized and approved IAFs</p>
+                        <h5 class="fw-bolder text-dark mb-1">Approved IAFs</h5>
+                        <p class="text-muted mb-0 fs-7">View finalized and approved IAF forms</p>
                     </div>
                 </div>
             </a>
@@ -113,78 +119,70 @@
 </div>
 
 <style>
-    :root {
-        --bg-body: #f8fafc;
-        --card-bg: #ffffff;
-        --text-main: #1e293b;
-        --text-muted: #64748b;
-        --border-color: #e2e8f0;
-        --accent-dark: #0f172a;
-        --accent-light: #334155;
-    }
-
-    body {
-        background-color: var(--bg-body);
-        font-family: 'Inter', sans-serif;
-    }
-
-    .premium-card {
-        background: var(--card-bg);
-        border: 1px solid var(--border-color);
-        border-radius: 16px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .premium-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
-    }
-
-    .taskbar {
-        background-color: var(--accent-dark);
-        border-radius: 16px;
-        color: white;
-        padding: 32px 40px;
-        box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.3);
-        margin-bottom: 32px;
-        position: relative;
-        overflow: hidden;
-    }
-
-    .stat-card-clean {
-        background-color: #ffffff;
-        border: 1px solid var(--border-color);
-        border-radius: 16px;
+    /* Premium UI Styles for Admin Dashboard */
+    .stat-card-premium {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(0,0,0,0.05);
+        border-radius: 20px;
         padding: 24px;
         display: flex;
         align-items: center;
         gap: 20px;
-        transition: transform 0.2s ease;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
-
-    .stat-card-clean:hover {
-        transform: translateY(-2px);
-        border-color: #cbd5e1;
+    .stat-card-premium:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+        border-color: rgba(37, 99, 235, 0.2);
     }
-
     .stat-icon-wrapper {
-        width: 56px;
-        height: 56px;
-        border-radius: 12px;
-        background-color: #f1f5f9;
+        width: 60px;
+        height: 60px;
+        border-radius: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
-        color: var(--accent-dark);
         font-size: 1.5rem;
     }
-
-    .hover-elevate-up {
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    
+    .action-card-premium {
+        background: #ffffff;
+        border: 1px solid rgba(0,0,0,0.05);
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+        transition: all 0.3s ease;
     }
-    .hover-elevate-up:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+    .action-card-premium:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 25px rgba(0, 0, 0, 0.08);
+        border-color: #cbd5e1;
     }
+    .action-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    
+    .bg-gradient-primary { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
+    .bg-gradient-info { background: linear-gradient(135deg, #06b6d4 0%, #0369a1 100%); }
+    .bg-gradient-success { background: linear-gradient(135deg, #10b981 0%, #047857 100%); }
+    
+    .bg-light-primary { background-color: #eff6ff !important; color: #3b82f6 !important; }
+    .bg-light-info { background-color: #ecfeff !important; color: #06b6d4 !important; }
+    .bg-light-success { background-color: #ecfdf5 !important; color: #10b981 !important; }
+    .bg-light-warning { background-color: #fffbeb !important; color: #f59e0b !important; }
+    
+    .taskbar {
+        border-radius: 24px;
+        padding: 40px 48px;
+        box-shadow: 0 15px 35px -5px rgba(15, 23, 42, 0.4);
+    }
+    .z-index-1 { z-index: 1; }
 </style>

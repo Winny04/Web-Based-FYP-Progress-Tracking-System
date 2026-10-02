@@ -2,41 +2,150 @@
     ViewData["Title"] = "System Settings";
 }
 
+<style>
+    :root { --admin-grad: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
+
+    .page-hero {
+        background: var(--admin-grad);
+        border-radius: 24px;
+        padding: 40px 48px;
+        color: white;
+        margin-bottom: 32px;
+        box-shadow: 0 15px 35px -5px rgba(15, 23, 42, 0.4);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .premium-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        border: 1px solid rgba(0,0,0,0.05);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+        padding: 32px;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .premium-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+        border-color: rgba(37, 99, 235, 0.2);
+    }
+    .z-index-1 { z-index: 1; }
+</style>
+
 <div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2 class="fw-bold mb-1"><i class="fas fa-cogs me-2 text-primary"></i>System Settings</h2>
-            <p class="text-muted mb-0">Manage global system configurations and preferences.</p>
+
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-4 position-relative">
+        <div class="position-absolute top-0 end-0 opacity-10 pe-none" style="transform: translate(10%, -10%);">
+            <i class="fas fa-cogs" style="font-size: 15rem; color: #ffffff;"></i>
+        </div>
+        <div class="position-relative z-index-1">
+            <h1 class="display-5 fw-bolder mb-2 text-white" style="letter-spacing: -1px;">
+                System <span style="background: linear-gradient(to right, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Settings</span>
+            </h1>
+            <p class="text-white-50 fs-5 mt-1 mb-0" style="font-weight: 300;">Manage global system configurations and preferences.</p>
         </div>
     </div>
 
     <div class="row g-4">
-        <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm border-0 rounded-4 p-4 h-100 border-top border-4" style="border-top-color: #8b5cf6 !important;">
-                <h5 class="fw-bold mb-3 text-dark"><i class="fas fa-graduation-cap me-2 text-purple"></i>Update Milestone Dates</h5>
+        
+        <!-- Left Column: Dates and Timeouts -->
+        <div class="col-lg-7 d-flex flex-column gap-4">
+            
+            <div class="card premium-card border-top border-4 h-100" style="border-top-color: #10b981 !important;">
+                <h5 class="fw-bolder mb-1 text-dark"><i class="fas fa-calendar-check text-success me-2"></i>FYP Key Submission Dates</h5>
+                <p class="text-muted small mb-4">Configure global deadlines and timeouts for the system.</p>
+
+                @if (TempData["FYPSettingSuccess"] != null)
+                {
+                    <div class="alert alert-light-success border border-success border-opacity-25 shadow-sm p-3 mb-4 rounded-3 text-dark fw-bold"><i class="fas fa-check-circle text-success me-2"></i>@TempData["FYPSettingSuccess"]</div>
+                }
+                @if (TempData["FYPSettingError"] != null)
+                {
+                    <div class="alert alert-light-danger border border-danger border-opacity-25 shadow-sm p-3 mb-4 rounded-3 text-dark fw-bold"><i class="fas fa-exclamation-circle text-danger me-2"></i>@TempData["FYPSettingError"]</div>
+                }
+
+                <form asp-action="UpdateFYPSettings" method="post" class="mt-2">
+                    @Html.AntiForgeryToken()
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">
+                                <i class="fas fa-file-alt text-primary me-1"></i>DPP Submission Deadline
+                            </label>
+                            <input type="date" name="dppDeadline" class="form-control form-control-solid bg-light rounded-3 shadow-sm border-0 py-2 px-3" value="@ViewBag.DPPDeadline" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">
+                                <i class="fas fa-star text-warning me-1"></i>FYP Exhibition Date
+                            </label>
+                            <input type="date" name="exhibitionDate" class="form-control form-control-solid bg-light rounded-3 shadow-sm border-0 py-2 px-3" value="@ViewBag.ExhibitionDate" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">
+                                <i class="far fa-clock text-info me-1"></i>Exhibition Start Time
+                            </label>
+                            <input type="time" name="exhibitionTimeStart" class="form-control form-control-solid bg-light rounded-3 shadow-sm border-0 py-2 px-3" value="@ViewBag.ExhibitionTimeStart" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">
+                                <i class="far fa-clock text-secondary me-1"></i>Exhibition End Time
+                            </label>
+                            <input type="time" name="exhibitionTimeEnd" class="form-control form-control-solid bg-light rounded-3 shadow-sm border-0 py-2 px-3" value="@ViewBag.ExhibitionTimeEnd" />
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-light rounded-4 mb-4 border border-opacity-10 shadow-sm">
+                        <label class="form-label fw-bold small text-muted text-uppercase mb-2">
+                            <i class="fas fa-hourglass-half text-danger me-1"></i>Supervisor Request Timeout (Days)
+                        </label>
+                        <div class="d-flex align-items-center gap-3">
+                            <input type="number" name="supervisorRequestTimeoutDays"
+                                   class="form-control form-control-solid bg-white shadow-sm border-0 rounded-3 text-center" style="width: 100px; font-weight: bold;" min="1" max="30"
+                                   value="@ViewBag.SupervisorRequestTimeoutDays" />
+                            <span class="text-muted small">
+                                Pending requests with no response will automatically reject.
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="text-end mt-4">
+                        <button type="submit" class="btn btn-success fw-bold px-4 py-2 rounded-pill shadow-sm">
+                            <i class="fas fa-save me-2"></i>Save Settings
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Right Column: Tools & Actions -->
+        <div class="col-lg-5 d-flex flex-column gap-4">
+            
+            <div class="card premium-card border-top border-4" style="border-top-color: #8b5cf6 !important;">
+                <h5 class="fw-bolder mb-2 text-dark"><i class="fas fa-graduation-cap me-2 text-purple"></i>Update Milestone Dates</h5>
                 <p class="text-muted small mb-4">Set the global due date for a specific default milestone across all students in the current session.</p>
-                <form asp-action="UpdateDefaultMilestoneDate" method="post" class="mt-auto">
+                <form asp-action="UpdateDefaultMilestoneDate" method="post">
                     @if (TempData["BulkUpdateSuccess"] != null)
                     {
-                        <div class="alert alert-success border-0 p-2 small mb-3">@TempData["BulkUpdateSuccess"]</div>
+                        <div class="alert alert-light-success border border-success border-opacity-25 p-2 small mb-3 rounded-3 fw-bold text-success"><i class="fas fa-check me-1"></i>@TempData["BulkUpdateSuccess"]</div>
                     }
                     @if (TempData["BulkUpdateInfo"] != null)
                     {
-                        <div class="alert alert-info border-0 p-2 small mb-3">@TempData["BulkUpdateInfo"]</div>
+                        <div class="alert alert-light-info border border-info border-opacity-25 p-2 small mb-3 rounded-3 fw-bold text-info"><i class="fas fa-info-circle me-1"></i>@TempData["BulkUpdateInfo"]</div>
                     }
                     @if (TempData["BulkUpdateError"] != null)
                     {
-                        <div class="alert alert-danger border-0 p-2 small mb-3">@TempData["BulkUpdateError"]</div>
+                        <div class="alert alert-light-danger border border-danger border-opacity-25 p-2 small mb-3 rounded-3 fw-bold text-danger"><i class="fas fa-exclamation-triangle me-1"></i>@TempData["BulkUpdateError"]</div>
                     }
                     @if(ViewBag.DistinctSessions == null || !((IEnumerable<string>)ViewBag.DistinctSessions).Any())
                     {
-                        <div class="alert alert-warning border-0 p-2 small mb-3">No active academic session found.</div>
+                        <div class="alert alert-warning border-0 p-3 small mb-3 rounded-3"><i class="fas fa-exclamation-circle me-1"></i>No active academic session found.</div>
                     }
                     else
                     {
                         <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted">Select Academic Session</label>
-                            <select name="sessionFilter" class="form-select bg-light" required>
+                            <label class="form-label fw-bold small text-muted text-uppercase">Academic Session</label>
+                            <select name="sessionFilter" class="form-select bg-light border-0 shadow-sm rounded-3 py-2 px-3" required>
                                 <option value="">-- Choose Session --</option>
                                 @foreach (var sessionName in (IEnumerable<string>)ViewBag.DistinctSessions)
                                 {
@@ -52,8 +161,8 @@
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted">Select Milestone</label>
-                            <select name="milestoneTitle" class="form-select bg-light" required>
+                            <label class="form-label fw-bold small text-muted text-uppercase">Milestone</label>
+                            <select name="milestoneTitle" class="form-select bg-light border-0 shadow-sm rounded-3 py-2 px-3" required>
                                 <option value="">-- Choose Milestone --</option>
                                 <option value="IAF">FYP 1: Initial Assessment Form (IAF)</option>
                                 <option value="Proposal">FYP 1: Stage 1 Final Submission</option>
@@ -64,104 +173,27 @@
                                 <option value="Step 5:">Step 5: Presentation Slides Submission</option>
                             </select>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted">New Due Date</label>
-                            <input type="date" name="deadline" class="form-control bg-light" required />
-                            <div class="form-text text-muted small mt-1"><i class="fas fa-info-circle me-1"></i>Time will be set to 11:59 PM.</div>
+                        <div class="mb-4">
+                            <label class="form-label fw-bold small text-muted text-uppercase">New Due Date</label>
+                            <input type="date" name="deadline" class="form-control bg-light border-0 shadow-sm rounded-3 py-2 px-3" required />
                         </div>
-                        <button type="submit" class="btn text-white w-100 fw-bold" style="background: #8b5cf6;">Update Deadlines</button>
+                        <button type="submit" class="btn text-white w-100 fw-bold py-2 rounded-pill shadow-sm" style="background: #8b5cf6;">
+                            <i class="fas fa-sync-alt me-2"></i>Update Deadlines
+                        </button>
                     }
                 </form>
             </div>
-        </div>
-        
 
-
-        <div class="col-md-6 col-lg-4">
-            <div class="card shadow-sm border-0 rounded-4 p-4 h-100">
-                <h5 class="fw-bold mb-3 text-success"><i class="fas fa-file-signature me-2"></i>Approved IAFs</h5>
-                <p class="text-muted small mb-4">View students who have had their Initial Project Allocation Form (IAF) approved and signed by their supervisors.</p>
-                <div class="mt-auto">
-                    <a href="/Admin/ApprovedIafList" class="btn btn-outline-success w-100 fw-bold">View Approved IAFs</a>
-                </div>
+            <div class="card premium-card border-top border-4" style="border-top-color: #3b82f6 !important;">
+                <h5 class="fw-bolder mb-2 text-primary"><i class="fas fa-file-signature me-2"></i>Approved IAFs Directory</h5>
+                <p class="text-muted small mb-4">View students who have had their Initial Project Allocation Form (IAF) approved.</p>
+                <a href="/Admin/ApprovedIafList" class="btn btn-outline-primary w-100 fw-bold py-2 rounded-pill shadow-sm">
+                    <i class="fas fa-external-link-alt me-2"></i>View Approved IAFs
+                </a>
             </div>
+            
         </div>
     </div>
-
-        @* ── FYP Submission Dates (DPP, Exhibition) ── *@
-        <div class="col-12 mt-2">
-            <div class="card shadow-sm border-0 rounded-4 p-4">
-                <h5 class="fw-bold mb-1"><i class="fas fa-calendar-check text-success me-2"></i>FYP Key Submission Dates</h5>
-                <p class="text-muted small mb-4">These dates are displayed on the student dashboard timeline and used in downloadable templates.</p>
-
-                @if (TempData["FYPSettingSuccess"] != null)
-                {
-                    <div class="alert alert-success border-0 p-2 small mb-3">@TempData["FYPSettingSuccess"]</div>
-                }
-                @if (TempData["FYPSettingError"] != null)
-                {
-                    <div class="alert alert-danger border-0 p-2 small mb-3">@TempData["FYPSettingError"]</div>
-                }
-
-                <form asp-action="UpdateFYPSettings" method="post">
-                    @Html.AntiForgeryToken()
-                    <div class="row g-3">
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label fw-semibold small text-muted text-uppercase">
-                                <i class="fas fa-file-alt text-primary me-1"></i>DPP Submission Deadline
-                            </label>
-                            <input type="date" name="dppDeadline" class="form-control" value="@ViewBag.DPPDeadline" />
-                            <div class="form-text small">e.g. 19th June 2026 before 11.59pm</div>
-                        </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label fw-semibold small text-muted text-uppercase">
-                                <i class="fas fa-star text-warning me-1"></i>FYP Exhibition Date
-                            </label>
-                            <input type="date" name="exhibitionDate" class="form-control" value="@ViewBag.ExhibitionDate" />
-                            <div class="form-text small">e.g. 25th June 2026</div>
-                        </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label fw-semibold small text-muted text-uppercase">
-                                <i class="far fa-clock text-info me-1"></i>Exhibition Start Time
-                            </label>
-                            <input type="time" name="exhibitionTimeStart" class="form-control" value="@ViewBag.ExhibitionTimeStart" />
-                            <div class="form-text small">e.g. 09:00 (9am)</div>
-                        </div>
-                        <div class="col-md-6 col-lg-3">
-                            <label class="form-label fw-semibold small text-muted text-uppercase">
-                                <i class="far fa-clock text-secondary me-1"></i>Exhibition End Time
-                            </label>
-                            <input type="time" name="exhibitionTimeEnd" class="form-control" value="@ViewBag.ExhibitionTimeEnd" />
-                            <div class="form-text small">e.g. 13:00 (1pm)</div>
-                        </div>
-                    </div>
-
-                    @* ── Supervisor Request Timeout Setting ── *@
-                    <hr class="my-4" />
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-6 col-lg-4">
-                            <label class="form-label fw-semibold small text-muted text-uppercase">
-                                <i class="fas fa-hourglass-half text-danger me-1"></i>Supervisor Request Timeout (Days)
-                            </label>
-                            <input type="number" name="supervisorRequestTimeoutDays"
-                                   class="form-control" min="1" max="30"
-                                   value="@ViewBag.SupervisorRequestTimeoutDays" />
-                            <div class="form-text small text-muted">
-                                Pending requests with no supervisor response after this many days are
-                                <strong>automatically rejected</strong> and the student is notified.
-                                Current requirement: <strong>3 days</strong>.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-4">
-                        <button type="submit" class="btn btn-success fw-bold px-4">
-                            <i class="fas fa-save me-2"></i>Save Dates &amp; Settings
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
+</div>
 
 

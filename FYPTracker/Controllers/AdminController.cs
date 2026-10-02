@@ -298,6 +298,12 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(ManageProjects));
             }
 
+            if (project.AssignedExaminers == null || !project.AssignedExaminers.Any())
+            {
+                TempData["Error"] = "Cannot set Viva date. Please assign an Examiner first.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
             project.VivaDate = vivaDate;
             project.VivaVenue = vivaVenue;
             await _context.SaveChangesAsync();
@@ -490,6 +496,137 @@ namespace FYPTracker.Controllers
             catch { /* Continue on notification error */ }
 
             TempData["Success"] = $"Successfully assigned {examiner.FullName} as Examiner for '{project.Title}'.";
+            return RedirectToAction(nameof(ManageProjects));
+        }
+
+        // ============================================================
+        // AI AUTO-ASSIGN EXAMINER (Rule-Based Keyword Matching Engine)
+        // ============================================================
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AutoAssignExaminer(int projectId)
+        {
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .Include(p => p.AssignedExaminers)
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Build a searchable corpus from the project
+            var projectCorpus = string.Join(" ",
+                project.Title ?? "",
+                project.Description ?? "",
+                project.ProblemStatement ?? "",
+                project.Scope ?? "",
+                project.Objective1 ?? "",
+                project.Objective2 ?? "",
+                project.Objective3 ?? "",
+                project.Student?.Specialization ?? ""
+            ).ToLowerInvariant();
+
+            // Get all active examiners with their specialisation
+            var examiners = await _context.ApplicationUsers
+                .Where(u => u.UserType == "Examiner" && !u.IsResign)
+                .ToListAsync();
+
+            if (!examiners.Any())
+            {
+                TempData["Error"] = "No active examiners found in the system.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Exclude the supervisor from being examiner (conflict of interest)
+            examiners = examiners.Where(e => e.Id != project.SupervisorId).ToList();
+
+            // Score each examiner by keyword overlap
+            var scored = examiners.Select(e =>
+            {
+                var examinerKeywords = string.Join(" ",
+                    e.Specialization ?? "",
+                    e.FullName ?? ""
+                ).ToLowerInvariant();
+
+                // Tokenize both sides
+                var projectTokens = projectCorpus.Split(new[] { ' ', ',', '.', ';', '/', '\\', '-', '(', ')' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(t => t.Length > 3) // ignore short words like "and", "the"
+                    .ToHashSet();
+
+                var examinerTokens = examinerKeywords.Split(new[] { ' ', ',', '.', ';', '/', '\\', '-', '(', ')' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(t => t.Length > 3)
+                    .ToHashSet();
+
+                // Count overlap
+                int matchScore = projectTokens.Intersect(examinerTokens).Count();
+
+                return new { Examiner = e, Score = matchScore };
+            })
+            .OrderByDescending(x => x.Score)
+            .ToList();
+
+            var bestMatch = scored.FirstOrDefault();
+            if (bestMatch == null)
+            {
+                TempData["Error"] = "Could not find a suitable examiner.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            var selectedExaminer = bestMatch.Examiner;
+            int aiScore = bestMatch.Score;
+
+            // Remove old assignments
+            var existing = await _context.FYPProjectExaminers
+                .Where(pe => pe.FYPProjectId == projectId)
+                .ToListAsync();
+            if (existing.Any()) _context.FYPProjectExaminers.RemoveRange(existing);
+
+            // Assign the best matched examiner
+            _context.FYPProjectExaminers.Add(new FYPProjectExaminer
+            {
+                FYPProjectId = project.Id,
+                ExaminerId = selectedExaminer.Id,
+                AssignedDate = DateTime.Now
+            });
+
+            await _context.SaveChangesAsync();
+
+            // Send notification + email
+            try
+            {
+                var notification = new FYPNotification
+                {
+                    RecipientId = selectedExaminer.Id,
+                    Title = "New Project Assignment (AI Auto-Assigned)",
+                    Message = $"You have been AI-matched and assigned as the Examiner for project: '{project.Title}' based on your specialisation.",
+                    Type = "ExaminerAssignment",
+                    RelatedRecordId = project.Id,
+                    CreatedDate = DateTime.Now,
+                    IsRead = false
+                };
+                _context.FYPNotifications.Add(notification);
+                await _context.SaveChangesAsync();
+
+                if (!string.IsNullOrEmpty(selectedExaminer.Email))
+                {
+                    string subject = "FYP Tracking System - AI Examiner Assignment";
+                    string content = $"<p>Dear {selectedExaminer.FullName},</p><p>Our AI matching engine has identified you as the best-matched Examiner for project: <strong>{project.Title}</strong> (Student: <strong>{project.Student?.FullName ?? "Unknown"}</strong>) based on your specialisation.</p><p>Please log in to the FYP Tracking System to view details.</p>";
+                    _emailService.Send(selectedExaminer.Email, subject, content);
+                }
+            }
+            catch { /* Continue on notification error */ }
+
+            string matchMsg = aiScore > 0
+                ? $"AI matched <strong>{selectedExaminer.FullName}</strong> with <strong>{aiScore} keyword(s)</strong> in common with the project scope."
+                : $"No strong keyword match found. AI assigned <strong>{selectedExaminer.FullName}</strong> as the best available examiner (you may override manually).";
+
+            TempData["Success"] = $"🤖 AI Auto-Assign Complete! {matchMsg} Assigned to '{project.Title}'.";
             return RedirectToAction(nameof(ManageProjects));
         }
 
@@ -2124,11 +2261,22 @@ public ActionResult ManageUsersData()
         // ────────────────────────────────────────────────────────
         // Reporting (Admin)
         // ────────────────────────────────────────────────────────
-        public async Task<IActionResult> Reporting()
+        public async Task<IActionResult> Reporting(string sessionFilter)
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             if (user == null || (user.UserType != "Admin" && user.UserType != "SuperAdmin")) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
+
+            // Fetch distinct sessions
+            var distinctSessions = await _context.ApplicationUsers
+                .Where(u => !string.IsNullOrEmpty(u.AcademicSession))
+                .Select(u => u.AcademicSession)
+                .Distinct()
+                .OrderByDescending(s => s)
+                .ToListAsync();
+
+            ViewBag.DistinctSessions = distinctSessions;
+            ViewBag.CurrentSessionFilter = sessionFilter;
 
             // 1. Supervisor Capacity vs Workload
             var supervisors = await _context.ApplicationUsers
@@ -2136,13 +2284,20 @@ public ActionResult ManageUsersData()
                 .Select(s => new {
                     Name = s.FullName ?? s.UserName,
                     MaxSlots = s.MaxStudentSlots ?? 5,
-                    CurrentStudents = _context.FYPProjects.Count(p => p.SupervisorId == s.Id && !p.Student.IsResign && p.Status == "Approved")
+                    CurrentStudents = _context.FYPProjects.Count(p => p.SupervisorId == s.Id && !p.Student.IsResign && p.Status == "Approved" && (string.IsNullOrEmpty(sessionFilter) || p.Student.AcademicSession == sessionFilter))
                 })
                 .ToListAsync();
 
             // 2. Global Student Allocation Status
-            var allActiveStudents = await _context.ApplicationUsers
-                .Where(u => u.UserType == "Student" && !u.IsResign)
+            var studentsQuery = _context.ApplicationUsers
+                .Where(u => u.UserType == "Student" && !u.IsResign);
+
+            if (!string.IsNullOrEmpty(sessionFilter))
+            {
+                studentsQuery = studentsQuery.Where(u => u.AcademicSession == sessionFilter);
+            }
+
+            var allActiveStudents = await studentsQuery
                 .Select(s => new {
                     s.Id,
                     HasApprovedProject = _context.FYPProjects.Any(p => p.StudentId == s.Id && p.Status == "Approved"),
@@ -2157,15 +2312,29 @@ public ActionResult ManageUsersData()
             };
 
             // 3. Faculty Demographics / Program Distribution
-            var programCounts = await _context.ApplicationUsers
-                .Where(u => u.UserType == "Student" && !u.IsResign && !string.IsNullOrEmpty(u.Programme))
+            var programCountsQuery = _context.ApplicationUsers
+                .Where(u => u.UserType == "Student" && !u.IsResign && !string.IsNullOrEmpty(u.Programme));
+
+            if (!string.IsNullOrEmpty(sessionFilter))
+            {
+                programCountsQuery = programCountsQuery.Where(u => u.AcademicSession == sessionFilter);
+            }
+
+            var programCounts = await programCountsQuery
                 .GroupBy(u => u.Programme)
                 .Select(g => new { Program = g.Key, Count = g.Count() })
                 .ToListAsync();
 
             // 4. Global Milestone Bottlenecks
-            var milestones = await _context.FYPMilestones
-                .Where(m => !m.Project.Student.IsResign)
+            var milestonesQuery = _context.FYPMilestones
+                .Where(m => !m.Project.Student.IsResign);
+
+            if (!string.IsNullOrEmpty(sessionFilter))
+            {
+                milestonesQuery = milestonesQuery.Where(m => m.Project.Student.AcademicSession == sessionFilter);
+            }
+
+            var milestones = await milestonesQuery
                 .Select(m => new { m.Title, m.Status })
                 .ToListAsync();
 
