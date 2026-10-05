@@ -253,6 +253,10 @@
                             </select>
                             <div id="editTitleError" class="text-danger mt-1 fs-7 fw-bold"></div>
                         </div>
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Max Student Quota <i class="fas fa-info-circle ms-1 text-muted" data-bs-toggle="tooltip" title="Maximum number of students this supervisor can take"></i></label>
+                            <input type="number" id="editMaxSlots" class="form-control form-control-lg form-control-solid" min="0" max="50" placeholder="e.g. 10" />
+                        </div>
                     </div>
 
                     <div class="text-center mt-4">
@@ -261,6 +265,44 @@
 
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transfer Students Modal -->
+<div class="modal fade" id="transferStudentsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-500px">
+        <div class="modal-content">
+            <form id="transferForm" method="post" action="/Admin/TransferStudents">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="fromSupervisorId" id="transferFromId" />
+                <div class="modal-header border-0 pb-0">
+                    <h2 class="fw-bold"><i class="fas fa-exchange-alt text-primary me-2"></i>Transfer Students</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body pb-3">
+                    <div class="alert alert-warning mb-4">
+                        You are transferring all active students from <strong id="transferFromName"></strong> to a new supervisor. This is usually done when a lecturer goes on leave (e.g. maternity/medical).
+                    </div>
+                    <div class="mb-5">
+                        <label class="form-label fw-bold">Select New Supervisor</label>
+                        <select name="toSupervisorId" id="transferToId" class="form-select form-select-solid fw-bold" required>
+                            <option value="">-- Select New Supervisor --</option>
+                            @if (ViewBag.Supervisors != null)
+                            {
+                                foreach (var sup in (List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>)ViewBag.Supervisors)
+                                {
+                                    <option value="@sup.Value">@sup.Text</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-check me-1"></i>Confirm Transfer</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -282,37 +324,24 @@
                         </span>
                     </div>
                 </div>
-                <div class="modal-body p-5">
-                    <div class="fv-row mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">Users to Invite <span class="text-danger">*</span></label>
-                        <div id="inviteesList">
-                            <div class="row mb-2 invitee-row">
-                                <div class="col-5">
-                                    <input type="text" name="inviteNames[]" class="form-control form-control-solid" placeholder="Full Name (Optional)">
-                                </div>
-                                <div class="col-6">
-                                    <input type="email" name="inviteEmails[]" class="form-control form-control-solid email-input" placeholder="Email Address *" required>
-                                </div>
-                                <div class="col-1 text-end">
-                                    <button type="button" class="btn btn-icon btn-light-danger btn-sm remove-invitee" disabled><i class="bi bi-trash fs-5"></i></button>
-                                </div>
+                <div class="modal-body p-5 pb-0">
+                    <div class="row mb-5">
+                        <div class="col-md-6 fv-row">
+                            <label class="form-label fw-bolder text-dark fs-6">User Type <span class="text-danger">*</span></label>
+                            <select name="bulkUserType" id="bulkUserType" class="form-select form-select-solid form-select-sm fw-bold" required>
+                                <option value="">-- Select Type --</option>
+                                <option value="Student">Student</option>
+                                <option value="Supervisor">Supervisor</option>
+                                <option value="Examiner">Examiner</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 fv-row">
+                            <label class="form-label fw-bolder text-dark fs-6">Email Domain</label>
+                            <div class="input-group input-group-solid input-group-sm">
+                                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                <input type="text" id="sharedDomain" class="form-control form-control-solid fw-bold text-muted" value="@@newinti.edu.my" readonly>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-light-primary btn-sm mt-2" id="addInviteeBtn">
-                            <i class="bi bi-plus fs-4"></i> Add Another User
-                        </button>
-                        <div class="form-text mt-3">
-                            <strong>Pro Tip:</strong> You can paste a list of comma or newline separated emails into the first Email box to automatically generate rows!
-                        </div>
-                    </div>
-                    <div class="fv-row mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">User Type <span class="text-danger">*</span></label>
-                        <select name="bulkUserType" id="bulkUserType" class="form-select form-select-solid form-select-lg fw-bold" required>
-                            <option value="">-- Select Type --</option>
-                            <option value="Student">Student</option>
-                            <option value="Supervisor">Supervisor</option>
-                            <option value="Examiner">Examiner</option>
-                        </select>
                     </div>
 
                     <!-- Student-specific required fields -->
@@ -321,29 +350,82 @@
                             <i class="fas fa-exclamation-triangle text-warning fs-4"></i>
                             <div class="fs-7 text-dark"><strong>Required for Students:</strong> Programme and Academic Session must be set before login credentials can be sent.</div>
                         </div>
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Programme <span class="text-danger">*</span></label>
-                            <select name="bulkProgramme" id="bulkProgramme" class="form-select form-select-solid form-select-lg fw-bold">
-                                <option value="">-- Select Programme --</option>
-                                @foreach (var prog in programmeList)
-                                {
-                                    <option value="@prog.Value">@prog.Text</option>
-                                }
-                            </select>
-                            <div id="bulkProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
-                        </div>
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Academic Session <span class="text-danger">*</span></label>
-                            <select name="bulkAcademicSession" id="bulkAcademicSession" class="form-select form-select-solid form-select-lg fw-bold">
-                                <option value="">-- Select Session --</option>
-                            </select>
-                            <div id="bulkAcademicSessionError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                        <div class="row mb-5">
+                            <div class="col-md-6 fv-row">
+                                <label class="form-label fw-bolder text-dark fs-6">Programme <span class="text-danger">*</span></label>
+                                <select name="bulkProgramme" id="bulkProgramme" class="form-select form-select-solid form-select-sm fw-bold">
+                                    <option value="">-- Select Programme --</option>
+                                    @foreach (var prog in programmeList)
+                                    {
+                                        <option value="@prog.Value">@prog.Text</option>
+                                    }
+                                </select>
+                                <div id="bulkProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                            </div>
+                            <div class="col-md-6 fv-row">
+                                <label class="form-label fw-bolder text-dark fs-6">Academic Session <span class="text-danger">*</span></label>
+                                <select name="bulkAcademicSession" id="bulkAcademicSession" class="form-select form-select-solid form-select-sm fw-bold">
+                                    <option value="">-- Select Session --</option>
+                                </select>
+                                <div id="bulkAcademicSessionError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="text-center mt-4">
-                        <button type="submit" id="bulkInviteSubmitBtn" class="btn btn-lg btn-primary w-100">Send Invites</button>
+                    <div class="fv-row mb-5">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-bolder text-dark fs-6 mb-0">Users to Invite (<span id="inviteCountTitle">1</span>)</label>
+                            <button type="button" class="btn btn-sm btn-light-primary" id="pasteMultipleBtn">
+                                <i class="bi bi-clipboard-check"></i> Paste Multiple
+                            </button>
+                        </div>
+                        
+                        <div id="pasteMultipleSection" style="display:none;" class="mb-3">
+                            <textarea id="pasteMultipleArea" class="form-control form-control-solid" rows="3" placeholder="Paste usernames or emails here (comma or newline separated)..."></textarea>
+                            <div class="mt-2 text-end">
+                                <button type="button" class="btn btn-sm btn-light me-2" id="cancelPasteBtn">Cancel</button>
+                                <button type="button" class="btn btn-sm btn-primary" id="processPasteBtn">Generate Rows</button>
+                            </div>
+                        </div>
+                        
+                        <div class="table-responsive border rounded" style="max-height: 350px; overflow-y: auto;">
+                            <table class="table table-row-dashed table-row-gray-300 align-middle gs-4 gy-3 mb-0" id="inviteUsersTable">
+                                <thead class="bg-light" style="position: sticky; top: 0; z-index: 1;">
+                                    <tr class="fw-bolder text-muted fs-7 text-uppercase">
+                                        <th class="min-w-150px">Full Name</th>
+                                        <th class="min-w-150px">Username</th>
+                                        <th class="min-w-100px text-center">Status</th>
+                                        <th class="min-w-50px text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="inviteesList">
+                                    <tr class="invitee-row">
+                                        <td>
+                                            <input type="text" name="inviteNames[]" class="form-control form-control-solid form-control-sm" placeholder="Full Name (Optional)">
+                                        </td>
+                                        <td>
+                                            <input type="text" class="form-control form-control-solid form-control-sm username-input" placeholder="Username *" required>
+                                            <input type="hidden" name="inviteEmails[]" class="full-email-hidden">
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge badge-light-secondary status-badge w-100">Ready</span>
+                                        </td>
+                                        <td class="text-end">
+                                            <button type="button" class="btn btn-icon btn-light-danger btn-sm remove-invitee" disabled><i class="bi bi-trash fs-6"></i></button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-light-primary btn-sm" id="addInviteeBtn">
+                                <i class="bi bi-plus fs-4"></i> Add Another User
+                            </button>
+                        </div>
                     </div>
+                </div>
+                <div class="modal-footer border-0 pt-0 bg-white" style="position: sticky; bottom: 0; z-index: 2;">
+                    <button type="submit" id="bulkInviteSubmitBtn" class="btn btn-lg btn-primary w-100">Send 1 Invites</button>
                 </div>
             </form>
         </div>
@@ -431,8 +513,27 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<!-- DataTables Buttons CSS & JS -->
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.dataTables.min.css"/>
+<script type="text/javascript" src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js"></script>
 <script>
-
+    // Ensure all POST AJAX requests include the AntiForgeryToken to prevent 400 Bad Request
+    $.ajaxPrefilter(function (options, originalOptions, jqXHR) {
+        if (options.type.toUpperCase() === "POST") {
+            var token = $('input[name="__RequestVerificationToken"]').first().val();
+            if (token) {
+                if (typeof options.data === 'string') {
+                    if (options.data.indexOf("__RequestVerificationToken") === -1) {
+                        options.data += (options.data.length > 0 ? "&" : "") + "__RequestVerificationToken=" + encodeURIComponent(token);
+                    }
+                } else if (typeof options.data === 'object' && !(options.data instanceof FormData)) {
+                    options.data.__RequestVerificationToken = token;
+                }
+            }
+        }
+    });
 
     $(document).ready(function () {
         @if (TempData["Success"] != null)
@@ -672,8 +773,11 @@
         $.post("@Url.Action("ManageUsersData")", { DepartmentName: $('#SearchDepartmentName').val() }, function (d) {
             $("#mytable").DataTable(
                 {
-                    dom: 'ltip',
-                    buttons: [],
+                    dom: 'Bfrtip',
+                    buttons: [
+                        { extend: 'csv', className: 'btn btn-sm btn-primary', text: '<i class="fas fa-file-csv"></i> Export CSV' },
+                        { extend: 'excel', className: 'btn btn-sm btn-success', text: '<i class="fas fa-file-excel"></i> Export Excel' }
+                    ],
                     processing: true,
                     searching: true,
                     destroy: true,
@@ -785,6 +889,9 @@
                             render: function (data, type, row, meta) {
                                 let buttonComponent = '<div class="action-btn-group justify-content-end">';
                                 buttonComponent += '<a id="edit_' + row.id + '" onclick="Edit(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit"><i class="bi bi-pencil-fill fs-4"></i></a>';
+                                if (row.userType === 'Supervisor' || row.userType === 'SUPERVISOR') {
+                                    buttonComponent += '<a id="transfer_' + row.id + '" onclick="TransferStudentsModal(' + row.id + ', \'' + row.fullName + '\')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Transfer Students"><i class="fas fa-exchange-alt fs-4 text-primary"></i></a>';
+                                }
                                 // Resend invite button — only for users who haven't activated yet
                                 if (row.requirePasswordChange) {
                                     buttonComponent += '<a id="resend_' + row.id + '" onclick="ResendInvite(' + row.id + ', \'' + row.fullName + '\')" class="btn btn-icon btn-bg-light btn-active-color-info btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Resend Login Credentials"><i class="bi bi-send-fill fs-4 text-info"></i></a>';
@@ -913,6 +1020,18 @@
         });
     }
 
+    function TransferStudentsModal(id, name) {
+        $('#transferFromId').val(id);
+        $('#transferFromName').text(name);
+        
+        // Disable the current supervisor in the dropdown
+        $('#transferToId option').prop('disabled', false);
+        $('#transferToId option[value="'+id+'"]').prop('disabled', true);
+        $('#transferToId').val('');
+
+        $('#transferStudentsModal').modal('show');
+    }
+
     function Edit(employeeId) {
         $.ajax({
             type: "GET",
@@ -977,6 +1096,7 @@
                         $('#editStudentFields').hide();
                         $('#editSupervisorFields').show();
                         $('#editTitle').val(data.title);
+                        $('#editMaxSlots').val(data.maxStudentSlots);
                     } else {
                         $('#editStudentFields').hide();
                         $('#editSupervisorFields').hide();
@@ -1087,7 +1207,8 @@
                 programme: programme, 
                 specialization: specialization, 
                 academicSession: academicSession, 
-                title: title 
+                title: title,
+                maxStudentSlots: $('#editMaxSlots').val()
             },
             success: function (r) {
                 if (r.status) {
@@ -1174,6 +1295,15 @@
     }
 
     $(document).ready(function () {
+        // Toggle domain based on User Type
+        $('#bulkUserType').on('change', function () {
+            let type = $(this).val();
+            let domain = type === 'Student' ? '@@student.newinti.edu.my' : '@@newinti.edu.my';
+            $('#sharedDomain').val(domain);
+            updateHiddenEmails();
+            validateAllRows();
+        });
+
         // Add Invitee Row
         $('#addInviteeBtn').click(function () {
             addInviteeRow();
@@ -1184,69 +1314,255 @@
             if ($('.invitee-row').length > 1) {
                 $(this).closest('.invitee-row').remove();
                 updateRemoveButtons();
+                updateHiddenEmails();
+                validateAllRows();
             }
         });
-
-        // Smart Paste logic on email input
-        $(document).on('paste', '.email-input', function (e) {
-            e.preventDefault();
-            let pasteData = (e.originalEvent || e).clipboardData.getData('text/plain');
-            if (!pasteData) return;
-
+        
+        // Paste Multiple Handlers
+        $('#pasteMultipleBtn').click(function() {
+            $('#pasteMultipleSection').slideDown();
+            $('#pasteMultipleArea').focus();
+        });
+        $('#cancelPasteBtn').click(function() {
+            $('#pasteMultipleSection').slideUp();
+            $('#pasteMultipleArea').val('');
+        });
+        $('#processPasteBtn').click(function() {
+            let pasteData = $('#pasteMultipleArea').val();
+            if (!pasteData) {
+                $('#pasteMultipleSection').slideUp();
+                return;
+            }
+            
             let rawItems = pasteData.split(/[\n\r,]+/).map(s => s.trim()).filter(s => s.length > 0);
-            
-            let emailRegex = /^[^\s@@]+@@[^\s@@]+\.[^\s@@]+$/;
-            let extractedEmails = [];
-            
+            let extractedUsernames = [];
+
             rawItems.forEach(item => {
-                let match = item.match(/([a-zA-Z0-9._-]+@@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi);
-                if (match && match.length > 0) {
-                    extractedEmails.push(...match);
+                if (item.includes('@@')) {
+                    extractedUsernames.push(item.split('@@')[0]);
+                } else {
+                    extractedUsernames.push(item);
                 }
             });
 
-            if (extractedEmails.length > 0) {
-                let inputEl = $(this);
-                // Fill the current input
-                inputEl.val(extractedEmails[0]);
+            if (extractedUsernames.length > 0) {
+                // If there's only one empty row, fill it first
+                let rows = $('.invitee-row');
+                let firstRow = rows.first();
+                let firstInput = firstRow.find('.username-input');
+                let startIndex = 0;
                 
-                // Add new rows for the rest
-                for (let i = 1; i < extractedEmails.length; i++) {
-                    let newRow = addInviteeRow();
-                    newRow.find('.email-input').val(extractedEmails[i]);
+                if (rows.length === 1 && !firstInput.val()) {
+                    firstInput.val(extractedUsernames[0]);
+                    startIndex = 1;
                 }
-            } else {
-                $(this).val(pasteData);
+                
+                for (let i = startIndex; i < extractedUsernames.length; i++) {
+                    let newRow = addInviteeRow();
+                    newRow.find('.username-input').val(extractedUsernames[i]);
+                }
+                updateHiddenEmails();
+                validateAllRows();
             }
+            $('#pasteMultipleSection').slideUp();
+            $('#pasteMultipleArea').val('');
         });
+
+        // Validation on input
+        $(document).on('input', '.username-input', function() {
+            updateHiddenEmails();
+            validateAllRows();
+        });
+
+        function updateHiddenEmails() {
+            let domain = $('#sharedDomain').val();
+            $('.invitee-row').each(function() {
+                let username = $(this).find('.username-input').val().trim();
+                let fullEmail = username ? username + domain : '';
+                $(this).find('.full-email-hidden').val(fullEmail);
+            });
+        }
+
+        let validationTimer = null;
+
+        function validateAllRows() {
+            clearTimeout(validationTimer);
+            let usernames = [];
+            let emailsToCheck = [];
+            let localErrors = 0;
+            let validRows = 0;
+            let domain = $('#sharedDomain').val();
+            
+            $('.invitee-row').each(function() {
+                let row = $(this);
+                let input = row.find('.username-input');
+                let username = input.val().trim();
+                let type = $('#bulkUserType').val();
+                
+                if (type === 'Supervisor' || type === 'Examiner') {
+                    username = username.toLowerCase();
+                    if (input.val() !== username) {
+                        input.val(username); // auto-normalize UI
+                    }
+                }
+                
+                let badge = row.find('.status-badge');
+                
+                if (!username) {
+                    badge.removeClass().addClass('badge badge-light-danger status-badge w-100').text('Invalid Username');
+                    row.find('.error-msg').remove();
+                    input.addClass('is-invalid');
+                    localErrors++;
+                } else {
+                    let isValid = true;
+                    let errorMsg = '';
+                    
+                    if (type === 'Student') {
+                        if (!/^p\d{8}$/.test(username)) {
+                            isValid = false;
+                            errorMsg = 'Student ID must be in the format p followed by 8 digits, e.g. p22014692.';
+                        }
+                    } else {
+                        // Supervisor or Examiner
+                        if (!/^[a-z0-9.-]+$/.test(username) || username.includes('@') || username.includes(' ')) {
+                            isValid = false;
+                            errorMsg = 'Invalid username format';
+                        }
+                    }
+
+                    if (!isValid) {
+                        badge.removeClass().addClass('badge badge-light-danger status-badge w-100').text('Invalid Username');
+                        if (row.find('.error-msg').length === 0) {
+                            input.after(`<div class="text-danger fs-8 mt-1 error-msg">${errorMsg}</div>`);
+                        } else {
+                            row.find('.error-msg').text(errorMsg);
+                        }
+                        input.addClass('is-invalid');
+                        localErrors++;
+                    } else if (usernames.includes(username)) {
+                        badge.removeClass().addClass('badge badge-light-warning status-badge w-100').text('Duplicate in List');
+                        row.find('.error-msg').remove();
+                        input.addClass('is-invalid');
+                        localErrors++;
+                    } else {
+                        usernames.push(username);
+                        emailsToCheck.push(username + domain);
+                        badge.removeClass().addClass('badge badge-light-info status-badge w-100').text('Checking...');
+                        row.find('.error-msg').remove();
+                        input.removeClass('is-invalid');
+                        validRows++;
+                    }
+                }
+            });
+            
+            $('#bulkInviteSubmitBtn').prop('disabled', true);
+            updateRemoveButtons(0); // Temporarily hide count during check
+
+            if (emailsToCheck.length === 0) {
+                $('#bulkInviteSubmitBtn').prop('disabled', localErrors > 0);
+                return;
+            }
+
+            validationTimer = setTimeout(function() {
+                $.ajax({
+                    url: '/Admin/CheckBulkEmails',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(emailsToCheck),
+                    success: function (results) {
+                        let remoteErrors = 0;
+                        let finalValidRows = 0;
+                        $('.invitee-row').each(function() {
+                            let row = $(this);
+                            let input = row.find('.username-input');
+                            let username = input.val().trim();
+                            let badge = row.find('.status-badge');
+                            
+                            if (badge.text() === 'Checking...') {
+                                // AJAX response keys might just be emails, but we normalized them to lowercase
+                                let fullEmail = (username + domain).toLowerCase();
+                                
+                                // We check against results dictionary by matching keys
+                                let foundResult = null;
+                                for (let key in results) {
+                                    if (key.toLowerCase() === fullEmail) {
+                                        foundResult = results[key];
+                                        break;
+                                    }
+                                }
+
+                                if (foundResult) {
+                                    input.addClass('is-invalid');
+                                    remoteErrors++;
+                                    if (foundResult === 'Pending') {
+                                        badge.removeClass().addClass('badge badge-light-warning status-badge w-100').text('Invitation already sent');
+                                    } else {
+                                        badge.removeClass().addClass('badge badge-light-danger status-badge w-100').text('Already registered');
+                                    }
+                                } else {
+                                    badge.removeClass().addClass('badge badge-light-success status-badge w-100').text('Ready');
+                                    finalValidRows++;
+                                }
+                            }
+                        });
+                        
+                        $('#bulkInviteSubmitBtn').prop('disabled', localErrors > 0 || remoteErrors > 0 || finalValidRows === 0);
+                        updateRemoveButtons(finalValidRows);
+                    },
+                    error: function() {
+                        // On error, let them submit but they will fail at backend validation
+                        $('#bulkInviteSubmitBtn').prop('disabled', localErrors > 0);
+                        updateRemoveButtons(validRows);
+                    }
+                });
+            }, 300); // 300ms debounce
+        }
 
         function addInviteeRow() {
             let rowHtml = `
-                <div class="row mb-2 invitee-row">
-                    <div class="col-5">
-                        <input type="text" name="inviteNames[]" class="form-control form-control-solid" placeholder="Full Name (Optional)">
-                    </div>
-                    <div class="col-6">
-                        <input type="email" name="inviteEmails[]" class="form-control form-control-solid email-input" placeholder="Email Address *" required>
-                    </div>
-                    <div class="col-1 text-end">
-                        <button type="button" class="btn btn-icon btn-light-danger btn-sm remove-invitee"><i class="bi bi-trash fs-5"></i></button>
-                    </div>
-                </div>
+                <tr class="invitee-row">
+                    <td>
+                        <input type="text" name="inviteNames[]" class="form-control form-control-solid form-control-sm" placeholder="Full Name (Optional)">
+                    </td>
+                    <td>
+                        <input type="text" class="form-control form-control-solid form-control-sm username-input" placeholder="Username *" required>
+                        <input type="hidden" name="inviteEmails[]" class="full-email-hidden">
+                    </td>
+                    <td class="text-center">
+                        <span class="badge badge-light-secondary status-badge w-100">Ready</span>
+                    </td>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-icon btn-light-danger btn-sm remove-invitee"><i class="bi bi-trash fs-6"></i></button>
+                    </td>
+                </tr>
             `;
             let newRow = $(rowHtml);
             $('#inviteesList').append(newRow);
-            updateRemoveButtons();
+            
+            // Auto scroll to bottom
+            let container = $('.bulk-invite-scroll');
+            if (container.length) {
+                container.scrollTop(container[0].scrollHeight);
+            }
+            
+            updateRemoveButtons(0);
             return newRow;
         }
 
-        function updateRemoveButtons() {
-            if ($('.invitee-row').length === 1) {
+        function updateRemoveButtons(validCount = 0) {
+            let count = $('.invitee-row').length;
+            if (count === 1) {
                 $('.remove-invitee').prop('disabled', true);
             } else {
                 $('.remove-invitee').prop('disabled', false);
             }
+            $('#inviteCountTitle').text(count);
+            $('#bulkInviteSubmitBtn').text(`Send ${validCount} Invite${validCount !== 1 ? 's' : ''}`);
         }
+        
+        // Initial setup
+        validateAllRows();
     });
 </script>
 

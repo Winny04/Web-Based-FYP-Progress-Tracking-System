@@ -230,6 +230,10 @@ namespace FYPTracker.Controllers
             ViewBag.TotalExaminers   = await _context.ApplicationUsers.CountAsync(u => u.UserType == "Examiner");
             ViewBag.TotalProjects    = await _context.FYPProjects.CountAsync();
             ViewBag.PendingRequests  = await _context.SupervisorRequests.CountAsync(r => r.Status == "Pending");
+            ViewBag.Supervisors = await _context.ApplicationUsers
+                .Where(u => (u.UserType == "Supervisor" || u.UserType == "SUPERVISOR") && !u.IsResign)
+                .Select(u => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = u.Id.ToString(), Text = u.FullName })
+                .ToListAsync();
 
             return View(new ApplicationUserVM());
         }
@@ -788,13 +792,14 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 programme = user.Programme,
                 specialization = user.Specialization,
                 academicSession = user.AcademicSession,
-                title = user.Title
+                title = user.Title,
+                maxStudentSlots = user.MaxStudentSlots
             });
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UpdateUserModal(int id, string fullName, string email, string phone, string department, string programme, string academicSession, string title, string specialization)
+        public async Task<IActionResult> UpdateUserModal(int id, string fullName, string email, string phone, string department, string programme, string academicSession, string title, string specialization, int maxStudentSlots = 0)
         {
             try
             {
@@ -835,6 +840,10 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 if (user.UserType == "Supervisor" || user.UserType == "SUPERVISOR")
                 {
                     user.Title = title;
+                    if (maxStudentSlots > 0)
+                    {
+                        user.MaxStudentSlots = maxStudentSlots;
+                    }
                 }
                 else if (user.UserType == "Student" || user.UserType == "STUDENT")
                 {
@@ -1862,6 +1871,58 @@ public ActionResult ManageUsersData()
         }
 
         [HttpPost]
+        [Authorize]
+        [IgnoreAntiforgeryToken] // Allow AJAX calls easily
+        public async Task<IActionResult> CheckBulkEmails([FromBody] List<string> emails)
+        {
+            if (emails == null || !emails.Any())
+                return Json(new Dictionary<string, string>());
+
+            var results = new Dictionary<string, string>();
+            
+            // Safely extract all possible search terms
+            var searchTerms = new List<string>();
+            foreach (var email in emails)
+            {
+                var normEmail = email.Trim().ToLower();
+                searchTerms.Add(normEmail);
+                if (normEmail.Contains("@"))
+                {
+                    searchTerms.Add(normEmail.Split('@')[0]);
+                }
+            }
+            
+            // Do a massive OR query on the server to grab any potential matches.
+            // SQL Server is case-insensitive by default, so we don't need .ToLower() in the query.
+            var existingUsers = await _context.ApplicationUsers
+                .Where(u => searchTerms.Contains(u.Email) || searchTerms.Contains(u.UserName))
+                .ToListAsync();
+            
+            foreach (var email in emails)
+            {
+                var normEmail = email.Trim().ToLower();
+                var normUsername = normEmail.Contains("@") ? normEmail.Split('@')[0] : normEmail;
+                
+                // Do the precise case-insensitive match in memory
+                var user = existingUsers.FirstOrDefault(u => 
+                    (u.Email != null && u.Email.ToLower() == normEmail) || 
+                    (u.UserName != null && u.UserName.ToLower() == normUsername) || 
+                    (u.UserName != null && u.UserName.ToLower() == normEmail)
+                );
+                
+                if (user != null)
+                {
+                    if (user.RequirePasswordChange)
+                        results[email] = "Pending";
+                    else
+                        results[email] = "Registered";
+                }
+            }
+            
+            return Json(results);
+        }
+
+        [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> BulkInvite(List<string> inviteNames, List<string> inviteEmails, string bulkUserType, string bulkProgramme, string bulkAcademicSession)
         {
@@ -1930,10 +1991,40 @@ public ActionResult ManageUsersData()
             var request = HttpContext.Request;
             var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
 
+            // Pre-fetch existing users for precise check
+            var searchTerms = new List<string>();
+            foreach (var inv in invites)
+            {
+                var normEmail = inv.Email.Trim().ToLower();
+                searchTerms.Add(normEmail);
+                if (normEmail.Contains("@")) searchTerms.Add(normEmail.Split('@')[0]);
+            }
+            var existingUsers = await _context.ApplicationUsers
+                .Where(u => searchTerms.Contains(u.Email) || searchTerms.Contains(u.UserName))
+                .ToListAsync();
+
             foreach (var invite in invites)
             {
-                var email = invite.Email;
-                var exists = await _context.ApplicationUsers.AnyAsync(u => u.Email == email || u.UserName == email);
+                var email = invite.Email.Trim().ToLower(); // Domain is case-insensitive, we normalize early.
+                var username = email.Split('@')[0];
+                
+                // Server-side format validation to prevent frontend bypass
+                bool isValidFormat = true;
+                if (bulkUserType == "Student") {
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(username, @"^p\d{8}$")) isValidFormat = false;
+                } else {
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(username, @"^[a-z0-9.-]+$")) isValidFormat = false;
+                }
+                
+                if (!isValidFormat) continue; // Skip entirely, it will not count towards success
+                
+                // Precise case-insensitive match in memory
+                var exists = existingUsers.Any(u => 
+                    (u.Email != null && u.Email.ToLower() == email) || 
+                    (u.UserName != null && u.UserName.ToLower() == username) ||
+                    (u.UserName != null && u.UserName.ToLower() == email)
+                );
+                
                 if (exists)
                 {
                     duplicateCount++;
@@ -2456,6 +2547,57 @@ public ActionResult ManageUsersData()
             {
                 return Json(new { status = false, msg = ex.Message });
             }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> TransferStudents(int fromSupervisorId, int toSupervisorId)
+        {
+            if (fromSupervisorId == 0 || toSupervisorId == 0 || fromSupervisorId == toSupervisorId)
+            {
+                TempData["Error"] = "Invalid supervisor selection.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            try
+            {
+                // Transfer from SupervisorRequests
+                var requests = await _context.SupervisorRequests
+                    .Where(r => r.SupervisorId == fromSupervisorId && (r.Status == "Approved" || r.Status == "Pending"))
+                    .ToListAsync();
+                foreach(var req in requests)
+                {
+                    req.SupervisorId = toSupervisorId;
+                }
+
+                // Transfer from FYPProjects
+                var projects = await _context.FYPProjects
+                    .Where(p => p.SupervisorId == fromSupervisorId && p.Status != "Completed")
+                    .ToListAsync();
+                foreach (var p in projects)
+                {
+                    p.SupervisorId = toSupervisorId;
+                }
+                
+                // Transfer active meeting bookings (Pending or Approved)
+                var meetings = await _context.MeetingBookings
+                    .Where(m => m.SupervisorId == fromSupervisorId && (m.Status == "Pending" || m.Status == "Approved"))
+                    .ToListAsync();
+                foreach (var m in meetings)
+                {
+                    m.SupervisorId = toSupervisorId;
+                }
+
+                await _context.SaveChangesAsync();
+                TempData["Success"] = $"Successfully transferred {projects.Count} projects and {requests.Count} requests to the new supervisor.";
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "An error occurred during transfer: " + ex.Message;
+            }
+
+            return RedirectToAction(nameof(ManageUsers));
         }
 
         [HttpPost]
