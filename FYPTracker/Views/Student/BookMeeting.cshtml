@@ -284,9 +284,11 @@
                                             {
                                                 <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" 
                                                         data-id="@m.Id"
-                                                        data-pdf="@(m.MeetingLog?.PdfLogbookPath)"
+                                                        data-topics="@(m.MeetingLog?.KeyTopicsDiscussed)"
+                                                        data-completed="@(m.MeetingLog?.CompletedActionsAndNotes)"
+                                                        data-action="@(m.MeetingLog?.ActionPointsForNextMeeting)"
                                                         onclick="openStudentLogModal(this)">
-                                                    <i class="fas fa-edit"></i> @(m.MeetingLog == null ? "Upload Logbook" : "View/Re-upload Logbook")
+                                                    <i class="fas fa-edit"></i> @(m.MeetingLog == null ? "Record Logbook" : "Edit Logbook")
                                                 </button>
                                             }
                                             else
@@ -437,22 +439,22 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small mb-4">Download the template, fill it out, and upload it as a PDF. Your supervisor will review and sign this log.</p>
-                    
-                    <div class="mb-4 text-center">
-                        <a href="/templates/Record_of_supervisor_meeting_template.docx" class="btn btn-outline-primary rounded-3" download>
-                            <i class="fas fa-download me-2"></i>Download Word Template
-                        </a>
+                    <p class="text-muted small mb-4">Digitally record your meeting discussions here. Your supervisor will review and sign this log directly in the system.</p>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Key Topics Discussed <span class="text-danger">*</span></label>
+                        <textarea name="keyTopicsDiscussed" id="keyTopicsDiscussed" class="form-control rounded-3" rows="3" required placeholder="What was discussed in this meeting?"></textarea>
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label fw-bold">Upload Completed Logbook (PDF)</label>
-                        <input type="file" name="logbookPdf" id="logbookPdf" class="form-control rounded-3" accept="application/pdf" required />
-                        <div id="existingLogbookLink" class="mt-2" style="display:none;">
-                            <a href="#" target="_blank" class="text-success"><i class="fas fa-file-pdf me-1"></i>View Previously Uploaded Logbook</a>
-                        </div>
+                        <label class="form-label fw-bold">Completed Actions & Notes</label>
+                        <textarea name="completedActionsAndNotes" id="completedActionsAndNotes" class="form-control rounded-3" rows="3" placeholder="What progress have you made since the last meeting?"></textarea>
                     </div>
 
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Action Points for Next Meeting <span class="text-danger">*</span></label>
+                        <textarea name="actionPointsForNextMeeting" id="actionPointsForNextMeeting" class="form-control rounded-3" rows="3" required placeholder="What do you need to do before the next meeting?"></textarea>
+                    </div>
                 </div>
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
@@ -724,18 +726,9 @@
     function openStudentLogModal(btn) {
         document.getElementById('logMeetingId').value = btn.getAttribute('data-id');
         
-        const pdfPath = btn.getAttribute('data-pdf');
-        const linkContainer = document.getElementById('existingLogbookLink');
-        const linkAnchor = linkContainer.querySelector('a');
-
-        if (pdfPath && pdfPath !== '') {
-            linkAnchor.href = pdfPath;
-            linkContainer.style.display = 'block';
-            document.getElementById('logbookPdf').removeAttribute('required');
-        } else {
-            linkContainer.style.display = 'none';
-            document.getElementById('logbookPdf').setAttribute('required', 'required');
-        }
+        document.getElementById('keyTopicsDiscussed').value = btn.getAttribute('data-topics') || '';
+        document.getElementById('completedActionsAndNotes').value = btn.getAttribute('data-completed') || '';
+        document.getElementById('actionPointsForNextMeeting').value = btn.getAttribute('data-action') || '';
 
         new bootstrap.Modal(document.getElementById('studentLogModal')).show();
     }

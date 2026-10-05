@@ -157,6 +157,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [AllowAnonymous]
+        [ValidateAntiForgeryToken]
         public ActionResult ResetPassword(string token, string password, string confirmPassword)
         {
             if (string.IsNullOrEmpty(token))
@@ -175,6 +176,13 @@ namespace FYPTracker.Controllers
             if (password != confirmPassword)
             {
                 ViewBag.Error = "Passwords do not match.";
+                ViewBag.Token = token;
+                return View();
+            }
+
+            if (user.PassCode == Encryption.GetHash(password))
+            {
+                ViewBag.Error = "New password cannot be the same as your old password.";
                 ViewBag.Token = token;
                 return View();
             }
@@ -375,6 +383,7 @@ namespace FYPTracker.Controllers
 
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult EditProfile(EmployeeEditVM ApplicationUser, IFormFile? picture, string isImgChanged)
         {
             if (User.Identity.Name != ApplicationUser.UserName)
@@ -516,6 +525,7 @@ namespace FYPTracker.Controllers
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public virtual async Task<IActionResult> Login(string username, string password, string returnUrl, bool rmbMe = true)
         {
             if (!await _userService.ValidateEmployeeAsync(username, password))
@@ -562,7 +572,7 @@ namespace FYPTracker.Controllers
                 return RedirectToAction("ForceChangePassword", "User");
             }
 
-            if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl)) return Redirect(returnUrl);
 
             // Redirect based on role
             if (emp.UserType == "Student")
@@ -671,6 +681,7 @@ namespace FYPTracker.Controllers
 
         [Authorize]
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> ForceChangePassword(string newPassword, string confirmPassword, string fullName, string phone, string programme, string academicSession, string title, int? departmentId, List<string> selectedProgrammes, List<string> selectedSpecializations)
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
@@ -682,6 +693,15 @@ namespace FYPTracker.Controllers
             if (string.IsNullOrEmpty(newPassword) || newPassword != confirmPassword)
             {
                 ViewBag.Error = "Passwords do not match or are empty.";
+                ViewBag.Departments = await _context.Department.ToListAsync();
+                ViewBag.Programmes = await _context.Programme.ToListAsync();
+                ViewBag.Specializations = await _context.Specialization.ToListAsync();
+                return View();
+            }
+
+            if (user.PassCode == Encryption.GetHash(newPassword))
+            {
+                ViewBag.Error = "New password cannot be the same as your current password.";
                 ViewBag.Departments = await _context.Department.ToListAsync();
                 ViewBag.Programmes = await _context.Programme.ToListAsync();
                 ViewBag.Specializations = await _context.Specialization.ToListAsync();
@@ -866,6 +886,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [Authorize]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> ChangePassword(string currentPassword, string newPassword, string confirmPassword)
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
@@ -874,6 +895,12 @@ namespace FYPTracker.Controllers
             if (user.PassCode != Encryption.GetHash(currentPassword))
             {
                 TempData["Error"] = "Current password is incorrect.";
+                return RedirectToAction("Profile", new { name = user.UserName });
+            }
+
+            if (currentPassword == newPassword)
+            {
+                TempData["Error"] = "New password cannot be the same as your current password.";
                 return RedirectToAction("Profile", new { name = user.UserName });
             }
 

@@ -1579,10 +1579,10 @@ namespace FYPTracker.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ReviewMeetingLogSupervisor(
             int meetingId, 
-            IFormFile? signedLogbookPdf)
+            string? supervisorComments)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "User");
+            if (user == null) return RedirectToAction("Login", "Authentication");
 
             var meeting = await _context.MeetingBookings
                 .Include(m => m.MeetingLog)
@@ -1596,27 +1596,9 @@ namespace FYPTracker.Controllers
 
             meeting.MeetingLog.LogStatus = "Signed";
             meeting.MeetingLog.SignatureDate = DateTime.Now;
-
-            if (signedLogbookPdf != null && signedLogbookPdf.Length > 0)
+            if (!string.IsNullOrEmpty(supervisorComments))
             {
-                var extension = Path.GetExtension(signedLogbookPdf.FileName).ToLower();
-                if (extension != ".pdf")
-                {
-                    TempData["Error"] = "Only PDF files are allowed for the signed logbook.";
-                    return RedirectToAction(nameof(ManageMeetings));
-                }
-                
-                string uniqueFileName = $"logbook_signed_student_{meeting.StudentId}_meeting_{meeting.Id}_{Guid.NewGuid().ToString().Substring(0, 8)}.pdf";
-                string uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "logbooks");
-                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-                string filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-                using (var fileStream = new FileStream(filePath, FileMode.Create))
-                {
-                    await signedLogbookPdf.CopyToAsync(fileStream);
-                }
-
-                meeting.MeetingLog.SignedPdfLogbookPath = $"/uploads/logbooks/{uniqueFileName}";
+                meeting.MeetingLog.SupervisorComments = supervisorComments;
             }
 
             await _context.SaveChangesAsync();

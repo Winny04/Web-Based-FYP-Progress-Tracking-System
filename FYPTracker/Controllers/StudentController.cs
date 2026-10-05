@@ -1485,7 +1485,9 @@ namespace FYPTracker.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SubmitMeetingLogStudent(
             int meetingId, 
-            IFormFile logbookPdf,
+            string keyTopicsDiscussed,
+            string actionPointsForNextMeeting,
+            string completedActionsAndNotes,
             DateTime? nextMeetingDate,
             string? nextMeetingTime)
         {
@@ -1547,6 +1549,9 @@ namespace FYPTracker.Controllers
                 {
                     MeetingBookingId = meeting.Id,
                     NextMeetingDate = nextMeetingDate,
+                    KeyTopicsDiscussed = keyTopicsDiscussed,
+                    ActionPointsForNextMeeting = actionPointsForNextMeeting,
+                    CompletedActionsAndNotes = completedActionsAndNotes,
                     LogStatus = "Draft",
                     CreatedDate = DateTime.Now
                 };
@@ -1554,29 +1559,10 @@ namespace FYPTracker.Controllers
             else
             {
                 meeting.MeetingLog.NextMeetingDate = nextMeetingDate;
+                meeting.MeetingLog.KeyTopicsDiscussed = keyTopicsDiscussed;
+                meeting.MeetingLog.ActionPointsForNextMeeting = actionPointsForNextMeeting;
+                meeting.MeetingLog.CompletedActionsAndNotes = completedActionsAndNotes;
                 meeting.MeetingLog.LogStatus = "Draft";
-            }
-
-            if (logbookPdf != null && logbookPdf.Length > 0)
-            {
-                var extension = Path.GetExtension(logbookPdf.FileName).ToLower();
-                if (extension != ".pdf")
-                {
-                    TempData["Error"] = "Only PDF files are allowed for the logbook.";
-                    return RedirectToAction(nameof(BookMeeting));
-                }
-                
-                string uniqueFileName = $"logbook_student_{meeting.StudentId}_meeting_{meeting.Id}_{Guid.NewGuid().ToString().Substring(0, 8)}.pdf";
-                string uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "logbooks");
-                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-                string filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-                using (var fileStream = new FileStream(filePath, FileMode.Create))
-                {
-                    await logbookPdf.CopyToAsync(fileStream);
-                }
-
-                meeting.MeetingLog.PdfLogbookPath = $"/uploads/logbooks/{uniqueFileName}";
             }
 
             await _context.SaveChangesAsync();
