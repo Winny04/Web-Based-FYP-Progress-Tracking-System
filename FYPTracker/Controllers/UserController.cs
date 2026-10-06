@@ -42,10 +42,19 @@ namespace FYPTracker.Controllers
             _authenticationService = authenticationService;
         }
 
+        [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        public IActionResult SwitchRole(string newRole)
+        {
+            var validRoles = new[] { "Admin", "SuperAdmin", "Supervisor", "Examiner", "Student" };
+            if (validRoles.Contains(newRole))
+            {
+                HttpContext.Session.SetString("ActiveRole", newRole);
+            }
+            return RedirectToAction("Index", "Home");
+        }
 
-
-
-        
         [AllowAnonymous]
         public ActionResult ForgotPassword()
         {

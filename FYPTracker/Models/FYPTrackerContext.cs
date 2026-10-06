@@ -19,6 +19,7 @@ namespace FYPTracker.Models
         public virtual DbSet<Department>        Department         { get; set; } = null!;
         public virtual DbSet<Programme>         Programme          { get; set; } = null!;
         public virtual DbSet<Specialization>    Specialization     { get; set; } = null!;
+        public virtual DbSet<AcademicSession>   AcademicSessions   { get; set; } = null!;
         public virtual DbSet<SupervisorAvailability> SupervisorAvailabilities { get; set; } = null!;
         public virtual DbSet<AppRole>           AppRoles           { get; set; } = null!;
         public virtual DbSet<UserRoleMapping>   UserRoleMappings   { get; set; } = null!;

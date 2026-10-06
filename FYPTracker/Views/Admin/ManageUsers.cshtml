@@ -890,7 +890,11 @@
                                 let buttonComponent = '<div class="action-btn-group justify-content-end">';
                                 buttonComponent += '<a id="edit_' + row.id + '" onclick="Edit(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit"><i class="bi bi-pencil-fill fs-4"></i></a>';
                                 if (row.userType === 'Supervisor' || row.userType === 'SUPERVISOR') {
-                                    buttonComponent += '<a id="transfer_' + row.id + '" onclick="TransferStudentsModal(' + row.id + ', \'' + row.fullName + '\')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Transfer Students"><i class="fas fa-exchange-alt fs-4 text-primary"></i></a>';
+                                    buttonComponent += '<a id="transfer_' + row.id + '" onclick="TransferStudentsModal(' + row.id + ', \'' + row.fullName.replace(/'/g, "\\'") + '\')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Transfer Students"><i class="fas fa-exchange-alt fs-4 text-primary"></i></a>';
+                                }
+                                if (row.userType === 'Supervisor' || row.userType === 'SUPERVISOR' || row.userType === 'Examiner' || row.userType === 'EXAMINER') {
+                                    var safeStudents = (row.assignedStudents || 'No Students').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                                    buttonComponent += '<a onclick="ViewAssignedStudents(\'' + row.fullName.replace(/'/g, "\\'") + '\', \'' + safeStudents + '\')" class="btn btn-icon btn-bg-light btn-active-color-info btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="View Assigned Students"><i class="fas fa-users fs-4 text-info"></i></a>';
                                 }
                                 // Resend invite button — only for users who haven't activated yet
                                 if (row.requirePasswordChange) {
@@ -910,6 +914,30 @@
                 }
             )
 
+        });
+    }
+
+    function ViewAssignedStudents(supervisorName, studentsStr) {
+        let listHtml = '';
+        if (studentsStr === 'No Students' || !studentsStr) {
+            listHtml = '<div class="text-muted fst-italic py-3">No students assigned yet.</div>';
+        } else {
+            let students = studentsStr.split(', ');
+            listHtml = '<ul class="list-group list-group-flush text-start mt-3" style="max-height: 250px; overflow-y: auto;">';
+            students.forEach(s => {
+                listHtml += '<li class="list-group-item px-0 border-0 border-bottom"><i class="fas fa-user-graduate me-3 text-primary"></i><span class="fw-bold">' + s + '</span></li>';
+            });
+            listHtml += '</ul>';
+        }
+        
+        Swal.fire({
+            title: '<i class="fas fa-users text-primary me-2 fs-2"></i> Assigned Students',
+            html: '<div class="mb-4 text-muted border-bottom pb-3">Students assigned to <strong class="text-dark">' + supervisorName + '</strong></div>' + listHtml,
+            confirmButtonColor: '#3b82f6',
+            confirmButtonText: 'Close',
+            customClass: {
+                popup: 'rounded-4'
+            }
         });
     }
 

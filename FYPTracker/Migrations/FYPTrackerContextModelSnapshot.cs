@@ -22,6 +22,27 @@ namespace FYPTracker.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder, 1L, 1);
 
+            modelBuilder.Entity("FYPTracker.Models.AcademicSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)")
+                        .HasColumnName("SessionName");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AcademicSession");
+                });
+
             modelBuilder.Entity("FYPTracker.Models.ApplicationUser", b =>
                 {
                     b.Property<int>("Id")

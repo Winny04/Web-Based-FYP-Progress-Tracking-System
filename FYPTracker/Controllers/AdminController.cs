@@ -2354,7 +2354,9 @@ public ActionResult ManageUsersData()
         // ────────────────────────────────────────────────────────
         public async Task<IActionResult> Reporting(string sessionFilter)
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers
+                .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             if (user == null || (!user.UserRoles.Any(r => r.Role.Name == "Admin") && !user.UserRoles.Any(r => r.Role.Name == "SuperAdmin"))) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
@@ -2478,6 +2480,11 @@ public ActionResult ManageUsersData()
                     var data = _context.Specialization.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive }).ToList();
                     return Json(new { data = data });
                 }
+                else if (type == "AcademicSession")
+                {
+                    var data = _context.AcademicSessions.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive }).ToList();
+                    return Json(new { data = data });
+                }
                 return Json(new { data = new List<object>() });
             }
             catch (Exception ex)
@@ -2509,6 +2516,11 @@ public ActionResult ManageUsersData()
                     if (_context.Specialization.Any(x => x.Name.ToLower() == name.ToLower())) return Json(new { status = false, msg = "Exists!" });
                     _context.Specialization.Add(new Specialization { Name = name, IsActive = true });
                 }
+                else if (type == "AcademicSession")
+                {
+                    if (_context.AcademicSessions.Any(x => x.Name.ToLower() == name.ToLower())) return Json(new { status = false, msg = "Exists!" });
+                    _context.AcademicSessions.Add(new AcademicSession { Name = name, IsActive = true });
+                }
                 _context.SaveChanges();
                 return Json(new { status = true });
             }
@@ -2539,6 +2551,11 @@ public ActionResult ManageUsersData()
                 else if (type == "Specialization")
                 {
                     var entity = _context.Specialization.Find(id);
+                    if (entity != null) { entity.Name = name; _context.SaveChanges(); }
+                }
+                else if (type == "AcademicSession")
+                {
+                    var entity = _context.AcademicSessions.Find(id);
                     if (entity != null) { entity.Name = name; _context.SaveChanges(); }
                 }
                 return Json(new { status = true });
@@ -2619,6 +2636,11 @@ public ActionResult ManageUsersData()
                 else if (type == "Specialization")
                 {
                     var entity = _context.Specialization.Find(id);
+                    if (entity != null) { entity.IsActive = !entity.IsActive; _context.SaveChanges(); }
+                }
+                else if (type == "AcademicSession")
+                {
+                    var entity = _context.AcademicSessions.Find(id);
                     if (entity != null) { entity.IsActive = !entity.IsActive; _context.SaveChanges(); }
                 }
                 return Json(new { status = true });

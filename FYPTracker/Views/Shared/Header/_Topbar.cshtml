@@ -5,12 +5,18 @@
     @using System.Net;
     @using Microsoft.AspNetCore.Mvc.Rendering;
     @using Microsoft.Data.SqlClient;
+    @using Microsoft.EntityFrameworkCore;
+    @using Microsoft.AspNetCore.Http;
     @{
         var dbContext = Context.RequestServices.GetService(typeof(FYPTrackerContext)) as FYPTrackerContext;
         var currentUserName = Context.User.Identity?.Name;
-        var currentUserObj = currentUserName != null ? dbContext?.ApplicationUsers.FirstOrDefault(u => u.UserName == currentUserName) : null;
+        var currentUserObj = currentUserName != null ? dbContext?.ApplicationUsers.Include(u => u.UserRoles).ThenInclude(ur => ur.Role).FirstOrDefault(u => u.UserName == currentUserName) : null;
         var avatarImg = !string.IsNullOrEmpty(currentUserObj?.Image) ? currentUserObj.Image : "/assets/media/avatars/blank.png";
-        var userType = currentUserObj?.UserType ?? "";
+        
+        var userType = Context.Session.GetString("ActiveRole");
+        if (string.IsNullOrEmpty(userType)) {
+            userType = currentUserObj?.UserType ?? "";
+        }
         
         string notifUrl = "/User/Notification";
         if (userType == "Student") {
@@ -58,6 +64,35 @@
             <!--end::Menu item-->
             <!--begin::Menu separator-->
             <div class="separator my-2"></div>
+            @if (currentUserObj != null && currentUserObj.UserRoles != null && currentUserObj.UserRoles.Count > 1)
+            {
+                <div class="menu-item px-5" data-kt-menu-trigger="hover" data-kt-menu-placement="left-start">
+                    <a href="#" class="menu-link px-5">
+                        <span class="menu-title"><i class="fas fa-exchange-alt me-2 text-muted"></i> Switch Role</span>
+                        <span class="menu-arrow"></span>
+                    </a>
+                    <div class="menu-sub menu-sub-dropdown w-175px py-4">
+                        @foreach (var ur in currentUserObj.UserRoles)
+                        {
+                            var roleName = ur.Role?.Name;
+                            if (!string.IsNullOrEmpty(roleName))
+                            {
+                                <div class="menu-item px-3">
+                                    <form method="post" action="/User/SwitchRole" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="newRole" value="@roleName" />
+                                        <a href="javascript:void(0);" onclick="$(this).closest('form').submit();" class="menu-link px-5 @(userType == roleName ? "active text-primary" : "")">
+                                            @roleName
+                                        </a>
+                                    </form>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+                <div class="separator my-2"></div>
+            }
+
             @if (userType != "Admin") {
                 <div class="menu-item px-5">
                     <a href="@notifUrl" class="menu-link px-5">
