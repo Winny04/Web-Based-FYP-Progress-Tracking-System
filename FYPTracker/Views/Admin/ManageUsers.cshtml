@@ -1111,12 +1111,14 @@
                     $('#editEmail').val(data.email);
                     $('#editPhone').val(data.phone);
 
-                    if (data.userType === 'Student' || data.userType === 'STUDENT' ||
-                        data.userType === 'Supervisor' || data.userType === 'SUPERVISOR' ||
-                        data.userType === 'Examiner' || data.userType === 'EXAMINER') {
+                    var uType = (data.userType || "").toLowerCase();
+                    var isStudent = uType.includes('student');
+                    var isAcademicStaff = uType.includes('supervisor') || uType.includes('examiner');
+
+                    if (isStudent || isAcademicStaff) {
                         $('#editLookupFields').show();
 
-                        if (data.userType === 'Student' || data.userType === 'STUDENT') {
+                        if (isStudent) {
                             $('#editDeptContainer').hide();
                             $('#editDepartment').val('');
                             $('#editSpecContainer').hide();
@@ -1138,7 +1140,7 @@
                                 }
                                 $sessSel.val(data.academicSession);
                             }
-                        } else {
+                        } else if (isAcademicStaff) {
                             $('#editDeptContainer').show();
                             $('#editSpecContainer').show();
                             $('#editProgContainer').show();
@@ -1155,10 +1157,10 @@
                         $('#editLookupFields').hide();
                     }
 
-                    if (data.userType === 'Student' || data.userType === 'STUDENT') {
+                    if (isStudent) {
                         // editStudentFields already shown above
                         $('#editSupervisorFields').hide();
-                    } else if (data.userType === 'Supervisor' || data.userType === 'SUPERVISOR') {
+                    } else if (isAcademicStaff) {
                         $('#editStudentFields').hide();
                         $('#editSupervisorFields').show();
                         $('#editTitle').val(data.title);

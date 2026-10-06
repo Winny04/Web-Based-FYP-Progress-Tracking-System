@@ -120,8 +120,11 @@ namespace FYPTracker.Controllers
 
         public async Task<IActionResult> Index()
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
-            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Examiner")) return RedirectToAction("Login", "User");
+            var user = await _context.ApplicationUsers
+                .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+            if (!user.UserRoles.Any(r => r.Role.Name == "Examiner")) return RedirectToAction("AccessDenied", "Home");
 
             ViewBag.CurrentUser = user;
 
@@ -630,18 +633,17 @@ namespace FYPTracker.Controllers
             if (project.Student != null && !string.IsNullOrEmpty(project.Student.Email))
             {
                 string subject = "FYP Viva Oral Examination Scheduled";
-                string body = $@"
-                    <div style='font-family: Arial, sans-serif;'>
-                        <h3>Viva Oral Examination Scheduled</h3>
-                        <p>Dear <strong>{project.Student.FullName}</strong>,</p>
-                        <p>Your Final Year Project Viva Oral Examination has been scheduled.</p>
-                        <ul>
-                            <li><strong>Date & Time:</strong> {formattedDate}</li>
-                            <li><strong>Project Title:</strong> {project.Title}</li>
-                            <li><strong>Examiner:</strong> {user.FullName}</li>
-                        </ul>
-                        <p>Please ensure you are fully prepared for your presentation. Log in to the FYP Tracker system for more details.</p>
-                    </div>";
+                string message = $@"<p>Dear <strong>{project.Student.FullName}</strong>,</p><br/>
+                    <p>Your Final Year Project Viva Oral Examination has been scheduled.</p>
+                    <ul>
+                        <li><strong>Date & Time:</strong> {formattedDate}</li>
+                        <li><strong>Project Title:</strong> {project.Title}</li>
+                        <li><strong>Examiner:</strong> {user.FullName}</li>
+                    </ul>
+                    <p>Please ensure you are fully prepared for your presentation.</p>";
+                var request = HttpContext.Request;
+                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
                 _emailService.Send(project.Student.Email, subject, body);
             }
 
@@ -649,18 +651,16 @@ namespace FYPTracker.Controllers
             if (project.Supervisor != null && !string.IsNullOrEmpty(project.Supervisor.Email))
             {
                 string subject = "FYP Viva Date Scheduled – Student Notification";
-                string body = $@"
-                    <div style='font-family: Arial, sans-serif;'>
-                        <h3>Viva Date Scheduled</h3>
-                        <p>Dear <strong>{project.Supervisor.FullName}</strong>,</p>
-                        <p>The examiner <strong>{user.FullName}</strong> has scheduled the Viva Oral Examination for your student.</p>
-                        <ul>
-                            <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
-                            <li><strong>Project Title:</strong> {project.Title}</li>
-                            <li><strong>Date & Time:</strong> {formattedDate}</li>
-                        </ul>
-                        <p>Please log in to the FYP Tracker system for more details.</p>
-                    </div>";
+                string message = $@"<p>Dear <strong>{project.Supervisor.FullName}</strong>,</p><br/>
+                    <p>The examiner <strong>{user.FullName}</strong> has scheduled the Viva Oral Examination for your student.</p>
+                    <ul>
+                        <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
+                        <li><strong>Project Title:</strong> {project.Title}</li>
+                        <li><strong>Date & Time:</strong> {formattedDate}</li>
+                    </ul>";
+                var request = HttpContext.Request;
+                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
                 _emailService.Send(project.Supervisor.Email, subject, body);
             }
 

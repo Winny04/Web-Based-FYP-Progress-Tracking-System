@@ -75,11 +75,12 @@ namespace FYPTracker.Services.BackgroundTasks
                         if (!string.IsNullOrEmpty(meeting.Student?.Email))
                         {
                             string subject = "FYP Meeting Reminder: Tomorrow";
-                            string html = $"<p>Dear {meeting.Student.FullName},</p>" +
+                            string message = $"<p>Dear {meeting.Student.FullName},</p><br/>" +
                                           $"<p>This is a reminder that your FYP meeting with your supervisor, {meeting.Supervisor?.FullName}, is scheduled for tomorrow.</p>" +
                                           $"<p><strong>Time:</strong> {meetingStart:dd MMM yyyy, hh:mm tt}<br/>" +
                                           $"<strong>Location:</strong> {meeting.Location ?? "TBA"}</p>" +
                                           $"<p>Please be prepared.</p>";
+                            string html = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message);
                             await emailService.Send(new System.Collections.Generic.List<string> { meeting.Student.Email }, subject, html);
                         }
 
@@ -87,10 +88,11 @@ namespace FYPTracker.Services.BackgroundTasks
                         if (!string.IsNullOrEmpty(meeting.Supervisor?.Email))
                         {
                             string subject = "FYP Meeting Reminder: Tomorrow";
-                            string html = $"<p>Dear {meeting.Supervisor.FullName},</p>" +
+                            string message = $"<p>Dear {meeting.Supervisor.FullName},</p><br/>" +
                                           $"<p>This is a reminder that your FYP meeting with your student, {meeting.Student?.FullName}, is scheduled for tomorrow.</p>" +
                                           $"<p><strong>Time:</strong> {meetingStart:dd MMM yyyy, hh:mm tt}<br/>" +
                                           $"<strong>Location:</strong> {meeting.Location ?? "TBA"}</p>";
+                            string html = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message);
                             await emailService.Send(new System.Collections.Generic.List<string> { meeting.Supervisor.Email }, subject, html);
                         }
 

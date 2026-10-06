@@ -47,12 +47,40 @@ namespace FYPTracker.Controllers
         [ValidateAntiForgeryToken]
         public IActionResult SwitchRole(string newRole)
         {
-            var validRoles = new[] { "Admin", "SuperAdmin", "Supervisor", "Examiner", "Student" };
-            if (validRoles.Contains(newRole))
+            // Switching only updates Session["ActiveRole"]; the auth cookie is never touched here.
+            var dashboards = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                HttpContext.Session.SetString("ActiveRole", newRole);
+                { "Supervisor", "Supervisor" },
+                { "Examiner", "Examiner" },
+                { "Student", "Student" },
+                { "Admin", "Admin" },
+                { "SuperAdmin", "Admin" }
+            };
+
+            if (string.IsNullOrWhiteSpace(newRole) || !dashboards.ContainsKey(newRole))
+            {
+                TempData["error"] = "Invalid role selected.";
+                return RedirectToAction("Index", "Home");
             }
-            return RedirectToAction("Index", "Home");
+
+            // Ownership check: cookie role claims first, then UserRoleMappings as fallback.
+            var ownsRole = User.Claims.Any(c => c.Type == System.Security.Claims.ClaimTypes.Role
+                                                && string.Equals(c.Value, newRole, StringComparison.OrdinalIgnoreCase));
+            if (!ownsRole && int.TryParse(User.FindFirst("Id")?.Value, out int userId))
+            {
+                ownsRole = _context.UserRoleMappings
+                    .Any(ur => ur.UserId == userId && ur.Role.Name == newRole);
+            }
+
+            if (!ownsRole)
+            {
+                TempData["error"] = "You do not have access to the requested role.";
+                return RedirectToAction("Index", "Home");
+            }
+
+            var canonicalRole = dashboards.Keys.First(k => string.Equals(k, newRole, StringComparison.OrdinalIgnoreCase));
+            HttpContext.Session.SetString("ActiveRole", canonicalRole);
+            return RedirectToAction("Index", dashboards[canonicalRole]);
         }
 
         [AllowAnonymous]
@@ -81,35 +109,10 @@ namespace FYPTracker.Controllers
 
                     var resetLink = $"https://{HttpContext.Request.Host}/User/ResetPassword?token={token}";
 
-                    string message = $@"<p>Dear {user.FullName},</p><br />
+                    string message = $@"<p>Dear {user.FullName},</p><br/>
                                 <p>You have requested to reset your password for the FYP Tracking System.</p>
-                                <p>Please click the button below to reset your password. This link is valid for 30 minutes.</p>
-						        <div style=""padding-bottom: 40px; text-align:center;"">
-							        <a href='{resetLink}' style=""text-decoration:none;display:inline-block;text-align:center;padding:0.75575rem 1.3rem;font-size:0.925rem;line-height:1.5;border-radius:0.35rem;color:#ffffff;background-color:#0d9488;border:0px;margin-right:0.75rem!important;font-weight:600!important;outline:none!important;vertical-align:middle"">Reset Password</a>
-						        </div>";
-                    string html = $@"<div style=""font-family:Arial,Helvetica,sans-serif; line-height: 1.5; font-weight: normal; font-size: 15px; color: #2F3044; min-height: 100%; margin:0; padding:0; width:100%; background-color:#edf2f7;padding-bottom:40px"">
-	                        <table align=""center"" border=""0"" cellpadding=""0"" cellspacing=""0"" width=""100%"" style=""border-collapse:collapse;margin:0 auto; padding:0; max-width:600px"">
-		                        <tbody>
-			                        <tr>
-				                        <td align=""center"" valign=""center"" style=""text-align:center;"">
-						                        <span style=""font-size: 24px; font-weight: bold; color: #0d9488;"">FYP Tracking System</span>
-                                        </td>
-			                        </tr>
-			                        <tr>
-				                        <td align=""left"" valign=""center"">
-					                        <div style=""text-align:left; margin: 0 0px; padding: 40px; background-color:#ffffff; border-radius: 6px"">
-						                        <!--begin:Email content-->
-						                        <div style=""padding-bottom: 30px; font-size: 17px;"">
-							                        <h3 style=""text-align:center;"">{title}</h3>
-						                        </div>
-                                                {message}
-                                                </br>
-					                        </div>
-				                        </td>
-			                        </tr>
-		                        </tbody>
-	                        </table>
-                        </div>";
+                                <p>This link is valid for 30 minutes.</p>";
+                    string html = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(title, message, "Reset Password", resetLink);
 
                     var email = user.Email;
                     if (!string.IsNullOrEmpty(email))

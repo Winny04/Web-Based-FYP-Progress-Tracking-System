@@ -1,4 +1,4 @@
-using FYPTracker.Models;
+﻿using FYPTracker.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -242,7 +242,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> ProjectDetails()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             ViewBag.CurrentUser = user;
 
@@ -273,7 +273,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> SelectSupervisor()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             // If student already has a confirmed supervisor, redirect to dashboard
             var hasApproved = await _context.SupervisorRequests
@@ -351,7 +351,7 @@ namespace FYPTracker.Controllers
             try 
             {
                 var user = await GetCurrentUserAsync();
-                if (user == null) return RedirectToAction("Login", "Authentication");
+                if (user == null) return RedirectToAction("Login", "User");
 
                 if (!string.IsNullOrEmpty(newSession))
                 {
@@ -375,7 +375,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> SubmitSupervisorRequest(int supervisorId, string matricNumber, string program, string phoneNumber, string sessionSemester, string projectTopic, string? requestMessage)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var myRequests = await _context.SupervisorRequests.Where(r => r.StudentId == user.Id && r.Status != "Failed").ToListAsync();
             
@@ -490,7 +490,10 @@ namespace FYPTracker.Controllers
                 if (!string.IsNullOrEmpty(supervisor.Email))
                 {
                     string subject = "New FYP Supervision Request";
-                    string body = $"<p>Dear {supervisor.FullName},</p><p>You have received a new FYP supervision request from <b>{user.FullName}</b>.</p><p><b>Topic:</b> {projectTopic}</p><p>Please log in to the FYP Tracker portal to approve or reject this request.</p>";
+                    string message = $"<p>Dear {supervisor.FullName},</p><br/><p>You have received a new FYP supervision request from <strong>{user.FullName}</strong>.</p><p><strong>Project Title:</strong> {projectTopic}</p>";
+                    var httpRequest = HttpContext.Request;
+                    string loginUrl = $"{httpRequest.Scheme}://{httpRequest.Host}/User/Login";
+                    string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Request", loginUrl);
                     try 
                     {
                         _emailService.Send(supervisor.Email, subject, body);
@@ -601,7 +604,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> SubmitForJointEvaluation(int milestoneId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var milestone = await _context.FYPMilestones
                 .Include(m => m.Project)
@@ -873,7 +876,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> Forms()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             ViewBag.CurrentUser = user;
 
@@ -962,7 +965,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> BookMeeting()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             ViewBag.CurrentUser = user;
 
@@ -1022,7 +1025,7 @@ namespace FYPTracker.Controllers
             int supervisorId, string meetingDate, string meetingTime, string? reason)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             if (!DateTime.TryParse(meetingDate, out var parsedDate))
             {
@@ -1150,7 +1153,10 @@ namespace FYPTracker.Controllers
             if (supervisor != null && !string.IsNullOrEmpty(supervisor.Email))
             {
                 string supSubject = "New FYP Meeting Booking Request";
-                string supBody = $"<p>Dear {supervisor.FullName},</p><p>You have a new meeting booking request from <strong>{user.FullName}</strong>.</p><ul><li><strong>Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>Time:</strong> {meetingTime}</li><li><strong>Reason:</strong> {reason}</li></ul><p>Please log in to the FYP Tracker system to approve or reject this request.</p>";
+                string message = $"<p>Dear {supervisor.FullName},</p><br/><p>You have a new meeting booking request from <strong>{user.FullName}</strong>.</p><ul><li><strong>Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>Time:</strong> {meetingTime}</li><li><strong>Reason:</strong> {reason}</li></ul>";
+                var request = HttpContext.Request;
+                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                string supBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(supSubject, message, "Log In to View Request", loginUrl);
                 _emailService.Send(supervisor.Email, supSubject, supBody);
             }
             
@@ -1175,7 +1181,10 @@ namespace FYPTracker.Controllers
             if (!string.IsNullOrEmpty(user.Email))
             {
                 string stuSubject = "Meeting Booking Request Submitted";
-                string stuBody = $"<p>Dear {user.FullName},</p><p>Your meeting request with <strong>{supName}</strong> has been successfully submitted and is currently pending approval.</p><ul><li><strong>Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>Time:</strong> {meetingTime}</li><li><strong>Reason:</strong> {reason}</li></ul><p>You will be notified once the supervisor responds.</p>";
+                string message = $"<p>Dear {user.FullName},</p><br/><p>Your meeting request with <strong>{supName}</strong> has been successfully submitted and is currently pending approval.</p><ul><li><strong>Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>Time:</strong> {meetingTime}</li><li><strong>Reason:</strong> {reason}</li></ul><p>You will be notified once the supervisor responds.</p>";
+                var request = HttpContext.Request;
+                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                string stuBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(stuSubject, message, "Log In to View Details", loginUrl);
                 _emailService.Send(user.Email, stuSubject, stuBody);
             }
 
@@ -1268,7 +1277,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> CancelMeeting(int meetingId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var meeting = await _context.MeetingBookings
                 .FirstOrDefaultAsync(m => m.Id == meetingId && m.StudentId == user.Id && (m.Status == "Pending" || m.Status == "Postponed"));
@@ -1310,7 +1319,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> AcceptPostponedMeeting(int meetingId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var meeting = await _context.MeetingBookings
                 .FirstOrDefaultAsync(m => m.Id == meetingId && m.StudentId == user.Id && m.Status == "Postponed");
@@ -1355,7 +1364,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> RescheduleMeeting(int meetingId, string meetingDate, string meetingTime)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             if (!DateTime.TryParse(meetingDate, out var parsedDate))
             {
@@ -1448,7 +1457,10 @@ namespace FYPTracker.Controllers
                 if (supervisor != null && !string.IsNullOrEmpty(supervisor.Email))
                 {
                     string supSubject = "FYP Meeting Rescheduled by Student";
-                    string supBody = $"<p>Dear {supervisor.FullName},</p><p><strong>{user.FullName}</strong> has rescheduled a meeting.</p><ul><li><strong>New Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>New Time:</strong> {meetingTime}</li></ul><p>Please log in to the FYP Tracker system to re-approve this request.</p>";
+                    string message = $"<p>Dear {supervisor.FullName},</p><br/><p>Student <strong>{user.FullName}</strong> has rescheduled a meeting.</p><ul><li><strong>New Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>New Time:</strong> {meetingTime}</li></ul>";
+                    var request = HttpContext.Request;
+                    string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                    string supBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(supSubject, message, "Log In to Re-Approve", loginUrl);
                     _emailService.Send(supervisor.Email, supSubject, supBody);
                 }
                 
@@ -1472,7 +1484,10 @@ namespace FYPTracker.Controllers
                 if (!string.IsNullOrEmpty(user.Email))
                 {
                     string stuSubject = "Meeting Rescheduled Successfully";
-                    string stuBody = $"<p>Dear {user.FullName},</p><p>Your meeting with <strong>{supName}</strong> has been rescheduled to {parsedDate:dd MMM yyyy} at {meetingTime} and is pending approval.</p>";
+                    string message = $"<p>Dear {user.FullName},</p><br/><p>Your meeting with <strong>{supName}</strong> has been rescheduled to {parsedDate:dd MMM yyyy} at {meetingTime} and is pending approval.</p>";
+                    var request = HttpContext.Request;
+                    string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                    string stuBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(stuSubject, message, "Log In to View Details", loginUrl);
                     _emailService.Send(user.Email, stuSubject, stuBody);
                 }
 
@@ -1493,7 +1508,7 @@ namespace FYPTracker.Controllers
             string? nextMeetingTime)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var meeting = await _context.MeetingBookings
                 .Include(m => m.MeetingLog)
@@ -1587,7 +1602,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> ViewMeetingLog(int id)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var log = await _context.MeetingLogs
                 .Include(l => l.MeetingBooking)
@@ -1614,7 +1629,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> Notifications()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             ViewBag.CurrentUser = user;
 
@@ -1632,7 +1647,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> MarkAsRead(int notificationId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var notification = await _context.FYPNotifications
                 .FirstOrDefaultAsync(n => n.Id == notificationId && n.RecipientId == user.Id);
@@ -1651,7 +1666,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> MarkAllRead()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var unread = await _context.FYPNotifications
                 .Where(n => n.RecipientId == user.Id && !n.IsRead)
@@ -1686,7 +1701,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> DownloadFile(int fileId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var file = await _context.FYPSubmissionFiles.FindAsync(fileId);
             if (file == null || string.IsNullOrEmpty(file.FilePath)) return NotFound();
@@ -1716,7 +1731,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> DownloadProposalTemplate()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var project = await _context.FYPProjects
                 .Include(p => p.Supervisor)
@@ -1917,7 +1932,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> DownloadProgressTemplate(int? milestoneId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var project = await _context.FYPProjects
                 .Include(p => p.Supervisor)
@@ -2060,7 +2075,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> DownloadFinalTemplate()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "Authentication");
+            if (user == null) return RedirectToAction("Login", "User");
 
             var project = await _context.FYPProjects
                 .Include(p => p.Supervisor)

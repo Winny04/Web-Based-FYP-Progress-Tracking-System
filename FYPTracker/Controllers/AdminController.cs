@@ -369,17 +369,17 @@ namespace FYPTracker.Controllers
             if (project.Student != null && !string.IsNullOrEmpty(project.Student.Email))
             {
                 string subject = "FYP Viva Oral Examination Scheduled";
-                string body = $@"<div style='font-family: Arial, sans-serif;'>
-                    <h3>Viva Oral Examination Scheduled</h3>
-                    <p>Dear <strong>{project.Student.FullName}</strong>,</p>
+                string message = $@"<p>Dear <strong>{project.Student.FullName}</strong>,</p><br/>
                     <p>Your Final Year Project Viva Oral Examination has been scheduled by the Admin.</p>
                     <ul>
                         <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
                         <li><strong>Venue:</strong> {venueDisplay}</li>
                         <li><strong>Project Title:</strong> {project.Title}</li>
                     </ul>
-                    <p>Please ensure you are fully prepared. Log in to the FYP Tracker for more details.</p>
-                </div>";
+                    <p>Please ensure you are fully prepared.</p>";
+                var request = HttpContext.Request;
+                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
                 try { _emailService.Send(project.Student.Email, subject, body); } catch { }
             }
 
@@ -387,18 +387,17 @@ namespace FYPTracker.Controllers
             if (project.Supervisor != null && !string.IsNullOrEmpty(project.Supervisor.Email))
             {
                 string subject = "FYP Viva Scheduled – Student Notification";
-                string body = $@"<div style='font-family: Arial, sans-serif;'>
-                    <h3>Viva Scheduled</h3>
-                    <p>Dear <strong>{project.Supervisor.FullName}</strong>,</p>
+                string message = $@"<p>Dear <strong>{project.Supervisor.FullName}</strong>,</p><br/>
                     <p>The Admin has scheduled the Viva Oral Examination for your student.</p>
                     <ul>
                         <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
                         <li><strong>Project Title:</strong> {project.Title}</li>
                         <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
                         <li><strong>Venue:</strong> {venueDisplay}</li>
-                    </ul>
-                    <p>Please log in to the FYP Tracker for more details.</p>
-                </div>";
+                    </ul>";
+                var request = HttpContext.Request;
+                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
                 try { _emailService.Send(project.Supervisor.Email, subject, body); } catch { }
             }
 
@@ -406,18 +405,17 @@ namespace FYPTracker.Controllers
             if (examiner != null && !string.IsNullOrEmpty(examiner.Email))
             {
                 string subject = "FYP Viva Scheduled – Examiner Notification";
-                string body = $@"<div style='font-family: Arial, sans-serif;'>
-                    <h3>Viva Scheduled</h3>
-                    <p>Dear <strong>{examiner.FullName}</strong>,</p>
+                string message = $@"<p>Dear <strong>{examiner.FullName}</strong>,</p><br/>
                     <p>The Admin has scheduled the Viva Oral Examination for a student you are examining.</p>
                     <ul>
                         <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
                         <li><strong>Project Title:</strong> {project.Title}</li>
                         <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
                         <li><strong>Venue:</strong> {venueDisplay}</li>
-                    </ul>
-                    <p>Please log in to the FYP Tracker for more details.</p>
-                </div>";
+                    </ul>";
+                var request = HttpContext.Request;
+                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
                 try { _emailService.Send(examiner.Email, subject, body); } catch { }
             }
 
@@ -498,7 +496,10 @@ namespace FYPTracker.Controllers
                 if (!string.IsNullOrEmpty(examiner.Email))
                 {
                     string subject = "FYP Tracking System - Examiner Assignment";
-                    string content = $"<p>Dear {examiner.FullName},</p><p>You have been assigned by the Administrator as the Examiner for project: <strong>{project.Title}</strong> (Student: <strong>{project.Student?.FullName ?? "Unknown"}</strong>).</p><p>Please log in to the FYP Tracking System to view details.</p>";
+                    string message = $"<p>Dear {examiner.FullName},</p><br/><p>You have been assigned by the Administrator as the Examiner for project: <strong>{project.Title}</strong> (Student: <strong>{project.Student?.FullName ?? "Unknown"}</strong>).</p>";
+                    var request = HttpContext.Request;
+                    string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                    string content = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
                     _emailService.Send(examiner.Email, subject, content);
                 }
             }
@@ -625,7 +626,10 @@ namespace FYPTracker.Controllers
                 if (!string.IsNullOrEmpty(selectedExaminer.Email))
                 {
                     string subject = "FYP Tracking System - AI Examiner Assignment";
-                    string content = $"<p>Dear {selectedExaminer.FullName},</p><p>Our AI matching engine has identified you as the best-matched Examiner for project: <strong>{project.Title}</strong> (Student: <strong>{project.Student?.FullName ?? "Unknown"}</strong>) based on your specialisation.</p><p>Please log in to the FYP Tracking System to view details.</p>";
+                    string message = $"<p>Dear {selectedExaminer.FullName},</p><br/><p>Our AI matching engine has identified you as the best-matched Examiner for project: <strong>{project.Title}</strong> (Student: <strong>{project.Student?.FullName ?? "Unknown"}</strong>) based on your specialisation.</p>";
+                    var request = HttpContext.Request;
+                    string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                    string content = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
                     _emailService.Send(selectedExaminer.Email, subject, content);
                 }
             }
@@ -1136,20 +1140,13 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                             var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
 
                             string subject = "Welcome to FYP Tracking System - Your Login Credentials";
-                            string htmlBody = $@"
-                                <h3>Welcome, {newEmployee.FullName}!</h3>
-                                <p>Your account has been successfully created. Below are your login credentials:</p>
+                            string message = $@"<p>Welcome, <strong>{newEmployee.FullName}</strong>!</p><br/><p>Your account has been successfully created. Below are your login credentials:</p>
                                 <ul>
                                     <li><strong>Username:</strong> {newEmployee.UserName}</li>
                                     <li><strong>Password:</strong> {generatedPassword}</li>
                                 </ul>
-                                <p style='margin: 20px 0;'>
-                                    <a href='{loginUrl}' style='display: inline-block; padding: 10px 20px; color: white; background-color: #009ef7; text-decoration: none; border-radius: 6px; font-weight: bold; font-family: sans-serif;'>Click Here to Login</a>
-                                </p>
-                                <p>Please log in and change your password as soon as possible.</p>
-                                <br/>
-                                <p>Best Regards,<br/>FYP Tracking System Admin</p>
-                            ";
+                                <p>Please log in and change your password as soon as possible.</p>";
+                            string htmlBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Click Here to Login", loginUrl);
                             _emailService.Send(newEmployee.Email, subject, htmlBody);
                         }
                         catch (Exception ex)
@@ -1801,15 +1798,17 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 var examiner = milestone.Project?.AssignedExaminers?.FirstOrDefault()?.Examiner;
 
                 string subject = "FYP IAF Defense Scheduled";
-                string htmlBody = $@"
-                    <p>An Initial Allocation Form (IAF) defense session has been scheduled.</p>
+                string message = $@"<p>An Initial Allocation Form (IAF) defense session has been scheduled.</p>
                     <ul>
                         <li><strong>Student:</strong> {student?.FullName ?? "Unknown"}</li>
                         <li><strong>Date:</strong> {formattedDate}</li>
                         <li><strong>Time:</strong> {formattedTime}</li>
                         <li><strong>Venue/Link:</strong> {venue}</li>
                     </ul>
-                    <p>Please ensure your attendance. Log in to the FYP Tracker for more details.</p>";
+                    <p>Please ensure your attendance.</p>";
+                var request = HttpContext.Request;
+                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                string htmlBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
 
                 if (student != null && !string.IsNullOrEmpty(student.Email))
                 {
@@ -2143,21 +2142,16 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
                 // ── Prepare Email ──
                 string subject = "Welcome to FYP Tracking System - Your Login Credentials";
-                string htmlBody = $@"
-                    <h3>Welcome!</h3>
-                    <p>Your account has been successfully created by the administrator. Below are your login credentials:</p>
+                string message = $@"<p>Your account has been successfully created by the administrator. Below are your login credentials:</p>
                     <ul>
                         <li><strong>Username:</strong> {newId}</li>
                         <li><strong>Email:</strong> {email}</li>
                         <li><strong>Temporary Password:</strong> {tempPwd}</li>
                     </ul>
-                    <p style='margin: 20px 0;'>
-                        <a href='{loginUrl}' style='display: inline-block; padding: 10px 20px; color: white; background-color: #009ef7; text-decoration: none; border-radius: 6px; font-weight: bold; font-family: sans-serif;'>Click Here to Login</a>
-                    </p>
-                    <p>Upon your first login, you will be required to set up your profile and change your password.</p>
-                    <br/>
-                    <p>Best Regards,<br/>FYP Tracking System Admin</p>
-                ";
+                    <p>Upon your first login, you will be required to set up your profile and change your password.</p>";
+                var httpRequest = HttpContext.Request;
+                string emailLoginUrl = $"{httpRequest.Scheme}://{httpRequest.Host}/User/Login";
+                string htmlBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Click Here to Login", emailLoginUrl);
                 try
                 {
                     _emailService.Send(email, subject, htmlBody);
@@ -2219,22 +2213,15 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             var request = HttpContext.Request;
             var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
             string subject = "FYP Tracking System - Your Updated Login Credentials";
-            string htmlBody = $@"
-                <h3>Login Credentials Resent</h3>
-                <p>Dear <strong>{user.FullName}</strong>,</p>
+            string message = $@"<p>Dear <strong>{user.FullName}</strong>,</p><br/>
                 <p>Your login credentials have been refreshed by the administrator. Please use the details below to log in:</p>
                 <ul>
                     <li><strong>Username:</strong> {user.UserName}</li>
                     <li><strong>Email:</strong> {user.Email}</li>
                     <li><strong>New Temporary Password:</strong> {newTempPwd}</li>
                 </ul>
-                <p style='margin: 20px 0;'>
-                    <a href='{loginUrl}' style='display: inline-block; padding: 10px 20px; color: white; background-color: #009ef7; text-decoration: none; border-radius: 6px; font-weight: bold; font-family: sans-serif;'>Click Here to Login</a>
-                </p>
-                <p>You will be required to change your password upon first login.</p>
-                <br/>
-                <p>Best Regards,<br/>FYP Tracking System Admin</p>
-            ";
+                <p>You will be required to change your password upon first login.</p>";
+            string htmlBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Click Here to Login", loginUrl);
 
             try { _emailService.Send(user.Email!, subject, htmlBody); }
             catch { /* email failure is non-fatal */ }
@@ -2397,11 +2384,10 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 try
                 {
                     string subject = "Welcome to FYP Tracking System - Your Login Credentials";
-                    string htmlBody = $@"<h3>Welcome!</h3>
-<p>Your account has been created. Here are your login credentials:</p>
+                    string message = $@"<p>Your account has been created. Here are your login credentials:</p>
 <ul><li><strong>Username:</strong> {newId}</li><li><strong>Email:</strong> {email}</li><li><strong>Temporary Password:</strong> {tempPwd}</li></ul>
-<p style='margin:20px 0'><a href='{loginUrl}' style='display:inline-block;padding:10px 20px;color:white;background:#009ef7;text-decoration:none;border-radius:6px;font-weight:bold'>Click Here to Login</a></p>
-<p>You will be asked to change your password on first login.</p><p>Best Regards,<br/>FYP Tracking System Admin</p>";
+<p>You will be asked to change your password on first login.</p>";
+                    string htmlBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Click Here to Login", loginUrl);
                     _emailService.Send(email, subject, htmlBody);
                 }
                 catch { }
