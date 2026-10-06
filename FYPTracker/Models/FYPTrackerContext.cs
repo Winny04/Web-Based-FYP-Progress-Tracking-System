@@ -292,6 +292,13 @@ namespace FYPTracker.Models
                       .OnDelete(DeleteBehavior.NoAction);
             });
 
+            // UserRoleMapping
+            modelBuilder.Entity<UserRoleMapping>(entity =>
+            {
+                entity.ToTable("UserRoleMappings");
+                entity.HasIndex(e => new { e.UserId, e.RoleId }).IsUnique();
+            });
+
             OnModelCreatingPartial(modelBuilder);
         }
 

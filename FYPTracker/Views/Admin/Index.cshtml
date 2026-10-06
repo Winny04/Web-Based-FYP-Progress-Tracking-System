@@ -1,6 +1,19 @@
+@inject FYPTracker.Models.FYPTrackerContext _context
 @{
     ViewData["Title"] = "Admin Dashboard";
     var currentUser = ViewBag.CurrentUser as ApplicationUser;
+
+    var totalStudents = ViewBag.TotalStudents ?? _context.ApplicationUsers.Count(u => u.UserRoles.Any(r => r.Role.Name == "Student"));
+    var totalAcademicStaff = _context.ApplicationUsers.Count(u => u.UserRoles.Any(r => r.Role.Name == "Supervisor" || r.Role.Name == "Examiner"));
+    var supervisors = ViewBag.TotalSupervisors ?? _context.ApplicationUsers.Count(u => u.UserRoles.Any(r => r.Role.Name == "Supervisor"));
+    var examiners = _context.ApplicationUsers.Count(u => u.UserRoles.Any(r => r.Role.Name == "Examiner"));
+    
+    var pendingInvitations = _context.ApplicationUsers.Count(u => u.PassCode == null);
+    
+    var activeProjects = _context.FYPProjects.Where(p => p.Status != "Archived").ToList();
+    var projectsNoSupervisor = activeProjects.Count(p => p.SupervisorId == null);
+    // FYPProject doesn't have ExaminerId directly, we must check AssignedExaminers
+    var projectsNoExaminer = _context.FYPProjects.Count(p => p.Status != "Archived" && !p.AssignedExaminers.Any());
 }
 
 <div class="container-fluid py-4">
@@ -19,8 +32,11 @@
         </div>
     </div>
 
-    @* ── Stats Grid ─────────────────────────────────────────── *@
-    <div class="row g-4 mb-5">
+    @* ── Users Stats Grid ─────────────────────────────────────────── *@
+    <div class="row g-4 mb-4">
+        <div class="col-12 mb-2">
+            <h4 class="fw-bolder text-dark mb-0" style="letter-spacing: -0.5px;">User Statistics</h4>
+        </div>
         <!-- Students -->
         <div class="col-md-3">
             <div class="stat-card-premium">
@@ -29,43 +45,43 @@
                 </div>
                 <div>
                     <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Total Students</h6>
-                    <h2 class="fw-bolder text-dark mb-0">@ViewBag.TotalStudents</h2>
+                    <h2 class="fw-bolder text-dark mb-0">@totalStudents</h2>
+                </div>
+            </div>
+        </div>
+        <!-- Total Academic Staff -->
+        <div class="col-md-3">
+            <div class="stat-card-premium">
+                <div class="stat-icon-wrapper text-info bg-light-info">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div>
+                    <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Academic Staff</h6>
+                    <h2 class="fw-bolder text-dark mb-0">@totalAcademicStaff</h2>
                 </div>
             </div>
         </div>
         <!-- Supervisors -->
         <div class="col-md-3">
             <div class="stat-card-premium">
-                <div class="stat-icon-wrapper text-info bg-light-info">
+                <div class="stat-icon-wrapper text-success bg-light-success">
                     <i class="fas fa-chalkboard-teacher"></i>
                 </div>
                 <div>
                     <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Supervisors</h6>
-                    <h2 class="fw-bolder text-dark mb-0">@ViewBag.TotalSupervisors</h2>
+                    <h2 class="fw-bolder text-dark mb-0">@supervisors</h2>
                 </div>
             </div>
         </div>
-        <!-- Projects -->
+        <!-- Examiners -->
         <div class="col-md-3">
             <div class="stat-card-premium">
-                <div class="stat-icon-wrapper text-success bg-light-success">
-                    <i class="fas fa-project-diagram"></i>
+                <div class="stat-icon-wrapper text-secondary bg-light-secondary" style="background-color: #f1f5f9; color: #475569;">
+                    <i class="fas fa-search"></i>
                 </div>
                 <div>
-                    <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Total Projects</h6>
-                    <h2 class="fw-bolder text-dark mb-0">@ViewBag.TotalProjects</h2>
-                </div>
-            </div>
-        </div>
-        <!-- Pending Requests -->
-        <div class="col-md-3">
-            <div class="stat-card-premium">
-                <div class="stat-icon-wrapper text-warning bg-light-warning">
-                    <i class="fas fa-clock"></i>
-                </div>
-                <div>
-                    <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Pending Requests</h6>
-                    <h2 class="fw-bolder text-dark mb-0">@ViewBag.PendingRequests</h2>
+                    <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Examiners</h6>
+                    <h2 class="fw-bolder text-dark mb-0">@examiners</h2>
                 </div>
             </div>
         </div>
@@ -76,41 +92,72 @@
         <div class="col-12 mb-2">
             <h4 class="fw-bolder text-dark mb-0" style="letter-spacing: -0.5px;">Quick Actions</h4>
         </div>
-        <div class="col-md-4">
-            <a href="/Admin/ManageUsers" class="action-card-premium text-decoration-none h-100 d-block">
-                <div class="p-4 d-flex align-items-center gap-4">
+        <!-- Invite User -->
+        <div class="col-md-4 col-lg-2">
+            <a href="/Admin/ManageUsers" class="action-card-premium text-decoration-none h-100 d-block" onclick="sessionStorage.setItem('openInviteModal', 'true');">
+                <div class="p-4 d-flex flex-column align-items-center text-center gap-3">
                     <div class="action-icon bg-gradient-primary">
+                        <i class="fas fa-user-plus text-white"></i>
+                    </div>
+                    <div>
+                        <h6 class="fw-bolder text-dark mb-1">Invite User</h6>
+                        <p class="text-muted mb-0 fs-8" style="font-size: 0.8rem;">Send new invites</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <!-- Manage Users -->
+        <div class="col-md-4 col-lg-2">
+            <a href="/Admin/ManageUsers" class="action-card-premium text-decoration-none h-100 d-block">
+                <div class="p-4 d-flex flex-column align-items-center text-center gap-3">
+                    <div class="action-icon bg-gradient-info">
                         <i class="fas fa-users text-white"></i>
                     </div>
                     <div>
-                        <h5 class="fw-bolder text-dark mb-1">Manage Users</h5>
-                        <p class="text-muted mb-0 fs-7">Add, edit, or remove system users</p>
+                        <h6 class="fw-bolder text-dark mb-1">Manage Users</h6>
+                        <p class="text-muted mb-0 fs-8" style="font-size: 0.8rem;">Edit accounts & roles</p>
                     </div>
                 </div>
             </a>
         </div>
-        <div class="col-md-4">
+        <!-- Manage Projects -->
+        <div class="col-md-4 col-lg-3">
             <a href="/Admin/ManageProjects" class="action-card-premium text-decoration-none h-100 d-block">
-                <div class="p-4 d-flex align-items-center gap-4">
-                    <div class="action-icon bg-gradient-info">
-                        <i class="fas fa-tasks text-white"></i>
+                <div class="p-4 d-flex flex-column align-items-center text-center gap-3">
+                    <div class="action-icon bg-gradient-success">
+                        <i class="fas fa-project-diagram text-white"></i>
                     </div>
                     <div>
-                        <h5 class="fw-bolder text-dark mb-1">Manage Projects</h5>
-                        <p class="text-muted mb-0 fs-7">Track all FYP milestones & assign examiners</p>
+                        <h6 class="fw-bolder text-dark mb-1">Manage Projects</h6>
+                        <p class="text-muted mb-0 fs-8" style="font-size: 0.8rem;">Assign supervisors & examiners</p>
                     </div>
                 </div>
             </a>
         </div>
-        <div class="col-md-4">
-            <a href="/Admin/ApprovedIafList" class="action-card-premium text-decoration-none h-100 d-block">
-                <div class="p-4 d-flex align-items-center gap-4">
-                    <div class="action-icon bg-gradient-success">
-                        <i class="fas fa-file-signature text-white"></i>
+        <!-- Reporting -->
+        <div class="col-md-4 col-lg-2">
+            <a href="/Admin/Reporting" class="action-card-premium text-decoration-none h-100 d-block">
+                <div class="p-4 d-flex flex-column align-items-center text-center gap-3">
+                    <div class="action-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                        <i class="fas fa-chart-line text-white"></i>
                     </div>
                     <div>
-                        <h5 class="fw-bolder text-dark mb-1">Approved IAFs</h5>
-                        <p class="text-muted mb-0 fs-7">View finalized and approved IAF forms</p>
+                        <h6 class="fw-bolder text-dark mb-1">Reporting</h6>
+                        <p class="text-muted mb-0 fs-8" style="font-size: 0.8rem;">View FYP analytics</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <!-- System Settings -->
+        <div class="col-md-4 col-lg-3">
+            <a href="/Admin/ManageLookups" class="action-card-premium text-decoration-none h-100 d-block">
+                <div class="p-4 d-flex flex-column align-items-center text-center gap-3">
+                    <div class="action-icon" style="background: linear-gradient(135deg, #64748b 0%, #475569 100%);">
+                        <i class="fas fa-cogs text-white"></i>
+                    </div>
+                    <div>
+                        <h6 class="fw-bolder text-dark mb-1">System Settings</h6>
+                        <p class="text-muted mb-0 fs-8" style="font-size: 0.8rem;">Departments, lookups & more</p>
                     </div>
                 </div>
             </a>

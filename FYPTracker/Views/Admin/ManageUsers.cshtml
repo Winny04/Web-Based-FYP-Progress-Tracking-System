@@ -114,10 +114,7 @@
                 <a class="nav-link text-muted" data-bs-toggle="tab" href="#students" onclick="filterUserType(event, 'Student')">Students</a>
             </li>
             <li class="nav-item">
-                <a class="nav-link text-muted" data-bs-toggle="tab" href="#supervisors" onclick="filterUserType(event, 'Supervisor')">Supervisors</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link text-muted" data-bs-toggle="tab" href="#examiners" onclick="filterUserType(event, 'Examiner')">Examiners</a>
+                <a class="nav-link text-muted" data-bs-toggle="tab" href="#academic_staff" onclick="filterUserType(event, 'AcademicStaff')">Academic Staff</a>
             </li>
         </ul>
         <div class="table-responsive">
@@ -311,12 +308,12 @@
 
 <!-- Bulk Invite Modal -->
 <div class="modal fade" id="bulkInviteModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered mw-600px">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
         <div class="modal-content">
             <form method="post" action="/Admin/BulkInvite">
                 @Html.AntiForgeryToken()
-                <div class="modal-header">
-                    <h2>Invite Users</h2>
+                <div class="modal-header py-4">
+                    <h3 class="modal-title fw-bolder mb-0">Invite Users</h3>
                     <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
                         <span class="svg-icon svg-icon-1">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -326,10 +323,10 @@
                         </span>
                     </div>
                 </div>
-                <div class="modal-body p-5 pb-0">
-                    <div class="row mb-5">
+                <div class="modal-body p-4 pb-0">
+                    <div class="row mb-3">
                         <div class="col-md-6 fv-row">
-                            <label class="form-label fw-bolder text-dark fs-6">Account Type <span class="text-danger">*</span></label>
+                            <label class="form-label fw-bolder text-dark fs-7">Account Type <span class="text-danger">*</span></label>
                             <select name="bulkUserType" id="bulkUserType" class="form-select form-select-solid form-select-sm fw-bold" required>
                                 <option value="">-- Select Type --</option>
                                 <option value="Student">Student</option>
@@ -337,7 +334,7 @@
                             </select>
                         </div>
                         <div class="col-md-6 fv-row">
-                            <label class="form-label fw-bolder text-dark fs-6">Email Domain</label>
+                            <label class="form-label fw-bolder text-dark fs-7">Email Domain</label>
                             <div class="input-group input-group-solid input-group-sm">
                                 <span class="input-group-text"><i class="bi bi-envelope"></i></span>
                                 <input type="text" id="sharedDomain" class="form-control form-control-solid fw-bold text-muted" value="@@newinti.edu.my" readonly>
@@ -346,30 +343,30 @@
                     </div>
                     
                     <!-- Academic Staff specific fields -->
-                    <div id="bulkAcademicFields" style="display:none;" class="mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">Assign Roles <span class="text-danger">*</span></label>
-                        <div class="d-flex gap-5">
-                            <div class="form-check form-check-custom form-check-solid">
-                                <input class="form-check-input" type="checkbox" name="bulkAcademicRoles" value="Supervisor" id="roleSupBulk" checked />
-                                <label class="form-check-label fw-bold text-gray-700" for="roleSupBulk">Supervisor</label>
+                    <div id="bulkAcademicFields" style="display:none;" class="mb-4">
+                        <label class="form-label fw-bolder text-dark fs-7">Assign Roles <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-4 p-3 bg-light rounded border border-gray-200">
+                            <div class="form-check form-check-solid d-flex align-items-center m-0">
+                                <input class="form-check-input mt-0 me-2" type="checkbox" name="bulkAcademicRoles" value="Supervisor" id="roleSupBulk" checked />
+                                <label class="form-check-label fw-bold text-gray-700 m-0" for="roleSupBulk">Supervisor</label>
                             </div>
-                            <div class="form-check form-check-custom form-check-solid">
-                                <input class="form-check-input" type="checkbox" name="bulkAcademicRoles" value="Examiner" id="roleExmBulk" />
-                                <label class="form-check-label fw-bold text-gray-700" for="roleExmBulk">Examiner</label>
+                            <div class="form-check form-check-solid d-flex align-items-center m-0">
+                                <input class="form-check-input mt-0 me-2" type="checkbox" name="bulkAcademicRoles" value="Examiner" id="roleExmBulk" />
+                                <label class="form-check-label fw-bold text-gray-700 m-0" for="roleExmBulk">Examiner</label>
                             </div>
                         </div>
-                        <div id="bulkAcademicRoleError" class="text-danger mt-1 fs-7 fw-bold" style="display:none;">Please select at least one role.</div>
+                        <div id="bulkAcademicRoleError" class="text-danger mt-1 fs-8 fw-bold" style="display:none;">Please select at least one role.</div>
                     </div>
 
                     <!-- Student-specific required fields -->
                     <div id="bulkStudentFields" style="display:none;">
-                        <div class="alert alert-warning border-0 rounded-3 d-flex align-items-center gap-3 p-3 mb-4">
-                            <i class="fas fa-exclamation-triangle text-warning fs-4"></i>
-                            <div class="fs-7 text-dark"><strong>Required for Students:</strong> Programme and Academic Session must be set before login credentials can be sent.</div>
+                        <div class="alert alert-warning border-0 rounded-3 d-flex align-items-center gap-3 p-3 mb-3 py-2">
+                            <i class="fas fa-exclamation-triangle text-warning fs-5"></i>
+                            <div class="fs-8 text-dark"><strong>Required for Students:</strong> Programme and Academic Session must be set before login credentials can be sent.</div>
                         </div>
-                        <div class="row mb-5">
+                        <div class="row mb-3">
                             <div class="col-md-6 fv-row">
-                                <label class="form-label fw-bolder text-dark fs-6">Programme <span class="text-danger">*</span></label>
+                                <label class="form-label fw-bolder text-dark fs-7">Programme <span class="text-danger">*</span></label>
                                 <select name="bulkProgramme" id="bulkProgramme" class="form-select form-select-solid form-select-sm fw-bold">
                                     <option value="">-- Select Programme --</option>
                                     @foreach (var prog in programmeList)
@@ -377,72 +374,72 @@
                                         <option value="@prog.Value">@prog.Text</option>
                                     }
                                 </select>
-                                <div id="bulkProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                                <div id="bulkProgrammeError" class="text-danger mt-1 fs-8 fw-bold"></div>
                             </div>
                             <div class="col-md-6 fv-row">
-                                <label class="form-label fw-bolder text-dark fs-6">Academic Session <span class="text-danger">*</span></label>
+                                <label class="form-label fw-bolder text-dark fs-7">Academic Session <span class="text-danger">*</span></label>
                                 <select name="bulkAcademicSession" id="bulkAcademicSession" class="form-select form-select-solid form-select-sm fw-bold">
                                     <option value="">-- Select Session --</option>
                                 </select>
-                                <div id="bulkAcademicSessionError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                                <div id="bulkAcademicSessionError" class="text-danger mt-1 fs-8 fw-bold"></div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="fv-row mb-5">
+                    <div class="fv-row mb-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <label class="form-label fw-bolder text-dark fs-6 mb-0">Users to Invite (<span id="inviteCountTitle">1</span>)</label>
-                            <button type="button" class="btn btn-sm btn-light-primary" id="pasteMultipleBtn">
-                                <i class="bi bi-clipboard-check"></i> Paste Multiple
+                            <label class="form-label fw-bolder text-dark fs-7 mb-0">Users to Invite (<span id="inviteCountTitle">1</span>)</label>
+                            <button type="button" class="btn btn-sm btn-light btn-active-light-primary px-3 py-1" id="pasteMultipleBtn">
+                                <i class="bi bi-clipboard-check fs-7"></i> Paste Multiple
                             </button>
                         </div>
                         
                         <div id="pasteMultipleSection" style="display:none;" class="mb-3">
-                            <textarea id="pasteMultipleArea" class="form-control form-control-solid" rows="3" placeholder="Paste usernames or emails here (comma or newline separated)..."></textarea>
+                            <textarea id="pasteMultipleArea" class="form-control form-control-solid fs-7" rows="2" placeholder="Paste usernames or emails here (comma or newline separated)..."></textarea>
                             <div class="mt-2 text-end">
-                                <button type="button" class="btn btn-sm btn-light me-2" id="cancelPasteBtn">Cancel</button>
-                                <button type="button" class="btn btn-sm btn-primary" id="processPasteBtn">Generate Rows</button>
+                                <button type="button" class="btn btn-sm btn-light me-2 px-3 py-1" id="cancelPasteBtn">Cancel</button>
+                                <button type="button" class="btn btn-sm btn-primary px-3 py-1" id="processPasteBtn">Generate Rows</button>
                             </div>
                         </div>
                         
-                        <div class="table-responsive border rounded" style="max-height: 350px; overflow-y: auto;">
-                            <table class="table table-row-dashed table-row-gray-300 align-middle gs-4 gy-3 mb-0" id="inviteUsersTable">
+                        <div class="table-responsive border rounded bg-white" style="max-height: 250px; overflow-y: auto;">
+                            <table class="table table-sm table-row-dashed table-row-gray-200 align-middle gs-3 gy-2 mb-0" id="inviteUsersTable">
                                 <thead class="bg-light" style="position: sticky; top: 0; z-index: 1;">
-                                    <tr class="fw-bolder text-muted fs-7 text-uppercase">
+                                    <tr class="fw-bolder text-muted fs-8 text-uppercase">
                                         <th class="min-w-150px">Full Name</th>
                                         <th class="min-w-150px">Username</th>
                                         <th class="min-w-100px text-center">Status</th>
-                                        <th class="min-w-50px text-end">Action</th>
+                                        <th class="w-50px text-end pe-4">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody id="inviteesList">
                                     <tr class="invitee-row">
                                         <td>
-                                            <input type="text" name="inviteNames[]" class="form-control form-control-solid form-control-sm" placeholder="Full Name (Optional)">
+                                            <input type="text" name="inviteNames[]" class="form-control form-control-solid form-control-sm fs-8" placeholder="Full Name (Optional)">
                                         </td>
                                         <td>
-                                            <input type="text" class="form-control form-control-solid form-control-sm username-input" placeholder="Username *" required>
+                                            <input type="text" class="form-control form-control-solid form-control-sm fs-8 username-input" placeholder="Username *" required>
                                             <input type="hidden" name="inviteEmails[]" class="full-email-hidden">
                                         </td>
                                         <td class="text-center">
-                                            <span class="badge badge-light-secondary status-badge w-100">Ready</span>
+                                            <span class="badge badge-light-secondary status-badge w-100 fs-8">Ready</span>
                                         </td>
-                                        <td class="text-end">
-                                            <button type="button" class="btn btn-icon btn-light-danger btn-sm remove-invitee" disabled><i class="bi bi-trash fs-6"></i></button>
+                                        <td class="text-end pe-4">
+                                            <button type="button" class="btn btn-icon btn-light-danger btn-sm h-30px w-30px remove-invitee" disabled><i class="bi bi-trash fs-7"></i></button>
                                         </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
-                        <div class="mt-3">
-                            <button type="button" class="btn btn-light-primary btn-sm" id="addInviteeBtn">
-                                <i class="bi bi-plus fs-4"></i> Add Another User
+                        <div class="mt-2 text-end">
+                            <button type="button" class="btn btn-sm btn-light btn-active-light-primary px-3 py-2" id="addInviteeBtn">
+                                <i class="bi bi-plus fs-6"></i> Add Another User
                             </button>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer border-0 pt-0 bg-white" style="position: sticky; bottom: 0; z-index: 2;">
-                    <button type="submit" id="bulkInviteSubmitBtn" class="btn btn-lg btn-primary w-100">Send 1 Invites</button>
+                <div class="modal-footer border-0 pt-2 pb-4 bg-white d-flex justify-content-center" style="position: sticky; bottom: 0; z-index: 2;">
+                    <button type="submit" id="bulkInviteSubmitBtn" class="btn btn-primary w-100 mx-4">Send 1 Invites</button>
                 </div>
             </form>
         </div>
@@ -793,7 +790,7 @@
         $.post("@Url.Action("ManageUsersData")", { DepartmentName: $('#SearchDepartmentName').val() }, function (d) {
             $("#mytable").DataTable(
                 {
-                    dom: 'Bfrtip',
+                    dom: 'Brtip',
                     buttons: [
                         { extend: 'csv', className: 'btn btn-sm btn-primary', text: '<i class="fas fa-file-csv"></i> Export CSV' },
                         { extend: 'excel', className: 'btn btn-sm btn-success', text: '<i class="fas fa-file-excel"></i> Export Excel' }
@@ -802,6 +799,13 @@
                     searching: true,
                     destroy: true,
                     data: d.data,
+                    drawCallback: function(settings) {
+                        if (typeof KTApp !== 'undefined') {
+                            KTApp.initBootstrapTooltips();
+                        } else {
+                            $('[data-bs-toggle="tooltip"]').tooltip();
+                        }
+                    },
                     columnDefs: [
                         {
                             "defaultContent": "-",
@@ -852,9 +856,22 @@
                         { 
                             render: function (data, type, row, meta) {
                                 if (type === 'display') {
-                                    let badge = '<span class="fw-bold">' + row.userType + '</span>';
+                                    let roleDisplay = row.userType || '';
+                                    if (roleDisplay.includes('Supervisor') && roleDisplay.includes('Examiner')) {
+                                        roleDisplay = '<span class="badge badge-light-primary fw-bold mb-1">Supervisor</span><br><span class="badge badge-light-info fw-bold">Examiner</span>';
+                                    } else if (roleDisplay === 'Supervisor') {
+                                        roleDisplay = '<span class="badge badge-light-primary fw-bold">Supervisor</span>';
+                                    } else if (roleDisplay === 'Examiner') {
+                                        roleDisplay = '<span class="badge badge-light-info fw-bold">Examiner</span>';
+                                    } else if (roleDisplay === 'Student') {
+                                        roleDisplay = '<span class="badge badge-light-dark fw-bold">Student</span>';
+                                    } else {
+                                        roleDisplay = '<span class="badge badge-light-dark fw-bold">' + roleDisplay + '</span>';
+                                    }
+                                    
+                                    let badge = roleDisplay;
                                     if (row.isProfileIncomplete) {
-                                        badge += '<br><span class="badge badge-light-warning fs-8 mt-1 border border-warning" data-bs-toggle="tooltip" title="Missing required profile configuration"><i class="bi bi-exclamation-triangle-fill text-warning me-1"></i> Pending Config</span>';
+                                        badge += '<br><span class="badge badge-light-warning fs-8 mt-1 border border-warning" data-bs-toggle="tooltip" title="Missing required profile configuration"><i class="bi bi-exclamation-triangle-fill text-warning me-1"></i> Setup Required</span>';
                                     }
                                     return badge;
                                 }
@@ -871,10 +888,10 @@
                         },
                         { 
                             render: function (data, type, row, meta) {
-                                if(row.userType === 'Supervisor' || row.userType === 'Examiner') {
+                                if(row.userType && (row.userType.includes('Supervisor') || row.userType.includes('Examiner'))) {
                                     var safeStudents = (row.assignedStudents || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                                     if(row.assignedStudentCount > 0) {
-                                        return '<a href="javascript:void(0);" onclick="ViewAssignedStudents(\'' + row.fullName.replace(/'/g, "\\'") + '\', \'' + safeStudents + '\', ' + row.assignedStudentCount + ')" class="text-primary fw-bold text-hover-info text-decoration-underline">View</a>';
+                                        return '<a href="javascript:void(0);" onclick="ViewAssignedStudents(\'' + row.fullName.replace(/'/g, "\\'") + '\', \'' + safeStudents + '\', ' + row.assignedStudentCount + ')" class="text-primary fw-bold text-hover-info text-decoration-underline" data-bs-toggle="tooltip" title="View Assigned Students">View</a>';
                                     } else {
                                         return '<span class="text-muted fw-bold">No Students</span>';
                                     }
@@ -884,7 +901,7 @@
                         },
                         { 
                             render: function (data, type, row, meta) {
-                                if(row.userType === 'Supervisor' || row.userType === 'Examiner') {
+                                if(row.userType && (row.userType.includes('Supervisor') || row.userType.includes('Examiner'))) {
                                     return '<span class="text-dark fw-bold">' + (row.assignedStudentCount || '0') + '</span>';
                                 }
                                 return '-';
@@ -894,40 +911,39 @@
                         {
                             render: function (data, type, row, meta) {
                                 if(row.isResign){
-                                    return '<div class="badge badge-light-danger">Inactive</div>';
+                                    return '<div class="badge badge-light-danger fw-bold" data-bs-toggle="tooltip" title="Account Deactivated">Inactive</div>';
                                 }
                                 else{
-                                    return '<div class="badge badge-light-success">Active</div>';
+                                    return '<div class="badge badge-light-success fw-bold" data-bs-toggle="tooltip" title="Account Active">Active</div>';
                                 }
                             }
                         },
                         {
                             render: function (data, type, row, meta) {
                                 if (row.requirePasswordChange) {
-                                    return '<span class="badge badge-light-warning fw-bold fs-7"><i class="bi bi-clock-history text-warning me-1"></i>Not Logged In</span>';
+                                    return '<span class="badge badge-light-warning fw-bold fs-7" data-bs-toggle="tooltip" title="User has not set their password yet"><i class="bi bi-clock-history text-warning me-1"></i>Not Logged In</span>';
                                 } else {
-                                    return '<span class="badge badge-light-success fw-bold fs-7"><i class="bi bi-check-circle-fill text-success me-1"></i>Logged In</span>';
+                                    return '<span class="badge badge-light-success fw-bold fs-7" data-bs-toggle="tooltip" title="User is fully active"><i class="bi bi-check-circle-fill text-success me-1"></i>Logged In</span>';
                                 }
                             }
                         },
                         {
                             render: function (data, type, row, meta) {
                                 let buttonComponent = '<div class="action-btn-group justify-content-end">';
-                                buttonComponent += '<a id="edit_' + row.id + '" onclick="Edit(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit"><i class="bi bi-pencil-fill fs-4"></i></a>';
-                                if (row.userType === 'Supervisor' || row.userType === 'SUPERVISOR') {
-                                    buttonComponent += '<a id="transfer_' + row.id + '" onclick="TransferStudentsModal(' + row.id + ', \'' + row.fullName.replace(/'/g, "\\'") + '\')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Transfer Students"><i class="fas fa-exchange-alt fs-4 text-primary"></i></a>';
+                                buttonComponent += '<a id="edit_' + row.id + '" onclick="Edit(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit User"><i class="bi bi-pencil-fill fs-5"></i></a>';
+                                if (row.userType && (row.userType.includes('Supervisor') || row.userType.includes('SUPERVISOR'))) {
+                                    buttonComponent += '<a id="transfer_' + row.id + '" onclick="TransferStudentsModal(' + row.id + ', \'' + row.fullName.replace(/'/g, "\\'") + '\')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Transfer Students"><i class="fas fa-exchange-alt fs-5 text-primary"></i></a>';
                                 }
-                                // View Assigned Students duplicate action button removed as per new UI simplification.
                                 // Resend invite button — only for users who haven't activated yet
                                 if (row.requirePasswordChange) {
-                                    buttonComponent += '<a id="resend_' + row.id + '" onclick="ResendInvite(' + row.id + ', \'' + row.fullName + '\')" class="btn btn-icon btn-bg-light btn-active-color-info btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Resend Login Credentials"><i class="bi bi-send-fill fs-4 text-info"></i></a>';
+                                    buttonComponent += '<a id="resend_' + row.id + '" onclick="ResendInvite(' + row.id + ', \'' + row.fullName.replace(/'/g, "\\'") + '\')" class="btn btn-icon btn-bg-light btn-active-color-info btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Resend Login Credentials"><i class="bi bi-send-fill fs-5 text-info"></i></a>';
                                 }
                                 if (row.isResign) {
-                                    buttonComponent += '<a id="activate_' + row.id + '" onclick="Activate(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-success btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Activate"><i class="bi bi-check-circle-fill fs-4 text-success"></i></a>';
+                                    buttonComponent += '<a id="activate_' + row.id + '" onclick="Activate(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-success btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Activate User"><i class="bi bi-check-circle-fill fs-5 text-success"></i></a>';
                                 } else {
-                                    buttonComponent += '<a id="deactivate_' + row.id + '" onclick="Delete(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-danger btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Deactivate"><i class="bi bi-slash-circle-fill fs-4 text-warning"></i></a>';
+                                    buttonComponent += '<a id="deactivate_' + row.id + '" onclick="Delete(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-warning btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Deactivate User"><i class="bi bi-slash-circle-fill fs-5 text-warning"></i></a>';
                                 }
-                                buttonComponent += '<a id="harddelete_' + row.id + '" onclick="HardDeleteUser(' + row.id + ', \'' + row.fullName + '\')" class="btn btn-icon btn-bg-light btn-active-color-danger btn-sm" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Permanently Delete"><i class="bi bi-trash-fill fs-4 text-danger"></i></a>';
+                                buttonComponent += '<a id="harddelete_' + row.id + '" onclick="HardDeleteUser(' + row.id + ', \'' + row.fullName.replace(/'/g, "\\'") + '\')" class="btn btn-icon btn-bg-light btn-active-color-danger btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Permanently Delete User"><i class="bi bi-trash-fill fs-5 text-danger"></i></a>';
                                 buttonComponent += '</div>';
                                 return buttonComponent;
                             }
@@ -1320,8 +1336,15 @@
         e.preventDefault();
         const table = $("#mytable").DataTable();
         
+        let searchRegex = '';
+        if (type === 'AcademicStaff') {
+            searchRegex = 'Supervisor|Examiner';
+        } else if (type) {
+            searchRegex = '\\b' + type + '\\b';
+        }
+
         // Filter by user type column (index 2) using regex for exact or partial word match
-        table.column(2).search(type ? '\\b' + type + '\\b' : '', true, false).draw();
+        table.column(2).search(searchRegex, true, false).draw();
         
         // Dynamically hide/show columns based on the role
         // Column 3 is Supervisor (for Students), Column 4 is Assigned Students (for Supervisors/Examiners), Column 5 is Student Count
@@ -1329,7 +1352,7 @@
             table.column(3).visible(true);
             table.column(4).visible(false);
             table.column(5).visible(false);
-        } else if (type === 'Supervisor' || type === 'Examiner') {
+        } else if (type === 'AcademicStaff' || type === 'Supervisor' || type === 'Examiner') {
             table.column(3).visible(false);
             table.column(4).visible(true);
             table.column(5).visible(true);
@@ -1573,17 +1596,17 @@
             let rowHtml = `
                 <tr class="invitee-row">
                     <td>
-                        <input type="text" name="inviteNames[]" class="form-control form-control-solid form-control-sm" placeholder="Full Name (Optional)">
+                        <input type="text" name="inviteNames[]" class="form-control form-control-solid form-control-sm fs-8" placeholder="Full Name (Optional)">
                     </td>
                     <td>
-                        <input type="text" class="form-control form-control-solid form-control-sm username-input" placeholder="Username *" required>
+                        <input type="text" class="form-control form-control-solid form-control-sm fs-8 username-input" placeholder="Username *" required>
                         <input type="hidden" name="inviteEmails[]" class="full-email-hidden">
                     </td>
                     <td class="text-center">
-                        <span class="badge badge-light-secondary status-badge w-100">Ready</span>
+                        <span class="badge badge-light-secondary status-badge w-100 fs-8">Ready</span>
                     </td>
-                    <td class="text-end">
-                        <button type="button" class="btn btn-icon btn-light-danger btn-sm remove-invitee"><i class="bi bi-trash fs-6"></i></button>
+                    <td class="text-end pe-4">
+                        <button type="button" class="btn btn-icon btn-light-danger btn-sm h-30px w-30px remove-invitee"><i class="bi bi-trash fs-7"></i></button>
                     </td>
                 </tr>
             `;
