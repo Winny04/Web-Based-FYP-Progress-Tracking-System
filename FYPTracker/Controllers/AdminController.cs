@@ -235,6 +235,11 @@ namespace FYPTracker.Controllers
                 .Select(u => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = u.Id.ToString(), Text = u.FullName })
                 .ToListAsync();
 
+            ViewBag.AcademicSessions = await _context.AcademicSessions
+                .Where(x => x.IsActive)
+                .Select(x => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = x.Name, Text = x.Name })
+                .ToListAsync();
+
             return View(new ApplicationUserVM());
         }
 
@@ -849,7 +854,13 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 {
                     // Save AcademicSession for students from the edit modal
                     if (!string.IsNullOrWhiteSpace(academicSession))
+                    {
+                        bool isValidSession = await _context.AcademicSessions.AnyAsync(s => s.Name == academicSession);
+                        if (!isValidSession)
+                            return Json(new { success = false, msg = $"Academic Session '{academicSession}' is invalid." });
+                            
                         user.AcademicSession = academicSession;
+                    }
                 }
 
                 _context.Update(user);
@@ -945,7 +956,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 model1.PassCode = ApplicationUser.PassCode;
                 model1.Email = ApplicationUser.Email;
                 model1.Image = ApplicationUser.Image;
-                model1.UserType = model != null ? RoleDisplay.Resolve(model.UserRoles.Select(ur => ur.Role.Name), null).ToUpper().Trim() : (ApplicationUser.UserType ?? "");
+                model1.UserType = model != null ? RoleDisplay.Resolve(model.UserRoles.Select(ur => ur.Role.Name), null).ToUpper().Trim() : "";
                 model1.Image = model?.Image ?? ApplicationUser.Image;
                 model1.Department = model?.EmpDepartment?.Name;
                 model1.EmployeeId = model?.EmployeeId ?? ApplicationUser.EmployeeId;
@@ -1108,12 +1119,16 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
                         // Role membership is stored in UserRoleMappings (source of truth)
                         var requestedRole = (newEmployee.UserType ?? "").Trim();
-                        var roleEntity = _context.AppRoles.FirstOrDefault(r => r.Name == requestedRole);
-                        if (roleEntity != null)
+                        var rolesToAddNew = requestedRole == "AcademicStaff" ? new[] { "Supervisor", "Examiner" } : new[] { requestedRole };
+                        foreach (var r in rolesToAddNew)
                         {
-                            _context.UserRoleMappings.Add(new UserRoleMapping { UserId = model.Id, RoleId = roleEntity.Id });
-                            _context.SaveChanges();
+                            var roleEntity = _context.AppRoles.FirstOrDefault(ar => ar.Name == r);
+                            if (roleEntity != null)
+                            {
+                                _context.UserRoleMappings.Add(new UserRoleMapping { UserId = model.Id, RoleId = roleEntity.Id });
+                            }
                         }
+                        _context.SaveChanges();
 
                         try
                         {
@@ -1146,17 +1161,8 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     }
                     else
                     {
-                        if (check != null)
-                        {
-                            //ModelState.AddModelError(nameof(ApplicationUserVM.UserName), "This Username is exists, please try another one!");
-                            return Json(new { status = false, msg = "This Username is exists, please try another one!" });
-                        }
-                        if (check1 != null)
-                        {
-                            //ModelState.AddModelError(nameof(ApplicationUserVM.Email), "This Email is exists, please try another one!");
-                            return Json(new { status = false, msg = "This Email is exists, please try another one!" });
-                        }
-                        //return RedirectToAction("Index", newEmployee);
+                        if (check != null) return Json(new { status = false, msg = "This Username is exists, please try another one!" });
+                        if (check1 != null) return Json(new { status = false, msg = "This Email is exists, please try another one!" });
                     }
 
                 }
@@ -1259,7 +1265,9 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         {
             try
             {
-                var user = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.Id == id);
+                var user = await _context.ApplicationUsers
+                    .Include(u => u.UserRoles).ThenInclude(r => r.Role)
+                    .FirstOrDefaultAsync(x => x.Id == id);
                 if (user == null) return Json(new { status = false, msg = "User not found." });
 
                 // 1. ChatGroupMembers — Restrict FK (student or supervisor as member)
@@ -1331,7 +1339,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                         _context.FYPProjects.Remove(project);
                     }
                 }
-                else if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR"))
+                if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR"))
                 {
                     // Nullify supervisor on students' projects (preserve students' data)
                     var supervisorProjects = await _context.FYPProjects
@@ -1344,7 +1352,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                         .Where(f => f.SupervisorId == id).ToListAsync();
                     _context.FYPFeedbacks.RemoveRange(feedbacks);
                 }
-                else if (user.UserRoles.Any(r => r.Role.Name == "Examiner") || user.UserRoles.Any(r => r.Role.Name == "EXAMINER"))
+                if (user.UserRoles.Any(r => r.Role.Name == "Examiner") || user.UserRoles.Any(r => r.Role.Name == "EXAMINER"))
                 {
                     // Nullify examiner on projects by removing mapping
                     var examinerAssignments = await _context.FYPProjectExaminers
@@ -1940,7 +1948,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkInvite(List<string> inviteNames, List<string> inviteEmails, string bulkUserType, string bulkProgramme, string bulkAcademicSession)
+        public async Task<IActionResult> BulkInvite(List<string> inviteNames, List<string> inviteEmails, string bulkUserType, List<string> bulkAcademicRoles, string bulkProgramme, string bulkAcademicSession)
         {
             if (inviteEmails == null || !inviteEmails.Any() || string.IsNullOrWhiteSpace(bulkUserType))
             {
@@ -1959,6 +1967,14 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 if (string.IsNullOrWhiteSpace(bulkAcademicSession))
                 {
                     TempData["Error"] = "Academic Session is required before sending login credentials to students.";
+                    return RedirectToAction(nameof(ManageUsers));
+                }
+                
+                // Validate that the session is active in the DB
+                bool isValidSession = await _context.AcademicSessions.AnyAsync(s => s.Name == bulkAcademicSession && s.IsActive);
+                if (!isValidSession)
+                {
+                    TempData["Error"] = $"Academic Session '{bulkAcademicSession}' is invalid or inactive.";
                     return RedirectToAction(nameof(ManageUsers));
                 }
             }
@@ -2035,13 +2051,13 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 if (!isValidFormat) continue; // Skip entirely, it will not count towards success
                 
                 // Precise case-insensitive match in memory
-                var exists = existingUsers.Any(u => 
+                var existingUser = existingUsers.FirstOrDefault(u => 
                     (u.Email != null && u.Email.ToLower() == email) || 
                     (u.UserName != null && u.UserName.ToLower() == username) ||
                     (u.UserName != null && u.UserName.ToLower() == email)
                 );
                 
-                if (exists)
+                if (existingUser != null)
                 {
                     duplicateCount++;
                     continue;
@@ -2094,12 +2110,16 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 _context.ApplicationUsers.Add(newUser);
                 await _context.SaveChangesAsync(); // save so we have newUser.Id for the log
 
-                var bulkRoleEntity = await _context.AppRoles.FirstOrDefaultAsync(r => r.Name == bulkUserType);
-                if (bulkRoleEntity != null)
+                var rolesToAddNew = bulkUserType == "AcademicStaff" ? bulkAcademicRoles.ToArray() : new[] { bulkUserType };
+                foreach (var r in rolesToAddNew)
                 {
-                    _context.UserRoleMappings.Add(new UserRoleMapping { UserId = newUser.Id, RoleId = bulkRoleEntity.Id });
-                    await _context.SaveChangesAsync();
+                    var bulkRoleEntity = await _context.AppRoles.FirstOrDefaultAsync(ar => ar.Name == r);
+                    if (bulkRoleEntity != null)
+                    {
+                        _context.UserRoleMappings.Add(new UserRoleMapping { UserId = newUser.Id, RoleId = bulkRoleEntity.Id });
+                    }
                 }
+                await _context.SaveChangesAsync();
 
                 // ── Log the invitation ──
                 var adminUser = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
@@ -2254,6 +2274,14 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 { TempData["Error"] = "Programme is required for student CSV uploads."; return RedirectToAction(nameof(ManageUsers)); }
                 if (string.IsNullOrWhiteSpace(csvAcademicSession))
                 { TempData["Error"] = "Academic Session is required for student CSV uploads."; return RedirectToAction(nameof(ManageUsers)); }
+                
+                // Validate session exists and is active
+                bool isValidSession = await _context.AcademicSessions.AnyAsync(s => s.Name == csvAcademicSession && s.IsActive);
+                if (!isValidSession)
+                {
+                    TempData["Error"] = $"Academic Session '{csvAcademicSession}' is invalid or inactive.";
+                    return RedirectToAction(nameof(ManageUsers));
+                }
             }
 
             var admin = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
@@ -2289,8 +2317,16 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
                 if (!emailRegex.IsMatch(email)) { errorCount++; continue; }
 
-                var exists = await _context.ApplicationUsers.AnyAsync(u => u.Email == email || u.UserName == email);
-                if (exists) { dupCount++; continue; }
+                var existingUser = await _context.ApplicationUsers
+                    .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                    .FirstOrDefaultAsync(u => u.Email == email || u.UserName == email);
+                    
+                if (existingUser != null)
+                {
+                    dupCount++;
+                    continue;
+                }
 
                 string newId;
                 if (email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) ||
@@ -2333,12 +2369,16 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 _context.ApplicationUsers.Add(newUser);
                 await _context.SaveChangesAsync();
 
-                var csvRoleEntity = await _context.AppRoles.FirstOrDefaultAsync(r => r.Name == csvUserType);
-                if (csvRoleEntity != null)
+                var rolesToAddNew = csvUserType == "AcademicStaff" ? new[] { "Supervisor", "Examiner" } : new[] { csvUserType };
+                foreach (var r in rolesToAddNew)
                 {
-                    _context.UserRoleMappings.Add(new UserRoleMapping { UserId = newUser.Id, RoleId = csvRoleEntity.Id });
-                    await _context.SaveChangesAsync();
+                    var csvRoleEntity = await _context.AppRoles.FirstOrDefaultAsync(ar => ar.Name == r);
+                    if (csvRoleEntity != null)
+                    {
+                        _context.UserRoleMappings.Add(new UserRoleMapping { UserId = newUser.Id, RoleId = csvRoleEntity.Id });
+                    }
                 }
+                await _context.SaveChangesAsync();
 
                 if (admin != null)
                 {

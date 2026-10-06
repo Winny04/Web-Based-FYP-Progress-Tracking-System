@@ -1,4 +1,4 @@
-﻿namespace FYPTracker.Configuration
+namespace FYPTracker.Configuration
 {
     public class SmtpSettings
     {
@@ -14,5 +14,12 @@
         public string SmtpPass { get; set; }
         public bool UseSSL { get; set; }
         public bool Offline { get; set; }
+
+        /// <summary>
+        /// Development only. When set and running in Development mode, ALL outgoing
+        /// emails are redirected to this address instead of the real recipient.
+        /// Leave null/empty in Production — it will be ignored.
+        /// </summary>
+        public string? DevRedirectEmail { get; set; }
     }
 }

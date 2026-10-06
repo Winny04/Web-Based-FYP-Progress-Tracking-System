@@ -75,16 +75,42 @@
                 </h2>
                 <p class="text-muted mb-0" style="font-size: 0.95rem;">Monitor and manage all final year projects, milestones, and examiner assignments with AI assistance.</p>
             </div>
-            <div class="d-flex flex-wrap gap-3">
-                <div class="d-flex align-items-center position-relative my-1">
-                    <span class="svg-icon svg-icon-1 position-absolute ms-4 text-muted">
-                        <i class="fas fa-search"></i>
-                    </span>
-                    <input type="text" id="customSearch" class="form-control form-control-solid w-250px shadow-sm border-0 bg-light" style="padding-left: 2.8rem !important; border-radius: 10px;" placeholder="Search projects...">
+            <div class="d-flex flex-wrap gap-2 w-100 mt-3 bg-light p-3 rounded-3 shadow-sm align-items-center justify-content-between">
+                <div class="d-flex gap-2 flex-wrap flex-grow-1">
+                    <select id="filterSession" class="form-select form-select-sm form-select-solid w-auto fw-bold min-w-125px">
+                        <option value="">All Sessions</option>
+                    </select>
+                    <select id="filterStatus" class="form-select form-select-sm form-select-solid w-auto fw-bold min-w-125px">
+                        <option value="">All Statuses</option>
+                        <option value="Active">Active</option>
+                        <option value="Proposed">Proposed</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
+                    <select id="filterSupervisor" class="form-select form-select-sm form-select-solid w-auto fw-bold min-w-150px">
+                        <option value="">All Supervisors</option>
+                    </select>
+                    <select id="filterExaminer" class="form-select form-select-sm form-select-solid w-auto fw-bold min-w-150px">
+                        <option value="">All Examiners</option>
+                    </select>
+                    <select id="filterMissing" class="form-select form-select-sm form-select-solid w-auto fw-bold min-w-150px">
+                        <option value="">Assignment State</option>
+                        <option value="No Supervisor">No Supervisor</option>
+                        <option value="No Examiner">No Examiner</option>
+                        <option value="Viva Not Set">Viva Not Set</option>
+                    </select>
                 </div>
-                <a href="/Admin/ExportProjectsExcel" class="btn btn-sm btn-success shadow-sm fw-bold align-self-center h-40px d-flex align-items-center" style="border-radius: 10px;">
-                    <i class="bi bi-file-earmark-spreadsheet fs-5 me-2"></i> Export Data
-                </a>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <div class="position-relative">
+                        <span class="svg-icon svg-icon-1 position-absolute ms-3 text-muted" style="top:50%; transform:translateY(-50%);">
+                            <i class="fas fa-search"></i>
+                        </span>
+                        <input type="text" id="customSearch" class="form-control form-control-sm form-control-solid w-200px" style="padding-left: 2.5rem !important; border-radius: 10px;" placeholder="Search projects...">
+                    </div>
+                    <a href="/Admin/ExportProjectsExcel" class="btn btn-sm btn-success fw-bold d-flex align-items-center" style="border-radius: 10px;">
+                        <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export Data
+                    </a>
+                </div>
             </div>
         </div>
 
@@ -197,50 +223,67 @@
                                     }
                                 </td>
                                 <td class="text-end pe-5">
-                                    <div class="d-flex justify-content-end gap-2 flex-wrap">
+                                    <button class="btn btn-sm btn-light btn-active-light-primary btn-icon rounded-circle shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end border-0 shadow-sm rounded-3 py-2">
                                         @if(project != null)
                                         {
+                                            <li>
+                                                <a class="dropdown-item fw-bold text-gray-700 py-2 px-4" href="/Admin/ProjectDetails/@project.Id">
+                                                    <i class="fas fa-eye text-primary me-2 w-15px"></i> View Details
+                                                </a>
+                                            </li>
+                                            <li><hr class="dropdown-divider opacity-25"></li>
+
                                             @if (!string.IsNullOrEmpty(project.Stage1ExaminerMarksheetPath)) {
-                                                <button type="button" class="btn btn-sm btn-light-secondary text-muted rounded-3 fw-bold border" disabled title="Examiner locked after grading Stage 1">
-                                                    <i class="fas fa-lock me-1"></i> Locked
-                                                </button>
+                                                <li>
+                                                    <a class="dropdown-item fw-bold text-muted py-2 px-4" href="#" onclick="return false;" title="Locked after grading">
+                                                        <i class="fas fa-lock text-muted me-2 w-15px"></i> Reassign Examiner
+                                                    </a>
+                                                </li>
                                             } else {
-                                                @* 🤖 AI Auto-Assign Button *@
-                                                <form asp-action="AutoAssignExaminer" asp-controller="Admin" method="post" class="m-0">
-                                                    @Html.AntiForgeryToken()
-                                                    <input type="hidden" name="projectId" value="@project.Id" />
-                                                    <button type="submit" class="btn btn-sm btn-ai-assign rounded-pill text-white px-3 fw-bold" 
-                                                            onclick="return confirm('Let AI auto-assign the best-matched examiner based on specialisation?')"
-                                                            title="AI will match an examiner based on project keywords and examiner specialisation">
-                                                        <i class="fas fa-magic me-1"></i> @(assignedExaminer != null ? "Re-Assign AI" : "AI Assign")
-                                                    </button>
-                                                </form>
+                                                <li>
+                                                    <form asp-action="AutoAssignExaminer" asp-controller="Admin" method="post" class="m-0">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="projectId" value="@project.Id" />
+                                                        <button type="submit" class="dropdown-item fw-bold text-gray-700 py-2 px-4" onclick="return confirm('Let AI auto-assign the best-matched examiner?')">
+                                                            <i class="fas fa-magic text-info me-2 w-15px"></i> @(assignedExaminer != null ? "Reassign AI Examiner" : "AI Assign Examiner")
+                                                        </button>
+                                                    </form>
+                                                </li>
                                             }
 
                                             @if (assignedExaminer == null)
                                             {
-                                                <button type="button" class="btn btn-sm btn-light rounded-pill border fw-bold px-3" disabled title="Please assign an Examiner before setting Viva">
-                                                    <i class="fas fa-calendar-check me-1 text-muted"></i> Set Viva
-                                                </button>
+                                                <li>
+                                                    <a class="dropdown-item fw-bold text-muted py-2 px-4" href="#" onclick="return false;" title="Assign Examiner First">
+                                                        <i class="fas fa-calendar-check text-muted me-2 w-15px"></i> Set Viva
+                                                    </a>
+                                                </li>
                                             }
                                             else
                                             {
-                                                <button type="button" class="btn btn-sm btn-light-success text-success rounded-pill border border-success fw-bold btn-open-viva-modal px-3"
-                                                        data-bs-toggle="modal" data-bs-target="#setVivaModal"
-                                                        data-project-id="@project.Id"
-                                                        data-project-title="@project.Title"
-                                                        data-student-name="@student.FullName"
-                                                        data-viva-date="@(project.VivaDate?.ToString("yyyy-MM-ddTHH:mm"))"
-                                                        data-viva-venue="@project.VivaVenue">
-                                                    <i class="fas fa-calendar-check me-1"></i>@(project.VivaDate.HasValue ? project.VivaDate.Value.ToString("dd MMM") : "Set Viva")
-                                                </button>
+                                                <li>
+                                                    <a class="dropdown-item fw-bold text-success py-2 px-4 btn-open-viva-modal" href="#" 
+                                                       data-bs-toggle="modal" data-bs-target="#setVivaModal"
+                                                       data-project-id="@project.Id"
+                                                       data-project-title="@project.Title"
+                                                       data-student-name="@student.FullName"
+                                                       data-viva-date="@(project.VivaDate?.ToString("yyyy-MM-ddTHH:mm"))"
+                                                       data-viva-venue="@project.VivaVenue">
+                                                        <i class="fas fa-calendar-alt text-success me-2 w-15px"></i> @(project.VivaDate.HasValue ? "Update Viva Date" : "Set Viva Date")
+                                                    </a>
+                                                </li>
                                             }
                                         }
                                         else
                                         {
-                                            <button class="btn btn-sm btn-light rounded-pill text-muted px-3" disabled>No Details</button>
+                                            <li>
+                                                <span class="dropdown-item fw-bold text-muted py-2 px-4"><i class="fas fa-ban me-2 w-15px"></i> No Details Available</span>
+                                            </li>
                                         }
-                                    </div>
+                                    </ul>
                                 </td>
                             </tr>
                         }
@@ -365,7 +408,7 @@
 @section Scripts {
     <script>
         $(document).ready(function () {
-            $('#projectsTable').DataTable({
+            var table = $('#projectsTable').DataTable({
                 "pageLength": 10,
                 "ordering": true,
                 "info": true,
@@ -379,8 +422,91 @@
                 ]
             });
 
+            // Populate Session Dropdown dynamically
+            var sessionOptions = new Set();
+            var supOptions = new Set();
+            var exmOptions = new Set();
+            
+            table.rows().every(function () {
+                var data = this.data();
+                var sessVal = $('<div>' + data[1] + '</div>').text().trim();
+                if (sessVal && sessVal !== '-') sessionOptions.add(sessVal);
+                
+                var supVal = $('<div>' + data[3] + '</div>').text().trim();
+                if (supVal && supVal !== 'Not Assigned') supOptions.add(supVal);
+                
+                var exmVal = $('<div>' + data[4] + '</div>').text().trim();
+                if (exmVal && exmVal !== 'Not Assigned') exmOptions.add(exmVal);
+            });
+            
+            var sessionSelect = $('#filterSession');
+            Array.from(sessionOptions).sort().reverse().forEach(function(sess) {
+                sessionSelect.append('<option value="' + sess + '">' + sess + '</option>');
+            });
+            
+            var supSelect = $('#filterSupervisor');
+            Array.from(supOptions).sort().forEach(function(sup) {
+                supSelect.append('<option value="' + sup + '">' + sup + '</option>');
+            });
+            
+            var exmSelect = $('#filterExaminer');
+            Array.from(exmOptions).sort().forEach(function(exm) {
+                exmSelect.append('<option value="' + exm + '">' + exm + '</option>');
+            });
+
+            // Custom Filtering Logic
+            $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+                var selectedSession = $('#filterSession').val();
+                var selectedStatus = $('#filterStatus').val();
+                var selectedSupervisor = $('#filterSupervisor').val();
+                var selectedExaminer = $('#filterExaminer').val();
+                var selectedMissing = $('#filterMissing').val();
+
+                var rowSession = data[1] || "";
+                var rowSup = data[3] || "";
+                var rowExm = data[4] || "";
+                var rowStatus = data[7] || "";
+                var rowActions = data[8] || ""; // For Viva Not Set
+
+                var rowSupText = $('<div>' + rowSup + '</div>').text().trim();
+                var rowExmText = $('<div>' + rowExm + '</div>').text().trim();
+
+                if (selectedSession && !rowSession.includes(selectedSession)) {
+                    return false;
+                }
+                
+                if (selectedSupervisor && rowSupText !== selectedSupervisor) {
+                    return false;
+                }
+                
+                if (selectedExaminer && rowExmText !== selectedExaminer) {
+                    return false;
+                }
+                
+                if (selectedStatus && !rowStatus.includes(selectedStatus)) {
+                    return false;
+                }
+
+                if (selectedMissing === 'No Supervisor' && !rowSup.includes('Not Assigned')) {
+                    return false;
+                }
+                if (selectedMissing === 'No Examiner' && !rowExm.includes('Not Assigned')) {
+                    return false;
+                }
+                if (selectedMissing === 'Viva Not Set' && (!rowActions.includes('Set Viva Date') && !rowActions.includes('Set Viva'))) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            // Trigger table redraw on filter changes
+            $('#filterSession, #filterStatus, #filterSupervisor, #filterExaminer, #filterMissing').on('change', function () {
+                table.draw();
+            });
+
             $('#customSearch').keyup(function () {
-                $('#projectsTable').DataTable().search($(this).val()).draw();
+                table.search($(this).val()).draw();
             });
             
             $('.dataTables_filter').hide();

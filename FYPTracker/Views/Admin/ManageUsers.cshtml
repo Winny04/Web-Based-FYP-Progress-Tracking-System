@@ -14,7 +14,9 @@
     var createUserTypeList = new List<SelectListItem>
     {
         new SelectListItem { Text = "Student", Value = "Student" },
-        new SelectListItem { Text = "Supervisor", Value = "Supervisor" }
+        new SelectListItem { Text = "Academic Staff (Supervisor & Examiner)", Value = "AcademicStaff" },
+        new SelectListItem { Text = "Supervisor Only", Value = "Supervisor" },
+        new SelectListItem { Text = "Examiner Only", Value = "Examiner" }
     };
 }
 <style>
@@ -327,12 +329,11 @@
                 <div class="modal-body p-5 pb-0">
                     <div class="row mb-5">
                         <div class="col-md-6 fv-row">
-                            <label class="form-label fw-bolder text-dark fs-6">User Type <span class="text-danger">*</span></label>
+                            <label class="form-label fw-bolder text-dark fs-6">Account Type <span class="text-danger">*</span></label>
                             <select name="bulkUserType" id="bulkUserType" class="form-select form-select-solid form-select-sm fw-bold" required>
                                 <option value="">-- Select Type --</option>
                                 <option value="Student">Student</option>
-                                <option value="Supervisor">Supervisor</option>
-                                <option value="Examiner">Examiner</option>
+                                <option value="AcademicStaff">Academic Staff</option>
                             </select>
                         </div>
                         <div class="col-md-6 fv-row">
@@ -342,6 +343,22 @@
                                 <input type="text" id="sharedDomain" class="form-control form-control-solid fw-bold text-muted" value="@@newinti.edu.my" readonly>
                             </div>
                         </div>
+                    </div>
+                    
+                    <!-- Academic Staff specific fields -->
+                    <div id="bulkAcademicFields" style="display:none;" class="mb-5">
+                        <label class="form-label fw-bolder text-dark fs-6">Assign Roles <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-5">
+                            <div class="form-check form-check-custom form-check-solid">
+                                <input class="form-check-input" type="checkbox" name="bulkAcademicRoles" value="Supervisor" id="roleSupBulk" checked />
+                                <label class="form-check-label fw-bold text-gray-700" for="roleSupBulk">Supervisor</label>
+                            </div>
+                            <div class="form-check form-check-custom form-check-solid">
+                                <input class="form-check-input" type="checkbox" name="bulkAcademicRoles" value="Examiner" id="roleExmBulk" />
+                                <label class="form-check-label fw-bold text-gray-700" for="roleExmBulk">Examiner</label>
+                            </div>
+                        </div>
+                        <div id="bulkAcademicRoleError" class="text-danger mt-1 fs-7 fw-bold" style="display:none;">Please select at least one role.</div>
                     </div>
 
                     <!-- Student-specific required fields -->
@@ -572,44 +589,40 @@
             </text>
         }
 
-        // Dynamically populate Academic Session dropdown
-        var now = new Date();
-        var currentYear = now.getFullYear();
-        var currentMonth = now.getMonth() + 1; // 1-12
-        var intakes = [
-            { name: 'Jan', month: 1 },
-            { name: 'April', month: 4 },
-            { name: 'Aug', month: 8 }
-        ];
+        // Dynamically populate Academic Session dropdown from DB
+        var activeSessions = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(ViewBag.AcademicSessions));
         var sessionSelect = $('#createAcademicSession'); // populated if a create modal is added
         var editSessionSelect = $('#editAcademicSession');
         var bulkSessionSelect = $('#bulkAcademicSession');
         var csvSessionSelect = $('#csvAcademicSession');
-        for (var y = currentYear - 1; y <= currentYear + 2; y++) {
-            intakes.forEach(function(intake) {
-                // Only allow selecting sessions from the current month onwards
-                if (y > currentYear || (y === currentYear && intake.month >= currentMonth)) {
-                    var sessionText = y + ' ' + intake.name;
-                    sessionSelect.append(new Option(sessionText, sessionText));
-                    editSessionSelect.append(new Option(sessionText, sessionText));
-                    bulkSessionSelect.append(new Option(sessionText, sessionText));
-                    csvSessionSelect.append(new Option(sessionText, sessionText));
-                }
+
+        if (activeSessions && activeSessions.length > 0) {
+            activeSessions.forEach(function(sess) {
+                sessionSelect.append(new Option(sess.Text, sess.Value));
+                editSessionSelect.append(new Option(sess.Text, sess.Value));
+                bulkSessionSelect.append(new Option(sess.Text, sess.Value));
+                csvSessionSelect.append(new Option(sess.Text, sess.Value));
             });
         }
 
-        // Show/hide student-specific fields in bulk invite modal
+        // Show/hide fields in bulk invite modal
         $('#bulkUserType').on('change', function () {
-            if ($(this).val() === 'Student') {
+            var val = $(this).val();
+            if (val === 'Student') {
                 $('#bulkStudentFields').slideDown(200);
                 $('#bulkProgramme').prop('required', true);
                 $('#bulkAcademicSession').prop('required', true);
-            } else {
+                $('#bulkAcademicFields').slideUp(200);
+            } else if (val === 'AcademicStaff') {
                 $('#bulkStudentFields').slideUp(200);
                 $('#bulkProgramme').prop('required', false).val('');
                 $('#bulkAcademicSession').prop('required', false).val('');
                 $('#bulkProgrammeError').text('');
                 $('#bulkAcademicSessionError').text('');
+                $('#bulkAcademicFields').slideDown(200);
+            } else {
+                $('#bulkStudentFields').slideUp(200);
+                $('#bulkAcademicFields').slideUp(200);
             }
         });
 
@@ -630,6 +643,13 @@
                     isValid = false;
                 } else {
                     $('#bulkAcademicSessionError').text('');
+                }
+            } else if (userType === 'AcademicStaff') {
+                if ($('input[name="bulkAcademicRoles"]:checked').length === 0) {
+                    $('#bulkAcademicRoleError').show();
+                    isValid = false;
+                } else {
+                    $('#bulkAcademicRoleError').hide();
                 }
             }
 
@@ -852,7 +872,12 @@
                         { 
                             render: function (data, type, row, meta) {
                                 if(row.userType === 'Supervisor' || row.userType === 'Examiner') {
-                                    return '<span class="text-dark fw-bold">' + (row.assignedStudents || 'No Students') + '</span>';
+                                    var safeStudents = (row.assignedStudents || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                                    if(row.assignedStudentCount > 0) {
+                                        return '<a href="javascript:void(0);" onclick="ViewAssignedStudents(\'' + row.fullName.replace(/'/g, "\\'") + '\', \'' + safeStudents + '\', ' + row.assignedStudentCount + ')" class="text-primary fw-bold text-hover-info text-decoration-underline">View</a>';
+                                    } else {
+                                        return '<span class="text-muted fw-bold">No Students</span>';
+                                    }
                                 }
                                 return '-';
                             }
@@ -892,10 +917,7 @@
                                 if (row.userType === 'Supervisor' || row.userType === 'SUPERVISOR') {
                                     buttonComponent += '<a id="transfer_' + row.id + '" onclick="TransferStudentsModal(' + row.id + ', \'' + row.fullName.replace(/'/g, "\\'") + '\')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Transfer Students"><i class="fas fa-exchange-alt fs-4 text-primary"></i></a>';
                                 }
-                                if (row.userType === 'Supervisor' || row.userType === 'SUPERVISOR' || row.userType === 'Examiner' || row.userType === 'EXAMINER') {
-                                    var safeStudents = (row.assignedStudents || 'No Students').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                                    buttonComponent += '<a onclick="ViewAssignedStudents(\'' + row.fullName.replace(/'/g, "\\'") + '\', \'' + safeStudents + '\')" class="btn btn-icon btn-bg-light btn-active-color-info btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="View Assigned Students"><i class="fas fa-users fs-4 text-info"></i></a>';
-                                }
+                                // View Assigned Students duplicate action button removed as per new UI simplification.
                                 // Resend invite button — only for users who haven't activated yet
                                 if (row.requirePasswordChange) {
                                     buttonComponent += '<a id="resend_' + row.id + '" onclick="ResendInvite(' + row.id + ', \'' + row.fullName + '\')" class="btn btn-icon btn-bg-light btn-active-color-info btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Resend Login Credentials"><i class="bi bi-send-fill fs-4 text-info"></i></a>';
@@ -917,7 +939,7 @@
         });
     }
 
-    function ViewAssignedStudents(supervisorName, studentsStr) {
+    function ViewAssignedStudents(supervisorName, studentsStr, count) {
         let listHtml = '';
         if (studentsStr === 'No Students' || !studentsStr) {
             listHtml = '<div class="text-muted fst-italic py-3">No students assigned yet.</div>';
@@ -932,7 +954,7 @@
         
         Swal.fire({
             title: '<i class="fas fa-users text-primary me-2 fs-2"></i> Assigned Students',
-            html: '<div class="mb-4 text-muted border-bottom pb-3">Students assigned to <strong class="text-dark">' + supervisorName + '</strong></div>' + listHtml,
+            html: '<div class="mb-4 text-muted border-bottom pb-3">Supervisor: <strong class="text-dark">' + supervisorName + '</strong> &bull; Total: <strong class="text-dark">' + (count || 0) + '</strong></div>' + listHtml,
             confirmButtonColor: '#3b82f6',
             confirmButtonText: 'Close',
             customClass: {
@@ -1298,8 +1320,8 @@
         e.preventDefault();
         const table = $("#mytable").DataTable();
         
-        // Filter by user type column (index 2) using regex for exact match if type provided
-        table.column(2).search(type ? '^' + type + '$' : '', true, false).draw();
+        // Filter by user type column (index 2) using regex for exact or partial word match
+        table.column(2).search(type ? '\\b' + type + '\\b' : '', true, false).draw();
         
         // Dynamically hide/show columns based on the role
         // Column 3 is Supervisor (for Students), Column 4 is Assigned Students (for Supervisors/Examiners), Column 5 is Student Count

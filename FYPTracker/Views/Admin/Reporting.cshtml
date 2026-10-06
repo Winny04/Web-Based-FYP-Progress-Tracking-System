@@ -61,7 +61,7 @@
             <p class="text-white-50 fs-5 mt-1 mb-0" style="font-weight: 300;">System-wide overview of student allocation, supervisor capacity, and academic bottlenecks.</p>
         </div>
         
-        <div class="position-relative z-index-1 mt-3 mt-md-0">
+        <div class="position-relative z-index-1 mt-3 mt-md-0 d-flex gap-2">
             <form method="get" asp-action="Reporting" class="d-flex align-items-center gap-2 bg-white p-2 rounded-3 shadow-sm border-0">
                 <i class="fas fa-filter text-primary ms-2"></i>
                 <select name="sessionFilter" class="form-select form-select-sm border-0 fw-bold shadow-none text-dark bg-white" onchange="this.form.submit()" style="cursor: pointer; width: auto; min-width: 180px; font-size: 0.95rem;">
@@ -82,6 +82,9 @@
                     }
                 </select>
             </form>
+            <a href="/Admin/ExportSummary" class="btn btn-sm btn-success shadow-sm fw-bold align-self-center h-40px d-flex align-items-center bg-white text-success border-0" style="border-radius: 10px;">
+                <i class="bi bi-file-earmark-spreadsheet fs-5 me-2"></i> Export Report
+            </a>
         </div>
     </div>
 
@@ -93,6 +96,7 @@
                 <div class="chart-container">
                     <canvas id="allocationChart"></canvas>
                 </div>
+                <div id="allocationInsight"></div>
             </div>
         </div>
 
@@ -103,6 +107,7 @@
                 <div class="chart-container">
                     <canvas id="programChart"></canvas>
                 </div>
+                <div id="programInsight"></div>
             </div>
         </div>
 
@@ -125,6 +130,7 @@
                 <div class="chart-container" style="min-height: 500px;">
                     <canvas id="capacityChart"></canvas>
                 </div>
+                <div id="capacityInsight"></div>
             </div>
         </div>
     </div>
@@ -169,8 +175,13 @@
                     },
                     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
                 });
+                
+                let totalStudents = rawAllocation.reduce((sum, x) => sum + x.Count, 0);
+                let allocated = rawAllocation.find(x => x.Status === "Allocated")?.Count || 0;
+                let pct = totalStudents > 0 ? Math.round((allocated / totalStudents) * 100) : 0;
+                document.getElementById('allocationInsight').innerHTML = `<div class="text-muted small mt-3 fw-bold text-center"><i class="fas fa-lightbulb text-warning me-1"></i> ${pct}% of students are fully allocated to a project.</div>`;
             } else {
-                document.getElementById('allocationChart').outerHTML = '<div class="text-muted text-center w-100">No student allocation data available.</div>';
+                document.getElementById('allocationChart').outerHTML = `<div class="text-center py-5 w-100"><i class="fas fa-chart-pie fa-3x text-muted mb-3 opacity-50"></i><div class="text-muted fw-bold fs-6">No data available</div></div>`;
             }
 
             // 2. Program Demographics (Pie)
@@ -189,8 +200,13 @@
                     },
                     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
                 });
+                
+                let topProg = rawPrograms.reduce((prev, current) => (prev.Count > current.Count) ? prev : current, rawPrograms[0]);
+                if (topProg) {
+                    document.getElementById('programInsight').innerHTML = `<div class="text-muted small mt-3 fw-bold text-center"><i class="fas fa-lightbulb text-warning me-1"></i> ${topProg.Program} is the most common program.</div>`;
+                }
             } else {
-                document.getElementById('programChart').outerHTML = '<div class="text-muted text-center w-100">No program data available.</div>';
+                document.getElementById('programChart').outerHTML = `<div class="text-center py-5 w-100"><i class="fas fa-chart-pie fa-3x text-muted mb-3 opacity-50"></i><div class="text-muted fw-bold fs-6">No data available</div></div>`;
             }
 
             // 3. Milestone Health (Stacked Bar)
@@ -227,7 +243,7 @@
                     }
                 });
             } else {
-                document.getElementById('milestoneChart').outerHTML = '<div class="text-muted text-center w-100">No milestone data available.</div>';
+                document.getElementById('milestoneChart').outerHTML = `<div class="text-center py-5 w-100"><i class="fas fa-chart-bar fa-3x text-muted mb-3 opacity-50"></i><div class="text-muted fw-bold fs-6">No data available</div></div>`;
             }
 
             // 4. Supervisor Capacity (Horizontal Bar)
@@ -268,8 +284,15 @@
                         }
                     }
                 });
+
+                let overbooked = rawSupervisors.filter(s => s.CurrentStudents >= s.MaxSlots).length;
+                if (overbooked > 0) {
+                    document.getElementById('capacityInsight').innerHTML = `<div class="text-muted small mt-3 fw-bold text-center"><i class="fas fa-exclamation-circle text-danger me-1"></i> ${overbooked} supervisor(s) have reached or exceeded maximum capacity.</div>`;
+                } else {
+                    document.getElementById('capacityInsight').innerHTML = `<div class="text-muted small mt-3 fw-bold text-center"><i class="fas fa-check-circle text-success me-1"></i> All supervisors are within their maximum capacity limits.</div>`;
+                }
             } else {
-                document.getElementById('capacityChart').outerHTML = '<div class="text-muted text-center w-100">No active supervisors found.</div>';
+                document.getElementById('capacityChart').outerHTML = `<div class="text-center py-5 w-100"><i class="fas fa-chart-bar fa-3x text-muted mb-3 opacity-50"></i><div class="text-muted fw-bold fs-6">No data available</div></div>`;
             }
 
         });

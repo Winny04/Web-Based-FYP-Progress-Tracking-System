@@ -20,7 +20,7 @@ namespace FYPTracker.Models
         [StringLength(255)]
         public string? PushSubscriptionJson { get; set; }
 
-        public ICollection<UserRoleMapping> UserRoles { get; set; }
+        public ICollection<UserRoleMapping> UserRoles { get; set; } = new List<UserRoleMapping>();
 
         [StringLength(50)]
         public string? AddedBy { get; set; }
@@ -32,8 +32,6 @@ namespace FYPTracker.Models
         public DateTime? DateJoin { get; set; }
         
         public string? Image { get; set; }
-        public string? UserType { get; set; } // "Student", "Supervisor", "Admin", etc.
-        
 
         public string? EmployeeId { get; set; } // We keep this name for legacy data, but it acts as StudentId (INTI ID)
         public string? CoventryId { get; set; } // Added Coventry ID

@@ -16,6 +16,13 @@ namespace FYPTracker.Common
                 var match = owned.FirstOrDefault(r => string.Equals(r, activeRole.Trim(), StringComparison.OrdinalIgnoreCase));
                 if (match != null) return match;
             }
+            
+            // If activeRole is null (e.g. data table view), and user is both Supervisor and Examiner, join them.
+            if (activeRole == null && owned.Any(r => r == "Supervisor") && owned.Any(r => r == "Examiner"))
+            {
+                return "Supervisor · Examiner";
+            }
+
             foreach (var p in Priority)
             {
                 var match = owned.FirstOrDefault(r => string.Equals(r, p, StringComparison.OrdinalIgnoreCase));

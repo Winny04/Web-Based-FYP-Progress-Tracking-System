@@ -453,9 +453,6 @@ namespace FYPTracker.Controllers
                 {
                     model.PassCode = Encryption.GetHash(ApplicationUser.PassCode);
                 }
-                // Preserve original UserType from DB — never let the form overwrite it
-                // (prevents a Student accidentally saving themselves as Admin etc.)
-                // model.UserType is unchanged (kept from DB)
                 model.EmployeeId = ApplicationUser.EmployeeId;
                 model.IsNotificationOn = ApplicationUser.IsNotificationOn;
                 
@@ -476,7 +473,7 @@ namespace FYPTracker.Controllers
                         model.Specialization = ApplicationUser.Specialization; // fallback if single select used
                 }
 
-                if (model.UserType == "Supervisor")
+                if (postRoles.Contains("Supervisor"))
                 {
                     if (!string.IsNullOrEmpty(ApplicationUser.Title))
                         model.Title = ApplicationUser.Title;
@@ -485,7 +482,7 @@ namespace FYPTracker.Controllers
                         model.MaxStudentSlots = ApplicationUser.MaxStudentSlots.Value;
                     }
                 }
-                else if (model.UserType == "Student")
+                else if (postRoles.Contains("Student"))
                 {
                     if (!string.IsNullOrEmpty(ApplicationUser.AcademicSession))
                         model.AcademicSession = ApplicationUser.AcademicSession;
@@ -670,7 +667,9 @@ namespace FYPTracker.Controllers
         [HttpGet]
         public async Task<IActionResult> ForceChangePassword()
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers
+                .Include(u => u.UserRoles).ThenInclude(r => r.Role)
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             if (user == null) return RedirectToAction("Login");
             if (!user.RequirePasswordChange) return RedirectToAction("Index", "Home");
 
@@ -687,7 +686,9 @@ namespace FYPTracker.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ForceChangePassword(string newPassword, string confirmPassword, string fullName, string phone, string programme, string academicSession, string title, int? departmentId, List<string> selectedProgrammes, List<string> selectedSpecializations)
         {
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            var user = await _context.ApplicationUsers
+                .Include(u => u.UserRoles).ThenInclude(r => r.Role)
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             if (user == null) return RedirectToAction("Login");
             if (!user.RequirePasswordChange) return RedirectToAction("Index", "Home");
 

@@ -18,7 +18,36 @@ namespace FYPTracker.Services.Others
             _env = env;
         }
 
-        public void Send(string to, string subject, string html,string? filePath = null, string from = null, string? cc = null)
+        /// <summary>
+        /// Returns true if development redirect is active.
+        /// Logs a clear error and returns false if DevRedirectEmail is configured
+        /// but invalid/empty, preventing accidental sends to real addresses.
+        /// </summary>
+        private bool TryGetDevRedirect(out string redirectTo)
+        {
+            redirectTo = null!;
+
+            if (!_env.IsDevelopment())
+                return false;
+
+            if (string.IsNullOrWhiteSpace(smtpSettings.DevRedirectEmail))
+                return false; // Not configured → send normally (Production-like behavior)
+
+            var candidate = smtpSettings.DevRedirectEmail.Trim();
+            if (!candidate.Contains('@') || candidate.Length < 5)
+            {
+                // Invalid redirect email — fail loudly in development rather than
+                // accidentally sending to a real institutional address
+                Console.WriteLine($"[EmailService] ⚠ DEV REDIRECT BLOCKED: DevRedirectEmail \"{candidate}\" is invalid. Email will NOT be sent.");
+                redirectTo = null!;
+                return false;
+            }
+
+            redirectTo = candidate;
+            return true;
+        }
+
+        public void Send(string to, string subject, string html, string? filePath = null, string from = null, string? cc = null)
         {
             if (smtpSettings.Offline) return;
 
@@ -30,11 +59,29 @@ namespace FYPTracker.Services.Others
 
                 var multiPart = new Multipart("mixed");
 
-                foreach (var addr in to.Split(';', StringSplitOptions.RemoveEmptyEntries))
-                    email.To.Add(MailboxAddress.Parse(addr.Trim()));
+                // ── Development redirect ──────────────────────────────────
+                string actualRecipient;
+                if (TryGetDevRedirect(out var devEmail))
+                {
+                    actualRecipient = devEmail;
+                    email.To.Add(MailboxAddress.Parse(devEmail));
 
-                if (!string.IsNullOrEmpty(cc))
-                    email.Cc.Add(MailboxAddress.Parse(cc.Trim()));
+                    // Prefix subject so the developer knows who the real target was
+                    subject = $"[DEV → {to}] {subject}";
+
+                    // Log safe info (no tokens/passwords)
+                    Console.WriteLine($"[EmailService] 📧 DEV REDIRECT: Original=\"{to}\", Redirected=\"{devEmail}\", Subject=\"{subject}\"");
+                }
+                else
+                {
+                    actualRecipient = to;
+                    foreach (var addr in to.Split(';', StringSplitOptions.RemoveEmptyEntries))
+                        email.To.Add(MailboxAddress.Parse(addr.Trim()));
+
+                    if (!string.IsNullOrEmpty(cc))
+                        email.Cc.Add(MailboxAddress.Parse(cc.Trim()));
+                }
+                // ── End redirect ──────────────────────────────────────────
 
                 email.Subject = subject;
                 var bodyPart = new TextPart(TextFormat.Html) { Text = html };
@@ -65,10 +112,13 @@ namespace FYPTracker.Services.Others
                     smtp.Disconnect(true);
                     smtp.Dispose();
                 }
+
+                if (_env.IsDevelopment())
+                    Console.WriteLine($"[EmailService] ✅ Email sent successfully to \"{actualRecipient}\".");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Email sending failed: {ex.Message}");
+                Console.WriteLine($"[EmailService] ❌ Email sending failed to \"{to}\": {ex.Message}");
             }
         }
 
@@ -82,10 +132,29 @@ namespace FYPTracker.Services.Others
                 var email = new MimeMessage();
 
                 email.From.Add(MailboxAddress.Parse(from ?? smtpSettings.EmailFrom));
-                foreach (var address in to)
+
+                // ── Development redirect ──────────────────────────────────
+                string actualRecipient;
+                string originalRecipients = string.Join("; ", to);
+
+                if (TryGetDevRedirect(out var devEmail))
                 {
-                    email.To.Add(MailboxAddress.Parse(address));
+                    actualRecipient = devEmail;
+                    email.To.Add(MailboxAddress.Parse(devEmail));
+
+                    subject = $"[DEV → {originalRecipients}] {subject}";
+
+                    Console.WriteLine($"[EmailService] 📧 DEV REDIRECT: Original=\"{originalRecipients}\", Redirected=\"{devEmail}\", Subject=\"{subject}\"");
                 }
+                else
+                {
+                    actualRecipient = originalRecipients;
+                    foreach (var address in to)
+                    {
+                        email.To.Add(MailboxAddress.Parse(address));
+                    }
+                }
+                // ── End redirect ──────────────────────────────────────────
 
                 var multiPart = new Multipart("mixed");
 
@@ -121,21 +190,23 @@ namespace FYPTracker.Services.Others
                     }
                     catch (SmtpCommandException ex)
                     {
-                        Console.WriteLine("Error trying to connect: {0}", ex.Message);
-                        Console.WriteLine("\tStatusCode: {0}", ex.StatusCode);
+                        Console.WriteLine("[EmailService] ❌ SMTP error: {0} (StatusCode: {1})", ex.Message, ex.StatusCode);
                         return;
                     }
                     catch (SmtpProtocolException ex)
                     {
-                        Console.WriteLine("Protocol error while trying to connect: {0}", ex.Message);
+                        Console.WriteLine("[EmailService] ❌ Protocol error: {0}", ex.Message);
                         return;
                     }
                    
                 }
+
+                if (_env.IsDevelopment())
+                    Console.WriteLine($"[EmailService] ✅ Email sent successfully to \"{actualRecipient}\".");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Email sending failed: {ex.Message}");
+                Console.WriteLine($"[EmailService] ❌ Email sending failed: {ex.Message}");
             }
         }
     }
