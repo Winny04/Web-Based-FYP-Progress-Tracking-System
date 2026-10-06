@@ -12,6 +12,7 @@ using System.IO;
 using Microsoft.AspNetCore.Http;
 using System.Collections.Generic;
 
+using FYPTracker.Common;
 namespace FYPTracker.Controllers
 {
     public class ChatController : Controller
@@ -44,7 +45,7 @@ namespace FYPTracker.Controllers
             if (user == null) return RedirectToAction("Login", "User");
 
             ViewBag.CurrentUserId = user.Id;
-            ViewBag.CurrentUserType = user.UserType;
+            ViewBag.CurrentUserType = RoleDisplay.Resolve(_context.UserRoleMappings.Where(ur => ur.UserId == user.Id).Select(ur => ur.Role.Name).ToList(), HttpContext.Session.GetString("ActiveRole"));
             ViewBag.IsStudent = user.UserRoles.Any(r => r.Role.Name == "Student");
             ViewBag.MyName = user.FullName ?? user.UserName;
             ViewBag.ActiveGroupId = groupId;

@@ -13,7 +13,8 @@
         : null;
         
     var sessionRole = HttpContextAccessor.HttpContext?.Session.GetString("ActiveRole");
-    var userType = !string.IsNullOrEmpty(sessionRole) ? sessionRole : (currentUser?.UserType ?? "Student");
+    var userRoles = HttpContextAccessor.HttpContext?.User?.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList() ?? new List<string>();
+    var userType = !string.IsNullOrEmpty(sessionRole) ? sessionRole : (userRoles.FirstOrDefault() ?? "Student");
     // Check if this student already has a confirmed (Approved) supervisor
     bool hasSupervisor = false;
     if (userType == "Student" && currentUser != null)

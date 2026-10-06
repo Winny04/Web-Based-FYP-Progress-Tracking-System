@@ -25,27 +25,36 @@ namespace FYPTracker.Controllers
                 var examiner = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == "EXM-001");
                 if (examiner == null)
                 {
-                    examiner = new ApplicationUser { UserName = "EXM-001", Email = "examiner@test.com", FullName = "Dr. Dummy Examiner", UserType = "Examiner", PassCode = FYPTracker.Common.Encryption.GetHash("123456"), DateCreated = DateTime.Now, RequirePasswordChange = false, IsResign = false, IsNotificationOn = false };
+                    examiner = new ApplicationUser { UserName = "EXM-001", Email = "examiner@test.com", FullName = "Dr. Dummy Examiner", PassCode = FYPTracker.Common.Encryption.GetHash("123456"), DateCreated = DateTime.Now, RequirePasswordChange = false, IsResign = false, IsNotificationOn = false };
                     _context.ApplicationUsers.Add(examiner);
                     await _context.SaveChangesAsync();
+                    
+                    var role = await _context.AppRoles.FirstOrDefaultAsync(r => r.Name == "Examiner");
+                    if (role != null) { _context.UserRoleMappings.Add(new UserRoleMapping { UserId = examiner.Id, RoleId = role.Id }); await _context.SaveChangesAsync(); }
                 }
 
                 // Create dummy supervisor if not exists
                 var supervisor = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == "SUP-001");
                 if (supervisor == null)
                 {
-                    supervisor = new ApplicationUser { UserName = "SUP-001", Email = "super@test.com", FullName = "Dr. Super Visor", UserType = "Supervisor", PassCode = FYPTracker.Common.Encryption.GetHash("123456"), DateCreated = DateTime.Now, RequirePasswordChange = false, IsResign = false, IsNotificationOn = false };
+                    supervisor = new ApplicationUser { UserName = "SUP-001", Email = "super@test.com", FullName = "Dr. Super Visor", PassCode = FYPTracker.Common.Encryption.GetHash("123456"), DateCreated = DateTime.Now, RequirePasswordChange = false, IsResign = false, IsNotificationOn = false };
                     _context.ApplicationUsers.Add(supervisor);
                     await _context.SaveChangesAsync();
+                    
+                    var role = await _context.AppRoles.FirstOrDefaultAsync(r => r.Name == "Supervisor");
+                    if (role != null) { _context.UserRoleMappings.Add(new UserRoleMapping { UserId = supervisor.Id, RoleId = role.Id }); await _context.SaveChangesAsync(); }
                 }
 
                 // Create dummy student if not exists
                 var student = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == "STU-001");
                 if (student == null)
                 {
-                    student = new ApplicationUser { UserName = "STU-001", Email = "student@test.com", FullName = "Johnny Student", EmployeeId = "S123456", UserType = "Student", PassCode = FYPTracker.Common.Encryption.GetHash("123456"), DateCreated = DateTime.Now, RequirePasswordChange = false, IsResign = false, IsNotificationOn = false };
+                    student = new ApplicationUser { UserName = "STU-001", Email = "student@test.com", FullName = "Johnny Student", EmployeeId = "S123456", PassCode = FYPTracker.Common.Encryption.GetHash("123456"), DateCreated = DateTime.Now, RequirePasswordChange = false, IsResign = false, IsNotificationOn = false };
                     _context.ApplicationUsers.Add(student);
                     await _context.SaveChangesAsync();
+                    
+                    var role = await _context.AppRoles.FirstOrDefaultAsync(r => r.Name == "Student");
+                    if (role != null) { _context.UserRoleMappings.Add(new UserRoleMapping { UserId = student.Id, RoleId = role.Id }); await _context.SaveChangesAsync(); }
                 }
 
                 // Create project

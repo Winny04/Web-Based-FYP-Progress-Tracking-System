@@ -237,26 +237,17 @@ namespace FYPTracker.Controllers
         {
             var model = _context.ApplicationUsers.Include(u => u.EmpDepartment).Where(d => d.UserName == name).FirstOrDefault();
             if (model != null) {
-                if (model.UserType == "SuperAdmin")
-                {
-                    model.UserType = "SuperAdmin";
-                }
-
-                else
-                {
-                    var userTypeItem = UserTypes.UserTypeList().FirstOrDefault(p => p.Value == model.UserType);
-                    if (userTypeItem != null)
-                    {
-                        model.UserType = userTypeItem.Text;
-                    }
-                }
+                var ownedRoles = _context.UserRoleMappings.Where(ur => ur.UserId == model.Id).Select(ur => ur.Role.Name).ToList();
+                var isOwnProfile = string.Equals(User.Identity?.Name, model.UserName, StringComparison.OrdinalIgnoreCase);
+                var displayRole = RoleDisplay.Resolve(ownedRoles, isOwnProfile ? HttpContext.Session.GetString("ActiveRole") : null);
+                ViewBag.DisplayRole = displayRole;
                 
-                if (model.UserType == "Student")
+                if (displayRole == "Student")
                 {
                     var project = _context.FYPProjects.Include(p => p.Supervisor).FirstOrDefault(p => p.StudentId == model.Id);
                     ViewBag.SupervisorName = project?.Supervisor?.FullName ?? "Not Assigned";
                 }
-                else if (model.UserType == "Supervisor")
+                else if (displayRole == "Supervisor")
                 {
                     var projects = _context.FYPProjects.Include(p => p.Student).Where(p => p.SupervisorId == model.Id).ToList();
                     ViewBag.FilledSlots = projects.Count;
@@ -357,7 +348,8 @@ namespace FYPTracker.Controllers
                 model.PassCode = check.PassCode;
                 model.Email = check.Email;
                 model.Image = check.Image;
-                model.UserType = String.IsNullOrEmpty(check.UserType) ? "" : check.UserType.ToUpper().Trim();
+                var editRoles = _context.UserRoleMappings.Where(ur => ur.UserId == check.Id).Select(ur => ur.Role.Name).ToList();
+                model.UserType = RoleDisplay.Resolve(editRoles, HttpContext.Session.GetString("ActiveRole")).ToUpper().Trim();
                 model.Department = check.EmpDepartment?.Name;
                 model.EmployeeId = check.EmployeeId;
                 
@@ -409,7 +401,8 @@ namespace FYPTracker.Controllers
             var deptQuery = _context.Department.AsQueryable();
             
             bool isDuplicateMatric = false;
-            if (model != null && model.UserType == "Student" && !string.IsNullOrWhiteSpace(ApplicationUser.EmployeeId))
+            var postRoles = model != null ? _context.UserRoleMappings.Where(ur => ur.UserId == model.Id).Select(ur => ur.Role.Name).ToList() : new List<string>();
+            if (model != null && postRoles.Contains("Student") && !string.IsNullOrWhiteSpace(ApplicationUser.EmployeeId))
             {
                 isDuplicateMatric = _context.ApplicationUsers.Any(u => u.UserRoles.Any(r => r.Role.Name == "Student") && u.Id != model.Id && u.EmployeeId != null && u.EmployeeId.ToLower() == ApplicationUser.EmployeeId.ToLower());
             }
@@ -441,7 +434,7 @@ namespace FYPTracker.Controllers
                 model.IsNotificationOn = ApplicationUser.IsNotificationOn;
                 model1.Email = ApplicationUser.Email;
                 model1.Image = ApplicationUser.Image;
-                model1.UserType = ApplicationUser.UserType;
+                model1.UserType = RoleDisplay.Resolve(postRoles, HttpContext.Session.GetString("ActiveRole")).ToUpper().Trim();
                 model1.Image = model.Image;
                 model1.EmployeeId = model.EmployeeId;
 
@@ -470,7 +463,7 @@ namespace FYPTracker.Controllers
                 model.Phone = ApplicationUser.Phone;
                 // Use null-guard: only overwrite if submitted value is non-empty
                 // This prevents readonly display fields from wiping existing data
-                if (model.UserType == "Supervisor" || model.UserType == "Examiner" || model.UserType == "Admin")
+                if (postRoles.Contains("Supervisor") || postRoles.Contains("Examiner") || postRoles.Contains("Admin"))
                 {
                     if (ApplicationUser.SelectedProgrammes != null && ApplicationUser.SelectedProgrammes.Any())
                         model.Programme = string.Join(", ", ApplicationUser.SelectedProgrammes);
@@ -682,6 +675,7 @@ namespace FYPTracker.Controllers
             if (!user.RequirePasswordChange) return RedirectToAction("Index", "Home");
 
             ViewBag.User = user;
+            ViewBag.UserRole = RoleDisplay.Resolve(_context.UserRoleMappings.Where(ur => ur.UserId == user.Id).Select(ur => ur.Role.Name).ToList(), HttpContext.Session.GetString("ActiveRole"));
             ViewBag.Departments = await _context.Department.ToListAsync();
             ViewBag.Programmes = await _context.Programme.ToListAsync();
             ViewBag.Specializations = await _context.Specialization.ToListAsync();
@@ -698,6 +692,7 @@ namespace FYPTracker.Controllers
             if (!user.RequirePasswordChange) return RedirectToAction("Index", "Home");
 
             ViewBag.User = user;
+            ViewBag.UserRole = RoleDisplay.Resolve(_context.UserRoleMappings.Where(ur => ur.UserId == user.Id).Select(ur => ur.Role.Name).ToList(), HttpContext.Session.GetString("ActiveRole"));
 
             if (string.IsNullOrEmpty(newPassword) || newPassword != confirmPassword)
             {
@@ -829,7 +824,7 @@ namespace FYPTracker.Controllers
                 {
                     newEmployee.PassCode = Encryption.GetHash(ApplicationUser.PassCode);
                 }
-                newEmployee.UserType = ApplicationUser.UserType;
+                // Role membership is managed via UserRoleMappings; never written from profile edits.
                 newEmployee.IsResign = Convert.ToBoolean(ApplicationUser.IsResign);
 
                 if (isImgChanged == "true") 

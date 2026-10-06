@@ -5,6 +5,7 @@
 @{
     ViewData["Title"] = "Student Profile";
     
+    string displayRole = ViewBag.DisplayRole as string ?? "";
     // Fetch project and supervisor dynamically
     var project = DbContext.FYPProjects.Include(p => p.Supervisor).FirstOrDefault(p => p.StudentId == Model.Id);
     var supervisorName = project?.Supervisor?.FullName ?? "Not Assigned";
@@ -108,15 +109,15 @@
                             <img id="avatarPreview" src="/assets/media/avatars/blank.png" alt="Profile Image" style="width: 100%; height: 100%; object-fit: cover;" />
                         }
                     </div>
-                    <h4 class="fw-bold text-dark mb-0">@(Model.UserType == "Supervisor" ? Model.Title + " " : "")@Model.FullName</h4>
-                    <span class="badge bg-light text-muted border px-3 py-1 rounded-pill mt-1">@Model.UserType</span>
+                    <h4 class="fw-bold text-dark mb-0">@(displayRole == "Supervisor" ? Model.Title + " " : "")@Model.FullName</h4>
+                    <span class="badge bg-light text-muted border px-3 py-1 rounded-pill mt-1">@displayRole</span>
                 </div>
 
                 <form asp-action="EditProfile" asp-controller="User" method="post" enctype="multipart/form-data" id="editProfileForm">
                     <input type="hidden" name="Id" value="@Model.Id" />
                     <input type="hidden" name="UserName" value="@Model.UserName" />
 
-                    <input type="hidden" name="UserType" value="@Model.UserType" />
+                    <input type="hidden" name="UserType" value="@displayRole" />
                     <input type="hidden" name="PassCode" value="@Model.PassCode" />
                     <input type="hidden" name="Department" value="@Model.EmpDepartment?.Name" />
                     <input type="hidden" name="EmployeeId" value="@Model.EmployeeId" />
@@ -149,7 +150,7 @@
                             <div id="phoneError" class="text-danger mt-1 fs-7 fw-bold"></div>
                         </div>
 
-                        @if (Model.UserType == "Student")
+                        @if (displayRole == "Student")
                         {
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Matric ID</label>
@@ -169,7 +170,7 @@
                                 <input type="text" class="form-control bg-light border-0" value="@supervisorName" readonly />
                             </div>
                         }
-                        else if (Model.UserType == "Supervisor" || Model.UserType == "Examiner")
+                        else if (displayRole == "Supervisor" || displayRole == "Examiner")
                         {
                             var currentStudents = ViewBag.FilledSlots ?? 0;
                             <div class="col-md-6">
@@ -189,7 +190,7 @@
                                 <input type="text" class="form-control bg-light border-0" value="@(Model.Specialization ?? "Not Assigned")" readonly />
                             </div>
 
-                            @if (Model.UserType == "Supervisor")
+                            @if (displayRole == "Supervisor")
                             {
                                 <div class="col-md-12">
                                     <label class="form-label fw-semibold">Current Student Slots</label>

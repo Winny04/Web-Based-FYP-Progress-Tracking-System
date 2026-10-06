@@ -42,7 +42,7 @@ namespace FYPTracker.Services.Authentication
             var claims = new List<Claim>()
             {
                 new Claim("Id",employee.Id.ToString()),
-                new Claim("Type",employee.UserType ?? String.Empty),
+
                 new Claim("DepartmentId",employee?.DepartmentId.ToString() ?? String.Empty),
                 new Claim("Department",employee.EmpDepartment?.Name ?? String.Empty),
                 new Claim("FullName",employee.FullName ?? String.Empty),

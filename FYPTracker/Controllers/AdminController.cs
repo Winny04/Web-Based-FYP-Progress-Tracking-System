@@ -779,7 +779,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         [HttpGet]
         public async Task<IActionResult> GetUserDetails(int id)
         {
-            var user = await _context.ApplicationUsers.Include(x => x.EmpDepartment).FirstOrDefaultAsync(u => u.Id == id);
+            var user = await _context.ApplicationUsers.Include(x => x.EmpDepartment).Include(x => x.UserRoles).ThenInclude(ur => ur.Role).FirstOrDefaultAsync(u => u.Id == id);
             if (user == null) return Json(new { success = false, msg = "User not found." });
             return Json(new {
                 success = true,
@@ -787,7 +787,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 fullName = user.FullName,
                 email = user.Email,
                 phone = user.Phone,
-                userType = user.UserType,
+                userType = RoleDisplay.Resolve(user.UserRoles.Select(ur => ur.Role.Name), null),
                 department = user.EmpDepartment?.Name,
                 programme = user.Programme,
                 specialization = user.Specialization,
@@ -872,6 +872,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
             var check = _context.ApplicationUsers
                 .Include(x => x.EmpDepartment)
+                .Include(x => x.UserRoles).ThenInclude(ur => ur.Role)
                 .Where(d => d.Id == id).FirstOrDefault();
             if (check != null)
             {
@@ -883,7 +884,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 model.PassCode = check.PassCode;
                 model.Email = check.Email;
                 model.Image = check.Image;
-                model.UserType = String.IsNullOrEmpty(check.UserType) ? "" : check.UserType.ToUpper().Trim();
+                model.UserType = RoleDisplay.Resolve(check.UserRoles.Select(ur => ur.Role.Name), null).ToUpper().Trim();
                 model.Department = check.EmpDepartment?.Name;
                 model.EmployeeId = check.EmployeeId;
                 model.IsResign = check.IsResign.ToString();
@@ -912,6 +913,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             try {
             var model = _context.ApplicationUsers
                 .Include(x => x.EmpDepartment)
+                .Include(x => x.UserRoles).ThenInclude(ur => ur.Role)
                 .Where(d => d.Id == ApplicationUser.Id).FirstOrDefault();
             var pattern = @"^[a-z0-9](\.?[a-z0-9]){2,}@(gmail\.com|student\.newinti\.edu\.my)$";
             Regex r = new Regex(pattern, RegexOptions.IgnoreCase);
@@ -924,9 +926,10 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 ModelState.AddModelError("Email", "Please enter the correct email! (xxx@gmail.com or xxx@student.newinti.edu.my)");
             }
 
-            if (model != null && model.UserType == "Student" && !string.IsNullOrWhiteSpace(ApplicationUser.EmployeeId))
+            bool modelIsStudent = model != null && model.UserRoles.Any(ur => ur.Role.Name == "Student");
+            if (model != null && modelIsStudent && !string.IsNullOrWhiteSpace(ApplicationUser.EmployeeId))
             {
-                var duplicateMatric = _context.ApplicationUsers.Any(u => u.UserType == "Student" && u.Id != model.Id && u.EmployeeId != null && u.EmployeeId.ToLower() == ApplicationUser.EmployeeId.ToLower());
+                var duplicateMatric = _context.ApplicationUsers.Any(u => u.UserRoles.Any(ur => ur.Role.Name == "Student") && u.Id != model.Id && u.EmployeeId != null && u.EmployeeId.ToLower() == ApplicationUser.EmployeeId.ToLower());
                 if (duplicateMatric)
                 {
                     ModelState.AddModelError("EmployeeId", $"Matric ID '{ApplicationUser.EmployeeId}' is already registered to another student.");
@@ -942,7 +945,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 model1.PassCode = ApplicationUser.PassCode;
                 model1.Email = ApplicationUser.Email;
                 model1.Image = ApplicationUser.Image;
-                model1.UserType = ApplicationUser.UserType;
+                model1.UserType = model != null ? RoleDisplay.Resolve(model.UserRoles.Select(ur => ur.Role.Name), null).ToUpper().Trim() : (ApplicationUser.UserType ?? "");
                 model1.Image = model?.Image ?? ApplicationUser.Image;
                 model1.Department = model?.EmpDepartment?.Name;
                 model1.EmployeeId = model?.EmployeeId ?? ApplicationUser.EmployeeId;
@@ -976,7 +979,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     model.EmployeeId = ApplicationUser.EmployeeId;
                     
                     model.Phone = ApplicationUser.Phone;
-                    if (model.UserType != "Student" && model.UserType != "STUDENT")
+                    if (!modelIsStudent)
                     {
                         model.Programme = ApplicationUser.Programme;
                         model.AcademicSession = ApplicationUser.AcademicSession;
@@ -1091,7 +1094,6 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                             DateCreated = DateTime.Now,
                             DateJoin = DateTime.Now,
                             AddedBy = "sys",
-                            UserType = String.IsNullOrEmpty(newEmployee.UserType) ? "Requestor" : newEmployee.UserType,
                             Image = "/assets/media/avatars/blank.png",
                             DepartmentId = deptQuery.Where(x => x.Name == newEmployee.Department).FirstOrDefault()?.Id,
                             Phone = newEmployee.Phone,
@@ -1103,6 +1105,15 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     };
                         _context.ApplicationUsers.Add(model);
                         _context.SaveChanges();
+
+                        // Role membership is stored in UserRoleMappings (source of truth)
+                        var requestedRole = (newEmployee.UserType ?? "").Trim();
+                        var roleEntity = _context.AppRoles.FirstOrDefault(r => r.Name == requestedRole);
+                        if (roleEntity != null)
+                        {
+                            _context.UserRoleMappings.Add(new UserRoleMapping { UserId = model.Id, RoleId = roleEntity.Id });
+                            _context.SaveChanges();
+                        }
 
                         try
                         {
@@ -1158,9 +1169,14 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             }
         }
 
-public ActionResult ManageUsersData()
+        public ActionResult ManageUsersData()
         {
-            var users = _context.ApplicationUsers.Where(u => !u.UserRoles.Any(r => r.Role.Name == "Admin") && !u.UserRoles.Any(r => r.Role.Name == "SuperAdmin")).ToList();
+            var users = _context.ApplicationUsers
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .Where(u => !u.UserRoles.Any(r => r.Role.Name == "Admin") && !u.UserRoles.Any(r => r.Role.Name == "SuperAdmin"))
+                .ToList();
+
             var projects = _context.FYPProjects.Include(p => p.Supervisor).Include(p => p.Student).ToList();
 
             var empList = users.Select(u => new {
@@ -1168,27 +1184,27 @@ public ActionResult ManageUsersData()
                 fullName = u.FullName,
                 email = u.Email,
                 employeeId = u.EmployeeId,
-                userType = u.UserType,
+                userType = RoleDisplay.Resolve(u.UserRoles.Select(ur => ur.Role.Name), null), // Preserved for frontend DataTable exact string matching compatibility
                 dateCreated = u.DateCreated,
                 isResign = u.IsResign,
                 image = u.Image,
-                supervisorName = u.UserType == "Student" 
+                supervisorName = u.UserRoles.Any(r => r.Role.Name == "Student")
                     ? (projects.FirstOrDefault(p => p.StudentId == u.Id)?.Supervisor?.FullName ?? "Not Assigned")
                     : "-",
-                assignedStudents = u.UserType == "Supervisor"
+                assignedStudents = u.UserRoles.Any(r => r.Role.Name == "Supervisor")
                     ? string.Join(", ", projects.Where(p => p.SupervisorId == u.Id && p.Student != null).Select(p => p.Student.FullName).DefaultIfEmpty("No Students"))
-                    : u.UserType == "Examiner" 
+                    : u.UserRoles.Any(r => r.Role.Name == "Examiner") 
                         ? string.Join(", ", projects.Where(p => p.AssignedExaminers.Any(ae => ae.ExaminerId == u.Id) && p.Student != null).Select(p => p.Student.FullName).DefaultIfEmpty("No Students"))
                         : "-",
-                assignedStudentCount = u.UserType == "Supervisor"
+                assignedStudentCount = u.UserRoles.Any(r => r.Role.Name == "Supervisor")
                     ? projects.Count(p => p.SupervisorId == u.Id && p.Student != null).ToString()
-                    : u.UserType == "Examiner"
+                    : u.UserRoles.Any(r => r.Role.Name == "Examiner")
                         ? projects.Count(p => p.AssignedExaminers.Any(ae => ae.ExaminerId == u.Id) && p.Student != null).ToString()
                         : "-",
                 specialization = u.Specialization,
                 requirePasswordChange = u.RequirePasswordChange,
                 accountExpiry = u.AccountExpiry,
-                isProfileIncomplete = ((u.UserType == "Supervisor" || u.UserType == "Examiner") && 
+                isProfileIncomplete = (u.UserRoles.Any(r => r.Role.Name == "Supervisor" || r.Role.Name == "Examiner") && 
                                       (u.DepartmentId == null || 
                                        string.IsNullOrWhiteSpace(u.Programme) || 
                                        string.IsNullOrWhiteSpace(u.Specialization) || 
@@ -2067,7 +2083,6 @@ public ActionResult ManageUsersData()
                     DateCreated = DateTime.Now,
                     DateJoin = DateTime.Now,
                     AddedBy = "sys",
-                    UserType = bulkUserType,
                     Image = "/assets/media/avatars/blank.png",
                     RequirePasswordChange = true, // Forces onboarding flow
                     // Store student-specific profile fields supplied by admin
@@ -2078,6 +2093,13 @@ public ActionResult ManageUsersData()
 
                 _context.ApplicationUsers.Add(newUser);
                 await _context.SaveChangesAsync(); // save so we have newUser.Id for the log
+
+                var bulkRoleEntity = await _context.AppRoles.FirstOrDefaultAsync(r => r.Name == bulkUserType);
+                if (bulkRoleEntity != null)
+                {
+                    _context.UserRoleMappings.Add(new UserRoleMapping { UserId = newUser.Id, RoleId = bulkRoleEntity.Id });
+                    await _context.SaveChangesAsync();
+                }
 
                 // ── Log the invitation ──
                 var adminUser = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
@@ -2302,7 +2324,6 @@ public ActionResult ManageUsersData()
                     DateCreated = DateTime.Now,
                     DateJoin = DateTime.Now,
                     AddedBy = "sys",
-                    UserType = csvUserType,
                     Image = "/assets/media/avatars/blank.png",
                     RequirePasswordChange = true,
                     Programme = csvUserType == "Student" ? csvProgramme : null,
@@ -2311,6 +2332,13 @@ public ActionResult ManageUsersData()
                 };
                 _context.ApplicationUsers.Add(newUser);
                 await _context.SaveChangesAsync();
+
+                var csvRoleEntity = await _context.AppRoles.FirstOrDefaultAsync(r => r.Name == csvUserType);
+                if (csvRoleEntity != null)
+                {
+                    _context.UserRoleMappings.Add(new UserRoleMapping { UserId = newUser.Id, RoleId = csvRoleEntity.Id });
+                    await _context.SaveChangesAsync();
+                }
 
                 if (admin != null)
                 {

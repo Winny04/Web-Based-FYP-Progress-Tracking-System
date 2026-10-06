@@ -66,7 +66,9 @@
             var identity = User.Identity as System.Security.Claims.ClaimsIdentity;
             var idClaim = identity?.FindFirst("Id");
             var currentUserId = idClaim != null ? idClaim.Value : "0";
-            var userTypeClaim = identity?.FindFirst("Type")?.Value ?? "";
+            var sessionRole = Context.Session.GetString("ActiveRole");
+            var userRoles = identity?.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList() ?? new List<string>();
+            var userTypeClaim = !string.IsNullOrEmpty(sessionRole) ? sessionRole : (userRoles.FirstOrDefault() ?? "");
         }
         var globalUserId = parseInt('@currentUserId');
         function incrementNotificationBadge() {
