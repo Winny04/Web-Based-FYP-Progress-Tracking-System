@@ -1425,7 +1425,7 @@
                         }
                     } else {
                         // Supervisor or Examiner
-                        if (!/^[a-z0-9.-]+$/.test(username) || username.includes('@') || username.includes(' ')) {
+                        if (!/^[a-z0-9.-]+$/.test(username) || username.includes('@@') || username.includes(' ')) {
                             isValid = false;
                             errorMsg = 'Invalid username format';
                         }

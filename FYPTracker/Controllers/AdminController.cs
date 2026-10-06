@@ -100,8 +100,8 @@ namespace FYPTracker.Controllers
             // 1. Calculate Stats
             var users = await _context.ApplicationUsers.ToListAsync();
             ViewBag.TotalUsers = users.Count;
-            ViewBag.TotalStudents = users.Count(u => u.UserType == "Student");
-            ViewBag.TotalSupervisors = users.Count(u => u.UserType == "Supervisor");
+            ViewBag.TotalStudents = users.Count(u => u.UserRoles.Any(r => r.Role.Name == "Student"));
+            ViewBag.TotalSupervisors = users.Count(u => u.UserRoles.Any(r => r.Role.Name == "Supervisor"));
 
             var projects = await _context.FYPProjects.Include(p => p.Milestones).ToListAsync();
             ViewBag.TotalProjects = projects.Count;
@@ -225,13 +225,13 @@ namespace FYPTracker.Controllers
             ViewBag.CurrentUser = user;
 
             // System-wide stats for Admin
-            ViewBag.TotalStudents    = await _context.ApplicationUsers.CountAsync(u => u.UserType == "Student");
-            ViewBag.TotalSupervisors = await _context.ApplicationUsers.CountAsync(u => u.UserType == "Supervisor");
-            ViewBag.TotalExaminers   = await _context.ApplicationUsers.CountAsync(u => u.UserType == "Examiner");
+            ViewBag.TotalStudents    = await _context.ApplicationUsers.CountAsync(u => u.UserRoles.Any(r => r.Role.Name == "Student"));
+            ViewBag.TotalSupervisors = await _context.ApplicationUsers.CountAsync(u => u.UserRoles.Any(r => r.Role.Name == "Supervisor"));
+            ViewBag.TotalExaminers   = await _context.ApplicationUsers.CountAsync(u => u.UserRoles.Any(r => r.Role.Name == "Examiner"));
             ViewBag.TotalProjects    = await _context.FYPProjects.CountAsync();
             ViewBag.PendingRequests  = await _context.SupervisorRequests.CountAsync(r => r.Status == "Pending");
             ViewBag.Supervisors = await _context.ApplicationUsers
-                .Where(u => (u.UserType == "Supervisor" || u.UserType == "SUPERVISOR") && !u.IsResign)
+                .Where(u => (u.UserRoles.Any(r => r.Role.Name == "Supervisor") || u.UserRoles.Any(r => r.Role.Name == "SUPERVISOR")) && !u.IsResign)
                 .Select(u => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = u.Id.ToString(), Text = u.FullName })
                 .ToListAsync();
 
@@ -246,7 +246,7 @@ namespace FYPTracker.Controllers
             ViewBag.CurrentUser = user;
 
             var students = await _context.ApplicationUsers
-                .Where(u => u.UserType == "Student")
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Student"))
                 .ToListAsync();
 
             var projects = await _context.FYPProjects
@@ -257,7 +257,7 @@ namespace FYPTracker.Controllers
 
             ViewBag.AvailableExaminers = await _context.ApplicationUsers
                 .Include(u => u.EmpDepartment)
-                .Where(u => u.UserType == "Examiner" && !u.IsResign)
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Examiner") && !u.IsResign)
                 .OrderBy(u => u.FullName)
                 .ToListAsync();
 
@@ -449,7 +449,7 @@ namespace FYPTracker.Controllers
             }
 
             var examiner = await _context.ApplicationUsers
-                .FirstOrDefaultAsync(u => u.Id == examinerId && u.UserType == "Examiner" && !u.IsResign);
+                .FirstOrDefaultAsync(u => u.Id == examinerId && u.UserRoles.Any(r => r.Role.Name == "Examiner") && !u.IsResign);
 
             if (examiner == null)
             {
@@ -538,7 +538,7 @@ namespace FYPTracker.Controllers
 
             // Get all active examiners with their specialisation
             var examiners = await _context.ApplicationUsers
-                .Where(u => u.UserType == "Examiner" && !u.IsResign)
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Examiner") && !u.IsResign)
                 .ToListAsync();
 
             if (!examiners.Any())
@@ -665,7 +665,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> ExportProjectsExcel()
         {
             var students = await _context.ApplicationUsers
-                .Where(u => u.UserType == "Student" && !u.IsResign)
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Student") && !u.IsResign)
                 .ToListAsync();
 
             var projects = await _context.FYPProjects
@@ -817,14 +817,14 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 user.Email = email;
                 user.Phone = phone;
                 
-                if (user.UserType == "Student" || user.UserType == "STUDENT" || 
-                    user.UserType == "Supervisor" || user.UserType == "SUPERVISOR" || 
-                    user.UserType == "Examiner" || user.UserType == "EXAMINER")
+                if (user.UserRoles.Any(r => r.Role.Name == "Student") || user.UserRoles.Any(r => r.Role.Name == "STUDENT") || 
+                    user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR") || 
+                    user.UserRoles.Any(r => r.Role.Name == "Examiner") || user.UserRoles.Any(r => r.Role.Name == "EXAMINER"))
                 {
                     var deptId = await _context.Department.Where(x => x.Name == department).Select(x => x.Id).FirstOrDefaultAsync();
                     user.DepartmentId = deptId > 0 ? deptId : user.DepartmentId;
                     
-                    if (user.UserType != "Student" && user.UserType != "STUDENT")
+                    if (!user.UserRoles.Any(r => r.Role.Name == "Student") && !user.UserRoles.Any(r => r.Role.Name == "STUDENT"))
                     {
                         user.Programme = programme;
                         user.Specialization = specialization;
@@ -837,7 +837,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     }
                 }
 
-                if (user.UserType == "Supervisor" || user.UserType == "SUPERVISOR")
+                if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR"))
                 {
                     user.Title = title;
                     if (maxStudentSlots > 0)
@@ -845,7 +845,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                         user.MaxStudentSlots = maxStudentSlots;
                     }
                 }
-                else if (user.UserType == "Student" || user.UserType == "STUDENT")
+                else if (user.UserRoles.Any(r => r.Role.Name == "Student") || user.UserRoles.Any(r => r.Role.Name == "STUDENT"))
                 {
                     // Save AcademicSession for students from the edit modal
                     if (!string.IsNullOrWhiteSpace(academicSession))
@@ -1160,7 +1160,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
 public ActionResult ManageUsersData()
         {
-            var users = _context.ApplicationUsers.Where(u => u.UserType != "Admin" && u.UserType != "SuperAdmin").ToList();
+            var users = _context.ApplicationUsers.Where(u => !u.UserRoles.Any(r => r.Role.Name == "Admin") && !u.UserRoles.Any(r => r.Role.Name == "SuperAdmin")).ToList();
             var projects = _context.FYPProjects.Include(p => p.Supervisor).Include(p => p.Student).ToList();
 
             var empList = users.Select(u => new {
@@ -1252,7 +1252,7 @@ public ActionResult ManageUsersData()
                 _context.ChatGroupMembers.RemoveRange(groupMembers);
 
                 // 2. ChatGroups owned by supervisor — Restrict FK (messages cascade via Group)
-                if (user.UserType == "Supervisor" || user.UserType == "SUPERVISOR")
+                if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR"))
                 {
                     var ownedGroups = await _context.ChatGroups
                         .Include(g => g.Messages)
@@ -1296,7 +1296,7 @@ public ActionResult ManageUsersData()
                     .Where(r => r.UserId == id).ToListAsync();
                 _context.UserRoleMappings.RemoveRange(userRoles);
 
-                if (user.UserType == "Student" || user.UserType == "STUDENT")
+                if (user.UserRoles.Any(r => r.Role.Name == "Student") || user.UserRoles.Any(r => r.Role.Name == "STUDENT"))
                 {
                     var project = await _context.FYPProjects
                         .FirstOrDefaultAsync(p => p.StudentId == id);
@@ -1315,7 +1315,7 @@ public ActionResult ManageUsersData()
                         _context.FYPProjects.Remove(project);
                     }
                 }
-                else if (user.UserType == "Supervisor" || user.UserType == "SUPERVISOR")
+                else if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR"))
                 {
                     // Nullify supervisor on students' projects (preserve students' data)
                     var supervisorProjects = await _context.FYPProjects
@@ -1328,7 +1328,7 @@ public ActionResult ManageUsersData()
                         .Where(f => f.SupervisorId == id).ToListAsync();
                     _context.FYPFeedbacks.RemoveRange(feedbacks);
                 }
-                else if (user.UserType == "Examiner" || user.UserType == "EXAMINER")
+                else if (user.UserRoles.Any(r => r.Role.Name == "Examiner") || user.UserRoles.Any(r => r.Role.Name == "EXAMINER"))
                 {
                     // Nullify examiner on projects by removing mapping
                     var examinerAssignments = await _context.FYPProjectExaminers
@@ -2355,7 +2355,7 @@ public ActionResult ManageUsersData()
         public async Task<IActionResult> Reporting(string sessionFilter)
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
-            if (user == null || (user.UserType != "Admin" && user.UserType != "SuperAdmin")) return RedirectToAction("Login", "User");
+            if (user == null || (!user.UserRoles.Any(r => r.Role.Name == "Admin") && !user.UserRoles.Any(r => r.Role.Name == "SuperAdmin"))) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             // Fetch distinct sessions
@@ -2371,7 +2371,7 @@ public ActionResult ManageUsersData()
 
             // 1. Supervisor Capacity vs Workload
             var supervisors = await _context.ApplicationUsers
-                .Where(u => u.UserType == "Supervisor" && !u.IsResign)
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Supervisor") && !u.IsResign)
                 .Select(s => new {
                     Name = s.FullName ?? s.UserName,
                     MaxSlots = s.MaxStudentSlots ?? 5,
@@ -2381,7 +2381,7 @@ public ActionResult ManageUsersData()
 
             // 2. Global Student Allocation Status
             var studentsQuery = _context.ApplicationUsers
-                .Where(u => u.UserType == "Student" && !u.IsResign);
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Student") && !u.IsResign);
 
             if (!string.IsNullOrEmpty(sessionFilter))
             {
@@ -2404,7 +2404,7 @@ public ActionResult ManageUsersData()
 
             // 3. Faculty Demographics / Program Distribution
             var programCountsQuery = _context.ApplicationUsers
-                .Where(u => u.UserType == "Student" && !u.IsResign && !string.IsNullOrEmpty(u.Programme));
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Student") && !u.IsResign && !string.IsNullOrEmpty(u.Programme));
 
             if (!string.IsNullOrEmpty(sessionFilter))
             {
