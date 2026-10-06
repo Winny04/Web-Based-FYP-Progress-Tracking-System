@@ -311,7 +311,7 @@ namespace FYPTracker.Controllers
             // 3. Get Filtered Supervisors
             var supervisors = await _context.ApplicationUsers
                 .Include(e => e.EmpDepartment)
-                .Where(e => e.UserType == "Supervisor" && !e.IsResign && !rejectedIds.Contains(e.Id))
+                .Where(e => e.UserRoles.Any(r => r.Role.Name == "Supervisor") && !e.IsResign && !rejectedIds.Contains(e.Id))
                 .ToListAsync();
 
             // 4. Calculate Applicant Counts (Pending + Approved)
@@ -428,7 +428,7 @@ namespace FYPTracker.Controllers
 
             // Duplicate Matric Number check — no other student should share the same ID
             var duplicateMatric = await _context.ApplicationUsers
-                .AnyAsync(u => u.UserType == "Student"
+                .AnyAsync(u => u.UserRoles.Any(r => r.Role.Name == "Student")
                             && u.Id != user.Id
                             && u.EmployeeId != null
                             && u.EmployeeId.ToLower() == matricNumber.ToLower());
@@ -1673,7 +1673,7 @@ namespace FYPTracker.Controllers
             }
 
             var duplicateMatric = await _context.ApplicationUsers
-                .AnyAsync(u => u.UserType == "Student"
+                .AnyAsync(u => u.UserRoles.Any(r => r.Role.Name == "Student")
                             && u.Id != user.Id
                             && u.EmployeeId != null
                             && u.EmployeeId.ToLower() == matricNumber.ToLower());

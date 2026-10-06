@@ -113,7 +113,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> Index(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "Authentication");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "Authentication");
             ViewBag.CurrentUser = user;
 
             var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
@@ -188,7 +188,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> StudentRequests(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
@@ -340,7 +340,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> MyProjects(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
@@ -360,7 +360,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> ProjectDetails(int id)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var project = await _context.FYPProjects
@@ -373,7 +373,7 @@ namespace FYPTracker.Controllers
 
             ViewBag.AvailableExaminers = await _context.ApplicationUsers
                 .Include(u => u.EmpDepartment)
-                .Where(u => u.UserType == "Examiner" && !u.IsResign)
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Examiner") && !u.IsResign)
                 .ToListAsync();
 
             return View(project);
@@ -764,7 +764,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> ViewFile(int fileId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
 
             var file = await _context.FYPSubmissionFiles.FindAsync(fileId);
             if (file == null || string.IsNullOrEmpty(file.FilePath)) return NotFound();
@@ -830,7 +830,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> ReviewSubmissions(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "Authentication");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "Authentication");
             ViewBag.CurrentUser = user;
 
             var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
@@ -853,7 +853,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> GradeMarksheetStage2(int id)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var project = await _context.FYPProjects
@@ -885,7 +885,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> GradeMarksheetStage2(int projectId, string marksheetData, string finalGrade)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
 
             var project = await _context.FYPProjects
                 .FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user.Id);
@@ -944,7 +944,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> GradeSubmission(int id)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var milestone = await _context.FYPMilestones
@@ -1232,7 +1232,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> ManageAvailability()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var availabilities = await _context.SupervisorAvailabilities
@@ -1247,7 +1247,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> SaveAvailability(SupervisorAvailability model, List<string> SelectedDays)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
 
             model.SupervisorId = user.Id;
             
@@ -1330,7 +1330,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> DeleteAvailability(int id)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
 
             var availability = await _context.SupervisorAvailabilities.FindAsync(id);
             if (availability != null && availability.SupervisorId == user.Id)
@@ -1362,7 +1362,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> ManageMeetings(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
             ViewBag.StartHour = 8;
             ViewBag.EndHour = 17;
@@ -1621,7 +1621,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> ViewMeetingLog(int id)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
 
             var log = await _context.MeetingLogs
                 .Include(l => l.MeetingBooking)
@@ -1648,7 +1648,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> Notifications()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             var notifications = await _context.FYPNotifications
@@ -1795,7 +1795,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> Reporting()
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("Login", "User");
             ViewBag.CurrentUser = user;
 
             // 1. Milestone Status Distribution
@@ -1905,7 +1905,7 @@ namespace FYPTracker.Controllers
                 return RedirectToAction("MyProjects");
             }
 
-            var examiner = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == examinerId && u.UserType == "Examiner");
+            var examiner = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == examinerId && u.UserRoles.Any(r => r.Role.Name == "Examiner"));
             if (examiner == null)
             {
                 TempData["Error"] = "Invalid Examiner selected.";
