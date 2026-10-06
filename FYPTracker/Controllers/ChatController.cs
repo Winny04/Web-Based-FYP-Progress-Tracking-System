@@ -45,11 +45,11 @@ namespace FYPTracker.Controllers
 
             ViewBag.CurrentUserId = user.Id;
             ViewBag.CurrentUserType = user.UserType;
-            ViewBag.IsStudent = user.UserType == "Student";
+            ViewBag.IsStudent = user.UserRoles.Any(r => r.Role.Name == "Student");
             ViewBag.MyName = user.FullName ?? user.UserName;
             ViewBag.ActiveGroupId = groupId;
 
-            if (user.UserType == "Student")
+            if (user.UserRoles.Any(r => r.Role.Name == "Student"))
             {
                 // Student: chat with assigned supervisor or in groups
                 var req = await _context.SupervisorRequests
@@ -97,7 +97,7 @@ namespace FYPTracker.Controllers
                 }
 
             }
-            else if (user.UserType == "Supervisor")
+            else if (user.UserRoles.Any(r => r.Role.Name == "Supervisor"))
             {
                 // Supervisor: list of active assigned students and groups
                 var projectStudents = await _context.SupervisorRequests
@@ -192,7 +192,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> CreateGroup(string name, List<int> memberIds)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return Unauthorized();
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return Unauthorized();
 
             if (string.IsNullOrWhiteSpace(name) || memberIds == null || !memberIds.Any())
             {
@@ -221,7 +221,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> GetGroupMembers(int groupId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return Unauthorized();
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return Unauthorized();
 
             var group = await _context.ChatGroups
                 .Include(g => g.Members)
@@ -244,7 +244,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> GetAvailableStudents(int groupId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return Unauthorized();
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return Unauthorized();
 
             var group = await _context.ChatGroups
                 .Include(g => g.Members)
@@ -271,7 +271,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> AddGroupMember(int groupId, int studentId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return Unauthorized();
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return Unauthorized();
 
             var group = await _context.ChatGroups
                 .Include(g => g.Members)
@@ -300,7 +300,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> RemoveGroupMember(int groupId, int studentId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return Unauthorized();
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return Unauthorized();
 
             var group = await _context.ChatGroups
                 .Include(g => g.Members)
@@ -324,7 +324,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> DeleteGroup(int groupId)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null || user.UserType != "Supervisor") return Unauthorized(new { success = false, message = "Unauthorized" });
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return Unauthorized(new { success = false, message = "Unauthorized" });
 
             var group = await _context.ChatGroups
                 .FirstOrDefaultAsync(g => g.Id == groupId && g.SupervisorId == user.Id);
