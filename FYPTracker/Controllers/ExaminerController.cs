@@ -115,7 +115,7 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> Index()
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
-            if (user == null || user.UserType != "Examiner") return RedirectToAction("Login", "User");
+            if (user == null || !user.UserRoles.Any(r => r.Role.Name == "Examiner")) return RedirectToAction("Login", "User");
 
             ViewBag.CurrentUser = user;
 
