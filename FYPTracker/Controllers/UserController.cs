@@ -402,7 +402,7 @@ namespace FYPTracker.Controllers
             bool isDuplicateMatric = false;
             if (model != null && model.UserType == "Student" && !string.IsNullOrWhiteSpace(ApplicationUser.EmployeeId))
             {
-                isDuplicateMatric = _context.ApplicationUsers.Any(u => u.UserType == "Student" && u.Id != model.Id && u.EmployeeId != null && u.EmployeeId.ToLower() == ApplicationUser.EmployeeId.ToLower());
+                isDuplicateMatric = _context.ApplicationUsers.Any(u => u.UserRoles.Any(r => r.Role.Name == "Student") && u.Id != model.Id && u.EmployeeId != null && u.EmployeeId.ToLower() == ApplicationUser.EmployeeId.ToLower());
             }
 
             if (!m.Success || isDuplicateMatric)
@@ -537,7 +537,7 @@ namespace FYPTracker.Controllers
             var emp = await _userService.GetEmpByUserNameAsync(username);
 
             // Auto-populate Student ID from email if missing
-            if (emp != null && emp.UserType == "Student" && string.IsNullOrEmpty(emp.EmployeeId) && !string.IsNullOrEmpty(emp.Email))
+            if (emp != null && emp.UserRoles.Any(r => r.Role.Name == "Student") && string.IsNullOrEmpty(emp.EmployeeId) && !string.IsNullOrEmpty(emp.Email))
             {
                 if (emp.Email.Contains("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase))
                 {
@@ -575,13 +575,13 @@ namespace FYPTracker.Controllers
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl)) return Redirect(returnUrl);
 
             // Redirect based on role
-            if (emp.UserType == "Student")
+            if (emp.UserRoles.Any(r => r.Role.Name == "Student"))
                 return RedirectToAction("Index", "Student");
-            else if (emp.UserType == "Supervisor")
+            else if (emp.UserRoles.Any(r => r.Role.Name == "Supervisor"))
                 return RedirectToAction("Index", "Supervisor");
-            else if (emp.UserType == "SuperAdmin" || emp.UserType == "Admin")
+            else if (emp.UserRoles.Any(r => r.Role.Name == "SuperAdmin") || emp.UserRoles.Any(r => r.Role.Name == "Admin"))
                 return RedirectToAction("Index", "Admin");
-            else if (emp.UserType == "Examiner")
+            else if (emp.UserRoles.Any(r => r.Role.Name == "Examiner"))
                 return RedirectToAction("Index", "Examiner");
 
             return RedirectToAction("Index", "Home");
@@ -640,13 +640,13 @@ namespace FYPTracker.Controllers
 
             if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
 
-            if (emp.UserType == "Student")
+            if (emp.UserRoles.Any(r => r.Role.Name == "Student"))
                 return RedirectToAction("Index", "Student");
-            else if (emp.UserType == "Supervisor")
+            else if (emp.UserRoles.Any(r => r.Role.Name == "Supervisor"))
                 return RedirectToAction("Index", "Supervisor");
-            else if (emp.UserType == "SuperAdmin" || emp.UserType == "Admin")
+            else if (emp.UserRoles.Any(r => r.Role.Name == "SuperAdmin") || emp.UserRoles.Any(r => r.Role.Name == "Admin"))
                 return RedirectToAction("Index", "Admin");
-            else if (emp.UserType == "Examiner")
+            else if (emp.UserRoles.Any(r => r.Role.Name == "Examiner"))
                 return RedirectToAction("Index", "Examiner");
 
             return RedirectToAction("Index", "Home");
@@ -722,14 +722,14 @@ namespace FYPTracker.Controllers
             user.FullName = fullName;
             user.Phone = phone;
 
-            if (user.UserType == "Student")
+            if (user.UserRoles.Any(r => r.Role.Name == "Student"))
             {
                 if (!string.IsNullOrEmpty(programme))
                     user.Programme = programme;
                 if (!string.IsNullOrEmpty(academicSession))
                     user.AcademicSession = academicSession;
             }
-            else if (user.UserType == "Supervisor" || user.UserType == "Examiner")
+            else if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "Examiner"))
             {
                 user.Title = title;
                 user.DepartmentId = departmentId;
@@ -756,13 +756,13 @@ namespace FYPTracker.Controllers
             _context.ApplicationUsers.Update(user);
             await _context.SaveChangesAsync();
 
-            if (user.UserType == "Student")
+            if (user.UserRoles.Any(r => r.Role.Name == "Student"))
                 return RedirectToAction("Index", "Student");
-            else if (user.UserType == "Supervisor")
+            else if (user.UserRoles.Any(r => r.Role.Name == "Supervisor"))
                 return RedirectToAction("Index", "Supervisor");
-            else if (user.UserType == "SuperAdmin" || user.UserType == "Admin")
+            else if (user.UserRoles.Any(r => r.Role.Name == "SuperAdmin") || user.UserRoles.Any(r => r.Role.Name == "Admin"))
                 return RedirectToAction("Index", "Admin");
-            else if (user.UserType == "Examiner")
+            else if (user.UserRoles.Any(r => r.Role.Name == "Examiner"))
                 return RedirectToAction("Index", "Examiner");
 
             return RedirectToAction("Index", "Home");

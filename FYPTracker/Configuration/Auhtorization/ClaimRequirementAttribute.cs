@@ -30,12 +30,13 @@ namespace FYPTracker.Configuration.Auhtorization
 
             foreach(var requiredClaim in requiredClaims)
             {
-                var claimValues = context.HttpContext.User.Claims.Where(x => x.Type == requiredClaim).Select(x => x.Value).FirstOrDefault();
-                if (claimValues == "SuperAdmin")
+                string actualClaimType = requiredClaim == "Type" ? ClaimTypes.Role : requiredClaim;
+                var claimValues = context.HttpContext.User.Claims.Where(x => x.Type == actualClaimType).Select(x => x.Value).ToList();
+                
+                if (claimValues.Contains("SuperAdmin"))
                     return;
 
-                if (context.HttpContext.User.Claims.Any(c => c.Type == requiredClaim) &&
-                requiredPermissions.Contains(claimValues))
+                if (claimValues.Intersect(requiredPermissions).Any())
                     return;
             }
 

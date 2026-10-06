@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using System.Linq;
+using System.Security.Claims;
 
 namespace FYPTracker.Filters
 {
@@ -22,14 +23,14 @@ namespace FYPTracker.Filters
                 return;
             }
 
-            var typeClaim = user.Claims.FirstOrDefault(c => c.Type == "Type")?.Value;
-            if (string.IsNullOrEmpty(typeClaim))
+            var roleClaims = user.Claims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value).ToList();
+            if (!roleClaims.Any())
             {
                 context.Result = new RedirectToActionResult("AccessDenied", "Home", null);
                 return;
             }
 
-            if (!_allowedTypes.Contains(typeClaim))
+            if (!_allowedTypes.Intersect(roleClaims).Any())
             {
                 context.Result = new RedirectToActionResult("AccessDenied", "Home", null);
                 return;

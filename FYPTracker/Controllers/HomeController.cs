@@ -23,6 +23,7 @@ namespace FYPTracker.Controllers
             var currentUsername = HttpContext.User.Identity?.Name;
             var getUser = await _context.ApplicationUsers
                 .Include(x => x.EmpDepartment)
+                .Include(x => x.UserRoles).ThenInclude(r => r.Role)
                 .FirstOrDefaultAsync(x => x.UserName == currentUsername);
 
             if (getUser == null)
@@ -32,17 +33,19 @@ namespace FYPTracker.Controllers
 
             ViewBag.CurrentUser = getUser;
 
-            // Fetch FYP projects based on user type
+            var activeRole = HttpContext.Session.GetString("ActiveRole");
+
+            // Fetch FYP projects based on user type / active role
             List<FYPProject> projects;
-            if (getUser.UserType == "Admin" || getUser.UserType == "SuperAdmin")
+            if (activeRole == "Admin" || activeRole == "SuperAdmin" || getUser.UserRoles.Any(r => r.Role.Name == "Admin" || r.Role.Name == "SuperAdmin"))
             {
                 return RedirectToAction("Index", "Admin");
             }
-            else if (getUser.UserType == "Examiner")
+            else if (activeRole == "Examiner" || (string.IsNullOrEmpty(activeRole) && getUser.UserRoles.Any(r => r.Role.Name == "Examiner")))
             {
                 return RedirectToAction("Index", "Examiner");
             }
-            else if (getUser.UserType == "Supervisor")
+            else if (activeRole == "Supervisor" || (string.IsNullOrEmpty(activeRole) && getUser.UserRoles.Any(r => r.Role.Name == "Supervisor")))
             {
                 projects = await _context.FYPProjects.Include(p => p.Student).Include(p => p.Supervisor).Where(p => p.SupervisorId == getUser.Id).ToListAsync();
             }

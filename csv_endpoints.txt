@@ -1,0 +1,245 @@
+public class ValidateCSVRow
+{
+    public int RowIndex { get; set; }
+    public string FullName { get; set; }
+    public string Username { get; set; }
+    public string GeneratedEmail { get; set; }
+    public string Programme { get; set; }
+    public string AcademicSession { get; set; }
+    public string Department { get; set; }
+    public string Title { get; set; }
+    public int MaxQuota { get; set; }
+    public string Status { get; set; }
+    public bool IsValid { get; set; }
+    public string OriginalRow { get; set; }
+}
+
+public class ConfirmImportRequest
+{
+    public string UserType { get; set; }
+    public List<ValidateCSVRow> Rows { get; set; }
+}
+
+[HttpGet]
+public IActionResult DownloadCSVTemplate(string userType)
+{
+    string csvData = """";
+    string fileName = ""template.csv"";
+    if (userType == ""Student"")
+    {
+        csvData = ""Full Name,Username,Programme,Academic Session\nChan,p22014692,Computer Science,2027 Jan"";
+        fileName = ""student_template.csv"";
+    }
+    else if (userType == ""Supervisor"")
+    {
+        csvData = ""Full Name,Username,Department,Title,Max Student Quota\nNam Neung,namneung,Computer Science,Prof.,10"";
+        fileName = ""supervisor_template.csv"";
+    }
+    else if (userType == ""Examiner"")
+    {
+        csvData = ""Full Name,Username,Department,Title\nJivita Raja,jivita.raja,Computer Science,Dr."";
+        fileName = ""examiner_template.csv"";
+    }
+    return File(System.Text.Encoding.UTF8.GetBytes(csvData), ""text/csv"", fileName);
+}
+
+[HttpPost]
+public async Task<IActionResult> ValidateCSV(IFormFile csvFile, string csvUserType)
+{
+    if (csvFile == null || csvFile.Length == 0) return Json(new { success = false, message = ""No file uploaded"" });
+    if (string.IsNullOrWhiteSpace(csvUserType)) return Json(new { success = false, message = ""User Type not selected"" });
+
+    var results = new List<ValidateCSVRow>();
+    using var reader = new System.IO.StreamReader(csvFile.OpenReadStream());
+    bool isFirstLine = true;
+    int rowIndex = 1;
+
+    // Load existing for fast check
+    var existingUsers = await _context.ApplicationUsers.Select(u => new { u.UserName, u.Email }).ToListAsync();
+    var pendingInvites = await _context.Invitations.Where(i => i.Status == ""Pending"").Select(i => new { i.InviteeUserName, i.InviteeEmail }).ToListAsync();
+    
+    var existingUsernames = new HashSet<string>(existingUsers.Select(u => u.UserName?.ToLower() ?? """"));
+    var existingEmails = new HashSet<string>(existingUsers.Select(u => u.Email?.ToLower() ?? """"));
+    var pendingUsernames = new HashSet<string>(pendingInvites.Select(i => i.InviteeUserName?.ToLower() ?? """"));
+    var pendingEmails = new HashSet<string>(pendingInvites.Select(i => i.InviteeEmail?.ToLower() ?? """"));
+
+    var csvUsernames = new HashSet<string>();
+    var csvEmails = new HashSet<string>();
+
+    var progList = await _context.Programmes.Select(p => p.Name.ToLower()).ToListAsync();
+    var deptList = await _context.Departments.Select(d => d.Name.ToLower()).ToListAsync();
+
+    while (!reader.EndOfStream)
+    {
+        var line = await reader.ReadLineAsync();
+        if (string.IsNullOrWhiteSpace(line)) continue;
+        
+        if (isFirstLine) { isFirstLine = false; continue; }
+        rowIndex++;
+
+        var cols = line.Split(',').Select(c => c.Trim().Trim('""')).ToArray();
+        var row = new ValidateCSVRow { RowIndex = rowIndex, OriginalRow = line, IsValid = true, Status = ""Ready"" };
+
+        if (cols.Length < 2)
+        {
+            row.IsValid = false;
+            row.Status = ""Missing Required Field"";
+            results.Add(row);
+            continue;
+        }
+
+        row.FullName = cols[0];
+        row.Username = cols[1];
+
+        if (string.IsNullOrWhiteSpace(row.Username))
+        {
+            row.IsValid = false;
+            row.Status = ""Missing Username"";
+            results.Add(row);
+            continue;
+        }
+
+        if (csvUserType == ""Student"")
+        {
+            if (cols.Length >= 3) row.Programme = cols[2];
+            if (cols.Length >= 4) row.AcademicSession = cols[3];
+            row.GeneratedEmail = $""{row.Username.ToLower()}@student.newinti.edu.my"";
+
+            if (!System.Text.RegularExpressions.Regex.IsMatch(row.Username, @""^p\d{8}$"", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                row.IsValid = false; row.Status = ""Invalid Username Format"";
+            }
+            else if (!string.IsNullOrEmpty(row.Programme) && !progList.Contains(row.Programme.ToLower()))
+            {
+                row.IsValid = false; row.Status = ""Invalid Programme"";
+            }
+        }
+        else
+        {
+            if (cols.Length >= 3) row.Department = cols[2];
+            if (cols.Length >= 4) row.Title = cols[3];
+            if (cols.Length >= 5 && int.TryParse(cols[4], out int mq)) row.MaxQuota = mq;
+            else row.MaxQuota = 0; // Default or ignored if examiner
+            
+            row.GeneratedEmail = $""{row.Username.ToLower()}@newinti.edu.my"";
+            
+            if (!string.IsNullOrEmpty(row.Department) && !deptList.Contains(row.Department.ToLower()))
+            {
+                row.IsValid = false; row.Status = ""Invalid Department"";
+            }
+        }
+
+        if (row.IsValid)
+        {
+            if (existingUsernames.Contains(row.Username.ToLower()) || existingEmails.Contains(row.GeneratedEmail.ToLower()))
+            {
+                row.IsValid = false; row.Status = ""Already Registered"";
+            }
+            else if (pendingUsernames.Contains(row.Username.ToLower()) || pendingEmails.Contains(row.GeneratedEmail.ToLower()))
+            {
+                row.IsValid = false; row.Status = ""Invitation Already Sent"";
+            }
+            else if (csvUsernames.Contains(row.Username.ToLower()) || csvEmails.Contains(row.GeneratedEmail.ToLower()))
+            {
+                row.IsValid = false; row.Status = ""Duplicate in CSV"";
+            }
+            else
+            {
+                csvUsernames.Add(row.Username.ToLower());
+                csvEmails.Add(row.GeneratedEmail.ToLower());
+            }
+        }
+
+        results.Add(row);
+    }
+    return Json(new { success = true, rows = results });
+}
+
+[HttpPost]
+public async Task<IActionResult> ConfirmImportCSV([FromBody] ConfirmImportRequest request)
+{
+    if (request == null || string.IsNullOrWhiteSpace(request.UserType) || request.Rows == null || !request.Rows.Any())
+        return Json(new { success = false, message = ""Invalid request payload"" });
+
+    var admin = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+    var requestCtx = HttpContext.Request;
+    
+    int successCount = 0;
+    
+    foreach (var row in request.Rows.Where(r => r.IsValid))
+    {
+        var exists = await _context.ApplicationUsers.AnyAsync(u => u.Email == row.GeneratedEmail || u.UserName == row.Username);
+        var pending = await _context.Invitations.AnyAsync(i => (i.InviteeEmail == row.GeneratedEmail || i.InviteeUserName == row.Username) && i.Status == ""Pending"");
+        if (exists || pending) continue;
+
+        string tokenStr = Guid.NewGuid().ToString(""N"") + Guid.NewGuid().ToString(""N"");
+        string tokenHash = FYPTracker.Common.Encryption.GetHash(tokenStr);
+        string dummyPwd = Guid.NewGuid().ToString(""N"");
+
+        var newUser = new ApplicationUser
+        {
+            UserName = row.Username,
+            FullName = !string.IsNullOrWhiteSpace(row.FullName) ? row.FullName : row.Username,
+            Email = row.GeneratedEmail,
+            PassCode = FYPTracker.Common.Encryption.GetHash(dummyPwd),
+            EmployeeId = row.Username,
+            DateCreated = DateTime.Now,
+            DateJoin = DateTime.Now,
+            AddedBy = ""sys"",
+            UserType = request.UserType,
+            Image = ""/assets/media/avatars/blank.png"",
+            RequirePasswordChange = true,
+            Programme = request.UserType == ""Student"" ? row.Programme : null,
+            AcademicSession = request.UserType == ""Student"" ? row.AcademicSession : null,
+            AccountExpiry = request.UserType == ""Student"" && !string.IsNullOrEmpty(row.AcademicSession) ? CalculateAccountExpiry(row.AcademicSession) : null,
+            Department = (request.UserType == ""Supervisor"" || request.UserType == ""Examiner"") ? row.Department : null,
+            Title = (request.UserType == ""Supervisor"" || request.UserType == ""Examiner"") ? row.Title : null,
+            MaxStudentSlots = request.UserType == ""Supervisor"" ? (row.MaxQuota > 0 ? row.MaxQuota : 10) : 0
+        };
+
+        _context.ApplicationUsers.Add(newUser);
+        
+        _context.Invitations.Add(new Invitation
+        {
+            InviteeUserName = newUser.UserName,
+            InviteeEmail = newUser.Email,
+            InviteeType = newUser.UserType,
+            InvitedByUserId = admin?.Id ?? 1,
+            Status = ""Pending"",
+            TokenHash = tokenHash,
+            SentAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddHours(24)
+        });
+
+        await _context.SaveChangesAsync();
+
+        if (admin != null)
+        {
+            _context.InvitationLogs.Add(new InvitationLog
+            {
+                StudentId = newUser.Id, StudentEmail = newUser.Email,
+                AdminId = admin.Id, Action = ""Invited"", Status = ""Sent"",
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                UserAgent = Request.Headers[""User-Agent""].ToString(),
+                CreatedAt = DateTime.Now
+            });
+            await _context.SaveChangesAsync();
+        }
+
+        try
+        {
+            var setupUrl = $""{requestCtx.Scheme}://{requestCtx.Host}/User/SetupAccount?token={tokenStr}"";
+            string envPrefix = Environment.GetEnvironmentVariable(""ASPNETCORE_ENVIRONMENT"") == ""Development"" ? ""[TEST] "" : """";
+            string subject = $""{envPrefix}Welcome to FYP Tracking System – Set Up Your Account"";
+            string htmlBody = $""... (content hidden to avoid bash escaping issues)...""; // I will insert the same html template later.
+            // Wait I need the actual HTML body string in my script, let's just copy it.
+            htmlBody = @$""<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;'><h3 style='color: #0d9488;'>Welcome to FYP Tracking System!</h3><p>Hi {newUser.FullName},</p><p>An administrator has created an account for you in the FYP Tracking System.</p><div style='background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;'><h4 style='margin-top: 0;'>Account Details</h4><ul style='list-style-type: none; padding-left: 0; margin-bottom: 0;'><li style='margin-bottom: 8px;'><strong>Username:</strong> {newUser.UserName}</li><li style='margin-bottom: 8px;'><strong>Email:</strong> {newUser.Email}</li><li><strong>Role:</strong> {newUser.UserType}</li></ul></div><p style='margin: 30px 0; text-align: center;'><a href='{setupUrl}' style='display: inline-block; padding: 12px 25px; color: white; background-color: #009ef7; text-decoration: none; border-radius: 6px; font-weight: bold; font-family: sans-serif;'>Set Up My Account</a></p><p style='font-size: 0.9em; color: #666;'><em>This setup link expires in 24 hours and can only be used once.</em></p><p style='font-size: 0.9em; color: #666;'>If you did not expect this invitation, you can safely ignore this email.</p><br/><p>Best Regards,<br/><strong>FYP Tracking System Admin</strong></p></div>"";
+            _emailService.Send(newUser.Email, subject, htmlBody);
+        }
+        catch { }
+
+        successCount++;
+    }
+
+    return Json(new { success = true, count = successCount, message = $""Successfully imported {successCount} users."" });
+}

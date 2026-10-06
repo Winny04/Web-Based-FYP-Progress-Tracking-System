@@ -1,6 +1,7 @@
 using FYPTracker.Helpers;
 using FYPTracker.Models;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace FYPTracker.Configuration.Auhtorization
 {
@@ -15,10 +16,10 @@ namespace FYPTracker.Configuration.Auhtorization
     {
         protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, UserTypeRequirement requirement, AuthResource resource)
         {
-            if (context.User.HasClaim(x => x.Type == "Type"))
+            var roles = context.User.Claims.Where(x => x.Type == ClaimTypes.Role).Select(x => x.Value).ToList();
+            if (roles.Any())
             {
-                var userType = context.User.Claims.Single(x => x.Type == "Type").Value;
-                if (resource.RequireValue == "All" || userType == "Admin" || userType == "SuperAdmin")
+                if (resource.RequireValue == "All" || roles.Contains("Admin") || roles.Contains("SuperAdmin"))
                 {
                     context.Succeed(requirement);
                     return Task.CompletedTask;
@@ -27,7 +28,7 @@ namespace FYPTracker.Configuration.Auhtorization
                 if (!string.IsNullOrEmpty(resource.RequireValue))
                 {
                     var listTypes = resource.RequireValue.Trim().Split(",");
-                    if (listTypes.Contains(userType))
+                    if (listTypes.Intersect(roles).Any())
                     {
                         context.Succeed(requirement);
                         return Task.CompletedTask;

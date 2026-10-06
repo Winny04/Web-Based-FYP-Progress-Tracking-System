@@ -98,7 +98,7 @@ namespace FYPTracker.Controllers
             ViewBag.CurrentUser = user;
             
             // 1. Calculate Stats
-            var users = await _context.ApplicationUsers.ToListAsync();
+            var users = await _context.ApplicationUsers.Include(u => u.UserRoles).ThenInclude(r => r.Role).ToListAsync();
             ViewBag.TotalUsers = users.Count;
             ViewBag.TotalStudents = users.Count(u => u.UserRoles.Any(r => r.Role.Name == "Student"));
             ViewBag.TotalSupervisors = users.Count(u => u.UserRoles.Any(r => r.Role.Name == "Supervisor"));

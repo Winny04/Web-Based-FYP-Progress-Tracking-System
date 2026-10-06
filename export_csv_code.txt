@@ -1,0 +1,100 @@
+    [HttpGet]
+    public IActionResult ExportUsersCsv(string type, string search)
+    {
+        var usersQuery = _context.ApplicationUsers.Where(u => u.UserType != "Admin" && u.UserType != "SuperAdmin");
+        
+        if (!string.IsNullOrEmpty(type))
+        {
+            usersQuery = usersQuery.Where(u => u.UserType == type);
+        }
+        
+        if (!string.IsNullOrEmpty(search))
+        {
+            search = search.ToLower();
+            usersQuery = usersQuery.Where(u => (u.FullName != null && u.FullName.ToLower().Contains(search))
+                || (u.UserName != null && u.UserName.ToLower().Contains(search))
+                || (u.Email != null && u.Email.ToLower().Contains(search)));
+        }
+        
+        var users = usersQuery.ToList();
+        var projects = _context.FYPProjects.Include(p => p.Supervisor).Include(p => p.Student).ToList();
+
+        var builder = new System.Text.StringBuilder();
+        
+        if (string.IsNullOrEmpty(type) || type == "Supervisor")
+        {
+            builder.AppendLine("ID,Full Name,Username / Student ID,Email,Role,Assignment,Setup,Created Date,Status,Login Status,Assigned Count,Assigned Student Names");
+        }
+        else
+        {
+            builder.AppendLine("ID,Full Name,Username / Student ID,Email,Role,Assignment,Setup,Created Date,Status,Login Status");
+        }
+
+        foreach (var u in users)
+        {
+            string assignment = "-";
+            if (u.UserType == "Student")
+            {
+                assignment = projects.FirstOrDefault(p => p.StudentId == u.Id)?.Supervisor?.FullName ?? "Not Assigned";
+            }
+            
+            bool isProfileIncomplete = ((u.UserType == "Supervisor" || u.UserType == "Examiner") && 
+                                      (u.DepartmentId == null || 
+                                       string.IsNullOrWhiteSpace(u.Programme) || 
+                                       string.IsNullOrWhiteSpace(u.Specialization) || 
+                                       string.IsNullOrWhiteSpace(u.Title)));
+                                       
+            string setup = (u.UserType == "Student") ? "-" : (isProfileIncomplete ? "Pending" : "Completed");
+            string created = u.DateCreated?.ToString("dd MMM yyyy, hh:mm tt") ?? "";
+            string status = u.IsResign ? "Deactivated" : "Active";
+            string login = u.RequirePasswordChange ? "First Login Pending" : "Has Logged In";
+
+            var row = new List<string>
+            {
+                EscapeCsv(u.Id),
+                EscapeCsv(u.FullName ?? "-"),
+                EscapeCsv(u.UserName ?? "-"),
+                EscapeCsv(u.Email ?? "-"),
+                EscapeCsv(u.UserType ?? "-"),
+                EscapeCsv(assignment),
+                EscapeCsv(setup),
+                EscapeCsv(created),
+                EscapeCsv(status),
+                EscapeCsv(login)
+            };
+
+            if (string.IsNullOrEmpty(type) || type == "Supervisor")
+            {
+                if (u.UserType == "Supervisor")
+                {
+                    int count = projects.Count(p => p.SupervisorId == u.Id && p.Student != null);
+                    var students = projects.Where(p => p.SupervisorId == u.Id && p.Student != null)
+                                           .Select(p => p.Student.FullName).ToList();
+                    string studentsStr = students.Any() ? string.Join("; ", students) : "None";
+                    
+                    row.Add(EscapeCsv(count.ToString()));
+                    row.Add(EscapeCsv(studentsStr));
+                }
+                else
+                {
+                    row.Add(EscapeCsv("-"));
+                    row.Add(EscapeCsv("-"));
+                }
+            }
+            
+            builder.AppendLine(string.Join(",", row));
+        }
+
+        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(builder.ToString());
+        return File(bytes, "text/csv", "User_Management_Report.csv");
+    }
+
+    private string EscapeCsv(string field)
+    {
+        if (string.IsNullOrEmpty(field)) return "";
+        if (field.Contains(",") || field.Contains("\"") || field.Contains("\r") || field.Contains("\n"))
+        {
+            return $"\"{field.Replace("\"", "\"\"")}\"";
+        }
+        return field;
+    }

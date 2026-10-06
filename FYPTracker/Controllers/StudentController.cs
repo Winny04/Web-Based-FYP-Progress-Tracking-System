@@ -196,6 +196,7 @@ namespace FYPTracker.Controllers
             {
                 return await _context.ApplicationUsers
                     .Include(u => u.EmpDepartment)
+                    .Include(u => u.UserRoles).ThenInclude(r => r.Role)
                     .FirstOrDefaultAsync(u => u.Id == id);
             }
             return null;
