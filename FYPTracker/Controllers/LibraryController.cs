@@ -74,7 +74,9 @@ namespace FYPTracker.Controllers
             else if (extension == ".doc" || extension == ".docx") contentType = "application/msword";
             else if (extension == ".xlsx") contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-            return PhysicalFile(filePath, contentType, fileRecord.FileName);
+            string finalName = fileRecord.FileName + (string.IsNullOrEmpty(Path.GetExtension(fileRecord.FileName)) ? extension : "");
+            Response.Headers.Add("Content-Disposition", $"inline; filename=\"{finalName}\"");
+            return PhysicalFile(filePath, contentType);
         }
     }
 }

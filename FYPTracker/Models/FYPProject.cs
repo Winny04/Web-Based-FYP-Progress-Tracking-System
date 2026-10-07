@@ -90,6 +90,8 @@ namespace FYPTracker.Models
         
         public string? Stage2SupervisorMarksheetData { get; set; }
 
+        public int? PreviousProjectId { get; set; }
+
         // Navigation
         [ForeignKey(nameof(StudentId))]
         public virtual ApplicationUser? Student { get; set; }

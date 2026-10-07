@@ -170,6 +170,7 @@
                 <thead>
                     <tr class="fw-bolder text-muted bg-light">
                         <th class="ps-4 min-w-150px">Date & Time</th>
+                        <th class="min-w-100px">Stage & Week</th>
                         <th class="min-w-120px">Status</th>
                         <th class="min-w-150px">Logbook Feedback</th>
                         <th class="text-end min-w-120px pe-4">Actions</th>
@@ -184,7 +185,7 @@
                         var student = group.Key;
                         
                         <tr class="bg-light-primary student-group" data-student-id="@student?.Id">
-                            <td colspan="4" class="ps-4 py-3 border-bottom border-primary">
+                            <td colspan="5" class="ps-4 py-3 border-bottom border-primary">
                                 <div class="d-flex align-items-center">
                                     <div class="symbol symbol-40px me-3">
                                         <span class="symbol-label bg-primary text-inverse-primary fw-bolder">@(student?.FullName?.FirstOrDefault() ?? '?')</span>
@@ -197,14 +198,27 @@
                             </td>
                         </tr>
 
-                        @foreach (var m in group.OrderByDescending(x => x.MeetingDate).ThenByDescending(x => x.MeetingTime))
+                        @foreach (var stageGroup in group.GroupBy(x => x.Stage).OrderBy(g => g.Key))
                         {
+                            <tr class="bg-light">
+                                <td colspan="5" class="ps-4 py-2 text-primary fw-bold">Stage @stageGroup.Key</td>
+                            </tr>
+                            @foreach (var m in stageGroup.OrderByDescending(x => x.MeetingDate).ThenByDescending(x => x.MeetingTime))
+                            {
                             var feedbackState = (m.Status == "Approved" && m.MeetingLog != null && m.MeetingLog.LogStatus == "Draft") ? "NeedFeedback" : (m.MeetingLog != null && m.MeetingLog.LogStatus == "Signed" ? "Done" : "");
 
                             <tr class="meeting-item" id="meetingRow_@m.Id" data-student-id="@student?.Id" data-student-name="@student?.FullName" data-status="@m.Status" data-feedback="@feedbackState">
                                 <td class="ps-4">
                                     <div class="fw-bold">@m.MeetingDate.ToString("dd MMM yyyy")</div>
                                     <div class="text-muted small">@m.MeetingTime</div>
+                                </td>
+                                <td>
+                                    <span class="badge @(m.Stage == 1 ? "bg-info" : "bg-primary")">Stage @m.Stage</span><br/>
+                                    @if(m.WeekNumber > 0) {
+                                        <span class="badge bg-secondary text-dark mt-1">Week @m.WeekNumber</span>
+                                    } else {
+                                        <span class="badge bg-light text-muted mt-1 border">Unlogged</span>
+                                    }
                                 </td>
                                 <td>
                                     <span class="status-badge @(m.Status == "Approved" ? "badge-approved" : m.Status == "Rejected" ? "badge-rejected" : m.Status == "Postponed" ? "badge-postponed" : "badge-pending")">
@@ -338,6 +352,7 @@
                                     }
                                 </td>
                             </tr>
+                            }
                         }
                     }
                     @if (!groupedMeetings.Any())

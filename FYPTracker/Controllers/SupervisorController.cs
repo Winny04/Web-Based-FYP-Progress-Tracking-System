@@ -16,12 +16,14 @@ namespace FYPTracker.Controllers
         private readonly FYPTrackerContext _context;
         private readonly IEmailService _emailService;
         private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _env;
 
-        public SupervisorController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext)
+        public SupervisorController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext, Microsoft.AspNetCore.Hosting.IWebHostEnvironment env)
         {
             _context = context;
             _emailService = emailService;
             _hubContext = hubContext;
+            _env = env;
         }
 
         private async Task<ApplicationUser?> GetCurrentUserAsync()
@@ -170,8 +172,7 @@ namespace FYPTracker.Controllers
                 .Include(m => m.Project)
                     .ThenInclude(p => p.Student)
                 .Where(m => m.Project.SupervisorId == user.Id 
-                            && m.RejectionCount >= 3 
-                            && m.DefenseDate.HasValue
+                            && m.Status == "DefenseScheduled"
                             && (activeSession == null || m.Project.AcademicSession == activeSession))
                 .OrderBy(m => m.DefenseDate)
                 .ToListAsync();
@@ -221,8 +222,10 @@ namespace FYPTracker.Controllers
 
                 if (status == "Approved")
                 {
-                    // Ignore Completed or Failed projects so we create a new one for a restarting student
-                    var proj = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == req.StudentId && p.Status != "Failed" && p.Status != "Completed");
+                    // Fetch the absolute latest project to check its status and grade
+                    var latestProj = await _context.FYPProjects
+                        .OrderByDescending(p => p.CreatedDate)
+                        .FirstOrDefaultAsync(p => p.StudentId == req.StudentId);
                     
                     // Update student's academic session based on their request
                     if (!string.IsNullOrWhiteSpace(req.SessionSemester))
@@ -230,9 +233,60 @@ namespace FYPTracker.Controllers
                         req.Student.AcademicSession = req.SessionSemester;
                     }
 
-                    if (proj == null)
+                    if (latestProj != null && latestProj.Stage1Grade == "Fail" && latestProj.Status != "Completed")
                     {
-                        proj = new FYPProject
+                        // OPTION B: Create a new project for the repeat attempt, copying metadata and seeding milestones concurrently
+                        var repeatProj = new FYPProject
+                        {
+                            PreviousProjectId = latestProj.Id,
+                            Title = latestProj.Title,
+                            Description = latestProj.Description,
+                            ProblemStatement = latestProj.ProblemStatement,
+                            Objective1 = latestProj.Objective1,
+                            Objective2 = latestProj.Objective2,
+                            Objective3 = latestProj.Objective3,
+                            Scope = latestProj.Scope,
+                            ExpectedOutcome = latestProj.ExpectedOutcome,
+                            References = latestProj.References,
+                            AcademicSession = req.SessionSemester ?? req.Student.AcademicSession,
+                            StudentId = req.StudentId,
+                            SupervisorId = req.SupervisorId,
+                            Status = "Approved",
+                            StartDate = DateTime.Now,
+                            CreatedDate = DateTime.Now
+                        };
+                        _context.FYPProjects.Add(repeatProj);
+                        await _context.SaveChangesAsync(); // Get ID
+
+                        _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
+                        {
+                            ProjectId = repeatProj.Id,
+                            OldStatus = "None",
+                            NewStatus = "Approved",
+                            ChangedById = req.SupervisorId,
+                            Remarks = "Repeat project created and approved from Supervisor Request."
+                        });
+
+                        // Seed BOTH Stage 1 (Repeat) and Stage 2 milestones concurrently
+                        var milestones = new List<FYPMilestone>
+                        {
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "FYP 1: Initial Assessment Form (IAF)", DueDate = DateTime.Now.AddDays(14), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Submission of Ethic Form", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Turnitin Checking - DPP", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "FYP 1: Stage 1 Final Submission (DPP)", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
+                            
+                            // Stage 2 Milestones
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 1: Turnitin Checking", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 2: Final Report Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 3: Marksheet Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 4: Record of Supervisor Meeting Form Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 5: Presentation Slides Submission", DueDate = DateTime.Now.AddMonths(6), Status = "Pending", Stage = 2 }
+                        };
+                        _context.FYPMilestones.AddRange(milestones);
+                    }
+                    else if (latestProj == null || latestProj.Status == "Failed" || latestProj.Status == "Completed")
+                    {
+                        var proj = new FYPProject
                         {
                             Title = req.ProjectTopic ?? "New FYP Project",
                             Description = req.RequestMessage ?? "Pending student updates.",
@@ -259,32 +313,29 @@ namespace FYPTracker.Controllers
                         var milestones = new List<FYPMilestone>
                         {
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Initial Assessment Form (IAF)", DueDate = DateTime.Now.AddDays(14), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Progress Report: Chapter 1", DueDate = DateTime.Now.AddDays(21), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Progress Report: Chapter 2", DueDate = DateTime.Now.AddDays(28), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Progress Report: Chapter 3", DueDate = DateTime.Now.AddDays(35), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "Submission of Ethic Form", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "Turnitin Checking - DPP", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
                             new FYPMilestone { FYPProjectId = proj.Id, Title = "FYP 1: Stage 1 Final Submission (DPP)", DueDate = DateTime.Now.AddMonths(1), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 1: Turnitin Checking", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 2: Final Report Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 3: Marksheet Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 4: Record of Supervisor Meeting Form Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 5: Presentation Slides Submission", DueDate = DateTime.Now.AddMonths(6), Status = "Pending" }
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 1: Turnitin Checking", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 2: Final Report Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 3: Marksheet Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 4: Record of Supervisor Meeting Form Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 5: Presentation Slides Submission", DueDate = DateTime.Now.AddMonths(6), Status = "Pending", Stage = 2 }
                         };
                         _context.FYPMilestones.AddRange(milestones);
                     }
                     else
                     {
-                        string oldStatus = proj.Status;
-                        proj.SupervisorId = req.SupervisorId;
-                        proj.Status = "Approved";
-                        proj.AcademicSession = req.Student.AcademicSession; // Sync session just in case
+                        string oldStatus = latestProj.Status;
+                        latestProj.SupervisorId = req.SupervisorId;
+                        latestProj.Status = "Approved";
+                        latestProj.AcademicSession = req.Student.AcademicSession; // Sync session just in case
 
                         if (oldStatus != "Approved")
                         {
                             _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
                             {
-                                ProjectId = proj.Id,
+                                ProjectId = latestProj.Id,
                                 OldStatus = oldStatus,
                                 NewStatus = "Approved",
                                 ChangedById = req.SupervisorId,
@@ -402,7 +453,9 @@ namespace FYPTracker.Controllers
                     Title = title,
                     Description = description,
                     DueDate = dueDate,
-                    Status = "Pending",
+                    Status = "Draft",
+                    MilestoneSource = "Supervisor",
+                    Stage = 1,
                     CreatedDate = DateTime.Now
                 };
                 _context.FYPMilestones.Add(milestone);
@@ -415,6 +468,62 @@ namespace FYPTracker.Controllers
                 TempData["Success"] = "Milestone added successfully.";
             }
             return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+        }
+
+        // DPP Work & Progress: Supervisor-added Stage 1 milestones are reviewed (not graded).
+        // Flow: Draft → PendingSupervisorReview → ReturnedForChanges | Completed
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ReviewProgressMilestone(int milestoneId, string decision, string? feedback)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.SupervisorId == user.Id);
+
+            if (milestone == null || milestone.MilestoneSource != "Supervisor" || milestone.Stage != 1)
+            {
+                TempData["Error"] = "Invalid progress milestone.";
+                return RedirectToAction(nameof(MyProjects));
+            }
+            if (milestone.Status != "PendingSupervisorReview")
+            {
+                TempData["Error"] = "This progress milestone is not awaiting your review.";
+                return RedirectToAction("GradeSubmission", new { id = milestoneId });
+            }
+
+            if (decision == "return")
+            {
+                if (string.IsNullOrWhiteSpace(feedback))
+                {
+                    TempData["Error"] = "Please provide feedback when returning for changes.";
+                    return RedirectToAction("GradeSubmission", new { id = milestoneId });
+                }
+                milestone.Status = "ReturnedForChanges";
+                milestone.RejectionCount++;
+            }
+            else if (decision == "complete")
+            {
+                milestone.Status = "Completed";
+            }
+            else
+            {
+                TempData["Error"] = "Invalid action.";
+                return RedirectToAction("GradeSubmission", new { id = milestoneId });
+            }
+
+            milestone.SupervisorFeedback = feedback;
+            await _context.SaveChangesAsync();
+
+            string label = milestone.Status == "Completed" ? "marked as Completed" : "returned for changes";
+            await AddNotificationAsync(milestone.Project.StudentId, "SubmissionFeedback", milestone.Title, $"Your progress work was {label}. {feedback}");
+            var payload = new { Type = "ReviewMilestone", MilestoneId = milestone.Id, Title = milestone.Title, Status = milestone.Status, Message = $"Your progress milestone '{milestone.Title}' was {label}." };
+            await _hubContext.Clients.Group($"User_{milestone.Project.StudentId}").SendAsync("ReceiveMilestoneUpdate", payload);
+
+            TempData["Success"] = $"Progress milestone {label}.";
+            return RedirectToAction("GradeSubmission", new { id = milestoneId });
         }
 
         [HttpPost]
@@ -482,7 +591,9 @@ namespace FYPTracker.Controllers
                     Title = finalTitle,
                     Description = description,
                     DueDate = dueDate,
-                    Status = "Pending",
+                    Status = stageSelection == "2" ? "Pending" : "Draft",
+                    MilestoneSource = "Supervisor",
+                    Stage = stageSelection == "2" ? 2 : 1,
                     CreatedDate = DateTime.Now
                 }).ToList();
 
@@ -564,7 +675,7 @@ namespace FYPTracker.Controllers
                 foreach (var milestone in milestones)
                 {
                     bool isIaf = milestone.Title.Contains("IAF") || milestone.Title.Contains("Initial Project Allocation");
-                    bool isSystemMilestone = isIaf || milestone.Title.Contains("Stage 1 Final Submission") || milestone.Title.Contains("Progress") || milestone.Title.Contains("Final");
+                    bool isSystemMilestone = milestone.MilestoneSource != "Supervisor";
 
                     if (isIaf && newDueDate.HasValue)
                     {
@@ -575,7 +686,7 @@ namespace FYPTracker.Controllers
                         milestone.DueDate = newDueDate.Value;
                     }
 
-                    if (milestone.Status != "Pending")
+                    if (milestone.Status != "Pending" && !(milestone.MilestoneSource == "Supervisor" && (milestone.Status == "Draft" || milestone.Status == "ReturnedForChanges")))
                     {
                         // For Submitted/UnderReview/Rejected, only allow editing the Due Date (handled above)
                         successCount++;
@@ -647,13 +758,13 @@ namespace FYPTracker.Controllers
 
             if (milestones.Any())
             {
-                if (targetTitle.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("Final", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("IAF", StringComparison.OrdinalIgnoreCase) || targetTitle.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase))
+                if (milestones.Any(m => m.MilestoneSource != "Supervisor"))
                 {
-                    TempData["Error"] = "Core system milestones (IAF, Proposal, and Final Report) cannot be deleted.";
+                    TempData["Error"] = "Default system milestones cannot be deleted. Only Supervisor-added milestones can be removed.";
                     return RedirectToAction(nameof(MyProjects));
                 }
 
-                var toDelete = milestones.Where(m => m.Status == "Pending").ToList();
+                var toDelete = milestones.Where(m => m.Status == "Pending" || m.Status == "Draft").ToList();
                 int skippedCount = milestones.Count - toDelete.Count;
 
                 if (toDelete.Any())
@@ -768,7 +879,35 @@ namespace FYPTracker.Controllers
         // ────────────────────────────────────────────────────────
         // Review Submissions
         // ────────────────────────────────────────────────────────
-        [HttpGet]
+         [HttpGet]
+        public async Task<IActionResult> DownloadFile(int fileId)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+            if (!user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("AccessDenied", "Home");
+
+            var file = await _context.FYPSubmissionFiles.FindAsync(fileId);
+            if (file == null || string.IsNullOrEmpty(file.FilePath)) return NotFound();
+
+            var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (string.IsNullOrEmpty(ext)) ext = System.IO.Path.GetExtension(file.FilePath).ToLowerInvariant();
+
+            string mimeType = "application/octet-stream";
+            if (ext == ".pdf") mimeType = "application/pdf";
+            else if (ext == ".docx") mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            else if (ext == ".doc") mimeType = "application/msword";
+            else if (ext == ".png") mimeType = "image/png";
+            else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+
+            var physicalPath = System.IO.Path.Combine(_env.WebRootPath, file.FilePath.TrimStart('/', '\\'));
+            if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+
+            Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{file.FileName}{(string.IsNullOrEmpty(System.IO.Path.GetExtension(file.FileName)) ? ext : "")}\"");
+            return PhysicalFile(physicalPath, mimeType);
+        }
+
+       [HttpGet]
+        [AllowAnonymous]
         public async Task<IActionResult> ViewFile(int fileId)
         {
             var user = await GetCurrentUserAsync();
@@ -779,6 +918,8 @@ namespace FYPTracker.Controllers
             if (file == null || string.IsNullOrEmpty(file.FilePath)) return NotFound();
 
             var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (string.IsNullOrEmpty(ext)) ext = System.IO.Path.GetExtension(file.FilePath).ToLowerInvariant();
+
             string mimeType = "application/octet-stream";
             
             if (ext == ".pdf") mimeType = "application/pdf";
@@ -787,10 +928,10 @@ namespace FYPTracker.Controllers
             else if (ext == ".png") mimeType = "image/png";
             else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
 
-            var physicalPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", file.FilePath.TrimStart('/', '\\'));
+            var physicalPath = System.IO.Path.Combine(_env.WebRootPath, file.FilePath.TrimStart('/', '\\'));
             if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
 
-            Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}\"");
+            Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}{(string.IsNullOrEmpty(System.IO.Path.GetExtension(file.FileName)) ? ext : "")}\"");
             return PhysicalFile(physicalPath, mimeType);
         }
 
@@ -851,8 +992,8 @@ namespace FYPTracker.Controllers
                     .ThenInclude(p => p.Student)
                 .Include(m => m.Feedbacks)
                 .Include(m => m.SubmissionFiles)
-                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (m.Status == "Submitted" || m.Status == "Pending" || m.Status == "Approved" || m.Status == "Completed" || m.Status == "Revision" || m.Status == "Rejected" || m.Status == "UnderReview") && (activeSession == null || m.Project.AcademicSession == activeSession))
-                .OrderBy(m => m.Status == "Submitted" ? 0 : 1)
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (m.Status == "PendingSupervisorReview" || m.Status == "Submitted" || m.Status == "Pending" || m.Status == "Approved" || m.Status == "Completed" || m.Status == "Revision" || m.Status == "Rejected" || m.Status == "UnderReview") && (activeSession == null || m.Project.AcademicSession == activeSession))
+                .OrderBy(m => (m.Status == "Submitted" || m.Status == "PendingSupervisorReview") ? 0 : 1)
                 .ThenBy(m => m.DueDate)
                 .ToListAsync();
 
@@ -915,25 +1056,15 @@ namespace FYPTracker.Controllers
             {
                 try
                 {
-                    using var supDoc = System.Text.Json.JsonDocument.Parse(marksheetData);
-                    using var exDoc = System.Text.Json.JsonDocument.Parse(project.Stage2ExaminerMarksheetData);
+                    double supTotal = FYPTracker.Utils.GradingHelper.CalculateStage2Score(marksheetData);
+                    double exTotal = FYPTracker.Utils.GradingHelper.CalculateStage2Score(project.Stage2ExaminerMarksheetData);
+
+                    // Using the stakeholder formula: examiner component = 70%; supervisor component = 80%; combined value = 150%, then divide by 100% (1.5) to obtain the total mark.
+                    // Wait, audit says "(SupervisorScore + ExaminerScore) / 2"
+                    double finalScore = (exTotal + supTotal) / 2.0;
                     
-                    if (supDoc.RootElement.TryGetProperty("Total", out var supTotalProp) && exDoc.RootElement.TryGetProperty("Total", out var exTotalProp))
-                    {
-                        double supTotal = 0;
-                        if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(supTotalProp.GetString(), out double s1)) { supTotal = s1; }
-                        else if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { supTotal = supTotalProp.GetDouble(); }
-
-                        double exTotal = 0;
-                        if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(exTotalProp.GetString(), out double e1)) { exTotal = e1; }
-                        else if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { exTotal = exTotalProp.GetDouble(); }
-
-                        // Using the stakeholder formula: examiner component = 70%; supervisor component = 80%; combined value = 150%, then divide by 100% (1.5) to obtain the total mark.
-                        double finalScore = (exTotal + supTotal) / 2.0;
-                        
-                        project.FinalGrade = GetGradeLabel(finalScore);
-                        TempData["Success"] = $"Stage 2 grading complete! Final joint score calculated as {finalScore:F1}%.";
-                    }
+                    project.FinalGrade = GetGradeLabel(finalScore);
+                    TempData["Success"] = $"Stage 2 grading complete! Final joint score calculated as {finalScore:F1}%.";
                 }
                 catch (Exception)
                 {
@@ -971,6 +1102,11 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(ReviewSubmissions));
             }
 
+            if (milestone.Title.Contains("Initial Project Allocation Form (IAF)", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase))
+            {
+                FYPTracker.Utils.IafPdfGenerator.EnsurePdfSnapshots(milestone, System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot"), _context);
+            }
+
             return View(milestone);
         }
 
@@ -986,10 +1122,19 @@ namespace FYPTracker.Controllers
 
             if (milestone != null && milestone.Project.SupervisorId == user?.Id)
             {
+                if (milestone.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (status == "Approved") {
+                        status = "SupervisorSigned";
+                    } else if (status == "Rejected") {
+                        status = "ReturnedForEdits";
+                    }
+                }
+
                 milestone.Status = status;
                 milestone.SupervisorFeedback = remarks;
 
-                if ((milestone.Title.Contains("Initial Project Allocation") || milestone.Title.Contains("IAF")) && !string.IsNullOrEmpty(supervisorSignature))
+                if (milestone.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase))
                 {
                     string raw = milestone.Remarks ?? "";
                     if (raw.Contains("JSON: "))
@@ -999,11 +1144,57 @@ namespace FYPTracker.Controllers
                         var parsedJson = parts[1];
                         try
                         {
-                            var dict = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, string>>(parsedJson);
-                            if (dict != null)
+                            var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parsedJson);
+                            var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
+                            
+                            if (currentAttempt != null)
                             {
-                                dict["Supervisor Signature"] = supervisorSignature;
-                                var updatedJson = System.Text.Json.JsonSerializer.Serialize(dict);
+                                currentAttempt.SupervisorFeedback = remarks;
+                                currentAttempt.Status = status;
+                                currentAttempt.SupervisorReviewedAt = DateTime.Now;
+                                
+                                if (status == "SupervisorSigned" && !string.IsNullOrEmpty(supervisorSignature))
+                                {
+                                    currentAttempt.SupervisorSignature = supervisorSignature;
+                                }
+                                else if (status == "ReturnedForEdits")
+                                {
+                                    currentAttempt.SupervisorSignature = "";
+                                }
+                                
+                                if (status == "SupervisorSigned")
+                                {
+                                    // Generate Immutable PDF Snapshot
+                                    try
+                                    {
+                                        var pdfBytes = FYPTracker.Utils.IafPdfGenerator.GenerateIafPdf(milestone, currentAttempt, milestone.Project?.Student, System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot"));
+                                        string uniqueFileName = $"IAF_Snapshot_{milestone.Project?.Student?.EmployeeId ?? "Student"}_Attempt_{currentAttempt.AttemptNumber}_{Guid.NewGuid().ToString().Substring(0, 8)}.pdf";
+                                        string folderPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", "uploads", "submissions");
+                                        if (!System.IO.Directory.Exists(folderPath)) System.IO.Directory.CreateDirectory(folderPath);
+                                        string filePath = System.IO.Path.Combine(folderPath, uniqueFileName);
+                                        System.IO.File.WriteAllBytes(filePath, pdfBytes);
+                                        
+                                        var subFile = new FYPSubmissionFile
+                                        {
+                                            MilestoneId = milestone.Id,
+                                            FileName = $"Signed IAF (Attempt {currentAttempt.AttemptNumber})",
+                                            FilePath = $"/uploads/submissions/{uniqueFileName}",
+                                            FileSize = pdfBytes.Length,
+                                            UploadedBy = user?.Id,
+                                            UploadedDate = DateTime.Now,
+                                            AttemptNumber = currentAttempt.AttemptNumber,
+                                            Remarks = "System Generated Snapshot"
+                                        };
+                                        _context.FYPSubmissionFiles.Add(subFile);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        // Log error, but continue approval
+                                        System.Diagnostics.Debug.WriteLine($"Error generating PDF: {ex.Message}");
+                                    }
+                                }
+                                
+                                var updatedJson = System.Text.Json.JsonSerializer.Serialize(history);
                                 milestone.Remarks = $"{formInfo} JSON: {updatedJson}";
                             }
                         }
@@ -1208,7 +1399,7 @@ namespace FYPTracker.Controllers
                 await _hubContext.Clients.Group($"User_{milestone.Project.StudentId}").SendAsync("ReceiveMilestoneUpdate", reviewPayload);
 
                 if (status == "Approved") {
-                    await AddNotificationAsync(milestone.Project.StudentId, "SubmissionFeedback", $"{milestone.Title} Approved", remarks);
+                    await AddNotificationAsync(milestone.Project.StudentId, "SubmissionFeedback", $"{milestone.Title} Approved", remarks ?? "No remarks provided.");
                     await LogActivityAsync(milestone.Project.StudentId, "MilestoneApproved", $"{milestone.Title} Approved");
 
                     // ── Seed Final Evaluation Steps when Final/Thesis milestone is approved ──
@@ -1233,7 +1424,7 @@ namespace FYPTracker.Controllers
                 } 
                 else if (status == "Rejected") {
                     milestone.RejectionCount++;
-                    await AddNotificationAsync(milestone.Project.StudentId, "RevisionRequest", $"{milestone.Title} Rejected", remarks);
+                    await AddNotificationAsync(milestone.Project.StudentId, "RevisionRequest", $"{milestone.Title} Rejected", remarks ?? "No remarks provided.");
                     await LogActivityAsync(milestone.Project.StudentId, "FeedbackReceived", $"Revision needed for {milestone.Title}");
                 }
 
@@ -1463,7 +1654,12 @@ namespace FYPTracker.Controllers
                             var weeklyAvail = overrideAvail == null ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == nextDate.DayOfWeek.ToString()) : null;
                             var activeAvail = overrideAvail ?? weeklyAvail;
 
-                            if (activeAvail == null || !activeAvail.IsAvailable) continue; // Skip this week due to unavailability
+                            if (activeAvail == null)
+                            {
+                                activeAvail = new SupervisorAvailability { StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(17), IsAvailable = true };
+                            }
+
+                            if (!activeAvail.IsAvailable) continue; // Skip this week due to unavailability
 
                             // 2. Check for overlapping meeting on this date/time
                             bool timeConflict = await _context.MeetingBookings.AnyAsync(m => m.SupervisorId == user.Id && m.MeetingDate.Date == nextDate.Date && m.MeetingTime == meeting.MeetingTime && m.Status != "Rejected" && m.Status != "Cancelled");
@@ -1473,6 +1669,8 @@ namespace FYPTracker.Controllers
                             {
                                 StudentId = meeting.StudentId,
                                 SupervisorId = meeting.SupervisorId,
+                                FYPProjectId = meeting.FYPProjectId,
+                                Stage = meeting.Stage,
                                 MeetingDate = nextDate,
                                 MeetingDay = nextDate.DayOfWeek.ToString(),
                                 MeetingTime = meeting.MeetingTime,
@@ -1650,11 +1848,6 @@ namespace FYPTracker.Controllers
                 .FirstOrDefaultAsync(l => l.Id == id && l.MeetingBooking.SupervisorId == user.Id);
 
             if (log == null || log.LogStatus != "Signed") return NotFound();
-            
-            if (!string.IsNullOrEmpty(log.SignedPdfLogbookPath))
-                return Redirect(log.SignedPdfLogbookPath);
-            if (!string.IsNullOrEmpty(log.PdfLogbookPath))
-                return Redirect(log.PdfLogbookPath);
             
             var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == log.MeetingBooking.StudentId);
             ViewBag.ProjectName = project?.Title ?? "FYP Project";
@@ -2066,21 +2259,11 @@ namespace FYPTracker.Controllers
                 milestone.Status = "Completed";
                 try
                 {
-                    using var supDoc = System.Text.Json.JsonDocument.Parse(marksheetData);
-                    using var exDoc = System.Text.Json.JsonDocument.Parse(milestone.ExaminerMarksheetData);
-                    
-                    if (supDoc.RootElement.TryGetProperty("Total", out var supTotalProp) && exDoc.RootElement.TryGetProperty("Total", out var exTotalProp))
-                    {
-                        double supTotal = 0;
-                        if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(supTotalProp.GetString(), out double s)) { supTotal = s; }
-                        else if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { supTotal = supTotalProp.GetDouble(); }
+                    double supTotal = FYPTracker.Utils.GradingHelper.CalculateStage1Score(marksheetData, "Supervisor");
+                    double exTotal = FYPTracker.Utils.GradingHelper.CalculateStage1Score(milestone.ExaminerMarksheetData, "Examiner");
 
-                        double exTotal = 0;
-                        if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(exTotalProp.GetString(), out double e)) { exTotal = e; }
-                        else if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { exTotal = exTotalProp.GetDouble(); }
-                        milestone.Project.Stage1TotalScore = (supTotal + exTotal) / 2.0;
-                        milestone.Project.Stage1Grade = milestone.Project.Stage1TotalScore >= 40.0 ? "Pass" : "Fail";
-                    }
+                    milestone.Project.Stage1TotalScore = (supTotal + exTotal) / 2.0;
+                    milestone.Project.Stage1Grade = milestone.Project.Stage1TotalScore >= 40.0 ? "Pass" : "Fail";
                 }
                 catch { }
             }
@@ -2249,8 +2432,124 @@ namespace FYPTracker.Controllers
             if (score > 0) return "Poor";
             return "Fail";
         }
+
+        // --- Timetable Management ---
+        [HttpGet]
+        public async Task<IActionResult> ManageTimetable()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true);
+            var entries = new List<SupervisorTimetableEntry>();
+            if (activeSession == null)
+            {
+                TempData["Error"] = "No active academic session found. You cannot upload a timetable without an active session.";
+                ViewBag.ActiveSessionName = "None";
+            }
+            else
+            {
+                entries = await _context.SupervisorTimetableEntries
+                    .Where(t => t.SupervisorId == user.Id && t.AcademicSessionId == activeSession.Id)
+                    .ToListAsync();
+                ViewBag.ActiveSessionName = activeSession.Name;
+            }
+
+            return View(entries);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> PreviewTimetable(IFormFile timetableFile)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            if (timetableFile == null || timetableFile.Length == 0)
+            {
+                TempData["Error"] = "Please upload a valid CSV file.";
+                return RedirectToAction(nameof(ManageTimetable));
+            }
+
+            var entries = new List<SupervisorTimetableEntry>();
+            using (var reader = new StreamReader(timetableFile.OpenReadStream()))
+            {
+                // skip header
+                if (!reader.EndOfStream) await reader.ReadLineAsync();
+
+                while (!reader.EndOfStream)
+                {
+                    var line = await reader.ReadLineAsync();
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+                    
+                    var values = line.Split(',');
+                    if (values.Length >= 3)
+                    {
+                        var entry = new SupervisorTimetableEntry
+                        {
+                            DayOfWeek = values[0].Trim(),
+                            Details = values.Length > 3 ? values[3].Trim() : ""
+                        };
+                        
+                        if (TimeSpan.TryParse(values[1].Trim(), out var start) && TimeSpan.TryParse(values[2].Trim(), out var end))
+                        {
+                            entry.StartTime = start;
+                            entry.EndTime = end;
+                            entries.Add(entry);
+                        }
+                    }
+                }
+            }
+
+            // Save to temp storage for preview
+            TempData["TimetablePreview"] = System.Text.Json.JsonSerializer.Serialize(entries);
+            return View("PreviewTimetable", entries);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> SaveTimetable()
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true);
+            if (activeSession == null) 
+            {
+                TempData["Error"] = "No active academic session found. Cannot save timetable.";
+                return RedirectToAction(nameof(ManageTimetable));
+            }
+
+            var previewJson = TempData["TimetablePreview"] as string;
+            if (string.IsNullOrEmpty(previewJson))
+            {
+                TempData["Error"] = "Session expired. Please upload again.";
+                return RedirectToAction(nameof(ManageTimetable));
+            }
+
+            var parsedEntries = System.Text.Json.JsonSerializer.Deserialize<List<SupervisorTimetableEntry>>(previewJson);
+            if (parsedEntries != null && parsedEntries.Any())
+            {
+                // Delete old ones
+                var oldEntries = await _context.SupervisorTimetableEntries
+                    .Where(t => t.SupervisorId == user.Id && t.AcademicSessionId == activeSession.Id)
+                    .ToListAsync();
+                _context.SupervisorTimetableEntries.RemoveRange(oldEntries);
+
+                foreach (var entry in parsedEntries)
+                {
+                    entry.SupervisorId = user.Id;
+                    entry.AcademicSessionId = activeSession.Id;
+                    _context.SupervisorTimetableEntries.Add(entry);
+                }
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Timetable successfully updated.";
+            }
+            
+            return RedirectToAction(nameof(ManageTimetable));
+        }
     }
 }
+
+
 
 
 

@@ -69,8 +69,9 @@
         
         @if (userType != "Admin" && userType != "SuperAdmin" && userType != "Examiner")
         {
+            string dashUrl = (userType == "Supervisor") ? "/Supervisor" : "/Student";
             <div class="menu-item @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "active border-bottom border-3 border-primary" : "")" href="/Home">
+                <a class="menu-link py-3 @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "active border-bottom border-3 border-primary" : "")" href="@dashUrl">
                     <span class="menu-title">Dashboard</span>
                 </a>
             </div>
@@ -116,7 +117,7 @@
                     </a>
                 </div>
                 <div class="menu-item @(pageTitle == "Messages" ? "here show" : "")">
-                    <a class="menu-link py-3 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" href="/Chat">
+                    <a class="menu-link py-3 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" asp-controller="Chat" asp-action="Index">
                         <span class="menu-title d-flex align-items-center">
                             Messages
                             @if(unreadMessages > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@unreadMessages</span> }
@@ -167,7 +168,7 @@
                 </a>
             </div>
             <div class="menu-item @(pageTitle == "Messages" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" href="/Chat">
+                <a class="menu-link py-3 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" asp-controller="Chat" asp-action="Index">
                     <span class="menu-title d-flex align-items-center">
                         Messages
                         @if(unreadMessages > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@unreadMessages</span> }

@@ -1,0 +1,57 @@
+@model IEnumerable<FYPTracker.Models.SupervisorTimetableEntry>
+
+@{
+    ViewData["Title"] = "Manage Timetable";
+}
+
+<div class="container mt-4">
+    <h2>Manage Teaching Timetable</h2>
+    <p>Upload your teaching timetable (CSV format) for the current active session: <strong>@ViewBag.ActiveSessionName</strong>.</p>
+    <p class="text-muted small">CSV Format: DayOfWeek, StartTime, EndTime, Details (e.g. Monday, 09:00, 11:00, Lecture 1)</p>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">@TempData["Success"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+
+    <form asp-action="PreviewTimetable" enctype="multipart/form-data" method="post" class="mb-4">
+        <div class="input-group">
+            <input type="file" name="timetableFile" class="form-control" accept=".csv" required />
+            <button class="btn btn-primary" type="submit">Preview Upload</button>
+        </div>
+    </form>
+
+    <hr />
+
+    <h4>Current Timetable Busy Periods</h4>
+    @if (Model.Any())
+    {
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Day</th>
+                    <th>Time</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td>@item.DayOfWeek</td>
+                        <td>@item.StartTime.ToString(@"hh\:mm") - @item.EndTime.ToString(@"hh\:mm")</td>
+                        <td>@item.Details</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    else
+    {
+        <p>No timetable entries found for the current session.</p>
+    }
+</div>

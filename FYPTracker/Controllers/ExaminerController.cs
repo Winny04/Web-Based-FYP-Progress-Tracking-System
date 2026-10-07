@@ -190,15 +190,14 @@ namespace FYPTracker.Controllers
 
             if (project == null) return NotFound("Project not found or not assigned to you.");
 
-            // Get meeting logs
-            var meetingLogs = await _context.MeetingBookings
+            // Get meeting logs (fetching MeetingBooking objects that include MeetingLog)
+            var meetingBookings = await _context.MeetingBookings
                 .Include(m => m.MeetingLog)
-                .Where(m => m.StudentId == project.StudentId && m.SupervisorId == project.SupervisorId && m.Status == "Approved" && m.MeetingLog != null)
-                .Select(m => m.MeetingLog)
-                .OrderByDescending(log => log.CreatedDate)
+                .Where(m => m.FYPProjectId == project.Id && m.Status == "Approved" && m.MeetingLog != null)
+                .OrderBy(m => m.Stage).ThenBy(m => m.WeekNumber).ThenByDescending(m => m.MeetingDate)
                 .ToListAsync();
 
-            ViewBag.MeetingLogs = meetingLogs;
+            ViewBag.MeetingBookings = meetingBookings;
 
             string idempotencyToken = Guid.NewGuid().ToString();
             TempData["IdempotencyToken"] = idempotencyToken;
@@ -416,25 +415,12 @@ namespace FYPTracker.Controllers
             {
                 try
                 {
-                    using var exDoc = System.Text.Json.JsonDocument.Parse(marksheetData);
-                    using var supDoc = System.Text.Json.JsonDocument.Parse(project.Stage2SupervisorMarksheetData);
+                    double exTotal = FYPTracker.Utils.GradingHelper.CalculateStage2Score(marksheetData);
+                    double supTotal = FYPTracker.Utils.GradingHelper.CalculateStage2Score(project.Stage2SupervisorMarksheetData);
                     
-                    if (exDoc.RootElement.TryGetProperty("Total", out var exTotalProp) && supDoc.RootElement.TryGetProperty("Total", out var supTotalProp))
-                    {
-                        double exTotal = 0;
-                        if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(exTotalProp.GetString(), out double e1)) { exTotal = e1; }
-                        else if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { exTotal = exTotalProp.GetDouble(); }
-
-                        double supTotal = 0;
-                        if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(supTotalProp.GetString(), out double s1)) { supTotal = s1; }
-                        else if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { supTotal = supTotalProp.GetDouble(); }
-
-                        // Using the stakeholder formula: examiner component = 70%; supervisor component = 80%; combined value = 150%, then divide by 100% (1.5) to obtain the total mark.
-                        double finalScore = (exTotal + supTotal) / 2.0;
-                        
-                        project.FinalGrade = GetGradeLabel(finalScore);
-                        TempData["Success"] = $"Stage 2 grading complete! Final joint score calculated as {finalScore:F1}%.";
-                    }
+                    double finalScore = (exTotal + supTotal) / 2.0;
+                    project.FinalGrade = GetGradeLabel(finalScore);
+                    TempData["Success"] = $"Stage 2 grading complete! Final joint score calculated as {finalScore:F1}%.";
                 }
                 catch (Exception)
                 {
@@ -784,21 +770,10 @@ namespace FYPTracker.Controllers
                 milestone.Status = "Completed";
                 try
                 {
-                    using var supDoc = System.Text.Json.JsonDocument.Parse(milestone.SupervisorMarksheetData);
-                    using var exDoc = System.Text.Json.JsonDocument.Parse(marksheetData);
-                    
-                    if (supDoc.RootElement.TryGetProperty("Total", out var supTotalProp) && exDoc.RootElement.TryGetProperty("Total", out var exTotalProp))
-                    {
-                        double supTotal = 0;
-                        if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(supTotalProp.GetString(), out double s)) { supTotal = s; }
-                        else if (supTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { supTotal = supTotalProp.GetDouble(); }
+                    double supTotal = FYPTracker.Utils.GradingHelper.CalculateStage1Score(milestone.SupervisorMarksheetData, "Supervisor");
+                    double exTotal = FYPTracker.Utils.GradingHelper.CalculateStage1Score(marksheetData, "Examiner");
 
-                        double exTotal = 0;
-                        if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.String && double.TryParse(exTotalProp.GetString(), out double e)) { exTotal = e; }
-                        else if (exTotalProp.ValueKind == System.Text.Json.JsonValueKind.Number) { exTotal = exTotalProp.GetDouble(); }
-                        
-                        milestone.Project.Stage1TotalScore = (supTotal + exTotal) / 2.0;
-                    }
+                    milestone.Project.Stage1TotalScore = (supTotal + exTotal) / 2.0;
                 }
                 catch { }
             }

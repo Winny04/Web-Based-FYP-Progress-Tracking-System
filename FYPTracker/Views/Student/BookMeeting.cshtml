@@ -220,11 +220,17 @@
                 </button>
             }
         </div>
-        <div class="table-responsive">
-            <table id="meetingTable" class="table align-middle table-hover">
+        @if(!meetings.Any()) {
+            <p class="text-muted">No meetings booked yet.</p>
+        }
+        @foreach (var stageGroup in meetings.GroupBy(m => m.Stage).OrderBy(g => g.Key))
+        {
+        <h6 class="fw-bold text-primary mt-2 mb-3">Stage @stageGroup.Key Meetings</h6>
+        <div class="table-responsive mb-4">
+            <table class="table align-middle table-hover">
                 <thead>
                     <tr>
-                        <th class="ps-3" style="width: 50px;">No</th>
+                        <th class="ps-3" style="width: 120px;">Stage & Week</th>
                         <th>Date</th>
                         <th>Day</th>
                         <th>Time</th>
@@ -234,10 +240,9 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @{ int number = 1; }
                     
                     <!-- Dynamic database meetings -->
-                    @foreach (var m in meetings)
+                    @foreach (var m in stageGroup)
                     {
                         var badgeCls = m.Status switch
                         {
@@ -255,7 +260,14 @@
                         } catch {}
 
                         <tr id="meetingRow_@m.Id">
-                            <td class="ps-3 fw-bold text-muted">@(number++)</td>
+                            <td class="ps-3">
+                                <span class="badge @(m.Stage == 1 ? "bg-info" : "bg-primary")">Stage @m.Stage</span><br/>
+                                @if(m.WeekNumber > 0) {
+                                    <span class="badge bg-secondary text-dark mt-1">Week @m.WeekNumber</span>
+                                } else {
+                                    <span class="badge bg-light text-muted mt-1 border">Unlogged</span>
+                                }
+                            </td>
                             <td>@m.MeetingDate.ToString("dd/MM/yyyy")</td>
                             <td>@m.MeetingDay</td>
                             <td>@displayTime</td>
@@ -340,6 +352,7 @@
                 </tbody>
             </table>
         </div>
+        }
     </div>
     </div> <!-- End List View -->
     
@@ -430,12 +443,12 @@
 <div class="modal fade" id="studentLogModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
-            <form asp-action="SubmitMeetingLogStudent" method="post" enctype="multipart/form-data" id="studentLogForm" onsubmit="return confirmLogSubmission(event)">
+            <form asp-action="SubmitMeetingLogStudent" method="post" id="studentLogForm" onsubmit="return confirmLogSubmission(event)">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="meetingId" id="logMeetingId" />
                 
                 <div class="modal-header border-0 pb-0">
-                    <h5 class="fw-bold text-dark"><i class="fas fa-file-upload text-primary me-2"></i>Upload Weekly Meeting Logbook</h5>
+                    <h5 class="fw-bold text-dark"><i class="fas fa-edit text-primary me-2"></i>Digital Weekly Meeting Logbook</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -733,24 +746,8 @@
         new bootstrap.Modal(document.getElementById('studentLogModal')).show();
     }
 
-    // ── Logbook File Validation ─────────────────────────────────
-    document.getElementById('logbookPdf')?.addEventListener('change', function(e) {
-        const file = this.files[0];
-        if (file && file.type !== 'application/pdf') {
-            Swal.fire({ 
-                icon: 'error',
-                title: 'Invalid File Format',
-                text: 'Only PDF files are allowed for the weekly meeting logbook.',
-                confirmButtonColor: '#3b82f6'
-            });
-            this.value = ''; // clear the input to prevent submission
-        }
-    });
-
-    // ── View Final Log as PDF ───────────────────────────────────
+    // ── View Final Log ───────────────────────────────────
     function viewFinalLog(logId) {
-        // Since the user uploads a PDF, we don't need html2pdf. We just redirect to the ViewMeetingLog endpoint
-        // which now returns the signed PDF directly.
         window.open('/Student/ViewMeetingLog/' + logId, '_blank');
     }
 

@@ -52,7 +52,7 @@
                 <option value="Pending">Pending</option>
                 <option value="Approved">Approved</option>
                 <option value="Completed">Completed</option>
-                <option value="Rejected">Rejected / Revise</option>
+                <option value="Rejected">Returned for Edits</option>
             </select>
         </div>
     </div>
@@ -137,15 +137,16 @@
                                     </td>
                                     <td>
                                         @if (ms.Status == "Submitted") { <span class="badge badge-light-primary">Submitted</span> }
+                                        else if (ms.Status == "PendingSupervisorReview") { <span class="badge badge-light-primary">Pending Supervisor Review</span> }
                                         else if (ms.Status == "UnderReview") { <span class="badge badge-light-warning">Needs Attention</span> }
                                         else if (ms.Status == "Completed") { <span class="badge badge-light-primary">Completed</span> }
                                         else if (ms.Status == "Approved") { <span class="badge badge-light-success">Approved</span> }
                                         else if (ms.Status == "Pending") { <span class="badge badge-light-info">Pending</span> }
-                                        else { <span class="badge badge-light-danger">Rejected / Revise</span> }
+                                        else if (ms.Status == "ReturnedForEdits" || ms.Status == "Rejected") { <span class="badge badge-light-danger">Returned for Edits</span> }
                                     </td>
                                     <td class="text-end pe-4">
-                                        @if (ms.Status == "Submitted" || ms.Status == "UnderReview") { <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-primary">Review</a> }
-                                        else if (ms.Status == "Approved" || ms.Status == "Rejected" || ms.Status == "Completed") { <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-info">View Details</a> }
+                                        @if (ms.Status == "Submitted" || ms.Status == "UnderReview" || ms.Status == "PendingSupervisorReview") { <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-primary">Review</a> }
+                                        else if (ms.Status == "Approved" || ms.Status == "Rejected" || ms.Status == "Completed" || ms.Status == "ReturnedForEdits" || ms.Status == "SupervisorSigned" || ms.Status == "PendingPanelReview" || ms.Status == "DefenseRequired" || ms.Status == "DefenseScheduled" || ms.Status == "AdminApproved") { <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-info">View Details</a> }
                                         else { <button class="btn btn-sm btn-light text-muted" disabled>Waiting</button> }
                                     </td>
                                 </tr>
@@ -187,11 +188,11 @@
                                             else if (ms.Status == "Completed") { <span class="badge badge-light-primary">Completed</span> }
                                             else if (ms.Status == "Approved") { <span class="badge badge-light-success">Approved</span> }
                                             else if (ms.Status == "Pending") { <span class="badge badge-light-info">Pending</span> }
-                                            else { <span class="badge badge-light-danger">Rejected / Revise</span> }
+                                            else if (ms.Status == "ReturnedForEdits" || ms.Status == "Rejected") { <span class="badge badge-light-danger">Returned for Edits</span> }
                                         </td>
                                         <td class="text-end pe-4">
                                             @if (ms.Status == "Submitted" || ms.Status == "UnderReview") { <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-primary">Review</a> }
-                                            else if (ms.Status == "Approved" || ms.Status == "Rejected" || ms.Status == "Completed") { <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-info">View Details</a> }
+                                            else if (ms.Status == "Approved" || ms.Status == "Rejected" || ms.Status == "Completed" || ms.Status == "ReturnedForEdits" || ms.Status == "SupervisorSigned") { <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = ms.Id })" class="btn btn-sm btn-light-info">View Details</a> }
                                             else { <button class="btn btn-sm btn-light text-muted" disabled>Waiting</button> }
                                         </td>
                                     </tr>

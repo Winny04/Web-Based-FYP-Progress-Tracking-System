@@ -84,6 +84,9 @@
     <h2>@ViewBag.ProjectName<br/><small style="font-size: 0.7em; color: #555;">Record of Supervisor Meeting</small></h2>
 
     <div class="header-info">
+        <div class="label">Stage & Week:</div>
+        <div>Stage @(meeting?.Stage ?? 1) - Week @(meeting?.WeekNumber ?? 0)</div>
+
         <div class="label">Supervisor:</div>
         <div>@supervisor?.FullName</div>
 

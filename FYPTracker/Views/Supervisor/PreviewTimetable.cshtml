@@ -1,0 +1,43 @@
+@model IEnumerable<FYPTracker.Models.SupervisorTimetableEntry>
+
+@{
+    ViewData["Title"] = "Preview Timetable";
+}
+
+<div class="container mt-4">
+    <h2>Preview Timetable Upload</h2>
+    
+    @if (Model != null && Model.Any())
+    {
+        <p>Please confirm the following entries to be saved for the current session. <strong>Note: this will overwrite your existing timetable.</strong></p>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Day</th>
+                    <th>Time</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td>@item.DayOfWeek</td>
+                        <td>@item.StartTime.ToString(@"hh\:mm") - @item.EndTime.ToString(@"hh\:mm")</td>
+                        <td>@item.Details</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <form asp-action="SaveTimetable" method="post" class="mt-3">
+            <button class="btn btn-success" type="submit">Confirm and Save</button>
+            <a asp-action="ManageTimetable" class="btn btn-secondary">Cancel</a>
+        </form>
+    }
+    else
+    {
+        <div class="alert alert-warning">No valid entries found in the uploaded file. Please check the CSV format.</div>
+        <a asp-action="ManageTimetable" class="btn btn-secondary">Go Back</a>
+    }
+</div>

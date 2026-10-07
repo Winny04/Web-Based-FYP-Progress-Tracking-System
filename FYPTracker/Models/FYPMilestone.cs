@@ -42,6 +42,13 @@ namespace FYPTracker.Models
 
         public int RejectionCount { get; set; } = 0;
 
+        /// <summary>Values: Default (system-seeded) or Supervisor (added via Add Milestone).</summary>
+        [StringLength(20)]
+        public string MilestoneSource { get; set; } = "Default";
+
+        /// <summary>FYP stage this milestone belongs to: 1 or 2.</summary>
+        public int Stage { get; set; } = 1;
+
         // --- Joint Marking Fields ---
         public bool IsReadyForJointEvaluation { get; set; } = false;
 

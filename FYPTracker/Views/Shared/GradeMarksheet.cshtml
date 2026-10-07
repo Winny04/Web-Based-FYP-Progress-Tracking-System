@@ -55,7 +55,10 @@
                             <span class="badge bg-dark fs-6" id="valTech">0/100</span>
                         </div>
                         <p class="text-muted small mb-3">Evaluates the complexity of the solution, analytical rigor, and depth of technical discussion.</p>
-                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" value="0" id="scoreTech" oninput="updateScore('Tech')">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreTech" oninput="updateScore('Tech')">
+                            <span class="badge bg-secondary ms-3" id="weightTech">Weight: 0/4</span>
+                        </div>
                     </div>
 
                     <!-- Literature Review -->
@@ -65,7 +68,10 @@
                             <span class="badge bg-dark fs-6" id="valLit">0/100</span>
                         </div>
                         <p class="text-muted small mb-3">Evaluates the comprehensive use of sources, critical analysis of existing work, and synthesis of ideas.</p>
-                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" value="0" id="scoreLit" oninput="updateScore('Lit')">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreLit" oninput="updateScore('Lit')">
+                            <span class="badge bg-secondary ms-3" id="weightLit">Weight: 0/4</span>
+                        </div>
                     </div>
 
                     <!-- Methodology -->
@@ -75,7 +81,10 @@
                             <span class="badge bg-dark fs-6" id="valMeth">0/100</span>
                         </div>
                         <p class="text-muted small mb-3">Evaluates the systematic approach, experimental design, and justification of methods used.</p>
-                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" value="0" id="scoreMeth" oninput="updateScore('Meth')">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreMeth" oninput="updateScore('Meth')">
+                            <span class="badge bg-secondary ms-3" id="weightMeth">Weight: 0/4</span>
+                        </div>
                     </div>
 
                     <!-- Presentation -->
@@ -85,7 +94,10 @@
                             <span class="badge bg-dark fs-6" id="valPres">0/100</span>
                         </div>
                         <p class="text-muted small mb-3">Evaluates clarity, grammar, structural flow, citations, and overall academic formatting.</p>
-                        <input type="range" class="form-range custom-range" min="0" max="100" step="1" value="0" id="scorePres" oninput="updateScore('Pres')">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scorePres" oninput="updateScore('Pres')">
+                            <span class="badge bg-secondary ms-3" id="weightPres">Weight: 0/4</span>
+                        </div>
                     </div>
 
                     @if (ViewBag.Role == "Supervisor")
@@ -97,7 +109,10 @@
                                 <span class="badge bg-primary fs-6" id="valAttitude">0/100</span>
                             </div>
                             <p class="text-muted small mb-3">Evaluates the student's independence, consistency in meetings, and response to feedback throughout the semester.</p>
-                            <input type="range" class="form-range custom-range custom-range-primary" min="0" max="100" step="1" value="0" id="scoreAttitude" oninput="updateScore('Attitude')">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range custom-range-primary w-75" min="0" max="4" step="1" value="0" id="scoreAttitude" oninput="updateScore('Attitude')">
+                                <span class="badge bg-secondary ms-3" id="weightAttitude">Weight: 0/4</span>
+                            </div>
                         </div>
                     }
 
@@ -173,28 +188,34 @@
         }
 
         function updateScore(category, updateAvg = true) {
-            let val = document.getElementById('score' + category).value;
-            document.getElementById('val' + category).innerText = val + "/100";
+            let weight = parseInt(document.getElementById('score' + category).value) || 0;
+            if (document.getElementById('weight' + category)) {
+                document.getElementById('weight' + category).innerText = "Weight: " + weight + "/4";
+            }
+            
+            let role = '@ViewBag.Role';
+            let fullMark = (role === 'Supervisor') ? 20 : 25;
+            let score = (weight / 4.0) * fullMark;
+            
+            document.getElementById('val' + category).innerText = score.toFixed(1) + "/" + fullMark;
             
             if (updateAvg) calculateTotal();
         }
 
         function calculateTotal() {
-            let tech = parseInt(document.getElementById('scoreTech').value) || 0;
-            let lit = parseInt(document.getElementById('scoreLit').value) || 0;
-            let meth = parseInt(document.getElementById('scoreMeth').value) || 0;
-            let pres = parseInt(document.getElementById('scorePres').value) || 0;
+            let techW = parseInt(document.getElementById('scoreTech').value) || 0;
+            let litW = parseInt(document.getElementById('scoreLit').value) || 0;
+            let methW = parseInt(document.getElementById('scoreMeth').value) || 0;
+            let presW = parseInt(document.getElementById('scorePres').value) || 0;
             
             let total = 0;
             let role = '@ViewBag.Role';
             
             if (role === 'Supervisor') {
-                let att = parseInt(document.getElementById('scoreAttitude').value) || 0;
-                // Supervisor weight: 20% each
-                total = (tech * 0.2) + (lit * 0.2) + (meth * 0.2) + (pres * 0.2) + (att * 0.2);
+                let attW = parseInt(document.getElementById('scoreAttitude').value) || 0;
+                total = ((techW/4)*20) + ((litW/4)*20) + ((methW/4)*20) + ((presW/4)*20) + ((attW/4)*20);
             } else {
-                // Examiner weight: 25% each
-                total = (tech * 0.25) + (lit * 0.25) + (meth * 0.25) + (pres * 0.25);
+                total = ((techW/4)*25) + ((litW/4)*25) + ((methW/4)*25) + ((presW/4)*25);
             }
             
             let roundedTotal = Math.round(total);

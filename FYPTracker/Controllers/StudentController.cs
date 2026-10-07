@@ -1,4 +1,4 @@
-﻿using FYPTracker.Models;
+using FYPTracker.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -635,7 +635,7 @@ namespace FYPTracker.Controllers
             int milestoneId, string formType, string? title, string? detailsJson, IFormFile? attachedFile, List<IFormFile>? attachedFiles,
             string? problemStatement, string? objective1, string? objective2, string? objective3,
             string? scope, string? outcome, string? references,
-            DateTime? startDate, DateTime? endDate, string? workDone, string? challenges, string? nextPeriodPlan, string? pctComplete, string? coventryId, string? revisionNotes)
+            DateTime? startDate, DateTime? endDate, string? workDone, string? challenges, string? nextPeriodPlan, string? pctComplete, string? coventryId, string? revisionNotes, bool isDraft = false)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "User");
@@ -663,6 +663,60 @@ namespace FYPTracker.Controllers
             {
                 TempData["Error"] = "This milestone has already been graded and cannot be modified or resubmitted.";
                 return RedirectToAction("Forms");
+            }
+
+            // ── Guard: DPP Work & Progress (Supervisor-added Stage 1) milestones ──
+            if (milestone.MilestoneSource == "Supervisor" && milestone.Stage == 1)
+            {
+                if (formType != "Progress Report Form" || !(milestone.Status == "Draft" || milestone.Status == "Pending" || milestone.Status == "ReturnedForChanges"))
+                {
+                    TempData["Error"] = "This progress milestone cannot be modified in its current status.";
+                    return RedirectToAction("Forms");
+                }
+            }
+
+            // ── Guard: Stage 1 IAF server-side state validation (F1–F4) ──
+            if (formType == "Initial Project Allocation Form (IAF)")
+            {
+                string guardAction = Request.Form["iafAction"].ToString();
+                string guardStatus = string.IsNullOrEmpty(milestone.Status) ? "Draft" : milestone.Status;
+                var editableStates = new[] { "Draft", "Pending", "ReturnedForEdits", "PanelRevisionRequired", "ChangeOfTopicRequired" };
+
+                string guardJson = "";
+                if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
+                    guardJson = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+                var guardHistory = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(guardJson);
+                var guardAttempt = guardHistory.Attempts.Find(a => a.AttemptNumber == guardHistory.CurrentAttempt);
+
+                bool allowed;
+                if (guardAction == "draft" || guardAction == "supervisor_review")
+                {
+                    allowed = editableStates.Contains(guardStatus)
+                              && (guardAttempt == null || guardAttempt.Status != "SupervisorSigned")
+                              && !(guardStatus == "PanelRevisionRequired" && guardAction == "supervisor_review");
+                }
+                else if (guardAction == "submit" || guardAction == "submit_new")
+                {
+                    allowed = guardStatus == "SupervisorSigned"
+                              && guardAttempt != null
+                              && guardAttempt.Status == "SupervisorSigned"
+                              && !string.IsNullOrWhiteSpace(guardAttempt.SupervisorSignature)
+                              && (guardAction == "submit" ? guardAttempt.AttemptNumber == 1 : guardAttempt.AttemptNumber >= 2);
+                }
+                else if (guardAction == "ready_defense")
+                {
+                    allowed = guardStatus == "PanelRevisionRequired";
+                }
+                else
+                {
+                    allowed = false;
+                }
+
+                if (!allowed)
+                {
+                    TempData["Error"] = "This IAF action is not allowed in its current status.";
+                    return RedirectToAction("Forms");
+                }
             }
 
             var allFiles = new List<IFormFile>();
@@ -732,11 +786,10 @@ namespace FYPTracker.Controllers
                         {"End Period", endDate?.ToString("dd MMM yyyy") ?? ""}
                     };
                     detailsJson = System.Text.Json.JsonSerializer.Serialize(dict);
-                    title = "Progress Report";
+                    title = "DPP Work & Progress";
                 }
                 else if (formType == "Initial Project Allocation Form (IAF)")
                 {
-                    // Clean up existing prefixes if they accidentally get submitted
                     var cleanObj1 = objective1?.StartsWith("1. To ", StringComparison.OrdinalIgnoreCase) == true ? objective1.Substring(6).TrimStart() : objective1;
                     var cleanObj2 = objective2?.StartsWith("2. To ", StringComparison.OrdinalIgnoreCase) == true ? objective2.Substring(6).TrimStart() : objective2;
                     var cleanObj3 = objective3?.StartsWith("3. To ", StringComparison.OrdinalIgnoreCase) == true ? objective3.Substring(6).TrimStart() : objective3;
@@ -745,23 +798,95 @@ namespace FYPTracker.Controllers
                     var finalObj2 = string.IsNullOrWhiteSpace(cleanObj2) ? "" : "2. To " + cleanObj2;
                     var finalObj3 = string.IsNullOrWhiteSpace(cleanObj3) ? "" : "3. To " + cleanObj3;
 
-                    var dict = new System.Collections.Generic.Dictionary<string, string> {
-                        {"Scope of Project", scope ?? ""},
-                        {"Problem Statement", problemStatement ?? ""},
-                        {"Objective 1", finalObj1},
-                        {"Objective 2", finalObj2},
-                        {"Objective 3", finalObj3},
-                        {"Agreed Supervisor Name", Request.Form.TryGetValue("supervisorName", out var supName) ? supName.ToString() : ""}
+                    string rawJson = "";
+                    if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
+                    {
+                        var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                        rawJson = parts[1];
+                    }
+                    var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(rawJson);
+
+                    string submittedTitle = Request.Form["title"].ToString();
+                    string iafActionForTitle = Request.Form["iafAction"].ToString();
+                    if (!string.IsNullOrWhiteSpace(submittedTitle) && (iafActionForTitle == "draft" || iafActionForTitle == "supervisor_review" || iafActionForTitle == "ready_defense")) 
+                    {
+                        milestone.Project.Title = submittedTitle;
+                    }
+
+                    var currentFormData = new System.Collections.Generic.Dictionary<string, string> {
+                        {"title", milestone.Project?.Title ?? ""},
+                        {"scope", scope ?? ""},
+                        {"problem", problemStatement ?? ""},
+                        {"obj1", finalObj1},
+                        {"obj2", finalObj2},
+                        {"obj3", finalObj3},
+                        {"agreedSupervisor", Request.Form.TryGetValue("supervisorName", out var supName) ? supName.ToString() : ""}
                     };
-                    detailsJson = System.Text.Json.JsonSerializer.Serialize(dict);
+
+                    var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
+                    string iafAction = Request.Form["iafAction"].ToString();
+                    
+                    bool isNewAttemptNeeded = currentAttempt != null && currentAttempt.Status == "ChangeOfTopicRequired" && (iafAction == "draft" || iafAction == "supervisor_review");
+
+                    if (isNewAttemptNeeded)
+                    {
+                        history.CurrentAttempt++;
+                        currentAttempt = new FYPTracker.Models.IafAttempt
+                        {
+                            AttemptNumber = history.CurrentAttempt
+                        };
+                        history.Attempts.Add(currentAttempt);
+                    }
+                    else if (currentAttempt == null)
+                    {
+                        currentAttempt = new FYPTracker.Models.IafAttempt { AttemptNumber = history.CurrentAttempt };
+                        history.Attempts.Add(currentAttempt);
+                    }
+
+                    string existingSignature = currentAttempt.SupervisorSignature ?? "";
+                    if (!string.IsNullOrEmpty(existingSignature))
+                    {
+                        currentFormData["Supervisor Signature"] = existingSignature;
+                    }
+                    
+                    bool isFormalSubmit = iafAction == "submit" || iafAction == "submit_new";
+                    if (!isFormalSubmit)
+                    {
+                        currentAttempt.FormData = currentFormData;
+                    }
+
+                    bool isPanelRevision = milestone.Status == "PanelRevisionRequired";
+                    if (iafAction == "draft") {
+                        currentAttempt.Status = isPanelRevision ? "PanelRevisionRequired" : "Draft";
+                        isDraft = true;
+                    } else if (iafAction == "supervisor_review") {
+                        currentAttempt.Status = "PendingSupervisorReview";
+                        isDraft = true;
+                    } else if (iafAction == "submit") {
+                        currentAttempt.Status = "PendingPanelReview";
+                        currentAttempt.SubmittedAt = DateTime.Now;
+                        isDraft = false; 
+                    } else if (iafAction == "submit_new") {
+                        // Formal Submission #2: formalize the SAME attempt; no Panel loop, proceeds to DPP.
+                        currentAttempt.Status = "AdminApproved";
+                        currentAttempt.SubmittedAt = DateTime.Now;
+                        isDraft = false; 
+                    } else if (iafAction == "ready_defense") {
+                        currentAttempt.Status = "DefenseRequired";
+                        isDraft = false;
+                    }
+
+                    detailsJson = System.Text.Json.JsonSerializer.Serialize(history);
                     title = "Initial Project Allocation Form (IAF)";
 
-                    // Also save these directly to the Project record
-                    milestone.Project.ProblemStatement = problemStatement;
-                    milestone.Project.Objective1 = finalObj1;
-                    milestone.Project.Objective2 = finalObj2;
-                    milestone.Project.Objective3 = finalObj3;
-                    milestone.Project.Scope = scope;
+                    if (!isFormalSubmit)
+                    {
+                        milestone.Project.ProblemStatement = problemStatement;
+                        milestone.Project.Objective1 = finalObj1;
+                        milestone.Project.Objective2 = finalObj2;
+                        milestone.Project.Objective3 = finalObj3;
+                        milestone.Project.Scope = scope;
+                    }
                 }
                 else if (formType == "Proposal Form")
                 {
@@ -780,9 +905,66 @@ namespace FYPTracker.Controllers
                     detailsJson = System.Text.Json.JsonSerializer.Serialize(dict);
                 }
 
-                milestone.Status = "Submitted";
-                milestone.SubmittedDate = DateTime.Now;
-                milestone.Remarks = $"Form: {formType}. Details: {title}. JSON: {detailsJson}";
+                if (isDraft)
+                {
+                    if (formType == "Initial Project Allocation Form (IAF)") {
+                        string iafAction = Request.Form["iafAction"].ToString();
+                        if (iafAction == "draft") {
+                            if (milestone.Status != "PanelRevisionRequired") milestone.Status = "Draft";
+                            TempData["Success"] = "Draft saved successfully.";
+                        } else if (iafAction == "supervisor_review") {
+                            milestone.Status = "PendingSupervisorReview";
+                            TempData["Success"] = "Sent for Supervisor Review successfully.";
+                        }
+                    } else {
+                        if (milestone.MilestoneSource == "Supervisor" && milestone.Stage == 1)
+                        {
+                            if (milestone.Status != "ReturnedForChanges") milestone.Status = "Draft";
+                        }
+                        else if (milestone.Status != "Rejected" && milestone.Status != "PanelRevisionRequired" && milestone.Status != "ChangeOfTopicRequired")
+                        {
+                            milestone.Status = "Draft";
+                        }
+                        TempData["Success"] = "Draft saved successfully.";
+                    }
+                    milestone.Remarks = $"Form: {formType}. Details: {title}. JSON: {detailsJson}";
+                }
+                else
+                {
+                    if (formType == "Initial Project Allocation Form (IAF)") {
+                        string iafAction = Request.Form["iafAction"].ToString();
+                        if (iafAction == "submit") {
+                            milestone.Status = "PendingPanelReview";
+                        } else if (iafAction == "submit_new") {
+                            milestone.Status = "AdminApproved";
+                        } else if (iafAction == "ready_defense") {
+                            milestone.Status = "DefenseRequired";
+                        }
+                        milestone.Remarks = $"Form: {formType}. Details: {title}. JSON: {detailsJson}";
+                    } else if (milestone.MilestoneSource == "Supervisor" && milestone.Stage == 1) {
+                        // DPP Work & Progress: not a formal submission
+                        milestone.Status = "PendingSupervisorReview";
+                        milestone.Remarks = $"Form: {formType}. Details: {title}. JSON: {detailsJson}";
+                    } else {
+                        if (milestone.Status == "PanelRevisionRequired")
+                        {
+                            milestone.Status = "DefenseRequired";
+                            milestone.Remarks = $"Form: {formType}. Details: {title} (Panel Revision). JSON: {detailsJson}";
+                        }
+                        else if (milestone.Status == "ChangeOfTopicRequired")
+                        {
+                            milestone.Status = "Submitted";
+                            milestone.Remarks = $"Form: {formType}. Details: {title} (Change of Topic). JSON: {detailsJson}";
+                        }
+                        else
+                        {
+                            milestone.Status = "Submitted";
+                            milestone.Remarks = $"Form: {formType}. Details: {title}. JSON: {detailsJson}";
+                        }
+                    }
+                    milestone.SubmittedDate = DateTime.Now;
+                    TempData["Success"] = "Form submitted successfully.";
+                }
                 
                 // Save specific proposal details directly to the Project record
                 if (formType == "Proposal Form")
@@ -813,8 +995,8 @@ namespace FYPTracker.Controllers
                     return RedirectToAction("Forms");
                 }
                 
-                await LogActivityAsync(user.Id, "Submission", "Form Submitted", $"Submitted {formType} for {milestone.Title}");
-                if (milestone.Project.SupervisorId.HasValue)
+                await LogActivityAsync(user.Id, "Submission", isDraft ? "Draft Saved" : "Form Submitted", isDraft ? $"Saved draft of {formType} for {milestone.Title}" : $"Submitted {formType} for {milestone.Title}");
+                if (!isDraft && milestone.Project.SupervisorId.HasValue)
                 {
                     await AddNotificationAsync(milestone.Project.SupervisorId.Value, "Submission", "Form Submitted", $"Student {user.FullName} submitted {formType} for {milestone.Title}", milestoneId);
                     
@@ -831,7 +1013,7 @@ namespace FYPTracker.Controllers
                     await _hubContext.Clients.Group($"User_{milestone.Project.SupervisorId.Value}").SendAsync("ReceiveMilestoneUpdate", submissionPayload);
                 }
 
-            TempData["Success"] = "Your form has been submitted successfully!";
+            if (!isDraft) TempData["Success"] = "Your form has been submitted successfully!";
             return RedirectToAction("Forms");
         }
 
@@ -855,6 +1037,8 @@ namespace FYPTracker.Controllers
             }
 
             var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (string.IsNullOrEmpty(ext)) ext = System.IO.Path.GetExtension(file.FilePath).ToLowerInvariant();
+
             string mimeType = "application/octet-stream";
             
             if (ext == ".pdf") mimeType = "application/pdf";
@@ -866,7 +1050,7 @@ namespace FYPTracker.Controllers
             var physicalPath = System.IO.Path.Combine(_env.WebRootPath, file.FilePath.TrimStart('/', '\\'));
             if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
 
-            Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}\"");
+            Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}{(string.IsNullOrEmpty(System.IO.Path.GetExtension(file.FileName)) ? ext : "")}\"");
             return PhysicalFile(physicalPath, mimeType);
         }
 
@@ -930,6 +1114,12 @@ namespace FYPTracker.Controllers
                         .Include(p => p.Milestones)
                             .ThenInclude(m => m.SubmissionFiles)
                         .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
+                }
+                
+                var iafMilestone = project?.Milestones.FirstOrDefault(m => m.Title.Contains("Initial Project Allocation Form (IAF)", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase));
+                if (iafMilestone != null)
+                {
+                    FYPTracker.Utils.IafPdfGenerator.EnsurePdfSnapshots(iafMilestone, System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot"), _context);
                 }
             }
             else
@@ -1022,7 +1212,7 @@ namespace FYPTracker.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SubmitMeetingBooking(
-            int supervisorId, string meetingDate, string meetingTime, string? reason)
+            int supervisorId, string meetingDate, string meetingTime, string? reason, int stage = 1)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "User");
@@ -1045,17 +1235,16 @@ namespace FYPTracker.Controllers
                 .Where(a => a.SupervisorId == supervisorId)
                 .ToListAsync();
 
-            if (!availabilities.Any(a => a.IsAvailable))
-            {
-                TempData["Error"] = "Your supervisor has not yet configured their available time slots. Please contact them.";
-                return RedirectToAction(nameof(BookMeeting));
-            }
-
             var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == parsedDate.Date);
             var weeklyAvail = overrideAvail == null ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == parsedDate.DayOfWeek.ToString()) : null;
             var activeAvail = overrideAvail ?? weeklyAvail;
 
-            if (activeAvail == null || !activeAvail.IsAvailable)
+            if (activeAvail == null)
+            {
+                activeAvail = new SupervisorAvailability { StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(17), IsAvailable = true };
+            }
+
+            if (!activeAvail.IsAvailable)
             {
                 TempData["Error"] = "Your supervisor is not available on this date. Please select a different day.";
                 return RedirectToAction(nameof(BookMeeting));
@@ -1117,10 +1306,15 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
+            var project = await _context.FYPProjects.OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
+            int? projectId = project?.Id;
+
             var booking = new MeetingBooking
             {
                 StudentId    = user.Id,
                 SupervisorId = supervisorId,
+                FYPProjectId = projectId,
+                Stage        = stage,
                 MeetingDate  = parsedDate,
                 MeetingDay   = parsedDate.DayOfWeek.ToString(),
                 MeetingTime  = meetingTime,
@@ -1203,12 +1397,6 @@ namespace FYPTracker.Controllers
                 .Where(a => a.SupervisorId == supervisorId)
                 .ToListAsync();
 
-            // ── If supervisor has NO availability configured at all, block booking ──
-            if (!availabilities.Any(a => a.IsAvailable))
-            {
-                return Json(new { slots = new List<string>(), message = "Your supervisor has not yet set their available time slots. Please ask them to configure their availability first.", noAvailability = true });
-            }
-
             // 2. Find specific date override
             var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == parsedDate.Date);
             
@@ -1219,10 +1407,9 @@ namespace FYPTracker.Controllers
 
             var activeAvail = overrideAvail ?? weeklyAvail;
 
-            // If there's no configuration for this specific day, show message
             if (activeAvail == null)
             {
-                return Json(new { slots = new List<string>(), message = "Your supervisor has not set availability for this day. Please select a different date." });
+                activeAvail = new SupervisorAvailability { StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(17), IsAvailable = true };
             }
 
             TimeSpan start = activeAvail.StartTime;
@@ -1251,7 +1438,18 @@ namespace FYPTracker.Controllers
                 .Select(m => m.MeetingTime)
                 .ToListAsync();
 
-            // 6. Return only slots that aren't booked and aren't in the past (if today)
+            // 5.5 Get timetable busy periods
+            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
+            var dayOfWeekStr = parsedDate.DayOfWeek.ToString();
+            var busyPeriods = new List<SupervisorTimetableEntry>();
+            if (activeSession != null)
+            {
+                busyPeriods = await _context.SupervisorTimetableEntries
+                    .Where(t => t.SupervisorId == supervisorId && t.AcademicSessionId == activeSession.Id && t.DayOfWeek == dayOfWeekStr)
+                    .ToListAsync();
+            }
+
+            // 6. Return only slots that aren't booked, aren't in busy periods, and aren't in the past (if today)
             var finalSlots = new List<string>();
             var now = DateTime.Now;
             bool isToday = parsedDate.Date == now.Date;
@@ -1260,11 +1458,18 @@ namespace FYPTracker.Controllers
             {
                 if (bookedTimes.Contains(slot)) continue;
 
-                if (isToday)
-                {
-                    var slotTime = TimeSpan.Parse(slot);
-                    if (now.TimeOfDay > slotTime) continue;
-                }
+                var slotTime = TimeSpan.Parse(slot);
+                
+                if (isToday && now.TimeOfDay > slotTime) continue;
+
+                // Check if slot overlaps with any timetable busy period (assume slot is 30 mins)
+                var slotEnd = slotTime.Add(TimeSpan.FromMinutes(30));
+                bool isBusy = busyPeriods.Any(b => 
+                    (slotTime >= b.StartTime && slotTime < b.EndTime) || 
+                    (slotEnd > b.StartTime && slotEnd <= b.EndTime) ||
+                    (slotTime <= b.StartTime && slotEnd >= b.EndTime)
+                );
+                if (isBusy) continue;
 
                 finalSlots.Add(slot);
             }
@@ -1526,38 +1731,59 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
-            if (nextMeetingDate.HasValue)
-            {
-                // Inherit time from the current meeting or default to "10:00"
-                string defaultTime = meeting.MeetingTime ?? "10:00";
-                
-                // Prevent duplicate bookings on the exact same date
-                bool duplicateExists = await _context.MeetingBookings
-                    .AnyAsync(m => m.StudentId == user.Id && m.MeetingDate.Date == nextMeetingDate.Value.Date && m.Status != "Rejected" && m.Status != "Postponed");
-
-                // Check supervisor availability
-                var availabilities = await _context.SupervisorAvailabilities.Where(a => a.SupervisorId == meeting.SupervisorId).ToListAsync();
-                var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == nextMeetingDate.Value.Date);
-                var weeklyAvail = overrideAvail == null ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == nextMeetingDate.Value.DayOfWeek.ToString()) : null;
-                var activeAvail = overrideAvail ?? weeklyAvail;
-
-                if (!duplicateExists && activeAvail != null && activeAvail.IsAvailable)
+                if (meeting.MeetingLog == null)
                 {
-                    // Instantly generate a new Meeting Booking so it appears in the list.
-                    var newBooking = new MeetingBooking
+                    int maxWeek = await _context.MeetingBookings
+                        .Where(m => m.FYPProjectId == meeting.FYPProjectId && m.Stage == meeting.Stage && m.MeetingLog != null)
+                        .MaxAsync(m => (int?)m.WeekNumber) ?? 0;
+                    
+                    if (maxWeek >= 14)
                     {
-                        StudentId = user.Id,
-                        SupervisorId = meeting.SupervisorId,
-                        MeetingDate = nextMeetingDate.Value,
-                        MeetingDay = nextMeetingDate.Value.DayOfWeek.ToString(),
-                        MeetingTime = defaultTime,
-                        Reason = "Follow-up meeting generated from logbook to confirm next meeting",
-                        Status = "Pending",
-                        CreatedDate = DateTime.Now
-                    };
-                    _context.MeetingBookings.Add(newBooking);
+                        TempData["Error"] = "Maximum of 14 meeting logs reached for this stage.";
+                        return RedirectToAction(nameof(BookMeeting));
+                    }
+                    meeting.WeekNumber = maxWeek + 1;
                 }
-            }
+
+                if (nextMeetingDate.HasValue)
+                {
+                    // Inherit time from the current meeting or default to "10:00"
+                    string defaultTime = meeting.MeetingTime ?? "10:00";
+                    
+                    // Prevent duplicate bookings on the exact same date
+                    bool duplicateExists = await _context.MeetingBookings
+                        .AnyAsync(m => m.StudentId == user.Id && m.MeetingDate.Date == nextMeetingDate.Value.Date && m.Status != "Rejected" && m.Status != "Postponed");
+
+                    // Check supervisor availability
+                    var availabilities = await _context.SupervisorAvailabilities.Where(a => a.SupervisorId == meeting.SupervisorId).ToListAsync();
+                    var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == nextMeetingDate.Value.Date);
+                    var weeklyAvail = overrideAvail == null ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == nextMeetingDate.Value.DayOfWeek.ToString()) : null;
+                    var activeAvail = overrideAvail ?? weeklyAvail;
+
+                    if (activeAvail == null)
+                    {
+                        activeAvail = new SupervisorAvailability { StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(17), IsAvailable = true };
+                    }
+
+                    if (!duplicateExists && activeAvail.IsAvailable)
+                    {
+                        // Instantly generate a new Meeting Booking so it appears in the list.
+                        var newBooking = new MeetingBooking
+                        {
+                            StudentId = user.Id,
+                            SupervisorId = meeting.SupervisorId,
+                            FYPProjectId = meeting.FYPProjectId,
+                            Stage = meeting.Stage,
+                            MeetingDate = nextMeetingDate.Value,
+                            MeetingDay = nextMeetingDate.Value.DayOfWeek.ToString(),
+                            MeetingTime = defaultTime,
+                            Reason = "Follow-up meeting generated from logbook to confirm next meeting",
+                            Status = "Pending",
+                            CreatedDate = DateTime.Now
+                        };
+                        _context.MeetingBookings.Add(newBooking);
+                    }
+                }
 
             if (meeting.MeetingLog == null)
             {
@@ -1711,6 +1937,8 @@ namespace FYPTracker.Controllers
             if (project == null) return Unauthorized();
             
             var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (string.IsNullOrEmpty(ext)) ext = System.IO.Path.GetExtension(file.FilePath).ToLowerInvariant();
+
             string mimeType = "application/octet-stream";
             
             if (ext == ".pdf") mimeType = "application/pdf";
@@ -1722,7 +1950,7 @@ namespace FYPTracker.Controllers
             var physicalPath = System.IO.Path.Combine(_env.WebRootPath, file.FilePath.TrimStart('/', '\\'));
             if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
 
-            Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}\"");
+            Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}{(string.IsNullOrEmpty(System.IO.Path.GetExtension(file.FileName)) ? ext : "")}\"");
             return PhysicalFile(physicalPath, mimeType);
         }
 

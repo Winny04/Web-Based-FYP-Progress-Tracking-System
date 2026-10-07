@@ -35,6 +35,7 @@ namespace FYPTracker.Controllers
             var userName = HttpContext.User.Identity?.Name;
             if (string.IsNullOrEmpty(userName)) return null;
             return await _context.ApplicationUsers
+                .Include(u => u.UserRoles).ThenInclude(r => r.Role)
                 .FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
         }
 
@@ -46,11 +47,12 @@ namespace FYPTracker.Controllers
 
             ViewBag.CurrentUserId = user.Id;
             ViewBag.CurrentUserType = RoleDisplay.Resolve(_context.UserRoleMappings.Where(ur => ur.UserId == user.Id).Select(ur => ur.Role.Name).ToList(), HttpContext.Session.GetString("ActiveRole"));
-            ViewBag.IsStudent = user.UserRoles.Any(r => r.Role.Name == "Student");
+            string activeRole = ViewBag.CurrentUserType as string ?? "Student";
+            ViewBag.IsStudent = (activeRole == "Student");
             ViewBag.MyName = user.FullName ?? user.UserName;
             ViewBag.ActiveGroupId = groupId;
 
-            if (user.UserRoles.Any(r => r.Role.Name == "Student"))
+            if (activeRole == "Student")
             {
                 // Student: chat with assigned supervisor or in groups
                 var req = await _context.SupervisorRequests
@@ -98,7 +100,7 @@ namespace FYPTracker.Controllers
                 }
 
             }
-            else if (user.UserRoles.Any(r => r.Role.Name == "Supervisor"))
+            else if (activeRole.Contains("Supervisor"))
             {
                 // Supervisor: list of active assigned students and groups
                 var projectStudents = await _context.SupervisorRequests

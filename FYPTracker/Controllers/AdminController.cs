@@ -808,11 +808,14 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UpdateUserModal(int id, string fullName, string email, string phone, string department, string programme, string academicSession, string title, string specialization, int maxStudentSlots = 0)
+        public async Task<IActionResult> UpdateUserModal(int id, string fullName, string email, string phone, string department, string programme, string academicSession, string title, string specialization, int maxStudentSlots = 0, List<string> roles = null)
         {
             try
             {
-                var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == id);
+                var user = await _context.ApplicationUsers
+                    .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                    .FirstOrDefaultAsync(u => u.Id == id);
                 if (user == null) return Json(new { status = false, msg = "User not found." });
 
                 // Check email uniqueness if email changed
@@ -868,6 +871,42 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 }
 
                 _context.Update(user);
+
+                if (roles != null && roles.Any() && !user.UserRoles.Any(r => r.Role.Name.Equals("Student", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var allRoles = await _context.AppRoles.ToListAsync();
+                    var supRole = allRoles.FirstOrDefault(r => r.Name.Equals("Supervisor", StringComparison.OrdinalIgnoreCase));
+                    var exmRole = allRoles.FirstOrDefault(r => r.Name.Equals("Examiner", StringComparison.OrdinalIgnoreCase));
+
+                    // Remove missing roles
+                    if (!roles.Contains("Supervisor") && supRole != null)
+                    {
+                        var mapping = user.UserRoles.FirstOrDefault(ur => ur.RoleId == supRole.Id);
+                        if (mapping != null) _context.UserRoleMappings.Remove(mapping);
+                    }
+                    if (!roles.Contains("Examiner") && exmRole != null)
+                    {
+                        var mapping = user.UserRoles.FirstOrDefault(ur => ur.RoleId == exmRole.Id);
+                        if (mapping != null) _context.UserRoleMappings.Remove(mapping);
+                    }
+
+                    // Add new roles
+                    if (roles.Contains("Supervisor") && supRole != null)
+                    {
+                        if (!user.UserRoles.Any(ur => ur.RoleId == supRole.Id))
+                        {
+                            _context.UserRoleMappings.Add(new UserRoleMapping { UserId = user.Id, RoleId = supRole.Id });
+                        }
+                    }
+                    if (roles.Contains("Examiner") && exmRole != null)
+                    {
+                        if (!user.UserRoles.Any(ur => ur.RoleId == exmRole.Id))
+                        {
+                            _context.UserRoleMappings.Add(new UserRoleMapping { UserId = user.Id, RoleId = exmRole.Id });
+                        }
+                    }
+                }
+
                 await _context.SaveChangesAsync();
                 
                 return Json(new { status = true, msg = "User details updated successfully." });
@@ -1288,9 +1327,23 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 }
 
                 // 3. ChatMessages (direct 1-to-1 messages) — Restrict FK
-                var chatMessages = await _context.ChatMessages
-                    .Where(m => m.SenderId == id || m.ReceiverId == id).ToListAsync();
-                _context.ChatMessages.RemoveRange(chatMessages);
+                // 3. ChatMessages — Preserve received history by nullifying ReceiverId, delete sent messages (Restrict FK)
+                var sentMessages = await _context.ChatMessages
+                    .Where(m => m.SenderId == id).ToListAsync();
+                _context.ChatMessages.RemoveRange(sentMessages);
+
+                var receivedMessages = await _context.ChatMessages
+                    .Where(m => m.ReceiverId == id && m.SenderId != id).ToListAsync();
+                foreach (var msg in receivedMessages)
+                {
+                    msg.ReceiverId = null;
+                }
+
+                // FYPNotifications — No FK restrict but needs cleanup to avoid orphans
+                var notifications = await _context.FYPNotifications
+                    .Where(n => n.RecipientId == id).ToListAsync();
+                _context.FYPNotifications.RemoveRange(notifications);
+
 
                 // 4. SupervisorRequests — Restrict FK
                 var requests = await _context.SupervisorRequests
@@ -1307,10 +1360,6 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     .Where(a => a.SupervisorId == id).ToListAsync();
                 _context.SupervisorAvailabilities.RemoveRange(availabilities);
 
-                // 7. InvitationLogs — NoAction FK (must delete manually)
-                var inviteLogs = await _context.InvitationLogs
-                    .Where(l => l.StudentId == id || l.AdminId == id).ToListAsync();
-                _context.InvitationLogs.RemoveRange(inviteLogs);
 
                 // 8. UserRoleMappings
                 var userRoles = await _context.UserRoleMappings
@@ -1319,25 +1368,36 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
                 if (user.UserRoles.Any(r => r.Role.Name == "Student") || user.UserRoles.Any(r => r.Role.Name == "STUDENT"))
                 {
-                    var project = await _context.FYPProjects
-                        .FirstOrDefaultAsync(p => p.StudentId == id);
-                    if (project != null)
+                    var chatGroupMembers = await _context.ChatGroupMembers
+                        .Where(m => m.StudentId == id).ToListAsync();
+                    _context.ChatGroupMembers.RemoveRange(chatGroupMembers);
+
+                    var projects = await _context.FYPProjects
+                        .Where(p => p.StudentId == id).ToListAsync();
+                    
+                    if (projects.Any())
                     {
+                        var projectIds = projects.Select(p => p.Id).ToList();
+
                         // Remove Project Examiners
                         var projectExaminers = await _context.FYPProjectExaminers
-                            .Where(e => e.FYPProjectId == project.Id).ToListAsync();
+                            .Where(e => projectIds.Contains(e.FYPProjectId)).ToListAsync();
                         _context.FYPProjectExaminers.RemoveRange(projectExaminers);
 
                         // Remove Milestones
                         var milestones = await _context.FYPMilestones
-                            .Where(m => m.FYPProjectId == project.Id).ToListAsync();
+                            .Where(m => projectIds.Contains(m.FYPProjectId)).ToListAsync();
                         _context.FYPMilestones.RemoveRange(milestones);
 
-                        _context.FYPProjects.Remove(project);
+                        _context.FYPProjects.RemoveRange(projects);
                     }
                 }
                 if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR"))
                 {
+                    var chatGroups = await _context.ChatGroups
+                        .Where(g => g.SupervisorId == id).ToListAsync();
+                    _context.ChatGroups.RemoveRange(chatGroups);
+
                     // Nullify supervisor on students' projects (preserve students' data)
                     var supervisorProjects = await _context.FYPProjects
                         .Where(p => p.SupervisorId == id).ToListAsync();
@@ -1738,7 +1798,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 .Include(m => m.Project)
                     .ThenInclude(p => p.AssignedExaminers)
                         .ThenInclude(e => e.Examiner)
-                .Where(m => (m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation")) && (m.Status == "Approved" || m.Status == "AdminApproved" || m.Status == "DefenseScheduled"))
+                .Where(m => (m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation")) && (m.Status == "PendingPanelReview" || m.Status == "AdminApproved" || m.Status == "DefenseScheduled" || m.Status == "DefenseRequired" || m.Status == "PanelRevisionRequired" || m.Status == "ChangeOfTopicRequired"))
                 .ToListAsync();
 
             return View(approvedList);
@@ -1752,8 +1812,69 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             if (milestone != null)
             {
                 milestone.Status = "AdminApproved";
+                
+                if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
+                {
+                    var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                    var formInfo = parts[0].Trim();
+                    try
+                    {
+                        var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parts[1]);
+                        var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
+                        if (currentAttempt != null)
+                        {
+                            currentAttempt.Status = "AdminApproved";
+                            milestone.Remarks = $"{formInfo} JSON: {System.Text.Json.JsonSerializer.Serialize(history)}";
+                        }
+                    }
+                    catch {}
+                }
+                
                 await _context.SaveChangesAsync();
                 TempData["Success"] = "Successfully granted final approval for the IAF.";
+            }
+            return RedirectToAction(nameof(ApprovedIafList));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AdminRejectIaf(int milestoneId, string? panelComments)
+        {
+            var milestone = await _context.FYPMilestones.Include(m => m.Project).ThenInclude(p => p.Student).FirstOrDefaultAsync(m => m.Id == milestoneId);
+            if (milestone != null)
+            {
+                milestone.Status = "PanelRevisionRequired";
+
+                if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
+                {
+                    var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                    var formInfo = parts[0].Trim();
+                    try
+                    {
+                        var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parts[1]);
+                        var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
+                        if (currentAttempt != null)
+                        {
+                            currentAttempt.Status = "PanelRevisionRequired";
+                            currentAttempt.PanelComments = panelComments;
+                            milestone.Remarks = $"{formInfo} JSON: {System.Text.Json.JsonSerializer.Serialize(history)}";
+                        }
+                    }
+                    catch {}
+                }
+
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = milestone.Project.StudentId,
+                    Type = "RevisionRequest",
+                    Title = "IAF Revision Required",
+                    Message = "The panel has requested revisions for your Initial Allocation Form. Please review the comments and resubmit.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "IAF rejected. Revision is now required.";
             }
             return RedirectToAction(nameof(ApprovedIafList));
         }
@@ -1772,7 +1893,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                         .ThenInclude(e => e.Examiner)
                 .FirstOrDefaultAsync(m => m.Id == milestoneId);
 
-            if (milestone != null)
+            if (milestone != null && milestone.Status == "DefenseRequired")
             {
                 var formattedDate = defenseDate.ToString("dd MMM yyyy");
                 var formattedTime = new DateTime(defenseTime.Ticks).ToString("hh:mm tt");
@@ -1781,6 +1902,22 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 milestone.DefenseDate = defenseDate;
                 milestone.DefenseTime = formattedTime;
                 milestone.DefenseVenue = venue;
+                if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
+                {
+                    var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                    var formInfo = parts[0].Trim();
+                    try
+                    {
+                        var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parts[1]);
+                        var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
+                        if (currentAttempt != null)
+                        {
+                            currentAttempt.Status = "DefenseScheduled";
+                            milestone.Remarks = $"{formInfo} JSON: {System.Text.Json.JsonSerializer.Serialize(history)}";
+                        }
+                    }
+                    catch {}
+                }
                 
                 var notificationMessage = $"Your IAF requires a defense session.\nDate: {formattedDate}\nTime: {formattedTime}\nVenue: {venue}";
                 _context.FYPNotifications.Add(new FYPNotification
@@ -1853,13 +1990,41 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AdminPassDefense(int milestoneId)
         {
-            var milestone = await _context.FYPMilestones.FindAsync(milestoneId);
+            var milestone = await _context.FYPMilestones.Include(m => m.Project).ThenInclude(p => p.Student).FirstOrDefaultAsync(m => m.Id == milestoneId);
             if (milestone != null)
             {
                 milestone.Status = "AdminApproved";
-                milestone.Remarks = "Passed Defense Session";
+                
+                if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
+                {
+                    var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                    var formInfo = parts[0].Trim();
+                    try
+                    {
+                        var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parts[1]);
+                        var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
+                        if (currentAttempt != null)
+                        {
+                            currentAttempt.Status = "AdminApproved";
+                            currentAttempt.PanelComments = "Passed Defense Session. Title accepted.";
+                            milestone.Remarks = $"{formInfo} JSON: {System.Text.Json.JsonSerializer.Serialize(history)}";
+                        }
+                    }
+                    catch {}
+                }
+
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = milestone.Project.StudentId,
+                    Type = "MilestoneCompleted",
+                    Title = "IAF Defense Passed",
+                    Message = "Congratulations! Your IAF defense was successful and your title is accepted. You may now proceed to the next stage.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+
                 await _context.SaveChangesAsync();
-                TempData["Success"] = "Successfully recorded defense pass. The IAF is now fully approved.";
+                TempData["Success"] = "Successfully recorded defense pass. Project title accepted.";
             }
             return RedirectToAction(nameof(ApprovedIafList));
         }
@@ -1871,8 +2036,26 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             var milestone = await _context.FYPMilestones.Include(m => m.Project).ThenInclude(p => p.Student).FirstOrDefaultAsync(m => m.Id == milestoneId);
             if (milestone != null)
             {
-                milestone.Status = "Pending"; // Reset to allow them to resubmit
-                milestone.Remarks = "Defense Failed. Please submit a new Initial Allocation Form with a change of topic.";
+                milestone.Status = "ChangeOfTopicRequired";
+                
+                if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
+                {
+                    var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                    var formInfo = parts[0].Trim();
+                    try
+                    {
+                        var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parts[1]);
+                        var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
+                        if (currentAttempt != null)
+                        {
+                            currentAttempt.Status = "ChangeOfTopicRequired";
+                            currentAttempt.PanelComments = "Defense Failed. Please submit a new Initial Allocation Form with a change of topic.";
+                            milestone.Remarks = $"{formInfo} JSON: {System.Text.Json.JsonSerializer.Serialize(history)}";
+                        }
+                    }
+                    catch {}
+                }
+                
                 milestone.DefenseDate = null;
                 milestone.DefenseTime = null;
                 milestone.DefenseVenue = null;
@@ -2120,23 +2303,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 }
                 await _context.SaveChangesAsync();
 
-                // ── Log the invitation ──
-                var adminUser = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
-                if (adminUser != null)
-                {
-                    _context.InvitationLogs.Add(new InvitationLog
-                    {
-                        StudentId = newUser.Id,
-                        StudentEmail = email,
-                        AdminId = adminUser.Id,
-                        Action = "Invited",
-                        Status = "Sent",
-                        IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
-                        UserAgent = Request.Headers["User-Agent"].ToString(),
-                        CreatedAt = DateTime.Now
-                    });
-                    await _context.SaveChangesAsync();
-                }
+
 
                 successCount++;
 
@@ -2194,18 +2361,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             user.PassCode = FYPTracker.Common.Encryption.GetHash(newTempPwd);
             user.TempPassword = newTempPwd;
 
-            // Log the resend action
-            _context.InvitationLogs.Add(new InvitationLog
-            {
-                StudentId = user.Id,
-                StudentEmail = user.Email,
-                AdminId = admin.Id,
-                Action = "Resend",
-                Status = "Sent",
-                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
-                UserAgent = Request.Headers["User-Agent"].ToString(),
-                CreatedAt = DateTime.Now
-            });
+
 
             await _context.SaveChangesAsync();
 
@@ -2367,18 +2523,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 }
                 await _context.SaveChangesAsync();
 
-                if (admin != null)
-                {
-                    _context.InvitationLogs.Add(new InvitationLog
-                    {
-                        StudentId = newUser.Id, StudentEmail = email,
-                        AdminId = admin.Id, Action = "Invited", Status = "Sent",
-                        IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
-                        UserAgent = Request.Headers["User-Agent"].ToString(),
-                        CreatedAt = DateTime.Now
-                    });
-                    await _context.SaveChangesAsync();
-                }
+
 
                 // Send welcome email
                 try
@@ -2706,5 +2851,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         }
     }
 }
+
+
 
 

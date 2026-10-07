@@ -23,16 +23,23 @@
      * Note: Meeting-log marks (12%) follow the official marksheet and are EXCLUDED from this bar.
      */
      
+    bool IsCompleted(FYPTracker.Models.FYPMilestone m) {
+        if (m == null) return false;
+        if (m.Status == "Approved" || m.Status == "Completed") return true;
+        if (m.Status == "AdminApproved" && (m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Initial Assessment Form", StringComparison.OrdinalIgnoreCase))) return true;
+        return false;
+    }
+
     // Differentiate milestones by their prefix (Stage 2 steps start with "Step ")
     var calcStage1Milestones = milestones.Where(m => !m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
     var calcStage2Milestones = milestones.Where(m => m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
 
     int totalStage1 = calcStage1Milestones.Count;
-    int approvedStage1 = calcStage1Milestones.Count(m => m.Status == "Approved" || m.Status == "Completed");
+    int approvedStage1 = calcStage1Milestones.Count(m => IsCompleted(m));
     double stage1Pct = totalStage1 > 0 ? ((double)approvedStage1 / totalStage1) * 50.0 : 0;
 
     int totalStage2 = 5; // Stage 2 always has exactly 5 required steps
-    int approvedStage2 = calcStage2Milestones.Count(m => m.Status == "Approved" || m.Status == "Completed");
+    int approvedStage2 = calcStage2Milestones.Count(m => IsCompleted(m));
     double stage2Pct = ((double)approvedStage2 / totalStage2) * 50.0;
 
     int pct = (int)Math.Round(stage1Pct + stage2Pct);
@@ -61,7 +68,7 @@
         : milestones.Where(m => !m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase));
 
     FYPMilestone? upcomingUrgent = activeMilestonesForDeadlines
-        .Where(m => m.DueDate.HasValue && m.Status != "Approved" && m.RejectionCount < 3)
+        .Where(m => m.DueDate.HasValue && m.Status != "Approved" && m.Status != "DefenseScheduled")
         .OrderBy(m => m.DueDate)
         .FirstOrDefault();
         
@@ -82,7 +89,7 @@
     var activities = ViewBag.Activities as List<FYPActivity> ?? new List<FYPActivity>();
     
     // Check if the student has a scheduled defense
-    var scheduledDefense = milestones.FirstOrDefault(m => m.RejectionCount >= 3 && m.DefenseDate.HasValue);
+    var scheduledDefense = milestones.FirstOrDefault(m => m.Status == "DefenseScheduled");
 
     var upcomingMeeting = ViewBag.UpcomingMeeting as MeetingBooking;
     var pendingMeetingsCount = ViewBag.PendingMeetingsCount != null ? (int)ViewBag.PendingMeetingsCount : 0;
@@ -99,27 +106,28 @@
     if (Model != null && milestones.Any())
     {
         // Check for ANY rejections first (highest priority)
-        var rejectedMilestone = milestones.FirstOrDefault(m => m.Status == "Rejected" || m.Status == "Revision");
-        if (rejectedMilestone != null)
+        var defenseMilestone = milestones.FirstOrDefault(m => m.Status == "DefenseScheduled");
+        var rejectedMilestone = milestones.FirstOrDefault(m => m.Status == "Rejected" || m.Status == "Revision" || m.Status == "ChangeOfTopicRequired" || m.Status == "PanelRevisionRequired");
+        
+        if (defenseMilestone != null)
         {
-            if (rejectedMilestone.RejectionCount >= 3)
-            {
-                nextStepTitle = $"Form Locked: {rejectedMilestone.Title}";
-                nextStepDesc = $"Your {rejectedMilestone.Title} has been rejected 3 times and is locked. You are required to attend a mandatory Defense session scheduled by the Administrator.";
-                nextStepIcon = "fas fa-lock";
-                nextStepBtnText = "View Dashboard";
-                nextStepLink = "/Student/Index";
-                nextStepDueDate = rejectedMilestone.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
-            }
-            else
-            {
-                nextStepTitle = $"Revision Required: {rejectedMilestone.Title}";
-                nextStepDesc = $"Your supervisor has requested revisions for your {rejectedMilestone.Title}. Please review the feedback and resubmit.";
-                nextStepIcon = "fas fa-exclamation-triangle";
-                nextStepBtnText = "View Feedback & Revise";
-                nextStepLink = "/Student/Forms";
-                nextStepDueDate = rejectedMilestone.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
-            }
+            nextStepTitle = $"Form Locked: {defenseMilestone.Title}";
+            nextStepDesc = $"Your {defenseMilestone.Title} has been rejected and is locked. You are required to attend a mandatory Defense session scheduled by the Administrator.";
+            nextStepIcon = "fas fa-lock";
+            nextStepBtnText = "View Dashboard";
+            nextStepLink = "/Student/Index";
+            nextStepDueDate = defenseMilestone.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
+        }
+        else if (rejectedMilestone != null)
+        {
+            nextStepTitle = $"Revision Required: {rejectedMilestone.Title}";
+            nextStepDesc = rejectedMilestone.Status == "ResubmissionRequired"
+                ? $"You have passed your defense. Please update and submit your corrected {rejectedMilestone.Title}."
+                : $"Your supervisor has requested revisions for your {rejectedMilestone.Title}. Please review the feedback and resubmit.";
+            nextStepIcon = "fas fa-exclamation-triangle";
+            nextStepBtnText = "View Feedback & Revise";
+            nextStepLink = "/Student/Forms";
+            nextStepDueDate = rejectedMilestone.DueDate?.ToString("dd MMM yyyy") ?? "Not Set";
         }
         else if (isStage1Failed)
         {
@@ -138,7 +146,7 @@
                 .OrderBy(m => m.DueDate ?? DateTime.MaxValue)
                 .ToList();
 
-            var nextStage1 = stage1Milestones.FirstOrDefault(m => m.Status != "Approved" && m.Status != "Completed");
+            var nextStage1 = stage1Milestones.FirstOrDefault(m => !IsCompleted(m));
 
             if (nextStage1 != null)
             {
@@ -591,16 +599,32 @@
     @* ── DYNAMIC NEXT STEP INDICATOR ── *@
     @if (Model != null && Model.Status != "Failed" && milestones.Any() && !string.IsNullOrEmpty(nextStepTitle))
     {
-        <div class="action-alert">
-            <div class="action-alert-icon">
-                <i class="@nextStepIcon"></i>
+        <div class="action-alert align-items-center bg-white shadow-sm" style="border-left: 4px solid var(--accent-dark);">
+            <div class="action-alert-icon me-2">
+                <i class="@nextStepIcon text-primary fs-4"></i>
             </div>
-            <div class="flex-grow-1">
-                <h6 class="fw-bold mb-1 text-dark">Current Action Required: @nextStepTitle</h6>
-                <div class="text-muted" style="font-size: 0.9rem;">@nextStepDesc</div>
+            <div class="flex-grow-1 d-flex flex-wrap align-items-center gap-3">
+                <div class="fw-bold text-dark fs-6">Current Action: @nextStepTitle</div>
+                @if (!string.IsNullOrEmpty(nextStepDueDate) && nextStepDueDate != "Not Set" && nextStepDueDate != "Completed" && nextStepDueDate != "Under Evaluation" && nextStepDueDate != "Action Required")
+                {
+                    var dueDateParsed = DateTime.MinValue;
+                    if (DateTime.TryParse(nextStepDueDate, out dueDateParsed))
+                    {
+                        var diffDays = (int)(dueDateParsed - DateTime.Today).TotalDays;
+                        <div class="text-muted fs-7"><i class="far fa-calendar-alt me-1"></i>Due @dueDateParsed.ToString("dd MMM yyyy") <span class="ms-1">·</span>
+                        @if (diffDays < 0) {
+                            <span class="text-danger fw-bold ms-1">@Math.Abs(diffDays) days overdue</span>
+                        } else if (diffDays <= 5) {
+                            <span class="text-warning text-dark fw-bold ms-1">@diffDays days remaining</span>
+                        } else {
+                            <span class="ms-1">@diffDays days remaining</span>
+                        }
+                        </div>
+                    }
+                }
             </div>
-            <div class="text-end">
-                <a href="@nextStepLink" class="btn btn-monochrome btn-sm py-2 px-3">@nextStepBtnText</a>
+            <div class="ms-auto text-end">
+                <a href="@nextStepLink" class="btn btn-monochrome btn-sm fw-bold px-4 rounded-pill">@nextStepBtnText <i class="fas fa-arrow-right ms-1"></i></a>
             </div>
         </div>
     }
@@ -622,7 +646,7 @@
             if (!string.IsNullOrEmpty(interim.SupervisorMarksheetData)) {
                 if (interim.SupervisorMarksheetData.StartsWith("{")) {
                     using var doc = System.Text.Json.JsonDocument.Parse(interim.SupervisorMarksheetData);
-                    if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double s)) supScore = s;
+                    supScore = FYPTracker.Utils.GradingHelper.CalculateStage1Score(interim.SupervisorMarksheetData, "Supervisor");
                     if (doc.RootElement.TryGetProperty("Strengths", out var sProp)) supStrengths = sProp.GetString();
                     if (doc.RootElement.TryGetProperty("Improvements", out var iProp)) supImprovements = iProp.GetString();
                     if (doc.RootElement.TryGetProperty("Comments", out var cProp)) supComments = cProp.GetString();
@@ -634,7 +658,7 @@
             if (!string.IsNullOrEmpty(interim.ExaminerMarksheetData)) {
                 if (interim.ExaminerMarksheetData.StartsWith("{")) {
                     using var doc = System.Text.Json.JsonDocument.Parse(interim.ExaminerMarksheetData);
-                    if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double e)) exScore = e;
+                    exScore = FYPTracker.Utils.GradingHelper.CalculateStage1Score(interim.ExaminerMarksheetData, "Examiner");
                     if (doc.RootElement.TryGetProperty("Strengths", out var sProp)) exStrengths = sProp.GetString();
                     if (doc.RootElement.TryGetProperty("Improvements", out var iProp)) exImprovements = iProp.GetString();
                     if (doc.RootElement.TryGetProperty("Comments", out var cProp)) exComments = cProp.GetString();
@@ -685,15 +709,32 @@
                     <div class="col-md-5 mt-3 mt-md-0 d-flex justify-content-md-end gap-2">
                         <div class="bg-light rounded px-3 py-2 text-center border">
                             <div class="text-muted fw-bold mb-1" style="font-size: 0.7rem;">SUPERVISOR</div>
-                            <div class="fw-bolder text-dark" style="font-size: 1.2rem;">@supScore.ToString("0.0")</div>
+                            <div class="fw-bolder text-dark" style="font-size: 1.2rem;">@(supScore > 0 ? supScore.ToString("0.0") : "Pending")</div>
                         </div>
                         <div class="bg-light rounded px-3 py-2 text-center border">
                             <div class="text-muted fw-bold mb-1" style="font-size: 0.7rem;">EXAMINER</div>
-                            <div class="fw-bolder text-dark" style="font-size: 1.2rem;">@exScore.ToString("0.0")</div>
+                            <div class="fw-bolder text-dark" style="font-size: 1.2rem;">@(exScore > 0 ? exScore.ToString("0.0") : "Pending")</div>
                         </div>
                         <div class="bg-light rounded px-3 py-2 text-center border border-primary">
                             <div class="text-primary fw-bold mb-1" style="font-size: 0.7rem;">JOINT AVERAGE</div>
                             <div class="fw-bolder text-primary" style="font-size: 1.5rem;">@Model.Stage1TotalScore.Value.ToString("0.0")<span class="text-muted fs-7 fw-normal">/100</span></div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="col-md-5 mt-3 mt-md-0 d-flex justify-content-md-end gap-2">
+                        <div class="bg-light rounded px-3 py-2 text-center border">
+                            <div class="text-muted fw-bold mb-1" style="font-size: 0.7rem;">SUPERVISOR</div>
+                            <div class="fw-bolder text-dark" style="font-size: 1.2rem;">@(supScore > 0 ? supScore.ToString("0.0") : "Pending")</div>
+                        </div>
+                        <div class="bg-light rounded px-3 py-2 text-center border">
+                            <div class="text-muted fw-bold mb-1" style="font-size: 0.7rem;">EXAMINER</div>
+                            <div class="fw-bolder text-dark" style="font-size: 1.2rem;">@(exScore > 0 ? exScore.ToString("0.0") : "Pending")</div>
+                        </div>
+                        <div class="bg-light rounded px-3 py-2 text-center border border-warning">
+                            <div class="text-warning fw-bold mb-1" style="font-size: 0.7rem;">JOINT AVERAGE</div>
+                            <div class="fw-bolder text-warning" style="font-size: 1.2rem;">Pending</div>
                         </div>
                     </div>
                 }
@@ -818,51 +859,18 @@
             }
             else
             {
-                <!-- Progress Bar Card -->
-                <div class="premium-card p-4 mb-4">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="fw-bold text-dark mb-0 text-uppercase" style="letter-spacing: 0.5px; font-size: 0.85rem;"><i class="fas fa-chart-line text-muted me-2"></i>Your FYP Progress</h6>
-                        <span class="badge bg-light text-dark fw-bold px-3 py-2 border">@pct% Completed</span>
+                <!-- Progress Summary Card -->
+                <div class="premium-card p-4 mb-4 d-flex align-items-center flex-wrap gap-4">
+                    <div class="fw-bold text-dark fs-6 text-nowrap"><i class="fas fa-chart-line text-muted me-2"></i>@pct% Project Progress</div>
+                    <div class="progress-bar-container progress flex-grow-1" style="height: 12px; min-width: 150px;">
+                        <div class="progress-bar bg-dark" role="progressbar" style="width: @pct%"></div>
                     </div>
-                    <div class="progress-bar-container progress">
-                        <div class="progress-bar bg-dark" role="progressbar" style="width: @pct%" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                </div>
-
-                <!-- Statistics Cards (3 columns) -->
-                <div class="row g-3 mb-4">
-                    <div class="col-md-4">
-                        <div class="stat-card-clean">
-                            <div class="stat-icon-wrapper">
-                                <i class="fas fa-check-circle"></i>
-                            </div>
-                            <div>
-                                <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Approved</h6>
-                                <h3 class="fw-bold text-dark mb-0">@approved</h3>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="stat-card-clean">
-                            <div class="stat-icon-wrapper">
-                                <i class="fas fa-hourglass-half"></i>
-                            </div>
-                            <div>
-                                <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Pending</h6>
-                                <h3 class="fw-bold text-dark mb-0">@pending</h3>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="stat-card-clean">
-                            <div class="stat-icon-wrapper">
-                                <i class="fas fa-redo-alt"></i>
-                            </div>
-                            <div>
-                                <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Revision</h6>
-                                <h3 class="fw-bold text-dark mb-0">@revision</h3>
-                            </div>
-                        </div>
+                    <div class="d-flex align-items-center gap-3 fs-7 fw-bold text-muted">
+                        <span>Approved: <span class="text-success fs-6 ms-1">@approved</span></span>
+                        <span class="text-gray-300">|</span>
+                        <span>Pending: <span class="text-warning text-dark fs-6 ms-1">@pending</span></span>
+                        <span class="text-gray-300">|</span>
+                        <span>Revision: <span class="text-danger fs-6 ms-1">@revision</span></span>
                     </div>
                 </div>
             }
@@ -940,7 +948,12 @@
 
                     <div class="border rounded-3 overflow-hidden bg-white">
                         @{
-                            var stage1Milestones = milestones.Where(m => !m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).OrderBy(m => m.DueDate).ToList();
+                            var stage1Order = new List<string> { "IAF", "Initial Assessment", "Chapter 1", "Chapter 2", "Chapter 3", "Ethics", "Turnitin", "Final DPP" };
+                            var stage1Milestones = milestones.Where(m => !m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase))
+                                .OrderBy(m => {
+                                    int index = stage1Order.FindIndex(o => m.Title.Contains(o, StringComparison.OrdinalIgnoreCase));
+                                    return index == -1 ? 99 : index;
+                                }).ToList();
                             var stage2Milestones = milestones.Where(m => m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).OrderBy(m => m.DueDate).ToList();
                         }
 
@@ -958,54 +971,36 @@
 
                         @if (stage1Milestones.Any())
                         {
-                            <div class="assignment-group-header" style="border-top: none;" data-bs-toggle="collapse" data-bs-target="#collapse-stage1" aria-expanded="true" aria-controls="collapse-stage1">
-                                <i class="fas fa-caret-down me-2" style="font-size: 0.85em;"></i> Stage 1: Progress & Reports
+                            <div class="assignment-group-header d-flex justify-content-between align-items-center" style="border-top: none;" data-bs-toggle="collapse" data-bs-target="#collapse-stage1" aria-expanded="true" aria-controls="collapse-stage1">
+                                <div><i class="fas fa-caret-down me-2" style="font-size: 0.85em;"></i> Stage 1 · @approvedStage1/@totalStage1 Completed</div>
+                                <div class="progress" style="width: 120px; height: 8px;">
+                                    <div class="progress-bar bg-success" style="width: @(totalStage1 > 0 ? (approvedStage1 * 100 / totalStage1) : 0)%"></div>
+                                </div>
                             </div>
                             <div class="collapse show" id="collapse-stage1">
                                 @foreach (var m in stage1Milestones)
                                 {
                                     var statusText = string.IsNullOrEmpty(m.Status) || (m.Status == "Pending" && !m.SubmittedDate.HasValue) ? "Not Started" : m.Status;
-                                    var iconClass = (m.Title.Contains("Quiz", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) ? "fas fa-rocket" : "far fa-edit";
-                                    var isPast = m.DueDate.HasValue && m.DueDate.Value < DateTime.Today && m.Status != "Approved" && m.Status != "Completed";
+                                    var isPast = m.DueDate.HasValue && m.DueDate.Value < DateTime.Today && !IsCompleted(m);
 
-                                    <div class="assignment-item">
-                                        <i class="@iconClass assignment-icon"></i>
-                                        <div class="flex-grow-1">
-                                            @if (m.Status == "Approved" || m.Status == "Completed" || statusText == "Not Started" || m.Status == "Rejected" || m.Status == "Revision")
-                                            {
-                                                <a href="/Student/Forms" class="assignment-title action-link">@m.Title</a>
-                                            }
-                                            else
-                                            {
-                                                <span class="assignment-title">@m.Title</span>
-                                            }
-                                            
-                                            <div class="assignment-meta">
-                                                @if (isPast) {
-                                                    <strong class="text-danger fw-bold">Overdue</strong> <span class="assignment-meta-separator">|</span>
-                                                }
-                                                @if (m.DueDate.HasValue) {
-                                                    <span>Due @m.DueDate.Value.ToString("MMM dd") at 11:59pm</span> <span class="assignment-meta-separator">|</span>
-                                                }
-                                                
-                                                @if (statusText == "Approved" || statusText == "Completed") {
-                                                    <span class="text-success fw-bold">@statusText</span>
-                                                } else if (statusText == "Rejected" || statusText == "Revision") {
-                                                    <span class="text-danger fw-bold">Revision Needed</span>
-                                                } else if (statusText == "Not Started") {
-                                                    <span>Not Yet Submitted</span>
-                                                } else {
-                                                    <span>@statusText</span>
-                                                }
-                                            </div>
+                                    <div class="assignment-item d-flex align-items-center justify-content-between py-3">
+                                        <div class="d-flex align-items-center flex-grow-1" style="min-width: 200px;">
+                                            <span class="assignment-title mb-0 fs-6">@m.Title</span>
                                         </div>
-                                        <div>
-                                            @if (m.Status == "Approved" || m.Status == "Completed" || m.Status == "Rejected" || m.Status == "Revision")
-                                            {
-                                                var fallbackFeedback = (m.Status == "Approved" || m.Status == "Completed") ? "No feedback provided yet." : "Please revise according to guidelines.";
-                                                <button type="button" class="btn btn-sm text-primary p-0 border-0 ms-3 hover-elevate-up" style="background: transparent; cursor: default;" title="Supervisor Feedback" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="left" data-bs-content="@Html.Raw(System.Web.HttpUtility.HtmlAttributeEncode(!string.IsNullOrEmpty(m.SupervisorFeedback) ? m.SupervisorFeedback : fallbackFeedback))">
-                                                    <i class="far fa-comment-dots fs-5"></i>
-                                                </button>
+                                        
+                                        <div class="d-flex align-items-center justify-content-end gap-3" style="min-width: 250px;">
+                                            @if (IsCompleted(m)) {
+                                                <span class="badge bg-light-success text-success px-3 py-2 fs-7 fw-bold" style="width: 110px;">Approved</span>
+                                                <a href="/Student/Forms" class="btn btn-sm btn-light btn-active-light-primary px-4 fw-bold">View</a>
+                                            } else if (statusText == "Rejected" || statusText == "Revision") {
+                                                <span class="badge bg-light-danger text-danger px-3 py-2 fs-7 fw-bold" style="width: 110px;">Revision</span>
+                                                <a href="/Student/Forms" class="btn btn-sm btn-danger px-3 fw-bold">View Feedback</a>
+                                            } else if (statusText == "Not Started") {
+                                                <span class="badge bg-light text-muted px-3 py-2 fs-7 fw-bold" style="width: 110px;">Not Submitted</span>
+                                                <a href="/Student/Forms" class="btn btn-sm btn-primary px-3 fw-bold">Submit <i class="fas fa-arrow-right ms-1"></i></a>
+                                            } else {
+                                                <span class="badge bg-light-warning text-warning px-3 py-2 fs-7 fw-bold" style="width: 110px;">Pending</span>
+                                                <a href="/Student/Forms" class="btn btn-sm btn-light btn-active-light-warning px-4 fw-bold">View</a>
                                             }
                                         </div>
                                     </div>
@@ -1021,12 +1016,8 @@
                             <div class="collapse show" id="collapse-stage2">
                                 @if (Model.Stage1Grade != "Pass")
                                 {
-                                    <div class="assignment-item d-flex justify-content-center align-items-center py-4 bg-light text-muted" style="border-radius: 8px;">
-                                        <div class="text-center">
-                                            <i class="fas fa-lock fs-3 mb-2 text-secondary opacity-50"></i>
-                                            <div class="fw-bold fs-7">Stage 2 is locked.</div>
-                                            <div class="small opacity-75">You have not passed Stage 1 yet.</div>
-                                        </div>
+                                    <div class="assignment-item py-3 bg-light text-muted border-0 rounded-bottom d-flex align-items-center">
+                                        <span class="fw-bold opacity-75"><i class="fas fa-lock me-2 text-secondary opacity-75"></i> 🔒 Stage 2 locked — Complete Stage 1 assessment to unlock</span>
                                     </div>
                                 }
                                 else
@@ -1034,47 +1025,25 @@
                                     @foreach (var m in stage2Milestones)
                                     {
                                         var statusText = string.IsNullOrEmpty(m.Status) || (m.Status == "Pending" && !m.SubmittedDate.HasValue) ? "Not Started" : m.Status;
-                                        var iconClass = (m.Title.Contains("Quiz", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) ? "fas fa-rocket" : "far fa-edit";
-                                        var isPast = m.DueDate.HasValue && m.DueDate.Value < DateTime.Today && m.Status != "Approved" && m.Status != "Completed";
-
-                                        <div class="assignment-item">
-                                            <i class="@iconClass assignment-icon"></i>
-                                            <div class="flex-grow-1">
-                                                @if (m.Status == "Approved" || m.Status == "Completed" || statusText == "Not Started" || m.Status == "Rejected" || m.Status == "Revision")
-                                                {
-                                                    <a href="/Student/Forms" class="assignment-title action-link">@m.Title</a>
-                                                }
-                                                else
-                                                {
-                                                    <span class="assignment-title">@m.Title</span>
-                                                }
-                                                
-                                                <div class="assignment-meta">
-                                                    @if (isPast) {
-                                                        <strong class="text-danger fw-bold">Overdue</strong> <span class="assignment-meta-separator">|</span>
-                                                    }
-                                                    @if (m.DueDate.HasValue) {
-                                                        <span>Due @m.DueDate.Value.ToString("MMM dd") at 11:59pm</span> <span class="assignment-meta-separator">|</span>
-                                                    }
-                                                    
-                                                    @if (statusText == "Approved" || statusText == "Completed") {
-                                                        <span class="text-success fw-bold">@statusText</span>
-                                                    } else if (statusText == "Rejected" || statusText == "Revision") {
-                                                        <span class="text-danger fw-bold">Revision Needed</span>
-                                                    } else if (statusText == "Not Started") {
-                                                        <span>Not Yet Submitted</span>
-                                                    } else {
-                                                        <span>@statusText</span>
-                                                    }
-                                                </div>
+                                        
+                                        <div class="assignment-item d-flex align-items-center justify-content-between py-3">
+                                            <div class="d-flex align-items-center flex-grow-1" style="min-width: 200px;">
+                                                <span class="assignment-title mb-0 fs-6">@m.Title</span>
                                             </div>
-                                            <div>
-                                                @if (m.Status == "Approved" || m.Status == "Completed" || m.Status == "Rejected" || m.Status == "Revision")
-                                                {
-                                                    var fallbackFeedback = (m.Status == "Approved" || m.Status == "Completed") ? "No feedback provided yet." : "Please revise according to guidelines.";
-                                                    <button type="button" class="btn btn-sm text-primary p-0 border-0 ms-3 hover-elevate-up" style="background: transparent; cursor: default;" title="Supervisor Feedback" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="left" data-bs-content="@Html.Raw(System.Web.HttpUtility.HtmlAttributeEncode(!string.IsNullOrEmpty(m.SupervisorFeedback) ? m.SupervisorFeedback : fallbackFeedback))">
-                                                        <i class="far fa-comment-dots fs-5"></i>
-                                                    </button>
+                                            
+                                            <div class="d-flex align-items-center justify-content-end gap-3" style="min-width: 250px;">
+                                                @if (IsCompleted(m)) {
+                                                    <span class="badge bg-light-success text-success px-3 py-2 fs-7 fw-bold" style="width: 110px;">Approved</span>
+                                                    <a href="/Student/Forms" class="btn btn-sm btn-light btn-active-light-primary px-4 fw-bold">View</a>
+                                                } else if (statusText == "Rejected" || statusText == "Revision") {
+                                                    <span class="badge bg-light-danger text-danger px-3 py-2 fs-7 fw-bold" style="width: 110px;">Revision</span>
+                                                    <a href="/Student/Forms" class="btn btn-sm btn-danger px-3 fw-bold">View Feedback</a>
+                                                } else if (statusText == "Not Started") {
+                                                    <span class="badge bg-light text-muted px-3 py-2 fs-7 fw-bold" style="width: 110px;">Not Submitted</span>
+                                                    <a href="/Student/Forms" class="btn btn-sm btn-primary px-3 fw-bold">Submit <i class="fas fa-arrow-right ms-1"></i></a>
+                                                } else {
+                                                    <span class="badge bg-light-warning text-warning px-3 py-2 fs-7 fw-bold" style="width: 110px;">Pending</span>
+                                                    <a href="/Student/Forms" class="btn btn-sm btn-light btn-active-light-warning px-4 fw-bold">View</a>
                                                 }
                                             </div>
                                         </div>
@@ -1088,7 +1057,7 @@
         </div>
 
         @* ── UPCOMING MEETING & ACTIVITIES (Right Sidebar) ── *@
-        <div class="col-lg-4 d-flex flex-column">
+        <div class="col-lg-4" style="position: sticky; top: 1rem; height: fit-content;">
             @if (scheduledDefense != null && scheduledDefense.DefenseDate.HasValue)
             {
                 <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="background-color: #fff1f2; border-left: 6px solid #e11d48 !important;">
@@ -1194,34 +1163,7 @@
                 }
             </div>
 
-            <div class="premium-card p-4 flex-grow-1 d-flex flex-column">
-                <h5 class="fw-bold text-dark mb-4"><i class="fas fa-history text-indigo me-2"></i>Recent Activities</h5>
-                <div class="flex-grow-1 overflow-auto pe-2" style="max-height: 450px;">
-                    @if (!activities.Any())
-                    {
-                        <div class="text-center py-5 text-muted">
-                            <i class="fas fa-tasks d-block fs-1 opacity-20 mb-3"></i>
-                            No activity logged yet.
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="d-flex flex-column">
-                            @foreach (var a in activities)
-                            {
-                                <div class="timeline-element">
-                                    <div class="fw-bold text-dark" style="font-size: 0.9rem;">@a.Title</div>
-                                    @if (!string.IsNullOrEmpty(a.Description))
-                                    {
-                                        <p class="text-muted mb-1" style="font-size: 0.82rem; line-height: 1.4;">@a.Description</p>
-                                    }
-                                    <small class="text-muted d-block mt-2" style="font-size: 0.75rem;"><i class="far fa-clock me-1"></i>@a.CreatedDate.ToString("dd/MM/yyyy hh:mm tt")</small>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-            </div>
+
         </div>
 
     </div>
@@ -1240,6 +1182,7 @@
         });
     });
 </script>
+
 
 
 

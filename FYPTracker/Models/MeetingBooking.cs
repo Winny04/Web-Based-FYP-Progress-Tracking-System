@@ -18,6 +18,10 @@ namespace FYPTracker.Models
 
         public int SupervisorId { get; set; }
 
+        public int? FYPProjectId { get; set; }
+        public int? Stage { get; set; }
+        public int? WeekNumber { get; set; }
+
         [Column(TypeName = "date")]
         public DateTime MeetingDate { get; set; }
 

@@ -36,25 +36,22 @@ namespace FYPTracker.Controllers
             var activeRole = HttpContext.Session.GetString("ActiveRole");
 
             // Fetch FYP projects based on user type / active role
-            List<FYPProject> projects;
             if (activeRole == "Admin" || activeRole == "SuperAdmin" || getUser.UserRoles.Any(r => r.Role.Name == "Admin" || r.Role.Name == "SuperAdmin"))
             {
                 return RedirectToAction("Index", "Admin");
+            }
+            else if (activeRole == "Supervisor" || (string.IsNullOrEmpty(activeRole) && getUser.UserRoles.Any(r => r.Role.Name == "Supervisor")))
+            {
+                return RedirectToAction("Index", "Supervisor");
             }
             else if (activeRole == "Examiner" || (string.IsNullOrEmpty(activeRole) && getUser.UserRoles.Any(r => r.Role.Name == "Examiner")))
             {
                 return RedirectToAction("Index", "Examiner");
             }
-            else if (activeRole == "Supervisor" || (string.IsNullOrEmpty(activeRole) && getUser.UserRoles.Any(r => r.Role.Name == "Supervisor")))
-            {
-                projects = await _context.FYPProjects.Include(p => p.Student).Include(p => p.Supervisor).Where(p => p.SupervisorId == getUser.Id).ToListAsync();
-            }
             else // Student
             {
-                projects = await _context.FYPProjects.Include(p => p.Student).Include(p => p.Supervisor).Where(p => p.StudentId == getUser.Id).ToListAsync();
+                return RedirectToAction("Index", "Student");
             }
-
-            return View(projects);
         }
 
         [AllowAnonymous]

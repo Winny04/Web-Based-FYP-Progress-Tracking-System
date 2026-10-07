@@ -238,6 +238,20 @@
 
                     <div id="editSupervisorFields" style="display:none;">
                         <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-7">Assigned Roles <span class="text-danger">*</span></label>
+                            <div class="d-flex gap-4 p-3 bg-light rounded border border-gray-200">
+                                <div class="form-check form-check-solid d-flex align-items-center m-0">
+                                    <input class="form-check-input mt-0 me-2" type="checkbox" name="editAcademicRoles" value="Supervisor" id="editRoleSup" />
+                                    <label class="form-check-label fw-bold text-gray-700 m-0" for="editRoleSup">Supervisor</label>
+                                </div>
+                                <div class="form-check form-check-solid d-flex align-items-center m-0">
+                                    <input class="form-check-input mt-0 me-2" type="checkbox" name="editAcademicRoles" value="Examiner" id="editRoleExm" />
+                                    <label class="form-check-label fw-bold text-gray-700 m-0" for="editRoleExm">Examiner</label>
+                                </div>
+                            </div>
+                            <div id="editAcademicRoleError" class="text-danger mt-1 fs-8 fw-bold" style="display:none;">Please select at least one role.</div>
+                        </div>
+                        <div class="fv-row mb-5">
                             <label class="form-label fw-bolder text-dark fs-6">Title <span class="text-danger">*</span></label>
                             <select id="editTitle" class="form-select form-select-solid form-select-lg fw-bold">
                                 <option value="">-- Select Title --</option>
@@ -1165,6 +1179,10 @@
                         $('#editSupervisorFields').show();
                         $('#editTitle').val(data.title);
                         $('#editMaxSlots').val(data.maxStudentSlots);
+                        
+                        // Populate checkboxes based on current roles
+                        $('#editRoleSup').prop('checked', data.userType && data.userType.includes('Supervisor'));
+                        $('#editRoleExm').prop('checked', data.userType && data.userType.includes('Examiner'));
                     } else {
                         $('#editStudentFields').hide();
                         $('#editSupervisorFields').hide();
@@ -1264,6 +1282,19 @@
             return;
         }
 
+        var roles = [];
+        if (userType !== "Student" && userType !== "STUDENT") {
+            if ($('input[name="editAcademicRoles"]:checked').length === 0) {
+                $('#editAcademicRoleError').show();
+                return;
+            } else {
+                $('#editAcademicRoleError').hide();
+                $('input[name="editAcademicRoles"]:checked').each(function() {
+                    roles.push($(this).val());
+                });
+            }
+        }
+
         $.ajax({
             url: "/Admin/UpdateUserModal", method: "POST",
             data: { 
@@ -1276,7 +1307,8 @@
                 specialization: specialization, 
                 academicSession: academicSession, 
                 title: title,
-                maxStudentSlots: $('#editMaxSlots').val()
+                maxStudentSlots: $('#editMaxSlots').val(),
+                roles: roles
             },
             success: function (r) {
                 if (r.status) {

@@ -1,8 +1,17 @@
 @model IEnumerable<FYPTracker.Models.SupervisorAvailability>
+@using Microsoft.EntityFrameworkCore
+@inject FYPTracker.Models.FYPTrackerContext _context
 @{
     ViewData["Title"] = "My Availability";
     Layout = "~/Views/Shared/_Layout.cshtml";
     var user = ViewBag.CurrentUser as FYPTracker.Models.ApplicationUser;
+
+    var currentSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true);
+    bool hasTimetable = false;
+    string sessionName = currentSession?.Name ?? "N/A";
+    if (currentSession != null && user != null) {
+        hasTimetable = await _context.SupervisorTimetableEntries.AnyAsync(e => e.SupervisorId == user.Id && e.AcademicSessionId == currentSession.Id);
+    }
 }
 
 <div class="container-fluid py-4">
@@ -31,6 +40,31 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
+
+    <!-- Teaching Timetable Card -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+            <h5 class="fw-bold"><i class="fas fa-chalkboard-teacher text-info me-2"></i>Teaching Timetable</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">
+                Your teaching timetable blocks out busy periods so students cannot book meetings during your classes. 
+                These apply to the current active session: <strong>@sessionName</strong>.
+            </p>
+            <div class="d-flex align-items-center">
+                @if (hasTimetable)
+                {
+                    <span class="badge bg-success me-3 fs-6 p-2"><i class="fas fa-check me-1"></i> Timetable Uploaded</span>
+                    <a href="/Supervisor/ManageTimetable" class="btn btn-outline-primary">View or Replace Timetable</a>
+                }
+                else
+                {
+                    <span class="badge bg-secondary me-3 fs-6 p-2 text-dark"><i class="fas fa-times me-1"></i> No Timetable</span>
+                    <a href="/Supervisor/ManageTimetable" class="btn btn-primary">Upload Timetable</a>
+                }
+            </div>
+        </div>
+    </div>
 
     <div class="row g-4">
         <!-- Weekly Defaults -->
