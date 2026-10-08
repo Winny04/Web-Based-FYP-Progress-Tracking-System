@@ -9,103 +9,7 @@
     var activeCount     = myRequests.Count(r => r.Status == "Pending" || r.Status == "Approved");
 }
 
-<style>
-    :root {
-        --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-        --card-bg: rgba(255, 255, 255, 0.9);
-    }
-    
-    .page-hero {
-        background: var(--hero-grad);
-        border-radius: 20px;
-        padding: 28px 32px;
-        color: white;
-        margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(30,41,59,.18);
-    }
-
-    .premium-card {
-        background: var(--card-bg);
-        backdrop-filter: blur(12px);
-        border-radius: 16px;
-        border: 1px solid #f1f5f9;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.05);
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    
-    .premium-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 28px rgba(0,0,0,0.08);
-    }
-
-    .status-badge {
-        font-size: 0.7rem;
-        font-weight: 700;
-        padding: 4px 12px;
-        border-radius: 999px;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        display: inline-block;
-    }
-    
-    .badge-pending  { background: #fef3c7; color: #92400e; }
-    .badge-approved { background: #d1fae5; color: #065f46; }
-    .badge-rejected { background: #fee2e2; color: #991b1b; }
-    .badge-full { background: #e2e8f0; color: #475569; }
-
-    .btn-apply {
-        background: #1e293b;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 6px 16px;
-        font-size: 0.8rem;
-        font-weight: 700;
-        transition: all 0.2s ease;
-    }
-    
-    .btn-apply:hover:not(:disabled) {
-        opacity: 0.9;
-        transform: scale(1.05);
-        color: white;
-    }
-    
-    .btn-apply:disabled {
-        background: #cbd5e1;
-        color: #94a3b8;
-        cursor: not-allowed;
-    }
-
-    .search-input {
-        border-radius: 10px 0 0 10px;
-        border: 1px solid #cbd5e1;
-        padding: 10px 16px;
-    }
-
-    .filter-select {
-        border-radius: 0 10px 10px 0;
-        border: 1px solid #cbd5e1;
-        border-left: none;
-        padding: 10px 16px;
-        background-color: #f8fafc;
-        max-width: 200px;
-    }
-
-    .countdown-box {
-        background: rgba(239, 68, 68, 0.08);
-        border: 1px solid rgba(239, 68, 68, 0.2);
-        color: #dc2626;
-        border-radius: 8px;
-        padding: 4px 10px;
-        font-size: 0.75rem;
-        font-weight: 700;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-    }
-</style>
-
-<div class="container-fluid py-4">
+<div class="container-xxl py-4">
 
     @if (hasApproved)
     {
@@ -128,14 +32,16 @@
         <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-4">@TempData["Error"]</div>
     }
 
-    @* ── Page Title & Hero ──────────────────────────────────── *@
-    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <div>
-            <h2 class="display-6 fw-bold mb-2"><i class="fas fa-user-tie me-2"></i>Select Your FYP Supervisor</h2>
-            <p class="mb-0 opacity-90">You may only select one supervisor. Your request will expire in @ViewBag.SupervisorRequestTimeoutDays days if not responded to.</p>
-        </div>
-        <div class="d-flex gap-2">
-            <span class="badge bg-white text-dark border px-3 py-2 rounded-pill fw-bold">@activeCount @(activeCount == 1 ? "Pending Request" : "Pending Requests")</span>
+    <!-- Welcome Header (Navy-blue matching Dashboard) -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4" style="background-color: #0f172a; color: white;">
+        <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <h4 class="fw-bolder mb-1"><i class="fas fa-user-tie me-2"></i>Select Your FYP Supervisor</h4>
+                <p class="mb-0 text-white-50 fs-7 fw-bold">You may only select one supervisor. Your request will expire in @ViewBag.SupervisorRequestTimeoutDays days if not responded to.</p>
+            </div>
+            <div>
+                <span class="badge bg-white text-dark border px-3 py-2 rounded-pill fw-bold fs-7">@activeCount @(activeCount == 1 ? "Pending Request" : "Pending Requests")</span>
+            </div>
         </div>
     </div>
 
@@ -155,163 +61,173 @@
     else if (!hasApproved)
     {
         <div class="row g-4">
-            @* ── Table and Search ──────────────────────────────── *@
+            <!-- Table and Search -->
             <div class="col-lg-9">
                 <!-- Search & Filter Controls -->
-                <div class="premium-card p-3 mb-4 d-flex gap-0 align-items-stretch">
-                    <input type="text" id="supSearch" class="form-control search-input" placeholder="Search by name or expertise..." onkeyup="filterSupervisors()" />
-                    <select id="deptFilter" class="form-select filter-select" onchange="filterSupervisors()">
-                        <option value="">All Departments</option>
-                        @{
-                            var departments = ViewBag.Departments as List<string> ?? new List<string>();
-                            foreach (var dept in departments)
-                            {
-                                if (!string.IsNullOrEmpty(dept))
-                                {
-                                    <option value="@dept">@dept</option>
+                <div class="card border-0 shadow-sm rounded-3 mb-4">
+                    <div class="card-body p-3">
+                        <div class="d-flex gap-0 align-items-stretch">
+                            <input type="text" id="supSearch" class="form-control border-end-0 rounded-start-3 rounded-end-0" placeholder="Search by name or expertise..." onkeyup="filterSupervisors()" />
+                            <select id="deptFilter" class="form-select bg-light border-start-0 rounded-start-0 rounded-end-3 w-auto" onchange="filterSupervisors()">
+                                <option value="">All Departments</option>
+                                @{
+                                    var departments = ViewBag.Departments as List<string> ?? new List<string>();
+                                    foreach (var dept in departments)
+                                    {
+                                        if (!string.IsNullOrEmpty(dept))
+                                        {
+                                            <option value="@dept">@dept</option>
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                    </select>
+                            </select>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Supervisor Table -->
-                <div class="premium-card p-4">
-                    <div class="table-responsive">
-                        <table class="table align-middle table-hover mb-0" id="supervisorTable">
-                            <thead>
-                                <tr class="text-muted small fw-bold text-uppercase">
-                                    <th style="width: 50px;">No</th>
-                                    <th>Name</th>
-                                    <th>Department</th>
-                                    <th>Programme</th>
-                                    <th>Specialization</th>
-                                    <th>Available Slots</th>
-                                    <th>Status</th>
-                                    <th class="text-end">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @{ int num = 1; }
-
-
-                                @foreach (var sup in supervisors)
-                                {
-                                    var existing = myRequests.FirstOrDefault(r => r.SupervisorId == sup.Id);
-                                    var appCount = applicantCounts.ContainsKey(sup.Id) ? applicantCounts[sup.Id] : 0;
-                                    
-                                    // Dynamically read MaxStudentSlots from the DB
-                                    int maxSlots = sup.MaxStudentSlots ?? 5;
-                                    int slotsLeft = Math.Max(0, maxSlots - appCount);
-                                    string deptLabel = sup.EmpDepartment?.Name ?? "-";
-                                    string programme = !string.IsNullOrEmpty(sup.Programme) ? sup.Programme : "-";
-                                    string specialization = !string.IsNullOrEmpty(sup.Specialization) ? sup.Specialization : "-";
-                                    
-                                    <tr class="sup-row" data-dept="@deptLabel" data-name="@sup.FullName" data-prog="@programme" data-spec="@specialization">
-                                        <td class="text-muted fw-bold">@(num++)</td>
-                                        <td>
-                                            <div class="fw-bold text-dark">@sup.FullName</div>
-                                            <div class="text-muted small">@sup.Email</div>
-                                        </td>
-                                        <td>@deptLabel</td>
-                                        <td>@programme</td>
-                                        <td>@specialization</td>
-                                        <td>
-                                            @if (slotsLeft > 0)
-                                            {
-                                                <span class="text-success fw-bold">@slotsLeft of @maxSlots slots available</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="text-danger fw-bold">Full</span>
-                                            }
-                                        </td>
-                                        <td>
-                                            @if (slotsLeft > 0)
-                                            {
-                                                <span class="status-badge badge-approved" style="background:#e0f2fe; color:#0369a1;">Open</span>
-                                            }
-                                            else
-                                            {
-                                                <span class="status-badge badge-full">Full</span>
-                                            }
-                                        </td>
-                                        <td class="text-end">
-                                            @if (existing != null)
-                                            {
-                                                <span class="status-badge @(existing.Status == "Approved" ? "badge-approved" : existing.Status == "Rejected" ? "badge-rejected" : "badge-pending")" id="table-status-@existing.Id">@existing.Status</span>
-                                            }
-                                            else if (slotsLeft > 0 && activeCount < 1)
-                                            {
-                                                <button class="btn-apply" onclick="openApplyConfirmation(@sup.Id, '@sup.FullName')">Select</button>
-                                            }
-                                            else
-                                            {
-                                                <button class="btn-apply" disabled>Select</button>
-                                            }
-                                        </td>
+                <div class="card border-0 shadow-sm rounded-3">
+                    <div class="card-body p-4">
+                        <div class="table-responsive">
+                            <table class="table align-middle table-hover mb-0" id="supervisorTable">
+                                <thead>
+                                    <tr class="text-muted small fw-bold text-uppercase border-bottom">
+                                        <th style="width: 50px;">No</th>
+                                        <th>Name</th>
+                                        <th>Department</th>
+                                        <th>Programme</th>
+                                        <th>Specialization</th>
+                                        <th>Available Slots</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Action</th>
                                     </tr>
-                                }
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    @{ int num = 1; }
+                                    @foreach (var sup in supervisors)
+                                    {
+                                        var existing = myRequests.FirstOrDefault(r => r.SupervisorId == sup.Id);
+                                        var appCount = applicantCounts.ContainsKey(sup.Id) ? applicantCounts[sup.Id] : 0;
+                                        
+                                        // Dynamically read MaxStudentSlots from the DB
+                                        int maxSlots = sup.MaxStudentSlots ?? 5;
+                                        int slotsLeft = Math.Max(0, maxSlots - appCount);
+                                        string deptLabel = sup.EmpDepartment?.Name ?? "-";
+                                        string programme = !string.IsNullOrEmpty(sup.Programme) ? sup.Programme : "-";
+                                        string specialization = !string.IsNullOrEmpty(sup.Specialization) ? sup.Specialization : "-";
+                                        
+                                        <tr class="sup-row" data-dept="@deptLabel" data-name="@sup.FullName" data-prog="@programme" data-spec="@specialization">
+                                            <td class="text-muted fw-bold">@(num++)</td>
+                                            <td>
+                                                <div class="fw-bold text-dark fs-7">@sup.FullName</div>
+                                                <div class="text-muted fs-8">@sup.Email</div>
+                                            </td>
+                                            <td class="fs-8">@deptLabel</td>
+                                            <td class="fs-8">@programme</td>
+                                            <td class="fs-8">@specialization</td>
+                                            <td class="fs-8">
+                                                @if (slotsLeft > 0)
+                                                {
+                                                    <span class="text-success fw-bold">@slotsLeft of @maxSlots slots available</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-danger fw-bold">Full</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (slotsLeft > 0)
+                                                {
+                                                    <span class="badge bg-info text-dark rounded-pill px-2 py-1 fs-8 fw-bold">Open</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-light text-muted border rounded-pill px-2 py-1 fs-8 fw-bold">Full</span>
+                                                }
+                                            </td>
+                                            <td class="text-end">
+                                                @if (existing != null)
+                                                {
+                                                    <span class="badge @(existing.Status == "Approved" ? "bg-success" : existing.Status == "Rejected" ? "bg-danger" : "bg-warning text-dark") rounded-pill px-2 py-1 fs-8 fw-bold" id="table-status-@existing.Id">@existing.Status</span>
+                                                }
+                                                else if (slotsLeft > 0 && activeCount < 1)
+                                                {
+                                                    <button class="btn btn-primary btn-sm fw-bold px-3 py-1" onclick="openApplyConfirmation(@sup.Id, '@sup.FullName')">Select</button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="btn btn-secondary btn-sm fw-bold px-3 py-1" disabled>Select</button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            @* ── Side Panel Choice & Countdown ──────────────────── *@
+            <!-- Side Panel Choice & Countdown -->
             <div class="col-lg-3">
-                <div class="premium-card p-4 h-100">
-                    <h5 class="fw-bold mb-4"><i class="fas fa-tasks text-purple me-2"></i>Request Status</h5>
-                    @if (!myRequests.Any())
-                    {
-                        <p class="text-muted small">No applications submitted yet. Select a supervisor from the table.</p>
-                    }
-                    @{ int reqCounter = 1; }
-                    @foreach (var req in myRequests)
-                    {
-                        <div class="p-3 border rounded-3 mb-3 bg-light" id="side-req-box-@req.Id">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="badge bg-white text-dark rounded-pill border" style="font-size:10px;">#@(reqCounter++)</span>
-                                <span class="status-badge @(req.Status == "Approved" ? "badge-approved" : req.Status == "Rejected" ? "badge-rejected" : "badge-pending")" id="side-status-@req.Id" style="font-size:9px; padding:2px 8px;">@req.Status</span>
-                            </div>
-                            <div class="fw-bold text-dark" style="font-size:0.85rem;"><i class="fas fa-user-tie me-1 text-muted"></i>@req.Supervisor?.FullName</div>
-                            <div class="text-muted mb-2 mt-1" style="font-size:11px; font-weight: 500;"><strong>Project Title:</strong> @req.ProjectTopic</div>
-                            
-                            <div class="text-muted mb-2" style="font-size:11px; line-height: 1.4;">
-                                <div><strong>Date Requested:</strong> @req.RequestedDate.ToString("dd MMM yyyy")</div>
+                <div class="card border-0 shadow-sm rounded-3 h-100">
+                    <div class="card-header bg-white border-bottom pt-3 pb-2">
+                        <h6 class="fw-bolder text-dark mb-0"><i class="fas fa-tasks text-primary me-2"></i>Request Status</h6>
+                    </div>
+                    <div class="card-body p-4">
+                        @if (!myRequests.Any())
+                        {
+                            <p class="text-muted fs-8 text-center mt-3">No applications submitted yet. Select a supervisor from the table.</p>
+                        }
+                        @{ int reqCounter = 1; }
+                        @foreach (var req in myRequests)
+                        {
+                            <div class="p-3 border rounded-3 mb-3 bg-light" id="side-req-box-@req.Id">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="badge bg-white text-dark border px-2 py-1 rounded-pill fs-8">#@(reqCounter++)</span>
+                                    <span class="badge @(req.Status == "Approved" ? "bg-success" : req.Status == "Rejected" ? "bg-danger" : "bg-warning text-dark") rounded-pill px-2 py-1 fs-8 fw-bold" id="side-status-@req.Id">@req.Status</span>
+                                </div>
+                                <div class="fw-bold text-dark fs-7"><i class="fas fa-user-tie me-1 text-muted"></i>@req.Supervisor?.FullName</div>
+                                <div class="text-muted mb-2 mt-1 fs-8 fw-bold"><strong>Topic:</strong> @req.ProjectTopic</div>
+                                
+                                <div class="text-muted mb-2 fs-8">
+                                    <div><i class="far fa-calendar-plus me-1"></i>Requested: @req.RequestedDate.ToString("dd MMM yyyy")</div>
+                                    @if (req.Status == "Pending")
+                                    {
+                                        var deadline = req.RequestedDate.AddDays(ViewBag.SupervisorRequestTimeoutDays);
+                                        <div><i class="far fa-clock me-1"></i>Deadline: @deadline.ToString("dd MMM yyyy, h:mm tt")</div>
+                                    }
+                                </div>
+
                                 @if (req.Status == "Pending")
                                 {
-                                    var deadline = req.RequestedDate.AddDays(ViewBag.SupervisorRequestTimeoutDays);
-                                    <div><strong>Response Deadline:</strong> @deadline.ToString("dd MMM yyyy, h:mm tt")</div>
+                                    <div class="badge bg-danger rounded-pill w-100 mt-1 d-flex align-items-center justify-content-center gap-1 py-2 fs-8 fw-bold" id="side-countdown-@req.Id">
+                                        <i class="far fa-clock"></i>
+                                        <span class="countdown-timer" data-expiry="@req.RequestedDate.AddDays(ViewBag.SupervisorRequestTimeoutDays).ToString("o")">Calculating...</span>
+                                    </div>
+                                }
+                                else if (!string.IsNullOrEmpty(req.ResponseNote))
+                                {
+                                    <div class="mt-2 text-muted fs-8 p-2 rounded" style="background:#f1f5f9; border-left: 3px solid #6b7280;">
+                                        <strong>Note:</strong> @req.ResponseNote
+                                    </div>
                                 }
                             </div>
-
-                            @if (req.Status == "Pending")
-                            {
-                                <div class="countdown-box mt-1 w-100 justify-content-center" id="side-countdown-@req.Id">
-                                    <i class="far fa-clock"></i>
-                                    <span class="countdown-timer" data-expiry="@req.RequestedDate.AddDays(ViewBag.SupervisorRequestTimeoutDays).ToString("o")">Calculating...</span>
-                                </div>
-                            }
-                            else if (!string.IsNullOrEmpty(req.ResponseNote))
-                            {
-                                <div class="mt-2 text-muted small p-2 rounded" style="background:#f1f5f9; border-left: 3px solid #6b7280;">
-                                    <strong>Supervisor's Note:</strong> @req.ResponseNote
-                                </div>
-                            }
-                        </div>
-                    }
+                        }
+                    </div>
                 </div>
             </div>
         </div>
     }
     else
     {
-        <div class="premium-card p-5 text-center">
-            <i class="fas fa-check-circle text-success fs-1 mb-4 d-block"></i>
+        <div class="card border-0 shadow-sm rounded-3 p-5 text-center">
+            <i class="fas fa-check-circle text-success mb-3" style="font-size: 4rem;"></i>
             <h3 class="fw-bold text-dark">Supervision Confirmed</h3>
-            <p class="text-muted mb-4 fs-5">Your supervision request has been accepted. You can now start submitting chapters and view milestones!</p>
-            <a href="/Student/Index" class="btn btn-primary btn-lg rounded-pill px-5">Go To Dashboard</a>
+            <p class="text-muted mb-4 fs-6">Your supervision request has been accepted. You can now start submitting chapters and view milestones!</p>
+            <div>
+                <a href="/Student/Index" class="btn btn-primary fw-bold rounded-pill px-5 py-2">Go To Dashboard</a>
+            </div>
         </div>
     }
 </div>
@@ -319,14 +235,14 @@
 <!-- DETAILED SUPERVISOR SELECTION & CONFIRMATION MODAL -->
 <div class="modal fade" id="applyConfirmModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+        <div class="modal-content border-0 shadow-sm rounded-3 overflow-hidden">
             <form asp-action="SubmitSupervisorRequest" method="post" id="subReqForm">
                 <input type="hidden" name="supervisorId" id="modalSupId" />
-                <div class="modal-header bg-primary text-white border-0 py-3">
-                    <h5 class="fw-bold mb-0">Supervisor Request Confirmation</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <div class="modal-header border-bottom bg-light">
+                    <h5 class="fw-bold text-dark mb-0"><i class="fas fa-paper-plane text-primary me-2"></i>Request Supervisor</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body p-4 bg-light">
+                <div class="modal-body p-4 bg-white">
                     
                     <!-- Confirmation Statement Box -->
                     <div class="alert alert-warning border-0 p-3 mb-4 rounded-3 d-flex align-items-center gap-3">
@@ -334,60 +250,67 @@
                         <h6 class="fw-bold mb-0 text-dark" id="confirmationText">Are you sure you want to request [Supervisor] as your supervisor?</h6>
                     </div>
 
-                    <div class="bg-white p-3 rounded-3 border mb-4">
-                        <h6 class="fw-bold text-primary mb-3"><i class="fas fa-user-edit me-1"></i>Part A: Student & Request Information</h6>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold small">Full Name</label>
-                                <input type="text" class="form-control bg-light border-0" value="@currentUser?.FullName" readonly />
+                    <div class="card border mb-4 shadow-none">
+                        <div class="card-header bg-light pt-3 pb-2 border-bottom">
+                            <h6 class="fw-bold text-dark mb-0"><i class="fas fa-user-edit text-muted me-2"></i>Part A: Student & Request Information</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold fs-8">Full Name</label>
+                                    <input type="text" class="form-control form-control-sm bg-light border-0" value="@currentUser?.FullName" readonly />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold fs-8">Matric ID</label>
+                                    <input type="text" name="matricNumber" class="form-control form-control-sm bg-light border-0" value="@currentUser?.EmployeeId" readonly />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold fs-8">Program</label>
+                                    <input type="text" name="program" class="form-control form-control-sm bg-light border-0" value="@currentUser?.Programme" readonly />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold fs-8">Phone Number <span class="text-danger">*</span></label>
+                                    <input type="tel" name="phoneNumber" id="modalPhone" class="form-control form-control-sm" value="@currentUser?.Phone" placeholder="012-3456789" required />
+                                    <div id="modalPhoneError" class="text-danger fs-8 mt-1 d-none">Please provide a valid Malaysia Phone Number (e.g. 012-3456789).</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold fs-8">Session / Semester</label>
+                                    <input type="text" name="sessionSemester" class="form-control form-control-sm bg-light border-0" value="@currentUser?.AcademicSession" readonly />
+                                </div>
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold small">Matric ID</label>
-                                <input type="text" name="matricNumber" class="form-control bg-light border-0" value="@currentUser?.EmployeeId" readonly />
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold small">Program</label>
-                                <input type="text" name="program" class="form-control bg-light border-0" value="@currentUser?.Programme" readonly />
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold small">Phone Number <span class="text-danger">*</span></label>
-                                <input type="tel" name="phoneNumber" id="modalPhone" class="form-control" value="@currentUser?.Phone" placeholder="012-3456789" required />
-                                <div id="modalPhoneError" class="text-danger small mt-1 d-none">Please provide a valid Malaysia Phone Number (e.g. 012-3456789).</div>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold small">Session / Semester</label>
-                                <input type="text" name="sessionSemester" class="form-control bg-light border-0" value="@currentUser?.AcademicSession" readonly />
-                            </div>
-
                         </div>
                     </div>
 
-                    <div class="bg-white p-3 rounded-3 border">
-                        <h6 class="fw-bold text-primary mb-3"><i class="fas fa-file-alt me-1"></i>Part B: Project Topic</h6>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold small">Project Topic / Proposed Title</label>
-                            <input type="text" name="projectTopic" id="projectTopic" class="form-control" placeholder="Enter your proposed project title" minlength="5" maxlength="200" required />
-                            <div id="projectTopicError" class="text-danger small mt-1 d-none">Please enter a valid project topic (min 5 characters).</div>
+                    <div class="card border shadow-none">
+                        <div class="card-header bg-light pt-3 pb-2 border-bottom">
+                            <h6 class="fw-bold text-dark mb-0"><i class="fas fa-file-alt text-muted me-2"></i>Part B: Project Topic</h6>
                         </div>
-                        <div class="mb-0">
-                            <label class="form-label fw-semibold small">Brief Proposal / Message</label>
-                            <textarea name="requestMessage" id="requestMessage" class="form-control" rows="4" placeholder="e.g. My project aims to solve [Problem] by building a [Solution] using [Tech Stack]..." minlength="10" maxlength="1000" required></textarea>
-                            <div id="requestMessageError" class="text-danger small mt-1 d-none">Please enter a brief proposal (min 10 characters).</div>
-                            <div class="form-text mt-2 text-muted" style="font-size: 0.8rem;">
-                                <strong class="text-primary"><i class="fas fa-lightbulb me-1"></i>Quick Guide:</strong> Please include:
-                                <ul class="mb-0 ps-3 mt-1">
-                                    <li><strong>Problem:</strong> What issue are you trying to solve?</li>
-                                    <li><strong>Solution:</strong> What system/app are you building?</li>
-                                    <li><strong>Tech Stack:</strong> E.g., .NET Core, React, SQL Server.</li>
-                                </ul>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold fs-8">Project Topic / Proposed Title</label>
+                                <input type="text" name="projectTopic" id="projectTopic" class="form-control form-control-sm" placeholder="Enter your proposed project title" minlength="5" maxlength="200" required />
+                                <div id="projectTopicError" class="text-danger fs-8 mt-1 d-none">Please enter a valid project topic (min 5 characters).</div>
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label fw-semibold fs-8">Brief Proposal / Message</label>
+                                <textarea name="requestMessage" id="requestMessage" class="form-control form-control-sm" rows="4" placeholder="e.g. My project aims to solve [Problem] by building a [Solution] using [Tech Stack]..." minlength="10" maxlength="1000" required></textarea>
+                                <div id="requestMessageError" class="text-danger fs-8 mt-1 d-none">Please enter a brief proposal (min 10 characters).</div>
+                                <div class="form-text mt-2 text-muted fs-8">
+                                    <strong class="text-primary"><i class="fas fa-lightbulb me-1"></i>Quick Guide:</strong> Please include:
+                                    <ul class="mb-0 ps-3 mt-1">
+                                        <li><strong>Problem:</strong> What issue are you trying to solve?</li>
+                                        <li><strong>Solution:</strong> What system/app are you building?</li>
+                                        <li><strong>Tech Stack:</strong> E.g., .NET Core, React, SQL Server.</li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                 </div>
-                <div class="modal-footer border-0 p-4 pt-0 bg-light">
-                    <button type="button" class="btn btn-secondary rounded-3 px-4" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary rounded-3 px-5 fw-bold">Confirm & Request</button>
+                <div class="modal-footer border-top p-3 bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm fw-bold px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-5">Confirm & Request</button>
                 </div>
             </form>
         </div>
@@ -534,14 +457,15 @@
         var sideBox = document.getElementById('side-req-box-' + d.requestId);
         var countdown = document.getElementById('side-countdown-' + d.requestId);
 
-        var newClass = d.status === 'Approved' ? 'badge-approved' : d.status === 'Rejected' ? 'badge-rejected' : 'badge-pending';
+        var newClass = d.status === 'Approved' ? 'bg-success' : d.status === 'Rejected' ? 'bg-danger' : 'bg-warning text-dark';
+        var badgeClasses = 'badge rounded-pill px-2 py-1 fs-8 fw-bold ' + newClass;
         
         if (tableBadge) {
-            tableBadge.className = 'status-badge ' + newClass;
+            tableBadge.className = badgeClasses;
             tableBadge.innerText = d.status;
         }
         if (sideBadge) {
-            sideBadge.className = 'status-badge ' + newClass;
+            sideBadge.className = badgeClasses;
             sideBadge.innerText = d.status;
         }
         if (countdown && d.status !== 'Pending') {
@@ -556,5 +480,3 @@
     });
 </script>
 }
-
-

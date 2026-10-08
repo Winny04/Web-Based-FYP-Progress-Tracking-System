@@ -163,21 +163,21 @@
     .stepper-btn:hover:not([disabled]) .step-icon { border-color: #f97316; color: #f97316; }
 </style>
 
-<div class="container-fluid py-4">
+<div class="container-xxl py-4">
 
-
-
-    @* -- Page Title & Hero ------------------------------------ *@
-    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <div>
-            <h2 class="display-6 fw-bold mb-2"><i class="fas fa-file-invoice me-2"></i>Digital Submission Forms</h2>
-            <p class="mb-0 opacity-90">Fill and submit your academic milestones digitally. Status updates are pushed instantly to your supervisor.</p>
+    <!-- Welcome Header (Navy-blue matching Dashboard) -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4" style="background-color: #0f172a; color: white;">
+        <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <h4 class="fw-bolder mb-1"><i class="fas fa-file-contract me-2"></i>Digital Submission Forms</h4>
+                <p class="mb-0 text-white-50 fs-7 fw-bold">Fill and submit your academic milestones digitally. Status updates are pushed instantly to your supervisor.</p>
+            </div>
         </div>
     </div>
 
     @if (Model == null)
     {
-        <div class="premium-card p-5 text-center">
+        <div class="card border-0 shadow-sm rounded-3 p-5 text-center">
             <i class="fas fa-exclamation-triangle text-warning fs-1 mb-4 d-block"></i>
             <h4 class="fw-bold text-dark">No Active Project</h4>
             <p class="text-muted mb-0">Please request a supervisor and secure an active project before submitting academic forms.</p>
@@ -287,7 +287,7 @@
                         <!-- Stage 2 is now a separate page, Final Submission tab removed -->
                     </ul>
 
-                    <div class="premium-card p-3 mb-2 bg-light d-flex align-items-center gap-3">
+                    <div class="card border-0 shadow-sm rounded-3 p-3 mb-2 bg-light d-flex align-items-center gap-3">
                         <i class="fas fa-info-circle text-orange fs-4" style="color:var(--primary-orange);"></i>
                         <div class="small text-muted">
                             <strong>Guidelines:</strong> Ensure all mandatory fields are fully populated before submission. 
@@ -315,7 +315,7 @@
 
                     @* -- 1. INITIAL PROJECT ALLOCATION FORM (IAF) -------- *@
                     <div class="tab-pane fade @(isIafApproved ? "" : "show active")" id="iaf-form-pane" role="tabpanel" tabindex="0">
-                        <div class="premium-card p-4">
+                        <div class="card border-0 shadow-sm rounded-3 p-4">
                             <h4 class="fw-bold text-dark mb-2"><i class="fas fa-clipboard-list text-orange me-2"></i>1. Initial Project Allocation Form (IAF)</h4>
                             <p class="text-danger fw-bold mb-4"><i class="far fa-clock me-1"></i> Please complete and submit this form before @ViewBag.IAFDeadline.</p>
                             
@@ -768,7 +768,7 @@
                     
                     @* -- A. PROPOSAL FORM ------------------------------ *@
                     <div class="tab-pane fade @(isIafApproved && isAllProgressCompleted && !isProposalApproved ? "show active" : "")" id="proposal-form-pane" role="tabpanel" tabindex="0">
-                        <div class="premium-card p-4">
+                        <div class="card border-0 shadow-sm rounded-3 p-4">
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>B. Stage 1 Detailed Project Proposal (DPP)</h4>
                             
                                 @* Select corresponding Milestone *@
@@ -903,7 +903,7 @@
                         id="progress-form-pane"
                         role="tabpanel"
                         tabindex="0">
-                        <div class="premium-card p-4">
+                        <div class="card border-0 shadow-sm rounded-3 p-4">
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-chart-line text-orange me-2"></i>A. DPP Work & Progress</h4>
                             
                             @{

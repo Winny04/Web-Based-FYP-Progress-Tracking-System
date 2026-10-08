@@ -1,0 +1,200 @@
+import os
+
+file_path = r"c:\Users\winny\source\repos\Web-Based-FYP-Progress-Tracking-System\FYPTracker\Views\Student\Notifications.cshtml"
+
+content = """@using FYPTracker.Models
+@model IEnumerable<FYPNotification>
+@{
+    ViewData["Title"] = "Notifications";
+    var currentUser = ViewBag.CurrentUser as ApplicationUser;
+    var unreadCount = (int)(ViewBag.UnreadCount ?? 0);
+    var notifications = Model?.ToList() ?? new List<FYPNotification>();
+}
+
+<div class="container-xxl py-4">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-4 d-flex align-items-center gap-2">
+            <i class="fas fa-check-circle fs-4"></i> <span>@TempData["Success"]</span>
+        </div>
+    }
+
+    <!-- Welcome Header (Navy-blue matching Dashboard) -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4" style="background-color: #0f172a; color: white;">
+        <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <h4 class="fw-bolder mb-1"><i class="fas fa-bell me-2"></i>Notifications</h4>
+                <p class="mb-0 text-white-50 fs-7 fw-bold">Stay updated with supervisor approvals, meeting updates, and deadlines.</p>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                @if (unreadCount > 0)
+                {
+                    <span class="badge bg-white text-dark fw-bold px-3 py-2 rounded-pill fs-7">
+                        @unreadCount Unread
+                    </span>
+                    <form asp-action="MarkAllRead" asp-controller="Student" method="post">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-light text-dark fw-bold btn-sm shadow-sm px-3 py-1">
+                            <i class="fas fa-check-double me-1"></i> Mark All Read
+                        </button>
+                    </form>
+                }
+                else
+                {
+                    <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-success fs-7"><i class="fas fa-check me-1"></i> All caught up</span>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-body p-4">
+            <!-- Filter Tabs -->
+            <div class="d-flex gap-2 flex-wrap mb-4">
+                <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 fw-bold filter-tab active" onclick="filterNotifs('all', this)">All (@notifications.Count)</button>
+                <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 fw-bold filter-tab" onclick="filterNotifs('unread', this)">Unread (@unreadCount)</button>
+                <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 fw-bold filter-tab" onclick="filterNotifs('SupervisorApproval', this)">Supervisor</button>
+                <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 fw-bold filter-tab" onclick="filterNotifs('MeetingUpdate', this)">Meetings</button>
+                <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 fw-bold filter-tab" onclick="filterNotifs('DeadlineReminder', this)">Deadlines</button>
+                <button class="btn btn-outline-secondary btn-sm rounded-pill px-3 fw-bold filter-tab" onclick="filterNotifs('SubmissionFeedback', this)">Feedback</button>
+            </div>
+
+            <!-- Notifications List -->
+            @if (!notifications.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="fas fa-bell-slash fs-1 d-block mb-3 opacity-25"></i>
+                    <p class="fw-semibold mb-0 text-dark">No notifications yet.</p>
+                    <small class="fs-8">Notifications will appear here when there are updates.</small>
+                </div>
+            }
+            else
+            {
+                <div class="list-group list-group-flush rounded-3 border" id="notifList">
+                    @foreach (var n in notifications)
+                    {
+                        var iconCls = n.Type switch {
+                            "SupervisorApproval" => "fas fa-user-check",
+                            "MeetingUpdate"      => "fas fa-calendar-check",
+                            "DeadlineReminder"   => "fas fa-clock",
+                            "SubmissionFeedback" => "fas fa-comment-alt",
+                            "RevisionRequest"    => "fas fa-edit",
+                            _                   => "fas fa-bell"
+                        };
+                        var bgColor = n.Type switch {
+                            "SupervisorApproval" => "bg-success bg-opacity-10 text-success",
+                            "MeetingUpdate"      => "bg-primary bg-opacity-10 text-primary",
+                            "DeadlineReminder"   => "bg-danger bg-opacity-10 text-danger",
+                            "SubmissionFeedback" => "bg-info bg-opacity-10 text-info",
+                            "RevisionRequest"    => "bg-warning bg-opacity-10 text-warning",
+                            _                   => "bg-secondary bg-opacity-10 text-secondary"
+                        };
+                        
+                        var timeAgo = GetTimeAgo(n.CreatedDate);
+
+                        var targetUrl = n.Type switch {
+                            "SupervisorApproval" => "/Student/Index",
+                            "MeetingUpdate"      => "/Student/BookMeeting",
+                            "DeadlineReminder"   => "/Student/ProjectDetails",
+                            "SubmissionFeedback" => "/Student/Forms",
+                            "RevisionRequest"    => "/Student/Forms",
+                            _                    => "#"
+                        };
+
+                        <div class="list-group-item p-3 notif-item @(n.IsRead ? "" : "bg-light")" data-type="@n.Type" data-read="@(n.IsRead ? "read" : "unread")">
+                            <div class="d-flex align-items-start gap-3">
+                                @if (!n.IsRead)
+                                {
+                                    <div class="bg-primary rounded-circle mt-2" style="width: 8px; height: 8px; flex-shrink: 0;"></div>
+                                }
+                                else
+                                {
+                                    <div style="width: 8px; flex-shrink: 0;"></div>
+                                }
+                                <div class="rounded-3 d-flex align-items-center justify-content-center @bgColor" style="width: 40px; height: 40px; flex-shrink: 0;">
+                                    <i class="@iconCls fs-5"></i>
+                                </div>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                        <a href="@targetUrl" class="text-decoration-none fw-bold text-dark stretched-link">@n.Title</a>
+                                        <small class="text-muted position-relative fw-bold fs-8" style="z-index: 2;">@timeAgo</small>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(n.Message))
+                                    {
+                                        <div class="text-muted mt-1 fs-8">@n.Message</div>
+                                    }
+                                    <div class="mt-2 position-relative d-flex align-items-center gap-3" style="z-index: 2;">
+                                        <small class="text-muted fs-8"><i class="far fa-calendar me-1"></i> @n.CreatedDate.ToString("dd MMM yyyy, h:mm tt")</small>
+                                        @if (!n.IsRead)
+                                        {
+                                            <form asp-action="MarkAsRead" asp-controller="Student" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="notificationId" value="@n.Id" />
+                                                <button type="submit" class="btn btn-outline-secondary btn-sm py-0 px-2 fs-8 fw-bold">
+                                                    <i class="fas fa-check me-1"></i> Mark Read
+                                                </button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <small class="text-success fs-8 fw-bold"><i class="fas fa-check-double me-1"></i> Read</small>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section scripts {
+<script>
+    function filterNotifs(filter, btn) {
+        document.querySelectorAll('.filter-tab').forEach(t => {
+            t.classList.remove('active', 'btn-primary', 'text-white');
+            t.classList.add('btn-outline-secondary');
+        });
+        btn.classList.add('active', 'btn-primary', 'text-white');
+        btn.classList.remove('btn-outline-secondary');
+
+        document.querySelectorAll('.notif-item').forEach(item => {
+            if (filter === 'all') {
+                item.style.display = '';
+            } else if (filter === 'unread') {
+                item.style.display = item.dataset.read === 'unread' ? '' : 'none';
+            } else {
+                item.style.display = item.dataset.type === filter ? '' : 'none';
+            }
+        });
+    }
+
+    // Initialize first button
+    document.addEventListener("DOMContentLoaded", function() {
+        var firstBtn = document.querySelector('.filter-tab.active');
+        if (firstBtn) {
+            firstBtn.classList.add('btn-primary', 'text-white');
+            firstBtn.classList.remove('btn-outline-secondary');
+        }
+    });
+</script>
+}
+
+@functions {
+    string GetTimeAgo(DateTime dt)
+    {
+        var diff = DateTime.Now - dt;
+        if (diff.TotalMinutes < 1)  return "Just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours   < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays    < 7)  return $"{(int)diff.TotalDays}d ago";
+        return dt.ToString("dd MMM yyyy");
+    }
+}
+"""
+
+with open(file_path, "w", encoding="utf-8") as f:
+    f.write(content)

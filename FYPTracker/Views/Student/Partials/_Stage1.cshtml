@@ -25,7 +25,7 @@
     if (isProposalApproved) { isIafApproved = true; }
 }
                     <div class="tab-pane fade @(isIafApproved ? "" : "show active")" id="iaf-form-pane" role="tabpanel" tabindex="0">
-                        <div class="premium-card p-4">
+                        <div class="card border-0 shadow-sm rounded-3 p-4">
                             <h4 class="fw-bold text-dark mb-2"><i class="fas fa-clipboard-list text-orange me-2"></i>1. Initial Project Allocation Form (IAF)</h4>
                             <p class="text-danger fw-bold mb-4"><i class="far fa-clock me-1"></i> Please complete and submit this form before @ViewBag.IAFDeadline.</p>
                             
@@ -280,7 +280,7 @@
                     
                     @* ── A. PROPOSAL FORM ────────────────────────────── *@
                     <div class="tab-pane fade @(isIafApproved && !isProposalApproved ? "show active" : "")" id="proposal-form-pane" role="tabpanel" tabindex="0">
-                        <div class="premium-card p-4">
+                        <div class="card border-0 shadow-sm rounded-3 p-4">
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>A. Stage 1 Final Submission</h4>
                             
                                 @* Select corresponding Milestone *@
@@ -409,7 +409,7 @@
 
                     @* ── B. PROGRESS REPORT FORM ─────────────────────── *@
                     <div class="tab-pane fade @(isProposalApproved && !isAllProgressApproved ? "show active" : "")" id="progress-form-pane" role="tabpanel" tabindex="0">
-                        <div class="premium-card p-4">
+                        <div class="card border-0 shadow-sm rounded-3 p-4">
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-chart-line text-orange me-2"></i>B. FYP Progress Report Form</h4>
                             
                             @{
