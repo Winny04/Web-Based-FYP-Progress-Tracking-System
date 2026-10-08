@@ -114,7 +114,14 @@
     <div class="signature-section">
         <div class="signature-box">
             <div style="font-weight: bold;">Supervisor Signature:</div>
-            <div style="margin-top: 20px; font-style: italic; color: #555;">(Digitally Signed - @supervisor?.FullName)</div>
+            @if (!string.IsNullOrEmpty(Model.SupervisorSignature) && Model.SupervisorSignature.StartsWith("data:image"))
+            {
+                <img src="@Model.SupervisorSignature" style="max-height: 80px; margin-top: 10px;" />
+            }
+            else
+            {
+                <div style="margin-top: 20px; font-style: italic; color: #555;">Not signed</div>
+            }
         </div>
         <div class="signature-box">
             <div style="font-weight: bold;">Supervisor Signature Date:</div>
@@ -123,7 +130,7 @@
     </div>
 
     <div class="section-title">Supervisor Comments & Feedback:</div>
-    <div class="content-box">@Model.SupervisorComments</div>
+    <div class="content-box">@Model.DisplayComments</div>
 
 </div>
 </body>

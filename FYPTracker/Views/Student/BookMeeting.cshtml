@@ -263,7 +263,7 @@
                             <td class="ps-3">
                                 <span class="badge @(m.Stage == 1 ? "bg-info" : "bg-primary")">Stage @m.Stage</span><br/>
                                 @if(m.WeekNumber > 0) {
-                                    <span class="badge bg-secondary text-dark mt-1">Week @m.WeekNumber</span>
+                                    <span class="badge bg-secondary text-white mt-1">Week @m.WeekNumber</span>
                                 } else {
                                     <span class="badge bg-light text-muted mt-1 border">Unlogged</span>
                                 }
@@ -393,7 +393,26 @@
                         <!-- Date Picker -->
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Date</label>
-                            <input type="date" name="meetingDate" id="meetingDate" class="form-control" required onchange="calculateDay()" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                            @{
+                                var minDate = DateTime.Today;
+                                var maxDate = DateTime.Today.AddYears(1);
+                                if (ViewBag.ActiveSession != null)
+                                {
+                                    var sessionStart = ViewBag.ActiveSession.StartDate;
+                                    var sessionEnd = ViewBag.ActiveSession.EndDate;
+                                    
+                                    if (sessionStart.HasValue && sessionStart.Value > minDate)
+                                    {
+                                        minDate = sessionStart.Value;
+                                    }
+                                    if (sessionEnd.HasValue)
+                                    {
+                                        // The first meeting must leave at least 13 weeks (91 days) before the end date to finish all 14 meetings.
+                                        maxDate = sessionEnd.Value.AddDays(-91);
+                                    }
+                                }
+                            }
+                            <input type="date" name="meetingDate" id="meetingDate" class="form-control" required onchange="calculateDay()" min="@minDate.ToString("yyyy-MM-dd")" max="@maxDate.ToString("yyyy-MM-dd")" />
                         </div>
 
                         <!-- Day (Auto-filled & Read-only) -->

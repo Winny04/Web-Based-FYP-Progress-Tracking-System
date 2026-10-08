@@ -26,6 +26,34 @@ namespace FYPTracker.Models
 
         public string? SupervisorComments { get; set; }
 
+        [NotMapped]
+        public string? SupervisorSignature 
+        { 
+            get 
+            {
+                if (SupervisorComments != null && SupervisorComments.Contains("|||SIG|||"))
+                {
+                    var parts = SupervisorComments.Split(new[] { "|||SIG|||" }, StringSplitOptions.None);
+                    return parts.Length > 1 ? parts[1] : null;
+                }
+                return null;
+            }
+            set { }
+        }
+
+        [NotMapped]
+        public string DisplayComments
+        {
+            get
+            {
+                if (SupervisorComments != null && SupervisorComments.Contains("|||SIG|||"))
+                {
+                    return SupervisorComments.Split(new[] { "|||SIG|||" }, StringSplitOptions.None)[0];
+                }
+                return SupervisorComments ?? "";
+            }
+        }
+
         [Column(TypeName = "datetime")]
         public DateTime? NextMeetingDate { get; set; }
 

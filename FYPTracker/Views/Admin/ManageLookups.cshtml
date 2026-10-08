@@ -41,16 +41,16 @@
         <div class="card-body p-5 pt-0">
             <ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x mb-5 fs-5 fw-bolder border-0">
                 <li class="nav-item">
-                    <a class="nav-link active text-primary" data-bs-toggle="tab" href="#tab_departments" onclick="loadData('Department')">Departments</a>
+                    <a class="nav-link active text-gray-600 text-active-primary" data-bs-toggle="tab" href="#tab_departments" onclick="loadData('Department')">Departments</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link text-muted" data-bs-toggle="tab" href="#tab_programmes" onclick="loadData('Programme')">Programmes</a>
+                    <a class="nav-link text-gray-600 text-active-primary" data-bs-toggle="tab" href="#tab_programmes" onclick="loadData('Programme')">Programmes</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link text-muted" data-bs-toggle="tab" href="#tab_specializations" onclick="loadData('Specialization')">Specializations</a>
+                    <a class="nav-link text-gray-600 text-active-primary" data-bs-toggle="tab" href="#tab_specializations" onclick="loadData('Specialization')">Specializations</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link text-muted" data-bs-toggle="tab" href="#tab_academicsessions" onclick="loadData('AcademicSession')">Academic Sessions</a>
+                    <a class="nav-link text-gray-600 text-active-primary" data-bs-toggle="tab" href="#tab_academicsessions" onclick="loadData('AcademicSession')">Academic Sessions</a>
                 </li>
             </ul>
 
@@ -68,7 +68,7 @@
                 <div class="table-responsive">
                     <table class="table table-premium align-middle mb-0" id="lookupTable">
                         <thead class="bg-light text-muted text-uppercase fw-bolder" style="font-size: 0.75rem; letter-spacing: 0.5px;">
-                            <tr>
+                            <tr id="tableHeaderRow">
                                 <th class="w-100px ps-4 border-bottom-0">ID</th>
                                 <th class="min-w-200px border-bottom-0">Name</th>
                                 <th class="min-w-100px border-bottom-0">Status</th>
@@ -87,12 +87,12 @@
 
 <!-- Add/Edit Modal -->
 <div class="modal fade" id="lookupModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered mw-500px">
+    <div class="modal-dialog modal-dialog-centered mw-550px">
         <div class="modal-content rounded-4 border-0 shadow-lg">
-            <div class="modal-header bg-light border-bottom-0 p-4">
-                <h2 class="fw-bolder text-dark mb-0 d-flex align-items-center" id="modalTitle">
+            <div class="modal-header bg-light border-bottom-0 p-3 px-4">
+                <h4 class="fw-bolder text-dark mb-0 d-flex align-items-center" id="modalTitle">
                     <i class="fas fa-edit text-primary me-2"></i> Add Lookup
-                </h2>
+                </h4>
                 <div class="btn btn-icon btn-sm btn-active-light-primary ms-2" data-bs-dismiss="modal">
                     <i class="bi bi-x fs-2"></i>
                 </div>
@@ -100,14 +100,39 @@
             <form id="lookupForm" class="form">
                 <div class="modal-body p-4 pt-4">
                     <input type="hidden" id="lookupId" value="0" />
-                    <div class="fv-row mb-4">
+                    <div class="fv-row mb-3">
                         <label class="required fs-6 fw-bold form-label text-muted text-uppercase small mb-2">Name</label>
                         <input type="text" class="form-control form-control-solid rounded-3" id="lookupName" placeholder="Enter name" required />
                     </div>
+                    <div id="academicSessionFields" class="d-none">
+                        <div class="row">
+                            <div class="col-md-6 fv-row mb-3">
+                                <label class="required fs-6 fw-bold form-label text-muted text-uppercase small mb-2">Start Date</label>
+                                <input type="date" class="form-control form-control-solid rounded-3" id="lookupStartDate" />
+                            </div>
+                            <div class="col-md-6 fv-row mb-3">
+                                <label class="required fs-6 fw-bold form-label text-muted text-uppercase small mb-2">End Date</label>
+                                <input type="date" class="form-control form-control-solid rounded-3" id="lookupEndDate" />
+                            </div>
+                        </div>
+                        <div class="fv-row mb-2">
+                            <div id="durationDisplay" class="text-muted small d-none fw-semibold">
+                                <i class="fas fa-clock me-1 text-primary"></i>Duration: <span id="durationText"></span>
+                            </div>
+                        </div>
+                        <div class="fv-row mt-3 mb-2 d-flex align-items-center">
+                            <div class="form-check form-switch m-0 p-0" style="padding-left: 2.5em !important;">
+                                <input class="form-check-input" type="checkbox" id="lookupIsCurrent" style="width: 2.5em; height: 1.25em; cursor: pointer; margin-left: -2.5em;" />
+                            </div>
+                            <label class="fw-bold text-dark mb-0 ms-3" for="lookupIsCurrent" style="cursor: pointer;">
+                                Set as Current Session
+                            </label>
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-footer border-top-0 bg-light p-3">
-                    <button type="reset" class="btn btn-light fw-bold" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary fw-bold px-4">
+                <div class="modal-footer border-top-0 bg-light p-3 d-flex justify-content-end gap-2">
+                    <button type="reset" class="btn btn-light fw-bold m-0" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary fw-bold px-4 m-0">
                         <span class="indicator-label">Save Changes</span>
                     </button>
                 </div>
@@ -136,7 +161,18 @@
                 let url = id == "0" ? '@Url.Action("AddLookup", "Admin")' : '@Url.Action("EditLookup", "Admin")';
                 let token = $('<div>@Html.AntiForgeryToken()</div>').find('input').val();
                 
-                $.post(url, { type: currentType, id: id, name: name, __RequestVerificationToken: token }, function (res) {
+                let data = { type: currentType, id: id, name: name, __RequestVerificationToken: token };
+                if (currentType === 'AcademicSession') {
+                    data.startDate = $('#lookupStartDate').val();
+                    data.endDate = $('#lookupEndDate').val();
+                    data.isCurrent = $('#lookupIsCurrent').is(':checked');
+                    if (!data.startDate || !data.endDate) {
+                        Swal.fire("Error", "Start Date and End Date are required for Academic Session.", "error");
+                        return;
+                    }
+                }
+                
+                $.post(url, data, function (res) {
                     if (res.status) {
                         $('#lookupModal').modal('hide');
                         Swal.fire("Success", "Saved successfully!", "success");
@@ -159,6 +195,26 @@
                     $('#lookupTable').DataTable().destroy();
                 }
 
+                if (currentType === 'AcademicSession') {
+                    $('#tableHeaderRow').html(`
+                        <th class="min-w-150px ps-4 border-bottom-0">Name</th>
+                        <th class="min-w-100px border-bottom-0">Start Date</th>
+                        <th class="min-w-100px border-bottom-0">End Date</th>
+                        <th class="min-w-150px border-bottom-0">Duration</th>
+                        <th class="min-w-100px border-bottom-0">Status</th>
+                        <th class="min-w-100px border-bottom-0">Current</th>
+                        <th class="min-w-100px text-end pe-4 border-bottom-0">Actions</th>
+                    `);
+                } else {
+                    $('#tableHeaderRow').html(`
+                        <th class="w-100px ps-4 border-bottom-0">ID</th>
+                        <th class="min-w-200px border-bottom-0">Name</th>
+                        <th class="min-w-100px border-bottom-0">Status</th>
+                        <th class="min-w-150px text-end pe-4 border-bottom-0">Actions</th>
+                    `);
+                }
+                $('#lookupTableBody').empty();
+
                 let html = '';
                 if(res.data && res.data.length > 0) {
                     res.data.forEach(function (item) {
@@ -167,25 +223,65 @@
                         let toggleIcon = item.isActive ? 'fa-ban' : 'fa-check-circle';
                         let toggleTitle = item.isActive ? 'Deactivate' : 'Activate';
 
-                        html += `
-                            <tr class="border-bottom border-light">
-                                <td class="ps-4">
-                                    <span class="text-muted fw-bold">#${item.id}</span>
-                                </td>
-                                <td>
-                                    <div class="fw-bolder text-dark fs-6">${item.name}</div>
-                                </td>
-                                <td>${statusBadge}</td>
-                                <td class="text-end pe-4">
-                                    <button class="btn btn-icon btn-light-primary btn-sm rounded-circle me-2 border shadow-sm" onclick="showEditModal(${item.id}, '${item.name.replace(/'/g, "\\'")}')" title="Edit">
-                                        <i class="fas fa-pen"></i>
-                                    </button>
-                                    <button class="btn btn-icon ${toggleBtnClass} btn-sm rounded-circle border shadow-sm" onclick="toggleStatus(${item.id})" title="${toggleTitle}">
-                                        <i class="fas ${toggleIcon}"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        `;
+                        if (currentType === 'AcademicSession') {
+                            let currentBadge = item.isCurrent ? '<span class="badge bg-primary">Current</span>' : '-';
+                            let sDate = item.startDate ? item.startDate.substring(0,10) : '';
+                            let eDate = item.endDate ? item.endDate.substring(0,10) : '';
+                            
+                            let duration = '';
+                            if (sDate && eDate) {
+                                let d1 = new Date(sDate);
+                                let d2 = new Date(eDate);
+                                let diffTime = Math.abs(d2 - d1);
+                                let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                let weeks = Math.floor(diffDays / 7);
+                                let days = diffDays % 7;
+                                duration = `${weeks} weeks ${days} days`;
+                            }
+                            
+                            html += `
+                                <tr class="border-bottom border-light align-middle">
+                                    <td class="ps-4">
+                                        <div class="fw-bolder text-dark fs-6">${item.name}</div>
+                                    </td>
+                                    <td>${sDate}</td>
+                                    <td>${eDate}</td>
+                                    <td>${duration}</td>
+                                    <td>${statusBadge}</td>
+                                    <td>${currentBadge}</td>
+                                    <td class="text-end pe-4">
+                                        <div class="d-flex justify-content-end align-items-center gap-2">
+                                            <button class="btn btn-icon btn-light-primary btn-sm rounded-circle border shadow-sm m-0" onclick="showEditModalSession(${item.id}, '${item.name.replace(/'/g, "\\'")}', '${sDate}', '${eDate}', ${item.isCurrent})" title="Edit">
+                                                <i class="fas fa-pen"></i>
+                                            </button>
+                                            <button class="btn btn-icon ${toggleBtnClass} btn-sm rounded-circle border shadow-sm m-0" onclick="toggleStatus(${item.id})" title="${toggleTitle}">
+                                                <i class="fas ${toggleIcon}"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                        } else {
+                            html += `
+                                <tr class="border-bottom border-light">
+                                    <td class="ps-4">
+                                        <span class="text-muted fw-bold">#${item.id}</span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bolder text-dark fs-6">${item.name}</div>
+                                    </td>
+                                    <td>${statusBadge}</td>
+                                    <td class="text-end pe-4">
+                                        <button class="btn btn-icon btn-light-primary btn-sm rounded-circle me-2 border shadow-sm" onclick="showEditModal(${item.id}, '${item.name.replace(/'/g, "\\'")}')" title="Edit">
+                                            <i class="fas fa-pen"></i>
+                                        </button>
+                                        <button class="btn btn-icon ${toggleBtnClass} btn-sm rounded-circle border shadow-sm" onclick="toggleStatus(${item.id})" title="${toggleTitle}">
+                                            <i class="fas ${toggleIcon}"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `;
+                        }
                     });
                 } 
                 $('#lookupTableBody').html(html);
@@ -200,7 +296,7 @@
                         "emptyTable": `<div class="text-center py-5"><i class="fas fa-folder-open fa-3x text-muted mb-3"></i><div class="text-muted fw-bold fs-5">No records found.</div></div>`
                     },
                     "columnDefs": [
-                        { "orderable": false, "targets": 3 }
+                        { "orderable": false, "targets": currentType === 'AcademicSession' ? 6 : 3 }
                     ]
                 });
                 
@@ -209,10 +305,51 @@
             });
         }
 
+        function toggleSessionFields() {
+            if (currentType === 'AcademicSession') {
+                $('#academicSessionFields').removeClass('d-none');
+            } else {
+                $('#academicSessionFields').addClass('d-none');
+            }
+        }
+
+        function updateDurationDisplay() {
+            let sDate = $('#lookupStartDate').val();
+            let eDate = $('#lookupEndDate').val();
+            let display = $('#durationDisplay');
+            
+            if (sDate && eDate) {
+                let d1 = new Date(sDate);
+                let d2 = new Date(eDate);
+                if (d2 > d1) {
+                    let diffTime = Math.abs(d2 - d1);
+                    let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    let weeks = Math.floor(diffDays / 7);
+                    let days = diffDays % 7;
+                    $('#durationText').text(`${weeks} weeks ${days} days`);
+                    display.removeClass('d-none');
+                } else {
+                    $('#durationText').text('Invalid duration (End Date must be after Start Date)');
+                    display.removeClass('d-none');
+                }
+            } else {
+                display.addClass('d-none');
+            }
+        }
+
+        $(document).ready(function() {
+            $('#lookupStartDate, #lookupEndDate').on('change', updateDurationDisplay);
+        });
+
         function showAddModal() {
             $('#modalTitle').html('<i class="fas fa-plus-circle text-primary me-2"></i> Add ' + currentType);
             $('#lookupId').val(0);
             $('#lookupName').val('');
+            $('#lookupStartDate').val('');
+            $('#lookupEndDate').val('');
+            $('#lookupIsCurrent').prop('checked', false);
+            updateDurationDisplay();
+            toggleSessionFields();
             $('#lookupModal').modal('show');
         }
 
@@ -220,6 +357,19 @@
             $('#modalTitle').html('<i class="fas fa-edit text-primary me-2"></i> Edit ' + currentType);
             $('#lookupId').val(id);
             $('#lookupName').val(name);
+            toggleSessionFields();
+            $('#lookupModal').modal('show');
+        }
+
+        function showEditModalSession(id, name, startDate, endDate, isCurrent) {
+            $('#modalTitle').html('<i class="fas fa-edit text-primary me-2"></i> Edit ' + currentType);
+            $('#lookupId').val(id);
+            $('#lookupName').val(name);
+            $('#lookupStartDate').val(startDate);
+            $('#lookupEndDate').val(endDate);
+            $('#lookupIsCurrent').prop('checked', isCurrent);
+            updateDurationDisplay();
+            toggleSessionFields();
             $('#lookupModal').modal('show');
         }
 

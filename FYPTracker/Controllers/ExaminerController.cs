@@ -759,14 +759,21 @@ namespace FYPTracker.Controllers
                 return RedirectToAction("Index");
             }
 
-            var stage1Milestones = await _context.FYPMilestones
-                .Where(m => m.FYPProjectId == milestone.FYPProjectId && !m.Title.StartsWith("Step"))
+            var stage1RequiredMilestones = await _context.FYPMilestones
+                .Where(m => m.FYPProjectId == milestone.FYPProjectId && 
+                            m.Stage == 1 && 
+                            m.MilestoneSource == "Default" && 
+                            m.IsRequired)
                 .ToListAsync();
-            bool isAllStage1Approved = stage1Milestones.Count >= 2 && stage1Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
+
+            bool isAllStage1Approved = stage1RequiredMilestones.Count >= 2 && stage1RequiredMilestones.All(m => 
+                m.Status == "Approved" || 
+                m.Status == "Completed" || 
+                (m.Status == "AdminApproved" && (m.Title.Contains("IAF") || m.Title.Contains("Initial Assessment Form"))));
 
             if (!isAllStage1Approved)
             {
-                TempData["Error"] = "Both Stage 1 milestones must be approved by the supervisor before joint evaluation.";
+                TempData["Error"] = "Required Stage 1 milestones (IAF & Final Submission) must be approved before joint evaluation.";
                 return RedirectToAction("StudentDetails", new { projectId = milestone.FYPProjectId });
             }
 

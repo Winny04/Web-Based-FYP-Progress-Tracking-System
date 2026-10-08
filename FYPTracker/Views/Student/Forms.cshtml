@@ -188,7 +188,7 @@
         var iafMilestone = milestones.FirstOrDefault(m => (m.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) && !m.Title.Contains("Industrial", StringComparison.OrdinalIgnoreCase));
         bool isIafApproved = iafMilestone != null && iafMilestone.Status == "AdminApproved";
         int iafMilestoneId = iafMilestone?.Id ?? 0;
-        bool isIafLocked = iafMilestone != null && (iafMilestone.Status == "Submitted" || iafMilestone.Status == "UnderReview" || iafMilestone.Status == "Approved" || iafMilestone.Status == "AdminApproved" || iafMilestone.Status == "DefenseScheduled" || iafMilestone.Status == "DefenseRequired");
+        bool isIafLocked = iafMilestone != null && (iafMilestone.Status == "PendingSupervisorReview" || iafMilestone.Status == "SupervisorSigned" || iafMilestone.Status == "PendingPanelReview" || iafMilestone.Status == "AdminApproved");
 
         var proposalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
         bool isProposalApproved = proposalMilestone != null && proposalMilestone.Status == "Approved";
@@ -360,6 +360,10 @@
                                     
                                     if(iafMilestone.Status == "Approved") {
                                         displayStatus = "Approved by Supervisor, Pending Admin";
+                                        alertColor = "warning";
+                                        icon = "fa-hourglass-half";
+                                    } else if (iafMilestone.Status == "SupervisorSigned") {
+                                        displayStatus = "Supervisor Signed, Pending Admin View";
                                         alertColor = "warning";
                                         icon = "fa-hourglass-half";
                                     } else if (iafMilestone.Status == "AdminApproved") {

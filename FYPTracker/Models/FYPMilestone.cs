@@ -49,6 +49,14 @@ namespace FYPTracker.Models
         /// <summary>FYP stage this milestone belongs to: 1 or 2.</summary>
         public int Stage { get; set; } = 1;
 
+        public bool IsRequired { get; set; } = true;
+        
+        public int? DefaultMilestoneTemplateId { get; set; }
+        public virtual DefaultMilestoneTemplate? Template { get; set; }
+        
+        [StringLength(50)]
+        public string MilestoneCode { get; set; } = "GENERIC";
+
         // --- Joint Marking Fields ---
         public bool IsReadyForJointEvaluation { get; set; } = false;
 

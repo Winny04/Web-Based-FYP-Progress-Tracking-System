@@ -1510,6 +1510,19 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             }
             
             ViewBag.CurrentSessionFilter = sessionFilter;
+            
+            var currentSessionObj = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == sessionFilter);
+            if (currentSessionObj != null)
+            {
+                ViewBag.DefaultMilestoneTemplates = await _context.DefaultMilestoneTemplates
+                    .Where(t => t.AcademicSessionId == currentSessionObj.Id && t.Stage == 1)
+                    .OrderBy(t => t.DisplayOrder)
+                    .ToListAsync();
+            }
+            else
+            {
+                ViewBag.DefaultMilestoneTemplates = new List<DefaultMilestoneTemplate>();
+            }
 
             var existingIaf = await _context.FYPMilestones
                 .Include(m => m.Project)
@@ -2732,7 +2745,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 }
                 else if (type == "AcademicSession")
                 {
-                    var data = _context.AcademicSessions.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive }).ToList();
+                    var data = _context.AcademicSessions.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive, startDate = x.StartDate, endDate = x.EndDate, isCurrent = x.IsCurrent }).ToList();
                     return Json(new { data = data });
                 }
                 return Json(new { data = new List<object>() });
@@ -2745,7 +2758,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult AddLookup(string type, string name)
+        public IActionResult AddLookup(string type, string name, DateTime? startDate = null, DateTime? endDate = null, bool isCurrent = false, bool isActive = true)
         {
             try
             {
@@ -2768,8 +2781,16 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 }
                 else if (type == "AcademicSession")
                 {
+                    if (startDate.HasValue && endDate.HasValue && endDate <= startDate) return Json(new { status = false, msg = "End Date must be after Start Date." });
                     if (_context.AcademicSessions.Any(x => x.Name.ToLower() == name.ToLower())) return Json(new { status = false, msg = "Exists!" });
-                    _context.AcademicSessions.Add(new AcademicSession { Name = name, IsActive = true });
+                    
+                    if (isCurrent)
+                    {
+                        var currents = _context.AcademicSessions.Where(s => s.IsCurrent == true).ToList();
+                        foreach (var curr in currents) curr.IsCurrent = false;
+                    }
+                    
+                    _context.AcademicSessions.Add(new AcademicSession { Name = name, IsActive = true, StartDate = startDate, EndDate = endDate, IsCurrent = isCurrent });
                 }
                 _context.SaveChanges();
                 return Json(new { status = true });
@@ -2782,7 +2803,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult EditLookup(string type, int id, string name)
+        public IActionResult EditLookup(string type, int id, string name, DateTime? startDate = null, DateTime? endDate = null, bool isCurrent = false, bool isActive = true)
         {
             try
             {
@@ -2791,22 +2812,37 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 if (type == "Department")
                 {
                     var entity = _context.Department.Find(id);
-                    if (entity != null) { entity.Name = name; _context.SaveChanges(); }
+                    if (entity != null) { entity.Name = name; entity.IsActive = isActive; _context.SaveChanges(); }
                 }
                 else if (type == "Programme")
                 {
                     var entity = _context.Programme.Find(id);
-                    if (entity != null) { entity.Name = name; _context.SaveChanges(); }
+                    if (entity != null) { entity.Name = name; entity.IsActive = isActive; _context.SaveChanges(); }
                 }
                 else if (type == "Specialization")
                 {
                     var entity = _context.Specialization.Find(id);
-                    if (entity != null) { entity.Name = name; _context.SaveChanges(); }
+                    if (entity != null) { entity.Name = name; entity.IsActive = isActive; _context.SaveChanges(); }
                 }
                 else if (type == "AcademicSession")
                 {
+                    if (startDate.HasValue && endDate.HasValue && endDate <= startDate) return Json(new { status = false, msg = "End Date must be after Start Date." });
                     var entity = _context.AcademicSessions.Find(id);
-                    if (entity != null) { entity.Name = name; _context.SaveChanges(); }
+                    if (entity != null) 
+                    { 
+                        if (isCurrent && entity.IsCurrent != true)
+                        {
+                            var currents = _context.AcademicSessions.Where(s => s.IsCurrent == true && s.Id != id).ToList();
+                            foreach (var curr in currents) curr.IsCurrent = false;
+                        }
+                        
+                        entity.Name = name; 
+                        entity.IsActive = isActive; 
+                        entity.StartDate = startDate; 
+                        entity.EndDate = endDate; 
+                        entity.IsCurrent = isCurrent; 
+                        _context.SaveChanges(); 
+                    }
                 }
                 return Json(new { status = true });
             }
@@ -2899,6 +2935,138 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             {
                 return Json(new { status = false, msg = ex.Message });
             }
+        }
+
+        // === Default Milestone Template Management ===
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddDefaultMilestoneTemplate(DefaultMilestoneTemplate model, string sessionFilter)
+        {
+            if (ModelState.IsValid)
+            {
+                var sessionObj = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == sessionFilter);
+                if (sessionObj != null)
+                {
+                    model.AcademicSessionId = sessionObj.Id;
+
+                    bool exists = await _context.DefaultMilestoneTemplates.AnyAsync(t => 
+                        t.AcademicSessionId == model.AcademicSessionId && 
+                        t.Stage == model.Stage &&
+                        ((t.MilestoneCode == model.MilestoneCode && (model.MilestoneCode == "IAF" || model.MilestoneCode == "STAGE1_FINAL")) || 
+                         (t.Title == model.Title))
+                    );
+
+                    if (exists)
+                    {
+                        TempData["Error"] = "A template with this Milestone Code (if IAF/STAGE1_FINAL) or Title already exists for this stage and session.";
+                        return RedirectToAction(nameof(Settings), new { sessionFilter });
+                    }
+
+                    _context.DefaultMilestoneTemplates.Add(model);
+                    await _context.SaveChangesAsync();
+
+                    if (model.IsActive && model.Stage == 1)
+                    {
+                        var projects = await _context.FYPProjects
+                            .Include(p => p.Milestones)
+                            .Where(p => p.AcademicSession == sessionFilter && p.Status != "Failed" && p.Status != "Completed")
+                            .ToListAsync();
+
+                        var newMilestones = projects
+                            .Where(p => !p.Milestones.Any(m => m.DefaultMilestoneTemplateId == model.Id))
+                            .Select(p => new FYPMilestone
+                            {
+                                FYPProjectId = p.Id,
+                                Title = model.Title,
+                                Description = model.Description,
+                                DueDate = model.DueDate,
+                                Status = "Pending",
+                                MilestoneSource = "Default",
+                                MilestoneCode = model.MilestoneCode,
+                                Stage = model.Stage,
+                                IsRequired = model.IsRequired,
+                                DefaultMilestoneTemplateId = model.Id
+                            }).ToList();
+
+                        if (newMilestones.Any())
+                        {
+                            _context.FYPMilestones.AddRange(newMilestones);
+                            await _context.SaveChangesAsync();
+                        }
+                        await _context.SaveChangesAsync();
+                    }
+
+                    TempData["Success"] = "Default Milestone added successfully.";
+                }
+            }
+            return RedirectToAction(nameof(Settings), new { sessionFilter });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditDefaultMilestoneTemplate(int id, DefaultMilestoneTemplate model, string sessionFilter)
+        {
+            var existing = await _context.DefaultMilestoneTemplates.FindAsync(id);
+            if (existing != null)
+            {
+                existing.Title = model.Title;
+                existing.MilestoneCode = model.MilestoneCode;
+                existing.Stage = model.Stage;
+                existing.IsRequired = model.IsRequired;
+                existing.DueDate = model.DueDate;
+                existing.DisplayOrder = model.DisplayOrder;
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Template updated successfully.";
+            }
+            return RedirectToAction(nameof(Settings), new { sessionFilter });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleDefaultMilestoneTemplate(int id, string sessionFilter)
+        {
+            var existing = await _context.DefaultMilestoneTemplates
+                .Include(t => t.Session)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
+            if (existing != null)
+            {
+                existing.IsActive = !existing.IsActive;
+                await _context.SaveChangesAsync();
+                
+                if (existing.IsActive && existing.Stage == 1 && existing.Session != null)
+                {
+                    var projects = await _context.FYPProjects
+                        .Include(p => p.Milestones)
+                        .Where(p => p.AcademicSession == existing.Session.Name && p.Status != "Failed" && p.Status != "Completed")
+                        .ToListAsync();
+
+                    var newMilestones = projects
+                        .Where(p => !p.Milestones.Any(m => m.DefaultMilestoneTemplateId == existing.Id))
+                        .Select(p => new FYPMilestone
+                        {
+                            FYPProjectId = p.Id,
+                            Title = existing.Title,
+                            Description = existing.Description,
+                            DueDate = existing.DueDate,
+                            Status = "Pending",
+                            MilestoneSource = "Default",
+                            MilestoneCode = existing.MilestoneCode,
+                            Stage = existing.Stage,
+                            IsRequired = existing.IsRequired,
+                            DefaultMilestoneTemplateId = existing.Id
+                        }).ToList();
+
+                    if (newMilestones.Any())
+                    {
+                        _context.FYPMilestones.AddRange(newMilestones);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+                TempData["Success"] = $"Template {(existing.IsActive ? "activated" : "deactivated")}.";
+            }
+            return RedirectToAction(nameof(Settings), new { sessionFilter });
         }
     }
 }

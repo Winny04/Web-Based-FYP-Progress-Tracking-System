@@ -44,6 +44,7 @@ namespace FYPTracker.Models
         public virtual DbSet<ChatGroupMember>   ChatGroupMembers   { get; set; } = null!;
 
         public virtual DbSet<FYPSetting>        FYPSettings        { get; set; } = null!;
+        public virtual DbSet<DefaultMilestoneTemplate> DefaultMilestoneTemplates { get; set; } = null!;
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {

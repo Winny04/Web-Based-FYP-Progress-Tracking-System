@@ -289,6 +289,50 @@ namespace FYPTracker.Migrations
                     b.ToTable("ChatMessage", (string)null);
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.DefaultMilestoneTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<int>("AcademicSessionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MilestoneCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Stage")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcademicSessionId");
+
+                    b.ToTable("DefaultMilestoneTemplates");
+                });
+
             modelBuilder.Entity("FYPTracker.Models.Department", b =>
                 {
                     b.Property<int>("Id")
@@ -391,6 +435,9 @@ namespace FYPTracker.Migrations
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("datetime");
 
+                    b.Property<int?>("DefaultMilestoneTemplateId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("DefenseDate")
                         .HasColumnType("date");
 
@@ -416,6 +463,14 @@ namespace FYPTracker.Migrations
 
                     b.Property<bool>("IsReadyForJointEvaluation")
                         .HasColumnType("bit");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MilestoneCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<string>("MilestoneSource")
                         .IsRequired()
@@ -451,6 +506,8 @@ namespace FYPTracker.Migrations
                         .HasColumnType("nvarchar(255)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DefaultMilestoneTemplateId");
 
                     b.HasIndex("FYPProjectId");
 
@@ -788,6 +845,9 @@ namespace FYPTracker.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"), 1L, 1);
+
+                    b.Property<int?>("AcademicSessionId")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("datetime");
@@ -1185,6 +1245,17 @@ namespace FYPTracker.Migrations
                     b.Navigation("Sender");
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.DefaultMilestoneTemplate", b =>
+                {
+                    b.HasOne("FYPTracker.Models.AcademicSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("AcademicSessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("FYPTracker.Models.FYPActivity", b =>
                 {
                     b.HasOne("FYPTracker.Models.ApplicationUser", "Student")
@@ -1217,6 +1288,10 @@ namespace FYPTracker.Migrations
 
             modelBuilder.Entity("FYPTracker.Models.FYPMilestone", b =>
                 {
+                    b.HasOne("FYPTracker.Models.DefaultMilestoneTemplate", "Template")
+                        .WithMany()
+                        .HasForeignKey("DefaultMilestoneTemplateId");
+
                     b.HasOne("FYPTracker.Models.FYPProject", "Project")
                         .WithMany("Milestones")
                         .HasForeignKey("FYPProjectId")
@@ -1224,6 +1299,8 @@ namespace FYPTracker.Migrations
                         .IsRequired();
 
                     b.Navigation("Project");
+
+                    b.Navigation("Template");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.FYPNotification", b =>

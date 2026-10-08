@@ -1169,9 +1169,11 @@ namespace FYPTracker.Controllers
 
             // ── Check if supervisor has configured any availability ──
             bool supervisorHasAvailability = false;
+            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
+            ViewBag.ActiveSession = activeSession;
+            
             if (approvedRequest?.Supervisor != null)
             {
-                var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
                 if (activeSession != null)
                 {
                     supervisorHasAvailability = await _context.SupervisorTimetableEntries
@@ -1234,6 +1236,26 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
+            // ── Academic Session Validation ──
+            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
+            if (activeSession == null || !activeSession.StartDate.HasValue || !activeSession.EndDate.HasValue)
+            {
+                TempData["Error"] = "There is no currently active Academic Session with valid dates. Please contact an admin.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            if (parsedDate.Date < activeSession.StartDate.Value.Date || parsedDate.Date > activeSession.EndDate.Value.Date)
+            {
+                TempData["Error"] = $"The selected date must be within the current academic session ({activeSession.StartDate.Value:dd MMM yyyy} - {activeSession.EndDate.Value:dd MMM yyyy}).";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            if (parsedDate.Date.AddDays(91) > activeSession.EndDate.Value.Date)
+            {
+                TempData["Error"] = "The 14-week meeting schedule cannot be completed within the current academic session. Please select an earlier date.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
             // ── Guard checks for new Timetable availability are handled below ──
 
             // ── Guard: Ensure student is actually supervised by this supervisor ──
@@ -1258,13 +1280,7 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
-            // Validations
-            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
-            if (activeSession == null)
-            {
-                TempData["Error"] = "No active academic session found.";
-                return RedirectToAction(nameof(BookMeeting));
-            }
+            // Validations handled above
 
             bool hasTimetable = await _context.SupervisorTimetableEntries.AnyAsync(t => t.SupervisorId == supervisorId && t.AcademicSessionId == activeSession.Id);
             if (!hasTimetable)

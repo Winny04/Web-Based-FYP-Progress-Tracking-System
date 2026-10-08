@@ -30,8 +30,11 @@
         return false;
     }
 
-    // Differentiate milestones by their prefix (Stage 2 steps start with "Step ")
-    var calcStage1Milestones = milestones.Where(m => !m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
+    var calcStage1Milestones = milestones.Where(m => 
+        m.Stage == 1 && 
+        m.MilestoneSource == "Default" && 
+        m.IsRequired
+    ).ToList();
     var calcStage2Milestones = milestones.Where(m => m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
 
     int totalStage1 = calcStage1Milestones.Count;
