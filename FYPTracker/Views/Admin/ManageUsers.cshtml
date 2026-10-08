@@ -156,119 +156,125 @@
                 </div>
             </div>
             <div class="modal-body p-5">
-                <div class="form-horizontal">
+                <div class="form-horizontal row g-3">
                     <input type="hidden" id="editUserId" />
                     <input type="hidden" id="editUserType" />
 
-                    <div class="fv-row mb-5">
+                    <div class="col-12 col-md-6">
                         <label class="form-label fw-bolder text-dark fs-6">Full Name <span class="text-danger">*</span></label>
-                        <input type="text" id="editFullName" class="form-control form-control-lg form-control-solid" placeholder="Enter full name" />
+                        <input type="text" id="editFullName" class="form-control" placeholder="Enter full name" />
                         <div id="editFullNameError" class="text-danger mt-1 fs-7 fw-bold"></div>
                     </div>
 
-                    <div class="fv-row mb-5">
-                        <label class="form-label fw-bolder text-dark fs-6">Phone</label>
-                        <input type="text" id="editPhone" class="form-control form-control-lg form-control-solid" placeholder="012-3456789" />
-                        <div id="editPhoneError" class="text-danger mt-1 fs-7 fw-bold"></div>
-                    </div>
-
-                    <div class="fv-row mb-5">
+                    <div class="col-12 col-md-6">
                         <label class="form-label fw-bolder text-dark fs-6">Email <span class="text-danger">*</span></label>
-                        <input type="email" id="editEmail" class="form-control form-control-lg form-control-solid" placeholder="xxx@gmail.com or xxx@student.newinti.edu.my" />
+                        <input type="email" id="editEmail" class="form-control" placeholder="xxx@gmail.com" />
                         <div id="editEmailError" class="text-danger mt-1 fs-7 fw-bold"></div>
                     </div>
 
-                    <div id="editLookupFields" style="display:none;">
-                        <div class="fv-row mb-5" id="editDeptContainer">
-                            <label class="form-label fw-bolder text-dark fs-6">Department <span class="text-danger">*</span></label>
-                            <select id="editDepartment" class="form-select form-select-solid form-select-lg fw-bold">
-                                <option value="">-- Select Department --</option>
-                                @foreach (var dept in departmentList)
-                                {
-                                    <option value="@dept.Value">@dept.Text</option>
-                                }
-                            </select>
-                            <div id="editDepartmentError" class="text-danger mt-1 fs-7 fw-bold"></div>
-                        </div>
-                        <div class="fv-row mb-5" id="editProgContainer">
-                            <label class="form-label fw-bolder text-dark fs-6">Programme</label>
-                            <select id="editProgramme" class="form-select form-select-solid form-select-lg fw-bold" multiple="multiple" data-control="select2" data-placeholder="-- Select Programme(s) --">
-                                <option value=""></option>
-                                @foreach (var prog in programmeList)
-                                {
-                                    <option value="@prog.Value">@prog.Text</option>
-                                }
-                            </select>
-                            <div id="editProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
-                        </div>
-                        <div class="fv-row mb-5" id="editSpecContainer">
-                            <label class="form-label fw-bolder text-dark fs-6">Specialization</label>
-                            <select id="editSpecialization" class="form-select form-select-solid form-select-lg fw-bold" multiple="multiple" data-control="select2" data-placeholder="-- Select Specialization(s) --">
-                                <option value=""></option>
-                                @foreach (var spec in specializationList)
-                                {
-                                    <option value="@spec.Value">@spec.Text</option>
-                                }
-                            </select>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-bolder text-dark fs-6">Phone</label>
+                        <input type="text" id="editPhone" class="form-control" placeholder="012-3456789" />
+                        <div id="editPhoneError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                    </div>
+
+                    <div id="editLookupFields" class="col-12" style="display:none;">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6" id="editDeptContainer">
+                                <label class="form-label fw-bolder text-dark fs-6">Department <span class="text-danger">*</span></label>
+                                <select id="editDepartment" class="form-select fw-bold">
+                                    <option value="">-- Select Department --</option>
+                                    @foreach (var dept in departmentList)
+                                    {
+                                        <option value="@dept.Value">@dept.Text</option>
+                                    }
+                                </select>
+                                <div id="editDepartmentError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                            </div>
+                            <div class="col-12 col-md-6" id="editProgContainer">
+                                <label class="form-label fw-bolder text-dark fs-6">Programme</label>
+                                <select id="editProgramme" class="form-select fw-bold" multiple="multiple" data-control="select2" data-placeholder="-- Select Programme(s) --">
+                                    <option value=""></option>
+                                    @foreach (var prog in programmeList)
+                                    {
+                                        <option value="@prog.Value">@prog.Text</option>
+                                    }
+                                </select>
+                                <div id="editProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                            </div>
+                            <div class="col-12" id="editSpecContainer">
+                                <label class="form-label fw-bolder text-dark fs-6">Specialization</label>
+                                <select id="editSpecialization" class="form-select fw-bold" multiple="multiple" data-control="select2" data-placeholder="-- Select Specialization(s) --">
+                                    <option value=""></option>
+                                    @foreach (var spec in specializationList)
+                                    {
+                                        <option value="@spec.Value">@spec.Text</option>
+                                    }
+                                </select>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Student-specific fields in Edit Modal -->
-                    <div id="editStudentFields" style="display:none;">
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Programme <span class="text-danger">*</span></label>
-                            <select id="editStudentProgramme" class="form-select form-select-solid form-select-lg fw-bold">
-                                <option value="">-- Select Programme --</option>
-                                @foreach (var prog in programmeList)
-                                {
-                                    <option value="@prog.Value">@prog.Text</option>
-                                }
-                            </select>
-                            <div id="editStudentProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
-                        </div>
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Academic Session <span class="text-danger">*</span></label>
-                            <select id="editAcademicSession" class="form-select form-select-solid form-select-lg fw-bold">
-                                <option value="">-- Select Session --</option>
-                            </select>
-                            <div id="editAcademicSessionError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                    <div id="editStudentFields" class="col-12" style="display:none;">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bolder text-dark fs-6">Programme <span class="text-danger">*</span></label>
+                                <select id="editStudentProgramme" class="form-select fw-bold">
+                                    <option value="">-- Select Programme --</option>
+                                    @foreach (var prog in programmeList)
+                                    {
+                                        <option value="@prog.Value">@prog.Text</option>
+                                    }
+                                </select>
+                                <div id="editStudentProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bolder text-dark fs-6">Academic Session <span class="text-danger">*</span></label>
+                                <select id="editAcademicSession" class="form-select fw-bold">
+                                    <option value="">-- Select Session --</option>
+                                </select>
+                                <div id="editAcademicSessionError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                            </div>
                         </div>
                     </div>
 
 
-                    <div id="editSupervisorFields" style="display:none;">
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-7">Assigned Roles <span class="text-danger">*</span></label>
-                            <div class="d-flex gap-4 p-3 bg-light rounded border border-gray-200">
-                                <div class="form-check form-check-solid d-flex align-items-center m-0">
-                                    <input class="form-check-input mt-0 me-2" type="checkbox" name="editAcademicRoles" value="Supervisor" id="editRoleSup" />
-                                    <label class="form-check-label fw-bold text-gray-700 m-0" for="editRoleSup">Supervisor</label>
-                                </div>
-                                <div class="form-check form-check-solid d-flex align-items-center m-0">
-                                    <input class="form-check-input mt-0 me-2" type="checkbox" name="editAcademicRoles" value="Examiner" id="editRoleExm" />
-                                    <label class="form-check-label fw-bold text-gray-700 m-0" for="editRoleExm">Examiner</label>
-                                </div>
+                    <div id="editSupervisorFields" class="col-12" style="display:none;">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bolder text-dark fs-6">Title <span class="text-danger">*</span></label>
+                                <select id="editTitle" class="form-select fw-bold">
+                                    <option value="">-- Select Title --</option>
+                                    <option value="Mr.">Mr.</option>
+                                    <option value="Ms.">Ms.</option>
+                                    <option value="Mrs.">Mrs.</option>
+                                    <option value="Dr.">Dr.</option>
+                                    <option value="Prof.">Prof.</option>
+                                    <option value="Assoc. Prof.">Assoc. Prof.</option>
+                                    <option value="Ts.">Ts.</option>
+                                    <option value="Ir.">Ir.</option>
+                                </select>
+                                <div id="editTitleError" class="text-danger mt-1 fs-7 fw-bold"></div>
                             </div>
-                            <div id="editAcademicRoleError" class="text-danger mt-1 fs-8 fw-bold" style="display:none;">Please select at least one role.</div>
-                        </div>
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Title <span class="text-danger">*</span></label>
-                            <select id="editTitle" class="form-select form-select-solid form-select-lg fw-bold">
-                                <option value="">-- Select Title --</option>
-                                <option value="Mr.">Mr.</option>
-                                <option value="Ms.">Ms.</option>
-                                <option value="Mrs.">Mrs.</option>
-                                <option value="Dr.">Dr.</option>
-                                <option value="Prof.">Prof.</option>
-                                <option value="Assoc. Prof.">Assoc. Prof.</option>
-                                <option value="Ts.">Ts.</option>
-                                <option value="Ir.">Ir.</option>
-                            </select>
-                            <div id="editTitleError" class="text-danger mt-1 fs-7 fw-bold"></div>
-                        </div>
-                        <div class="fv-row mb-5">
-                            <label class="form-label fw-bolder text-dark fs-6">Max Student Quota <i class="fas fa-info-circle ms-1 text-muted" data-bs-toggle="tooltip" title="Maximum number of students this supervisor can take"></i></label>
-                            <input type="number" id="editMaxSlots" class="form-control form-control-lg form-control-solid" min="0" max="50" placeholder="e.g. 10" />
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bolder text-dark fs-6">Max Student Quota</label>
+                                <input type="number" id="editMaxSlots" class="form-control" min="0" max="50" placeholder="e.g. 5" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bolder text-dark fs-7">Assigned Roles <span class="text-danger">*</span></label>
+                                <div class="d-flex gap-4 p-3 bg-light rounded border border-gray-200">
+                                    <div class="form-check form-check-solid d-flex align-items-center m-0">
+                                        <input class="form-check-input mt-0 me-2" type="checkbox" name="editAcademicRoles" value="Supervisor" id="editRoleSup" />
+                                        <label class="form-check-label fw-bold text-gray-700 m-0" for="editRoleSup">Supervisor</label>
+                                    </div>
+                                    <div class="form-check form-check-solid d-flex align-items-center m-0">
+                                        <input class="form-check-input mt-0 me-2" type="checkbox" name="editAcademicRoles" value="Examiner" id="editRoleExm" />
+                                        <label class="form-check-label fw-bold text-gray-700 m-0" for="editRoleExm">Examiner</label>
+                                    </div>
+                                </div>
+                                <div id="editAcademicRoleError" class="text-danger mt-1 fs-8 fw-bold" style="display:none;">Please select at least one role.</div>
+                            </div>
                         </div>
                     </div>
 

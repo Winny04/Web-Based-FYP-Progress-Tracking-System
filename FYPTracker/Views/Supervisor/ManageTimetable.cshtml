@@ -2,9 +2,13 @@
 
 @{
     ViewData["Title"] = "Manage Timetable";
+    Layout = "~/Views/Shared/_LayoutAnonymous.cshtml";
 }
 
 <div class="container mt-4">
+    <div class="mb-4">
+        <a href="/Supervisor/ManageAvailability" class="btn btn-sm btn-light"><i class="fas fa-arrow-left me-2"></i>Back to Availability</a>
+    </div>
     <h2>Manage Teaching Timetable</h2>
     <p>Upload your teaching timetable (CSV format) for the current active session: <strong>@ViewBag.ActiveSessionName</strong>.</p>
     <p class="text-muted small">CSV Format: DayOfWeek, StartTime, EndTime, Details (e.g. Monday, 09:00, 11:00, Lecture 1)</p>
@@ -19,10 +23,12 @@
     }
 
     <form asp-action="PreviewTimetable" enctype="multipart/form-data" method="post" class="mb-4">
-        <div class="input-group">
-            <input type="file" name="timetableFile" class="form-control" accept=".csv" required />
-            <button class="btn btn-primary" type="submit">Preview Upload</button>
+        <div class="mb-4">
+            <label for="timetableFile" class="form-label fw-semibold">Teaching Timetable</label>
+            <input class="form-control" type="file" id="timetableFile" name="timetableFile" accept=".csv" required />
+            <div class="form-text">Upload a CSV timetable. Teaching periods will be blocked from student meeting bookings.</div>
         </div>
+        <button class="btn btn-primary" type="submit">Preview Upload</button>
     </form>
 
     <hr />

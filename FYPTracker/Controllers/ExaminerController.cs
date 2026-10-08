@@ -193,7 +193,7 @@ namespace FYPTracker.Controllers
             // Get meeting logs (fetching MeetingBooking objects that include MeetingLog)
             var meetingBookings = await _context.MeetingBookings
                 .Include(m => m.MeetingLog)
-                .Where(m => m.FYPProjectId == project.Id && m.Status == "Approved" && m.MeetingLog != null)
+                .Where(m => m.FYPProjectId == project.Id && m.Status == "Approved")
                 .OrderBy(m => m.Stage).ThenBy(m => m.WeekNumber).ThenByDescending(m => m.MeetingDate)
                 .ToListAsync();
 
@@ -326,12 +326,20 @@ namespace FYPTracker.Controllers
                                 {
                                     if (hasSupScore)
                                     {
-                                        project.Stage1TotalScore = (supScore + exScore) / 2.0;
-                                        project.Stage1Grade = project.Stage1TotalScore >= 40.0 ? "Pass" : "Fail";
+                                        // Stage 1:
+                                        // Supervisor max = 80
+                                        // Examiner max = 70
+                                        // Combined max = 150
+                                        // Convert combined score to percentage out of 100
+                                        project.Stage1TotalScore = ((supScore + exScore) / 150.0) * 100.0;
+
+                                        project.Stage1Grade =
+                                            project.Stage1TotalScore >= 40.0 ? "Pass" : "Fail";
                                     }
                                     else
                                     {
-                                        project.Stage1TotalScore = exScore;
+                                        // Do not calculate final Stage 1 score until both marks are available
+                                        project.Stage1TotalScore = null;
                                     }
                                 }
                             }
@@ -773,15 +781,22 @@ namespace FYPTracker.Controllers
                     double supTotal = FYPTracker.Utils.GradingHelper.CalculateStage1Score(milestone.SupervisorMarksheetData, "Supervisor");
                     double exTotal = FYPTracker.Utils.GradingHelper.CalculateStage1Score(marksheetData, "Examiner");
 
-                    milestone.Project.Stage1TotalScore = (supTotal + exTotal) / 2.0;
+                    // Stage 1:
+                    // Supervisor max = 80
+                    // Examiner max = 70
+                    // Combined max = 150
+                    // Convert to percentage out of 100
+                    milestone.Project.Stage1TotalScore =
+                        ((supTotal + exTotal) / 150.0) * 100.0;
+
+                    milestone.Project.Stage1Grade =
+                        milestone.Project.Stage1TotalScore >= 40.0
+                            ? "Pass"
+                            : "Fail";
                 }
                 catch { }
             }
-            
-            if (!string.IsNullOrEmpty(stage1Grade))
-            {
-                milestone.Project.Stage1Grade = stage1Grade;
-            }
+    
             await _context.SaveChangesAsync();
 
             TempData["Success"] = "Your joint evaluation marks have been saved successfully.";

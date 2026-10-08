@@ -281,12 +281,11 @@
                                                                 </select>
                                                             </div>
                                                             <div class="mb-3" id="recurringWeeksContainer_@m.Id">
-                                                                <label class="form-label fw-bold text-success">Auto-Generate Recurring Meetings?</label>
-                                                                <div class="input-group">
-                                                                    <span class="input-group-text bg-light border-success text-success fw-bold">Weeks</span>
-                                                                    <input type="number" name="recurringWeeks" id="recurringWeeks_@m.Id" class="form-control border-success" value="14" min="1" max="52" title="Set to 1 for just this meeting, or up to 52 to automatically book the rest of the semester." />
+                                                                <label class="form-label fw-bold text-success">Auto-Generate Meeting Structure</label>
+                                                                <div class="alert alert-success py-2 px-3 mb-0" style="font-size: 0.9rem;">
+                                                                    <i class="fas fa-info-circle me-1"></i> Week 1–14 structure will be auto-generated.
                                                                 </div>
-                                                                <small class="text-muted mt-1 d-block">If greater than 1, we will automatically generate weekly meetings at this same time.</small>
+                                                                <input type="hidden" name="recurringWeeks" id="recurringWeeks_@m.Id" value="14" />
                                                             </div>
                                                             <div class="mb-3" id="proposedDateContainer_@m.Id" style="display: none;">
                                                                 <label class="form-label fw-bold text-primary">Proposed New Date</label>

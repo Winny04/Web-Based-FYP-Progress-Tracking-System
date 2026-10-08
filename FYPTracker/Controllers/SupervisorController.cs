@@ -120,6 +120,13 @@ namespace FYPTracker.Controllers
             if (!user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("AccessDenied", "Home");
             ViewBag.CurrentUser = user;
 
+            var activeSessionConfig = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true);
+            bool hasAvailability = activeSessionConfig != null && await _context.SupervisorTimetableEntries.AnyAsync(a => a.SupervisorId == user.Id && a.AcademicSessionId == activeSessionConfig.Id);
+            if (!hasAvailability)
+            {
+                ViewBag.MissingAvailability = true;
+            }
+
             var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
 
             // Stats
@@ -1643,27 +1650,47 @@ namespace FYPTracker.Controllers
 
                     if (existingApprovedCount <= 1) // Only this current one is approved
                     {
+                        meeting.WeekNumber = 1; // Assign week 1 to the approved first meeting
+                        await _context.SaveChangesAsync(); // save the WeekNumber
+
                         var newMeetings = new List<MeetingBooking>();
-                        for (int i = 1; i < recurringWeeks; i++)
+                        for (int i = 1; i < 14; i++)
                         {
                             var nextDate = meeting.MeetingDate.AddDays(7 * i);
 
                             // 1. Check if supervisor is available on this specific date
+                            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
+                            bool hasTimetable = activeSession != null && await _context.SupervisorTimetableEntries.AnyAsync(t => t.SupervisorId == user.Id && t.AcademicSessionId == activeSession.Id);
+
                             var availabilities = await _context.SupervisorAvailabilities.Where(a => a.SupervisorId == user.Id).ToListAsync();
                             var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == nextDate.Date);
-                            var weeklyAvail = overrideAvail == null ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == nextDate.DayOfWeek.ToString()) : null;
-                            var activeAvail = overrideAvail ?? weeklyAvail;
 
-                            if (activeAvail == null)
+                            bool isUnavailable = !hasTimetable || (overrideAvail != null && !overrideAvail.IsAvailable);
+
+                            TimeSpan windowStart = overrideAvail != null ? overrideAvail.StartTime : TimeSpan.FromHours(9);
+                            TimeSpan windowEnd = overrideAvail != null ? overrideAvail.EndTime : TimeSpan.FromHours(17);
+
+                            bool timeValid = TimeSpan.TryParse(meeting.MeetingTime, out var reqTime) && reqTime >= windowStart && reqTime < windowEnd;
+
+                            bool isBusy = false;
+                            if (activeSession != null && timeValid && !isUnavailable)
                             {
-                                activeAvail = new SupervisorAvailability { StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(17), IsAvailable = true };
+                                var reqEnd = reqTime.Add(TimeSpan.FromMinutes(30));
+                                var dayStr = nextDate.DayOfWeek.ToString();
+                                isBusy = await _context.SupervisorTimetableEntries.AnyAsync(b => 
+                                    b.SupervisorId == user.Id && b.AcademicSessionId == activeSession.Id && b.DayOfWeek == dayStr &&
+                                    ((reqTime >= b.StartTime && reqTime < b.EndTime) || 
+                                     (reqEnd > b.StartTime && reqEnd <= b.EndTime) ||
+                                     (reqTime <= b.StartTime && reqEnd >= b.EndTime))
+                                );
                             }
-
-                            if (!activeAvail.IsAvailable) continue; // Skip this week due to unavailability
 
                             // 2. Check for overlapping meeting on this date/time
                             bool timeConflict = await _context.MeetingBookings.AnyAsync(m => m.SupervisorId == user.Id && m.MeetingDate.Date == nextDate.Date && m.MeetingTime == meeting.MeetingTime && m.Status != "Rejected" && m.Status != "Cancelled");
-                            if (timeConflict) continue; // Skip this week due to conflict
+
+                            bool hasConflict = isUnavailable || !timeValid || isBusy || timeConflict;
+                            string finalStatus = hasConflict ? "Postponed" : "Approved";
+                            string supervisorNote = hasConflict ? "Needs Reschedule (Timetable or Availability Conflict)" : null;
 
                             newMeetings.Add(new MeetingBooking
                             {
@@ -1674,8 +1701,10 @@ namespace FYPTracker.Controllers
                                 MeetingDate = nextDate,
                                 MeetingDay = nextDate.DayOfWeek.ToString(),
                                 MeetingTime = meeting.MeetingTime,
+                                WeekNumber = i + 1,
                                 Reason = "Auto-generated weekly recurring meeting.",
-                                Status = "Approved",
+                                SupervisorNote = supervisorNote,
+                                Status = finalStatus,
                                 Location = location,
                                 CreatedDate = DateTime.Now,
                                 RespondedDate = DateTime.Now
@@ -2484,16 +2513,55 @@ namespace FYPTracker.Controllers
                     var values = line.Split(',');
                     if (values.Length >= 3)
                     {
+                        string NormalizeDay(string d)
+                        {
+                            if (int.TryParse(d, out int dayInt) && dayInt >= 1 && dayInt <= 7)
+                            {
+                                return ((DayOfWeek)(dayInt % 7)).ToString();
+                            }
+                            return d;
+                        }
+
                         var entry = new SupervisorTimetableEntry
                         {
-                            DayOfWeek = values[0].Trim(),
+                            DayOfWeek = NormalizeDay(values[0].Trim()),
                             Details = values.Length > 3 ? values[3].Trim() : ""
                         };
                         
-                        if (TimeSpan.TryParse(values[1].Trim(), out var start) && TimeSpan.TryParse(values[2].Trim(), out var end))
+                        TimeSpan? ParseTime(string val)
                         {
-                            entry.StartTime = start;
-                            entry.EndTime = end;
+                            val = val.Trim();
+                            if (string.IsNullOrEmpty(val)) return null;
+
+                            if (int.TryParse(val, out int hour) && hour >= 0 && hour <= 23)
+                            {
+                                return TimeSpan.FromHours(hour);
+                            }
+
+                            val = val.Replace(".", ":");
+
+                            if (DateTime.TryParse(val, out var dt))
+                            {
+                                return dt.TimeOfDay;
+                            }
+
+                            if (TimeSpan.TryParse(val, out var ts))
+                            {
+                                if (ts.Days > 0 && ts.Hours == 0 && ts.Minutes == 0) ts = TimeSpan.FromHours(ts.Days);
+                                if (ts >= TimeSpan.Zero && ts < TimeSpan.FromHours(24))
+                                    return ts;
+                            }
+                            
+                            return null;
+                        }
+
+                        var parsedStart = ParseTime(values[1]);
+                        var parsedEnd = ParseTime(values[2]);
+                        
+                        if (parsedStart.HasValue && parsedEnd.HasValue)
+                        {
+                            entry.StartTime = parsedStart.Value;
+                            entry.EndTime = parsedEnd.Value;
                             entries.Add(entry);
                         }
                     }

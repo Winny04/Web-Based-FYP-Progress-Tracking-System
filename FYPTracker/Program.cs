@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.Http.Features;
 using Newtonsoft.Json;
 using Quartz;
 using System;
@@ -66,7 +67,6 @@ builder.Services.AddDbContext<FYPTrackerContext>(options =>
 builder.Services.AddControllers().AddJsonOptions(options => { options.JsonSerializerOptions.PropertyNamingPolicy = null; });
 builder.Services.AddSession();
 builder.Services.AddSignalR();
-builder.Services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
 builder.Services.AddTransient<IAuthorizationHandler, UserTypeHandler>();
 builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
 
@@ -86,8 +86,8 @@ builder.Services.AddAuthentication(AuthenticationDefaults.AuthenticationScheme)
 .AddCookie(AuthenticationDefaults.AuthenticationScheme, options =>
 {
     options.Cookie.Name = $"{CookieDefaults.Prefix}{CookieDefaults.AuthenticationCookie}";
-    options.Cookie.HttpOnly = false;
-    options.ExpireTimeSpan = TimeSpan.FromDays(1);
+    options.Cookie.HttpOnly = true;
+    options.ExpireTimeSpan = TimeSpan.FromHours(8);
     options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     options.LoginPath = AuthenticationDefaults.LoginPath;
     options.AccessDeniedPath = AuthenticationDefaults.AccessDeniedPath;
@@ -96,6 +96,21 @@ builder.Services.AddAuthentication(AuthenticationDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization(options =>
 {
 
+});
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 100L * 1024 * 1024;
+});
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 100L * 1024 * 1024;
+});
+
+builder.Services.Configure<IISServerOptions>(options =>
+{
+    options.MaxRequestBodySize = 100L * 1024 * 1024;
 });
 
 var app = builder.Build();

@@ -18,7 +18,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-0">My Availability</h2>
-            <p class="text-muted">Configure your weekly schedule and date-specific overrides.</p>
+            <p class="text-muted">Meeting availability is automatically calculated from your teaching timetable. Teaching periods are blocked, while free periods between 09:00 and 17:00 are available for student bookings.</p>
         </div>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addAvailabilityModal">
             <i class="fas fa-plus me-2"></i> Add Availability
@@ -67,61 +67,8 @@
     </div>
 
     <div class="row g-4">
-        <!-- Weekly Defaults -->
-        <div class="col-md-6">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-                    <h5 class="fw-bold"><i class="fas fa-calendar-week text-primary me-2"></i>Weekly Default Schedule</h5>
-                </div>
-                <div class="card-body">
-                    @{
-                        var weekly = Model.Where(m => m.ScheduleType == "WeeklyDefault").OrderBy(m => m.DayOfWeek).ToList();
-                    }
-                    @if (!weekly.Any())
-                    {
-                        <p class="text-muted">No weekly defaults set. Students will see the default 8:00 AM - 5:00 PM availability until you add your own.</p>
-                    }
-                    else
-                    {
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>Day</th>
-                                        <th>Time</th>
-                                        <th>Status</th>
-                                        <th class="text-end">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach(var w in weekly)
-                                    {
-                                        <tr>
-                                            <td class="fw-bold">@w.DayOfWeek</td>
-                                            <td>@w.StartTime.ToString(@"hh\:mm") - @w.EndTime.ToString(@"hh\:mm")</td>
-                                            <td>
-                                                @if(w.IsAvailable) { <span class="badge bg-success">Available</span> }
-                                                else { <span class="badge bg-danger">Unavailable</span> }
-                                            </td>
-                                            <td class="text-end">
-                                                <form asp-action="DeleteAvailability" method="post" class="d-inline" onsubmit="return confirm('Delete this availability?');">
-                                                    @Html.AntiForgeryToken()
-                                                    <input type="hidden" name="id" value="@w.Id" />
-                                                    <button type="submit" class="btn btn-sm btn-icon btn-light-danger"><i class="fas fa-trash"></i></button>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
-                </div>
-            </div>
-        </div>
-
         <!-- Date Overrides -->
-        <div class="col-md-6">
+        <div class="col-md-12">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
                     <h5 class="fw-bold"><i class="fas fa-calendar-day text-warning me-2"></i>Date Overrides</h5>
@@ -193,26 +140,9 @@
                 </div>
                 <div class="modal-body">
                     
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Schedule Type</label>
-                        <select class="form-select" name="ScheduleType" id="scheduleTypeSelect" onchange="toggleScheduleType()">
-                            <option value="WeeklyDefault">Weekly Default (e.g. Every Monday)</option>
-                            <option value="DateOverride">Specific Date Override</option>
-                        </select>
-                    </div>
+                    <input type="hidden" name="ScheduleType" value="DateOverride" />
 
-                    <div class="mb-4" id="dayOfWeekDiv">
-                        <label class="form-label fw-bold d-block mb-2">Days of the Week</label>
-                        <div class="d-flex flex-wrap gap-2">
-                            @foreach(var day in new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" })
-                            {
-                                <input type="checkbox" class="btn-check" name="SelectedDays" id="day_@day" value="@day" autocomplete="off">
-                                <label class="btn btn-outline-primary rounded-pill px-3 py-1" for="day_@day">@day</label>
-                            }
-                        </div>
-                    </div>
-
-                    <div class="mb-4 d-none" id="specificDateDiv">
+                    <div class="mb-4" id="specificDateDiv">
                         <label class="form-label fw-bold">Specific Date</label>
                         <input type="date" class="form-control" name="SpecificDate" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
                     </div>
@@ -249,17 +179,6 @@
 
 @section Scripts {
     <script>
-        function toggleScheduleType() {
-            var type = document.getElementById('scheduleTypeSelect').value;
-            if (type === 'WeeklyDefault') {
-                document.getElementById('dayOfWeekDiv').classList.remove('d-none');
-                document.getElementById('specificDateDiv').classList.add('d-none');
-            } else {
-                document.getElementById('dayOfWeekDiv').classList.add('d-none');
-                document.getElementById('specificDateDiv').classList.remove('d-none');
-            }
-        }
-
         function toggleTimeInputs() {
             var isAvail = document.getElementById('isAvailableSelect').value;
             if (isAvail === 'true') {
@@ -268,5 +187,8 @@
                 document.getElementById('timeInputsDiv').classList.add('d-none');
             }
         }
+        
+        // Init
+        toggleTimeInputs();
     </script>
 }

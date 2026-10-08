@@ -269,7 +269,7 @@
                 else
                 {
                     <div class="milestone-list">
-                        @foreach (var m in Model.Milestones.OrderBy(x => x.DueDate))
+                        @foreach (var m in Model.Milestones.Where(m => m.MilestoneSource == "Supervisor").OrderBy(x => x.DueDate))
                         {
                             <div class="milestone-item d-flex justify-content-between align-items-center flex-wrap gap-3">
                                 <div>

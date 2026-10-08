@@ -301,6 +301,16 @@
             @if (!isStage2Unlocked)
             {
                 <div class="col-12">
+                <style>
+                    #forms-tabContent > .tab-pane {
+                        display: none;
+                    }
+
+                    #forms-tabContent > .tab-pane.active {
+                        display: block !important;
+                        opacity: 1 !important;
+                    }
+                </style>
                 <div class="tab-content" id="forms-tabContent">
 
                     @* -- 1. INITIAL PROJECT ALLOCATION FORM (IAF) -------- *@
@@ -745,6 +755,7 @@
                                             </div>
                                         </div>
                                     }
+                                    </div>
                                 </form>
                             
                         </div>
@@ -808,21 +819,18 @@
 
                                 @if (!isPropLocked)
                                 {
-                                <form id="proposalForm" asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
+                                <form id="proposalForm" asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" asp-antiforgery="true">
                                     <input type="hidden" name="formType" value="Proposal Form" />
                                     <input type="hidden" name="milestoneId" value="@propMilestoneId" />
 
                                     @* Stage 1 Submission Guide *@
                                     <div class="alert alert-info border-0 rounded-3 shadow-sm mb-4">
-                                        <h6 class="fw-bold text-dark mb-2"><i class="fas fa-list-check me-2"></i>Stage 1 Submission Requirements</h6>
+                                        <h6 class="fw-bold text-dark mb-2"><i class="fas fa-list-check me-2"></i>Detailed Project Proposal Submission</h6>
                                         <p class="small text-dark mb-2">Please ensure you have completed the following before the deadline. Each submission requires the correct template:</p>
                                         <ul class="small text-dark mb-0 ps-3" style="line-height: 1.6;">
-                                            <li><strong>Submission of Initial Form (IAF)</strong> - (Already Completed)</li>
                                             <li><strong>Submission of Detail Project Proposal (DPP)</strong> - Complete the word template below and upload.</li>
                                             <li><strong>Turnitin Checking</strong> - Ensure similarity is below the accepted threshold.</li>
                                             <li><strong>Submission of Marksheet</strong></li>
-                                            <li><strong>Submission of Ethics Form</strong> - (Template available in Final Submission tab)</li>
-                                            <li><strong>Submission of Meeting Log</strong> - (Downloadable from the Book Meeting page)</li>
                                         </ul>
                                     </div>
 
@@ -832,33 +840,37 @@
                                     <input type="text" name="title" class="form-control bg-light" value="@Model.Title" readonly required />
                                 </div>
 
-                                <div class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1;">
-                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                                        <div>
-                                            <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>Stage 1 Final Submission Template</div>
-                                            <div class="text-muted small">Download the official Word template pre-filled with your student & project info. Complete it and upload as PDF below.</div>
-                                        </div>
-                                        <a href="@Url.Action("DownloadProposalTemplate", "Student")"
-                                           class="btn btn-outline-dark fw-semibold rounded-3 px-4 py-2 text-decoration-none d-flex align-items-center gap-2"
-                                           style="white-space: nowrap;">
-                                            <i class="fas fa-download"></i> Download Template (.docx)
-                                        </a>
+                                <div class="mb-4 p-3 rounded-3"
+                                    style="background: #f8fafc; border: 1px solid #e2e8f0;">
+
+                                    <div class="fw-bold text-dark mb-2">
+                                        <i class="fas fa-file-pdf text-danger me-2"></i>
+                                        Detailed Project Proposal (DPP) Submission
                                     </div>
+
+                                    <div class="text-muted small mb-3">
+                                        Combine your completed Part 1 work into <strong>ONE PDF</strong> before submitting.
+                                    </div>
+
+                                    <ul class="small text-dark mb-3 ps-3" style="line-height: 1.7;">
+                                        <li>Cover Page</li>
+                                        <li>Chapter 1: Introduction</li>
+                                        <li>Chapter 2: Literature Review</li>
+                                        <li>Chapter 3: Software Methodology</li>
+                                        <li>References</li>
+                                        <li>Appendices (if applicable)</li>
+                                    </ul>
+                                    <div class="small text-muted">
+                                        Upload the final combined PDF using the document upload section below.
+                                    </div>
+                                    
                                 </div>
 
                                 <div class="form-section-title">Part 2: Document Attachment</div>
                                 <div class="mb-4">
-                                    <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="dropZone" onclick="document.getElementById('proposalDocument').click()">
-                                        <i class="fas fa-cloud-upload-alt fs-1 mb-3" style="color: var(--primary-orange) !important;"></i>
-                                        <h6 class="fw-bold mb-1">Drag & Drop your proposal here</h6>
-                                        <p class="text-muted small mb-0">or click to browse files (PDF ONLY)</p>
-                                        <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
-                                        <input type="file" name="attachedFile" id="proposalDocument" class="d-none" accept=".pdf" onchange="updateFileName(this)" />
-                                        <div id="proposalFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please select a PDF file before submitting.</div>
-                                        <div id="fileNameDisplay" class="mt-3 fw-bold text-success" style="display:none;">
-                                            <i class="fas fa-file-pdf me-2"></i><span id="fName"></span>
-                                        </div>
-                                    </div>
+                                    <label for="proposalDocument" class="form-label fw-semibold">Upload Final Proposal <span class="text-danger">*</span></label>
+                                    <input class="form-control" type="file" id="proposalDocument" name="attachedFile" accept=".pdf" required />
+                                    <div class="form-text">Accepted formats: PDF only.</div>
                                 </div>
 
                                 @if (proposalMilestone?.Status == "Rejected")
@@ -881,7 +893,12 @@
                     </div>
 
                     @* -- A. DPP WORK & PROGRESS ----------------------- *@
-                    <div class="tab-pane fade @(isIafApproved && !isAllProgressCompleted ? "show active" : "")" id="progress-form-pane" role="tabpanel" tabindex="0">
+
+
+                    <div class="tab-pane fade @(isIafApproved && !isAllProgressCompleted ? "show active" : "")"
+                        id="progress-form-pane"
+                        role="tabpanel"
+                        tabindex="0">
                         <div class="premium-card p-4">
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-chart-line text-orange me-2"></i>A. DPP Work & Progress</h4>
                             
@@ -906,101 +923,129 @@
                             else if (!progressMilestones.Any())
                             {
                                 <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
-                                    <i class="fas fa-check-circle fs-2 me-3 text-success"></i>
+                                    <i class="fas fa-clock fs-2 me-3 text-info"></i>
                                     <div>
-                                        <h5 class="fw-bold text-dark mb-1">All Current Progress Work Handled</h5>
-                                        <p class="mb-0 text-muted">You have no remaining Stage 1 progress milestones to submit. They are all pending review or completed. Please proceed to the Required Submissions tab if it is unlocked.</p>
+                                        <h5 class="fw-bold text-dark mb-1">Awaiting Supervisor Review</h5>
+                                        <p class="mb-0 text-muted">You have no editable Stage 1 progress milestones to submit. They are all pending supervisor review or already completed.</p>
                                     </div>
                                 </div>
                             }
                             else
                             {
-                                @foreach (var rm in progressMilestones.Where(x => x.Status == "ReturnedForChanges"))
-                                {
-                                    <div class="alert alert-danger d-flex align-items-center mt-3 border-danger shadow-sm">
-                                        <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
-                                        <div>
-                                            <h5 class="fw-bold text-dark mb-1">@rm.Title Returned for Changes</h5>
-                                            <p class="mb-0 text-muted"><strong>Feedback:</strong> @rm.SupervisorFeedback</p>
-                                        </div>
-                                    </div>
-                                }
                                 @if (progressMilestones.Any())
                                 {
-                                    <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+                                    <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate id="progressForm">
                                         <input type="hidden" name="formType" value="DPP Work & Progress" />
 
                                         <div class="mb-4">
-                                            <label class="form-label fw-bold text-dark" style="font-size: 0.95rem;">Select Progress Milestone</label>
-                                            <select name="milestoneId" id="progressMilestoneSelect" class="form-select" required onchange="toggleProgressTemplate(this)">
+                                            <label class="form-label fw-bold text-dark fs-6 mb-2">Select Progress Milestone</label>
+                                            <select name="milestoneId" id="progressMilestoneSelect" class="form-select form-select-lg form-select-solid bg-light" required onchange="toggleProgressTemplate(this)">
                                                 <option value="">-- Choose a Milestone --</option>
                                                 @foreach (var m in progressMilestones)
                                                 {
-                                                    <option value="@m.Id">@m.Title (@(m.Status == "ReturnedForChanges" ? "Returned for Changes" : m.Status))</option>
+                                                    <option value="@m.Id" data-status="@m.Status" data-feedback="@(m.SupervisorFeedback ?? "")">@m.Title</option>
                                                 }
                                             </select>
                                             <div class="invalid-feedback">Please select a milestone.</div>
                                         </div>
 
-                                        <div id="progressTemplateSection" class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1; display: none;">
-                                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                                                <div>
-                                                    <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>DPP Progress Work Template</div>
-                                                    <div class="text-muted small">Select a milestone above to download the pre-filled Word template for that specific progress work.</div>
+                                        <div id="progressStatusInfo" class="d-none mb-4">
+                                            <div class="card border border-primary border-opacity-25 shadow-sm rounded-4 overflow-hidden" style="background: #f4f8ff;">
+                                                <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                                                    <div>
+                                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                                            <h5 class="fw-bolder text-dark mb-0" id="progressStatusTitle">Milestone Title</h5>
+                                                            <span class="badge bg-primary text-white px-2 py-1 rounded-pill small" id="progressStatusBadge">Draft</span>
+                                                        </div>
+                                                        <p class="text-muted small mb-0 fw-semibold">DPP Work & Progress</p>
+                                                        <p class="text-muted small mb-0 mt-2">Complete and submit this work for review.</p>
+                                                    </div>
+                                                    <a href="#"
+                                                       id="btnDownloadProgress"
+                                                       class="btn btn-sm btn-outline-primary fw-bold rounded-3 px-3 d-flex align-items-center gap-2">
+                                                        <i class="fas fa-download"></i> Download Format of Part 1 Report
+                                                    </a>
                                                 </div>
-                                                <a href="@Url.Action("DownloadProgressTemplate", "Student")"
-                                                   id="btnDownloadProgress"
-                                                   class="btn btn-outline-dark fw-semibold rounded-3 px-4 py-2 text-decoration-none d-flex align-items-center gap-2"
-                                                   style="white-space: nowrap;">
-                                                    <i class="fas fa-download"></i> Download Template (.docx)
-                                                </a>
                                             </div>
                                         </div>
 
-                                        <div class="form-section-title">Part 1: Reporting Period</div>
-                                        <div class="row g-3 mb-3">
-                                            <div class="col-md-6">
-                                                <label class="form-label fw-semibold">Start Period</label>
-                                                <input type="date" name="startDate" id="progressStartDate" class="form-control" required />
-                                                <div class="invalid-feedback">Start date is required.</div>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label class="form-label fw-semibold">End Period</label>
-                                                <input type="date" name="endDate" id="progressEndDate" class="form-control" required />
-                                                <div class="invalid-feedback">End date is required.</div>
-                                            </div>
-                                            <div class="col-12 mt-2">
-                                                <div id="progressDateError" class="text-danger fw-bold d-none"><i class="fas fa-exclamation-triangle me-1"></i>End Period must be equal to or after the Start Period.</div>
+                                        <div id="progressFeedbackInfo" class="d-none mb-4">
+                                            <div class="card border border-danger border-opacity-25 shadow-sm rounded-4" style="background: #fff5f5;">
+                                                <div class="card-body p-4">
+                                                    <div class="d-flex align-items-center mb-2">
+                                                        <i class="fas fa-exclamation-circle fs-3 text-danger me-2"></i>
+                                                        <h6 class="fw-bolder text-danger mb-0">Returned for Changes</h6>
+                                                    </div>
+                                                    <p class="text-dark small mb-0 fw-semibold">Supervisor Feedback:</p>
+                                                    <p class="text-muted small mb-0 mt-1" id="progressFeedbackText"></p>
+                                                </div>
                                             </div>
                                         </div>
 
-                                        <div class="form-section-title">Part 2: Document Attachment</div>
-                                        <div class="row g-3 mb-4">
-                                            <div class="col-md-12">
-                                                <label class="form-label fw-semibold mb-2">Upload Progress Work</label>
-                                                <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="progressDropZone" onclick="document.getElementById('progressFiles').click()">
-                                                    <i class="fas fa-copy fs-1 mb-3" style="color: #3b82f6 !important;"></i>
-                                                    <h6 class="fw-bold mb-1">Drag & Drop your files here</h6>
-                                                    <p class="text-muted small mb-0">or click to browse (PDF ONLY)</p>
-                                                    <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
-                                                    <input type="file" name="attachedFiles" id="progressFiles" class="d-none" accept=".pdf" multiple onchange="updateMultiFileNames(this, 'progressFileList')" />
-                                                    <div id="progressFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please select at least one PDF file before submitting.</div>
-                                                    <div id="progressFileList" class="mt-3 text-start small fw-semibold text-primary" style="display:none; max-width: 300px; margin: auto;">
+                                        <!-- Section 1 -->
+                                        <div class="saas-card mb-3">
+                                            <div class="saas-card-body p-3">
+                                                <div class="d-flex align-items-center mb-2">
+                                                    <span class="text-primary fw-bolder fs-5 me-2">01</span>
+                                                    <h6 class="fw-bold text-dark mb-0">Reporting Period</h6>
+                                                </div>
+                                                
+                                                <div class="row ms-4 mt-2 g-3">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label text-dark small fw-semibold">Start Period</label>
+                                                        <input type="date" name="startDate" id="progressStartDate" class="form-control saas-input" required oninput="validateProgressSubmitBtn()" />
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label text-dark small fw-semibold">End Period</label>
+                                                        <input type="date" name="endDate" id="progressEndDate" class="form-control saas-input" value="@DateTime.Today.ToString("yyyy-MM-dd")" required oninput="validateProgressSubmitBtn()" />
+                                                    </div>
+                                                    <div class="col-12 mt-1">
+                                                        <div id="progressDateError" class="text-danger fw-bold small d-none"><i class="fas fa-exclamation-triangle me-1"></i>End Period must be equal to or after the Start Period.</div>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div class="form-section-title text-danger"><i class="fas fa-history me-2"></i>Part 3: Revision Notes (If Resubmitting)</div>
-                                        <div class="mb-4">
-                                            <label class="form-label fw-semibold">What did you change in this version?</label>
-                                            <textarea name="revisionNotes" class="form-control" rows="3" placeholder="Explain what was changed based on supervisor feedback..."></textarea>
-                                            <div class="text-muted small mt-1">Leave blank if this is your first attempt.</div>
+                                        <!-- Section 2 -->
+                                        <div class="saas-card mb-3">
+                                            <div class="saas-card-body p-3">
+                                                <div class="d-flex align-items-center mb-2">
+                                                    <span class="text-primary fw-bolder fs-5 me-2">02</span>
+                                                    <h6 class="fw-bold text-dark mb-0">Progress Document (PDF)</h6>
+                                                </div>
+                                                
+                                                <div class="ms-4 mt-2">
+                                                    <div class="mb-3">
+                                                        <label for="progressFiles" class="form-label fw-semibold">Upload Supporting Documents</label>
+                                                        <input class="form-control" type="file" id="progressFiles" name="attachedFiles" accept=".pdf" multiple />
+                                                        <div class="form-text">Accepted formats: PDF only. You can select multiple files.</div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        <div class="d-flex gap-3 justify-content-end">
-                                            <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
-                                            <button type="submit" class="btn-submit" onclick="return validateProgressForm(event)">Send for Supervisor Review</button>
+                                        <!-- Section 3 -->
+                                        <div id="progressRevisionSection" class="d-none mb-3">
+                                            <div class="saas-card" style="border-left: 3px solid #F59E0B; background: #FEF3C7;">
+                                                <div class="saas-card-body p-3">
+                                                    <div class="d-flex align-items-center mb-2">
+                                                        <span class="text-warning fw-bolder fs-5 me-2" style="color: #F59E0B !important;">03</span>
+                                                        <h6 class="fw-bold text-dark mb-0">Revision Details</h6>
+                                                    </div>
+                                                    <div class="ms-4 mt-2">
+                                                        <textarea name="revisionNotes" id="progressRevisionNotes" class="form-control saas-input" rows="2" placeholder="Briefly explain your changes based on feedback..." oninput="validateProgressSubmitBtn()"></textarea>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Action Area -->
+                                        <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 p-3 saas-card bg-white position-sticky bottom-0 shadow-sm" style="z-index:100; border-radius: 8px;">
+                                            <div class="text-muted small fw-medium"><i class="fas fa-save me-1"></i>Your work can be saved as a draft locally.</div>
+                                            <div class="d-flex gap-2 mt-2 mt-md-0">
+                                                <button type="submit" name="isDraft" value="true" class="btn-saas-secondary" formnovalidate>Save Draft</button>
+                                                <button type="submit" class="btn-saas-primary" id="btnProgressSubmit" onclick="return validateProgressForm(event)" disabled>Send for Supervisor Review</button>
+                                            </div>
                                         </div>
                                     </form>
                                 }
@@ -1146,17 +1191,32 @@
         
         function updateMultiFileNames(input, listId) {
             const display = document.getElementById(listId);
+            const dropZone = document.getElementById('progressDropZone');
             display.innerHTML = '';
             if (input.files && input.files.length > 0) {
+                dropZone.style.display = 'none';
                 display.style.display = 'block';
                 Array.from(input.files).forEach(file => {
                     const fileDiv = document.createElement('div');
-                    fileDiv.className = 'mb-1';
-                    fileDiv.innerHTML = '<i class="fas fa-file-alt me-2 text-primary"></i>' + file.name;
+                    fileDiv.className = 'd-flex justify-content-between align-items-center p-3 rounded-3 bg-white border shadow-sm';
+                    const fileSize = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+                    fileDiv.innerHTML = '<div class="d-flex align-items-center"><i class="fas fa-file-pdf fs-1 text-danger me-3"></i><div><h6 class="mb-0 text-dark fw-bold">' + file.name + '</h6><small class="text-muted">' + fileSize + '</small></div></div>' +
+                        '<button type="button" class="btn btn-sm btn-light-danger fw-bold rounded-pill px-3" onclick="clearFileInput(\'' + input.id + '\', \'' + listId + '\', event)">Remove</button>';
                     display.appendChild(fileDiv);
                 });
             } else {
                 display.style.display = 'none';
+                dropZone.style.display = 'block';
+            }
+            if (typeof validateProgressSubmitBtn === 'function') validateProgressSubmitBtn();
+        }
+
+        function clearFileInput(inputId, listId, event) {
+            event.stopPropagation();
+            const input = document.getElementById(inputId);
+            if (input) {
+                input.value = '';
+                updateMultiFileNames(input, listId);
             }
         }
         
@@ -1478,13 +1538,86 @@
         });
 
         function toggleProgressTemplate(selectObj) {
-            const templateSection = document.getElementById('progressTemplateSection');
+            const statusInfo = document.getElementById('progressStatusInfo');
+            const statusTitle = document.getElementById('progressStatusTitle');
+            const statusBadge = document.getElementById('progressStatusBadge');
             const downloadBtn = document.getElementById('btnDownloadProgress');
+            const feedbackInfo = document.getElementById('progressFeedbackInfo');
+            const feedbackText = document.getElementById('progressFeedbackText');
+            const revisionSection = document.getElementById('progressRevisionSection');
+            const revisionNotes = document.getElementById('progressRevisionNotes');
+            const submitBtn = document.getElementById('btnProgressSubmit');
+            
             if (selectObj.value) {
-                templateSection.style.display = 'block';
-                downloadBtn.href = '@Url.Action("DownloadProgressTemplate", "Student")?milestoneId=' + selectObj.value;
+                downloadBtn.href = '/Student/DownloadProgressTemplate?milestoneId=' + selectObj.value;
+                downloadBtn.classList.remove('disabled');
+                
+                const selectedOption = selectObj.options[selectObj.selectedIndex];
+                const status = selectedOption.getAttribute('data-status');
+                const feedback = selectedOption.getAttribute('data-feedback');
+                let title = selectedOption.text;
+                
+                statusInfo.classList.remove('d-none');
+                statusTitle.innerText = title;
+                
+                if (status === 'ReturnedForChanges') {
+                    statusBadge.innerText = 'Returned for Changes';
+                    statusBadge.className = 'badge bg-danger text-white px-3 py-1 rounded-pill small';
+                    
+                    feedbackInfo.classList.remove('d-none');
+                    feedbackText.innerText = feedback;
+                    revisionSection.classList.remove('d-none');
+                    revisionNotes.setAttribute('required', 'required');
+                    if (submitBtn) submitBtn.innerText = 'Resubmit for Supervisor Review';
+                } else {
+                    statusBadge.innerText = status || 'Draft';
+                    statusBadge.className = 'badge bg-primary text-white px-3 py-1 rounded-pill small';
+                    
+                    feedbackInfo.classList.add('d-none');
+                    revisionSection.classList.add('d-none');
+                    revisionNotes.removeAttribute('required');
+                    if (submitBtn) submitBtn.innerText = 'Send for Supervisor Review';
+                }
             } else {
-                templateSection.style.display = 'none';
+                downloadBtn.removeAttribute('href');
+                downloadBtn.classList.add('disabled');
+                statusInfo.classList.add('d-none');
+                feedbackInfo.classList.add('d-none');
+                revisionSection.classList.add('d-none');
+                revisionNotes.removeAttribute('required');
+                if (submitBtn) submitBtn.innerText = 'Send for Supervisor Review';
+            }
+            if (typeof validateProgressSubmitBtn === 'function') validateProgressSubmitBtn();
+        }
+
+        function validateProgressSubmitBtn() {
+            const milestoneSelect = document.getElementById('progressMilestoneSelect');
+            const startDate = document.getElementById('progressStartDate');
+            const endDate = document.getElementById('progressEndDate');
+            const fileInput = document.getElementById('progressFiles');
+            const submitBtn = document.getElementById('btnProgressSubmit');
+            const revisionNotes = document.getElementById('progressRevisionNotes');
+            const revisionSection = document.getElementById('progressRevisionSection');
+            
+            if (!submitBtn) return;
+            
+            let isValid = true;
+            if (!milestoneSelect || !milestoneSelect.value) isValid = false;
+            if (!startDate || !startDate.value) isValid = false;
+            if (!endDate || !endDate.value) isValid = false;
+            if (startDate && endDate && startDate.value && endDate.value) {
+                if (new Date(endDate.value) < new Date(startDate.value)) isValid = false;
+            }
+            if (!fileInput || fileInput.files.length === 0) isValid = false;
+            
+            if (revisionSection && !revisionSection.classList.contains('d-none')) {
+                if (revisionNotes && !revisionNotes.value.trim()) isValid = false;
+            }
+
+            if (isValid) {
+                submitBtn.removeAttribute('disabled');
+            } else {
+                submitBtn.setAttribute('disabled', 'disabled');
             }
         }
 

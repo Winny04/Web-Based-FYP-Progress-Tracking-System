@@ -668,7 +668,7 @@ namespace FYPTracker.Controllers
             // ── Guard: DPP Work & Progress (Supervisor-added Stage 1) milestones ──
             if (milestone.MilestoneSource == "Supervisor" && milestone.Stage == 1)
             {
-                if (formType != "Progress Report Form" || !(milestone.Status == "Draft" || milestone.Status == "Pending" || milestone.Status == "ReturnedForChanges"))
+                if (formType != "DPP Work & Progress" || !(milestone.Status == "Draft" || milestone.Status == "Pending" || milestone.Status == "ReturnedForChanges"))
                 {
                     TempData["Error"] = "This progress milestone cannot be modified in its current status.";
                     return RedirectToAction("Forms");
@@ -736,9 +736,9 @@ namespace FYPTracker.Controllers
                         TempData["Error"] = "Only PDF and PPT/PPTX files are allowed.";
                         return RedirectToAction("Forms");
                     }
-                    if (file.Length > 20 * 1024 * 1024)
+                    if (file.Length > 100L * 1024 * 1024)
                     {
-                        TempData["Error"] = "File size must not exceed 20 MB.";
+                        TempData["Error"] = "File size must not exceed 100 MB.";
                         return RedirectToAction("Forms");
                     }
                 }
@@ -779,7 +779,7 @@ namespace FYPTracker.Controllers
                 }
             }
 
-                if (formType == "Progress Report Form")
+                if (formType == "DPP Work & Progress")
                 {
                     var dict = new System.Collections.Generic.Dictionary<string, string> {
                         {"Start Period", startDate?.ToString("dd MMM yyyy") ?? ""},
@@ -1171,8 +1171,12 @@ namespace FYPTracker.Controllers
             bool supervisorHasAvailability = false;
             if (approvedRequest?.Supervisor != null)
             {
-                supervisorHasAvailability = await _context.SupervisorAvailabilities
-                    .AnyAsync(a => a.SupervisorId == approvedRequest.Supervisor.Id && a.IsAvailable);
+                var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
+                if (activeSession != null)
+                {
+                    supervisorHasAvailability = await _context.SupervisorTimetableEntries
+                        .AnyAsync(t => t.SupervisorId == approvedRequest.Supervisor.Id && t.AcademicSessionId == activeSession.Id);
+                }
             }
             ViewBag.SupervisorHasAvailability = supervisorHasAvailability;
 
@@ -1230,25 +1234,7 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
-            // ── Guard: Ensure supervisor is actually available on this specific date/time ──
-            var availabilities = await _context.SupervisorAvailabilities
-                .Where(a => a.SupervisorId == supervisorId)
-                .ToListAsync();
-
-            var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == parsedDate.Date);
-            var weeklyAvail = overrideAvail == null ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == parsedDate.DayOfWeek.ToString()) : null;
-            var activeAvail = overrideAvail ?? weeklyAvail;
-
-            if (activeAvail == null)
-            {
-                activeAvail = new SupervisorAvailability { StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(17), IsAvailable = true };
-            }
-
-            if (!activeAvail.IsAvailable)
-            {
-                TempData["Error"] = "Your supervisor is not available on this date. Please select a different day.";
-                return RedirectToAction(nameof(BookMeeting));
-            }
+            // ── Guard checks for new Timetable availability are handled below ──
 
             // ── Guard: Ensure student is actually supervised by this supervisor ──
             var isMySupervisor = await _context.SupervisorRequests.AnyAsync(r => r.StudentId == user.Id && r.SupervisorId == supervisorId && r.Status == "Approved");
@@ -1272,6 +1258,60 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
+            // Validations
+            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
+            if (activeSession == null)
+            {
+                TempData["Error"] = "No active academic session found.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            bool hasTimetable = await _context.SupervisorTimetableEntries.AnyAsync(t => t.SupervisorId == supervisorId && t.AcademicSessionId == activeSession.Id);
+            if (!hasTimetable)
+            {
+                TempData["Error"] = "Supervisor has not uploaded a teaching timetable yet.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            var availabilities = await _context.SupervisorAvailabilities.Where(a => a.SupervisorId == supervisorId).ToListAsync();
+            var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == parsedDate.Date);
+
+            if (overrideAvail != null && !overrideAvail.IsAvailable)
+            {
+                TempData["Error"] = "Supervisor is unavailable on this date.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            TimeSpan windowStart = overrideAvail != null ? overrideAvail.StartTime : TimeSpan.FromHours(9);
+            TimeSpan windowEnd = overrideAvail != null ? overrideAvail.EndTime : TimeSpan.FromHours(17);
+
+            if (!TimeSpan.TryParse(meetingTime, out var reqTime) || reqTime < windowStart || reqTime >= windowEnd)
+            {
+                TempData["Error"] = "Selected time is outside the booking window.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            if (parsedDate.Date == DateTime.Now.Date && reqTime < DateTime.Now.TimeOfDay)
+            {
+                TempData["Error"] = "Cannot book a meeting in the past.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            var reqEnd = reqTime.Add(TimeSpan.FromMinutes(30));
+            var dayStr = parsedDate.DayOfWeek.ToString();
+            var isBusy = await _context.SupervisorTimetableEntries.AnyAsync(b => 
+                b.SupervisorId == supervisorId && b.AcademicSessionId == activeSession.Id && b.DayOfWeek == dayStr &&
+                ((reqTime >= b.StartTime && reqTime < b.EndTime) || 
+                 (reqEnd > b.StartTime && reqEnd <= b.EndTime) ||
+                 (reqTime <= b.StartTime && reqEnd >= b.EndTime))
+            );
+
+            if (isBusy)
+            {
+                TempData["Error"] = "Selected time conflicts with a teaching period.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
             var startOfWeek = parsedDate.Date.AddDays(-(int)parsedDate.DayOfWeek);
             var endOfWeek = startOfWeek.AddDays(7);
             var existingThisWeek = await _context.MeetingBookings
@@ -1281,16 +1321,6 @@ namespace FYPTracker.Controllers
             {
                 TempData["Error"] = "You can only book one meeting per week.";
                 return RedirectToAction(nameof(BookMeeting));
-            }
-
-            var firstMeeting = await _context.MeetingBookings
-                .Where(m => m.StudentId == user.Id && m.Status == "Approved")
-                .OrderBy(m => m.CreatedDate)
-                .FirstOrDefaultAsync();
-
-            if (firstMeeting != null && !string.IsNullOrEmpty(firstMeeting.MeetingTime))
-            {
-                meetingTime = firstMeeting.MeetingTime;
             }
 
             // Smart Double-Booking Prevention
@@ -1392,34 +1422,25 @@ namespace FYPTracker.Controllers
             if (!DateTime.TryParse(date, out var parsedDate))
                 return Json(new { slots = new List<string>(), message = "Invalid date" });
 
-            // 1. Get supervisor's schedule logic
-            var availabilities = await _context.SupervisorAvailabilities
-                .Where(a => a.SupervisorId == supervisorId)
-                .ToListAsync();
+            // Get supervisor's schedule logic
+            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
+            if (activeSession == null)
+                return Json(new { slots = new List<string>(), message = "No active academic session found." });
 
-            // 2. Find specific date override
+            bool hasTimetable = await _context.SupervisorTimetableEntries.AnyAsync(t => t.SupervisorId == supervisorId && t.AcademicSessionId == activeSession.Id);
+            if (!hasTimetable)
+                return Json(new { slots = new List<string>(), message = "Supervisor has not uploaded a teaching timetable yet." });
+
+            var availabilities = await _context.SupervisorAvailabilities.Where(a => a.SupervisorId == supervisorId).ToListAsync();
             var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == parsedDate.Date);
-            
-            // 3. Fallback to weekly default
-            var weeklyAvail = overrideAvail == null 
-                ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == parsedDate.DayOfWeek.ToString()) 
-                : null;
 
-            var activeAvail = overrideAvail ?? weeklyAvail;
-
-            if (activeAvail == null)
+            if (overrideAvail != null && !overrideAvail.IsAvailable)
             {
-                activeAvail = new SupervisorAvailability { StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(17), IsAvailable = true };
+                return Json(new { slots = new List<string>(), message = "Supervisor is unavailable on this date." });
             }
 
-            TimeSpan start = activeAvail.StartTime;
-            TimeSpan end = activeAvail.EndTime;
-            bool isAvailable = activeAvail.IsAvailable;
-
-            if (!isAvailable)
-            {
-                return Json(new { slots = new List<string>(), message = "Supervisor is not available on this date." });
-            }
+            TimeSpan start = overrideAvail != null ? overrideAvail.StartTime : TimeSpan.FromHours(9);
+            TimeSpan end = overrideAvail != null ? overrideAvail.EndTime : TimeSpan.FromHours(17);
 
             // 4. Generate all 30-min slots
             var allSlots = new List<string>();
@@ -1439,7 +1460,6 @@ namespace FYPTracker.Controllers
                 .ToListAsync();
 
             // 5.5 Get timetable busy periods
-            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
             var dayOfWeekStr = parsedDate.DayOfWeek.ToString();
             var busyPeriods = new List<SupervisorTimetableEntry>();
             if (activeSession != null)
@@ -1730,60 +1750,6 @@ namespace FYPTracker.Controllers
                 TempData["Error"] = "Progress logbook is already signed by the supervisor.";
                 return RedirectToAction(nameof(BookMeeting));
             }
-
-                if (meeting.MeetingLog == null)
-                {
-                    int maxWeek = await _context.MeetingBookings
-                        .Where(m => m.FYPProjectId == meeting.FYPProjectId && m.Stage == meeting.Stage && m.MeetingLog != null)
-                        .MaxAsync(m => (int?)m.WeekNumber) ?? 0;
-                    
-                    if (maxWeek >= 14)
-                    {
-                        TempData["Error"] = "Maximum of 14 meeting logs reached for this stage.";
-                        return RedirectToAction(nameof(BookMeeting));
-                    }
-                    meeting.WeekNumber = maxWeek + 1;
-                }
-
-                if (nextMeetingDate.HasValue)
-                {
-                    // Inherit time from the current meeting or default to "10:00"
-                    string defaultTime = meeting.MeetingTime ?? "10:00";
-                    
-                    // Prevent duplicate bookings on the exact same date
-                    bool duplicateExists = await _context.MeetingBookings
-                        .AnyAsync(m => m.StudentId == user.Id && m.MeetingDate.Date == nextMeetingDate.Value.Date && m.Status != "Rejected" && m.Status != "Postponed");
-
-                    // Check supervisor availability
-                    var availabilities = await _context.SupervisorAvailabilities.Where(a => a.SupervisorId == meeting.SupervisorId).ToListAsync();
-                    var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == nextMeetingDate.Value.Date);
-                    var weeklyAvail = overrideAvail == null ? availabilities.FirstOrDefault(a => a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == nextMeetingDate.Value.DayOfWeek.ToString()) : null;
-                    var activeAvail = overrideAvail ?? weeklyAvail;
-
-                    if (activeAvail == null)
-                    {
-                        activeAvail = new SupervisorAvailability { StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(17), IsAvailable = true };
-                    }
-
-                    if (!duplicateExists && activeAvail.IsAvailable)
-                    {
-                        // Instantly generate a new Meeting Booking so it appears in the list.
-                        var newBooking = new MeetingBooking
-                        {
-                            StudentId = user.Id,
-                            SupervisorId = meeting.SupervisorId,
-                            FYPProjectId = meeting.FYPProjectId,
-                            Stage = meeting.Stage,
-                            MeetingDate = nextMeetingDate.Value,
-                            MeetingDay = nextMeetingDate.Value.DayOfWeek.ToString(),
-                            MeetingTime = defaultTime,
-                            Reason = "Follow-up meeting generated from logbook to confirm next meeting",
-                            Status = "Pending",
-                            CreatedDate = DateTime.Now
-                        };
-                        _context.MeetingBookings.Add(newBooking);
-                    }
-                }
 
             if (meeting.MeetingLog == null)
             {
@@ -2245,49 +2211,38 @@ namespace FYPTracker.Controllers
             addLabelValue("Supervisor Name:", project?.Supervisor?.FullName ?? "");
             addBlankLine("");
 
-            // Section 2
-            addPara("SECTION 2: REPORTING PERIOD", true, 12, "1F3A7A", false);
-            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
+            // Chapter 1
+            addPara("Chapter 1: Introduction", true, 14, "1F3A7A", false);
+            addPara("� Problem Statement", false, 12, "", false);
+            addPara("� Detailed Research Question", false, 12, "", false);
+            addPara("� Objective", false, 12, "", false);
+            addPara("� Clients, Audience, Motivation", false, 12, "", false);
+            addPara("� Scope", false, 12, "", false);
             addBlankLine("");
-            addLabelValue("Start Date:", "");
-            addLabelValue("End Date:", "");
-            addBlankLine("");
+            for (int i = 0; i < 3; i++) addBlankLine("");
 
-            // Section 3
-            addPara("SECTION 3: PROGRESS SUMMARY", true, 12, "1F3A7A", false);
-            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
-            addPara("(Describe the tasks completed during this reporting period.)", false, 10, "888888", false);
+            // Chapter 2
+            addPara("Chapter 2: Literature Review", true, 14, "1F3A7A", false);
+            addPara("� Define the topic", false, 12, "", false);
+            addPara("� Study on existing system/existing technologies", false, 12, "", false);
+            addPara("� Comparison/Summary of existing technologies/system", false, 12, "", false);
+            addPara("� How it has helped derive the proposed work", false, 12, "", false);
+            addPara("� Discussion on the sustainability component", false, 12, "", false);
             addBlankLine("");
-            for (int i = 0; i < 6; i++) addBlankLine("");
+            for (int i = 0; i < 3; i++) addBlankLine("");
 
-            // Section 4
-            addPara("SECTION 4: CHALLENGES & ISSUES", true, 12, "1F3A7A", false);
-            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
-            addPara("(Describe any challenges faced and how they were resolved or planned to be resolved.)", false, 10, "888888", false);
+            // Chapter 3
+            addPara("Chapter 3: Software Methodology", true, 14, "1F3A7A", false);
+            addPara("� Primary Research Plan", false, 12, "", false);
+            addPara("� Use Case Diagram (minimum requirement)", false, 12, "", false);
+            addPara("� High-fidelity design/prototype", false, 12, "", false);
+            addPara("� Gantt Chart", false, 12, "", false);
+            addPara("� Survey with respondents, if applicable", false, 12, "", false);
             addBlankLine("");
-            for (int i = 0; i < 6; i++) addBlankLine("");
+            for (int i = 0; i < 3; i++) addBlankLine("");
 
-            // Section 5
-            addPara("SECTION 5: NEXT STEPS & GOALS", true, 12, "1F3A7A", false);
-            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
-            addPara("(Outline the tasks and goals for the next reporting period.)", false, 10, "888888", false);
+            addPara("Maximum pages: 150�200 pages. Please ensure this requirement is followed.", true, 12, "FF0000", true);
             addBlankLine("");
-            for (int i = 0; i < 6; i++) addBlankLine("");
-
-            // Section 6
-            addPara("SECTION 6: SUPERVISOR SIGN-OFF", true, 12, "1F3A7A", false);
-            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
-            addBlankLine("");
-            addPara("I confirm that I have reviewed the student's progress for this reporting period.", false, 12, "", false);
-            addBlankLine("");
-            addLabelValue("Supervisor Signature:", "");
-            addLabelValue("Date:", "");
-            addBlankLine("");
-            addPara("─────────────────────────────────────────────────────", false, 10, "AAAAAA", false);
-            addLabelValue("Student Signature:", "");
-            addLabelValue("Date:", "");
-            addBlankLine("");
-
             addPara("Generated by FYP Tracking System  |  " + DateTime.Now.ToString("dd MMMM yyyy"), false, 9, "AAAAAA", true);
 
             doc.Write(ms);

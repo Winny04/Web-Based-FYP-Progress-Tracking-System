@@ -63,7 +63,7 @@
 }
 
 <!--begin::Menu wrapper-->
-<div class="header-menu align-items-stretch">
+<div class="header-menu align-items-stretch" data-kt-drawer="true" data-kt-drawer-name="header-menu" data-kt-drawer-activate="{default: true, lg: false}" data-kt-drawer-overlay="true" data-kt-drawer-width="{default:'200px', '300px': '250px'}" data-kt-drawer-direction="start" data-kt-drawer-toggle="#kt_header_menu_mobile_toggle" data-kt-swapper="true" data-kt-swapper-mode="prepend" data-kt-swapper-parent="{default: '#kt_body', lg: '#kt_header_nav'}">
     <!--begin::Menu-->
     <div class="menu menu-lg-rounded menu-column menu-lg-row menu-state-bg menu-title-gray-700 menu-state-icon-primary menu-state-bullet-primary menu-arrow-gray-400 fw-bold my-5 my-lg-0 align-items-stretch" id="kt_header_menu" data-kt-menu="true">
         
@@ -71,8 +71,8 @@
         {
             string dashUrl = (userType == "Supervisor") ? "/Supervisor" : "/Student";
             <div class="menu-item @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "active border-bottom border-3 border-primary" : "")" href="@dashUrl">
-                    <span class="menu-title">Dashboard</span>
+                <a class="menu-link py-3 px-4 @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "active border-bottom border-3 border-primary" : "")" href="@dashUrl">
+                    <span class="menu-title text-nowrap">Dashboard</span>
                 </a>
             </div>
         }
@@ -82,16 +82,16 @@
             @if (hasSupervisor)
             {
                 <div class="menu-item @(pageTitle == "Project Details" ? "here show" : "")">
-                    <a class="menu-link py-3 @(pageTitle == "Project Details" ? "active border-bottom border-3 border-primary" : "")" href="/Student/ProjectDetails">
-                        <span class="menu-title">Project Details</span>
+                    <a class="menu-link py-3 px-4 @(pageTitle == "Project Details" ? "active border-bottom border-3 border-primary" : "")" href="/Student/ProjectDetails">
+                        <span class="menu-title text-nowrap">Project Details</span>
                     </a>
                 </div>
             }
             @if (!hasSupervisor)
             {
             <div class="menu-item @(pageTitle == "Select Supervisor" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "Select Supervisor" ? "active border-bottom border-3 border-primary" : "")" href="/Student/SelectSupervisor">
-                    <span class="menu-title d-flex align-items-center">
+                <a class="menu-link py-3 px-4 @(pageTitle == "Select Supervisor" ? "active border-bottom border-3 border-primary" : "")" href="/Student/SelectSupervisor">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
                         Select Supervisor
                         @if(studentPendingSupervisorReqs > 0) { <span class="badge badge-sm badge-circle badge-warning ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingSupervisorReqs</span> }
                     </span>
@@ -101,24 +101,24 @@
             @if (hasSupervisor)
             {
                 <div class="menu-item @(pageTitle.Contains("Forms") ? "here show" : "")">
-                    <a class="menu-link py-3 @(pageTitle.Contains("Forms") ? "active border-bottom border-3 border-primary" : "")" href="/Student/Forms">
-                        <span class="menu-title d-flex align-items-center">
+                    <a class="menu-link py-3 px-4 @(pageTitle.Contains("Forms") ? "active border-bottom border-3 border-primary" : "")" href="/Student/Forms">
+                        <span class="menu-title text-nowrap d-flex align-items-center">
                             Assignments
                             @if(studentPendingForms > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingForms</span> }
                         </span>
                     </a>
                 </div>
                 <div class="menu-item @(pageTitle == "Book Meeting" ? "here show" : "")">
-                    <a class="menu-link py-3 @(pageTitle == "Book Meeting" ? "active border-bottom border-3 border-primary" : "")" href="/Student/BookMeeting">
-                        <span class="menu-title d-flex align-items-center">
+                    <a class="menu-link py-3 px-4 @(pageTitle == "Book Meeting" ? "active border-bottom border-3 border-primary" : "")" href="/Student/BookMeeting">
+                        <span class="menu-title text-nowrap d-flex align-items-center">
                             Book Meeting
                             @if(studentPendingMeetings > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingMeetings</span> }
                         </span>
                     </a>
                 </div>
                 <div class="menu-item @(pageTitle == "Messages" ? "here show" : "")">
-                    <a class="menu-link py-3 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" asp-controller="Chat" asp-action="Index">
-                        <span class="menu-title d-flex align-items-center">
+                    <a class="menu-link py-3 px-4 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" asp-controller="Chat" asp-action="Index">
+                        <span class="menu-title text-nowrap d-flex align-items-center">
                             Messages
                             @if(unreadMessages > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@unreadMessages</span> }
                         </span>
@@ -129,47 +129,47 @@
         else if (userType == "Supervisor")
         {
             <div class="menu-item @(pageTitle == "Student Requests" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "Student Requests" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/StudentRequests">
-                    <span class="menu-title d-flex align-items-center">
+                <a class="menu-link py-3 px-4 @(pageTitle == "Student Requests" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/StudentRequests">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
                         Student Requests
                         @if(pendingRequests > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@pendingRequests</span> }
                     </span>
                 </a>
             </div>
             <div class="menu-item @(pageTitle == "My Students" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "My Students" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/MyProjects">
-                    <span class="menu-title">My Students</span>
+                <a class="menu-link py-3 px-4 @(pageTitle == "My Students" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/MyProjects">
+                    <span class="menu-title text-nowrap">My Students</span>
                 </a>
             </div>
             <div class="menu-item @(pageTitle == "Review Submissions" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "Review Submissions" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ReviewSubmissions">
-                    <span class="menu-title d-flex align-items-center">
+                <a class="menu-link py-3 px-4 @(pageTitle == "Review Submissions" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ReviewSubmissions">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
                         Review Submissions
                         @if(pendingSubmissions > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@pendingSubmissions</span> }
                     </span>
                 </a>
             </div>
             <div class="menu-item @(pageTitle == "Manage Meetings" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "Manage Meetings" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ManageMeetings">
-                    <span class="menu-title d-flex align-items-center">
+                <a class="menu-link py-3 px-4 @(pageTitle == "Manage Meetings" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ManageMeetings">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
                         Manage Meetings
                         @if(pendingMeetings > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@pendingMeetings</span> }
                     </span>
                 </a>
             </div>
             <div class="menu-item @(pageTitle == "My Availability" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "My Availability" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ManageAvailability">
-                    <span class="menu-title">My Availability</span>
+                <a class="menu-link py-3 px-4 @(pageTitle == "My Availability" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ManageAvailability">
+                    <span class="menu-title text-nowrap">My Availability</span>
                 </a>
             </div>
             <div class="menu-item @(pageTitle == "Reports & Analytics" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "Reports & Analytics" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/Reporting">
-                    <span class="menu-title">Reporting</span>
+                <a class="menu-link py-3 px-4 @(pageTitle == "Reports & Analytics" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/Reporting">
+                    <span class="menu-title text-nowrap">Reporting</span>
                 </a>
             </div>
             <div class="menu-item @(pageTitle == "Messages" ? "here show" : "")">
-                <a class="menu-link py-3 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" asp-controller="Chat" asp-action="Index">
-                    <span class="menu-title d-flex align-items-center">
+                <a class="menu-link py-3 px-4 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" asp-controller="Chat" asp-action="Index">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
                         Messages
                         @if(unreadMessages > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@unreadMessages</span> }
                     </span>
@@ -187,36 +187,36 @@
             bool isLookups = currentPath.StartsWith("/Admin/ManageLookups", StringComparison.OrdinalIgnoreCase);
 
             <div class="menu-item @(isDashboard ? "here show" : "")">
-                <a class="menu-link py-3 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Admin">
-                    <span class="menu-title d-flex align-items-center">
+                <a class="menu-link py-3 px-4 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Admin">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
                         Dashboard
                         @if(adminPendingRequests > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@adminPendingRequests</span> }
                     </span>
                 </a>
             </div>
             <div class="menu-item @(isUsers ? "here show" : "")">
-                <a class="menu-link py-3 @(isUsers ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageUsers">
-                    <span class="menu-title">Manage Users</span>
+                <a class="menu-link py-3 px-4 @(isUsers ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageUsers">
+                    <span class="menu-title text-nowrap">Manage Users</span>
                 </a>
             </div>
             <div class="menu-item @(isLookups ? "here show" : "")">
-                <a class="menu-link py-3 @(isLookups ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageLookups">
-                    <span class="menu-title">Manage Lookups</span>
+                <a class="menu-link py-3 px-4 @(isLookups ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageLookups">
+                    <span class="menu-title text-nowrap">Manage Lookups</span>
                 </a>
             </div>
             <div class="menu-item @(isProjects ? "here show" : "")">
-                <a class="menu-link py-3 @(isProjects ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageProjects">
-                    <span class="menu-title">All Projects</span>
+                <a class="menu-link py-3 px-4 @(isProjects ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageProjects">
+                    <span class="menu-title text-nowrap">All Projects</span>
                 </a>
             </div>
             <div class="menu-item @(isReporting ? "here show" : "")">
-                <a class="menu-link py-3 @(isReporting ? "active border-bottom border-3 border-primary" : "")" href="/Admin/Reporting">
-                    <span class="menu-title">Reporting</span>
+                <a class="menu-link py-3 px-4 @(isReporting ? "active border-bottom border-3 border-primary" : "")" href="/Admin/Reporting">
+                    <span class="menu-title text-nowrap">Reporting</span>
                 </a>
             </div>
             <div class="menu-item @(isSettings ? "here show" : "")">
-                <a class="menu-link py-3 @(isSettings ? "active border-bottom border-3 border-primary" : "")" href="/Admin/Settings">
-                    <span class="menu-title">System Settings</span>
+                <a class="menu-link py-3 px-4 @(isSettings ? "active border-bottom border-3 border-primary" : "")" href="/Admin/Settings">
+                    <span class="menu-title text-nowrap">System Settings</span>
                 </a>
             </div>
         }
@@ -225,8 +225,8 @@
             bool isDashboard = currentPath == "/Examiner" || currentPath == "/Examiner/" || currentPath.StartsWith("/Examiner/Index", StringComparison.OrdinalIgnoreCase);
 
             <div class="menu-item @(isDashboard ? "here show" : "")">
-                <a class="menu-link py-3 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Examiner">
-                    <span class="menu-title d-flex align-items-center">
+                <a class="menu-link py-3 px-4 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Examiner">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
                         Dashboard
                     </span>
                 </a>
@@ -237,8 +237,8 @@
             bool isLibrary = currentPath.StartsWith("/Library", StringComparison.OrdinalIgnoreCase);
         }
         <div class="menu-item @(isLibrary ? "here show" : "")">
-            <a class="menu-link py-3 @(isLibrary ? "active border-bottom border-3 border-primary" : "")" href="/Library">
-                <span class="menu-title"><i class="fas fa-book me-2"></i>Digital Library</span>
+            <a class="menu-link py-3 px-4 @(isLibrary ? "active border-bottom border-3 border-primary" : "")" href="/Library">
+                <span class="menu-title text-nowrap"><i class="fas fa-book me-2"></i>Digital Library</span>
             </a>
         </div>
     </div>

@@ -219,6 +219,23 @@
         </div>
     </div>
 
+    @* ── TIMETABLE WARNING ───────────────────────────────── *@
+    @if (ViewBag.MissingAvailability == true)
+    {
+        <div class="alert alert-warning border-0 shadow-sm rounded-3 d-flex align-items-center flex-wrap gap-3 mb-5 p-4" style="background: linear-gradient(135deg, #fef3c7, #fffbeb); border-left: 5px solid #f59e0b !important;">
+            <span class="fs-1 text-warning d-none d-sm-block"><i class="fas fa-calendar-times"></i></span>
+            <div class="flex-grow-1">
+                <h6 class="fw-bold text-dark mb-1">Please Upload Your Teaching Timetable</h6>
+                <p class="mb-0 text-muted" style="font-size: 0.95rem;">
+                    You have not uploaded a teaching timetable for the current academic session. Students will not be able to book meetings with you until a timetable is uploaded.
+                </p>
+            </div>
+            <div>
+                <a href="/Supervisor/ManageTimetable" class="btn btn-warning fw-bold text-dark rounded-pill px-4" style="background-color: #fbbf24; border:none;">Upload Timetable Now</a>
+            </div>
+        </div>
+    }
+
     @* ── PRIORITY ACTION CENTER ─────────────────────────────── *@
     @if (hasActionRequired)
     {

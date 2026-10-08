@@ -20,3 +20,35 @@ body {
 body, .menu-title, h1, h2, h3, h4, h5, h6, .form-label, .btn {
     font-family: 'Poppins', sans-serif !important;
 }
+
+/* Global Form Styling improvements */
+.form-label {
+    font-weight: 600;
+    color: #3f4254;
+    margin-bottom: 0.5rem;
+}
+
+.form-control,
+.form-select {
+    min-height: 42px;
+    border-radius: 8px;
+    border: 1px solid #e4e6ef;
+    transition: all 0.2s;
+}
+
+.form-control:focus,
+.form-select:focus {
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.08);
+    border-color: #b5b5c3;
+}
+
+.form-text {
+    font-size: 12px;
+    margin-top: 6px;
+    color: #a1a5b7;
+}
+
+textarea.form-control {
+    min-height: 100px;
+    resize: vertical;
+}

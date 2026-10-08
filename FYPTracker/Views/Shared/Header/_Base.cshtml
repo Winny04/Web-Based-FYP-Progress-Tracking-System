@@ -51,7 +51,7 @@
     <!--begin::Container-->
     <div class="container-xxl d-flex align-items-center">
         <div class="d-flex topbar align-items-center d-lg-none ms-n2 me-3" title="Show aside menu">
-            <button class="btn btn-icon btn-active-light-primary btn-custom w-30px h-30px w-md-40px h-md-40px border-0 bg-transparent" type="button" data-toggle="collapse" data-bs-toggle="collapse" data-target="#custom_mobile_nav" data-bs-target="#custom_mobile_nav" aria-expanded="false" aria-controls="custom_mobile_nav">
+            <div class="btn btn-icon btn-active-light-primary btn-custom w-30px h-30px w-md-40px h-md-40px border-0 bg-transparent" id="kt_header_menu_mobile_toggle">
                 <!--begin::Svg Icon | path: icons/duotune/abstract/abs015.svg-->
                 <span class="svg-icon svg-icon-1">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -60,7 +60,7 @@
                     </svg>
                 </span>
                 <!--end::Svg Icon-->
-            </button>
+            </div>
         </div>
         <!--end::Heaeder menu toggle-->
         <!--begin::Header Logo-->
@@ -73,7 +73,7 @@
         <!--begin::Wrapper-->
         <div class="d-flex align-items-stretch justify-content-between flex-lg-grow-1">
             <!--begin::Navbar-->
-            <div class="collapse d-lg-flex align-items-stretch" id="custom_mobile_nav">
+            <div class="d-flex align-items-stretch" id="kt_header_nav">
                 <!--layout-partial:layout/header/__menu.html-->
                  @await Component.InvokeAsync(typeof(HeaderViewComponent))
             </div>

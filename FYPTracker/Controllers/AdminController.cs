@@ -544,17 +544,35 @@ namespace FYPTracker.Controllers
 
             // Get all active examiners with their specialisation
             var examiners = await _context.ApplicationUsers
-                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Examiner") && !u.IsResign)
+                .Where(u =>
+                    u.UserRoles.Any(r => r.Role.Name == "Examiner") &&
+                    !u.IsResign)
                 .ToListAsync();
+
+            // Examiner assignment count for each lecturer
+            var examinerCounts = await _context.FYPProjectExaminers
+                .GroupBy(x => x.ExaminerId)
+                .Select(g => new
+                {
+                    ExaminerId = g.Key,
+                    Count = g.Count()
+                })
+                .ToDictionaryAsync(x => x.ExaminerId, x => x.Count);
+
+            // Eligible:
+            // 1. Cannot examine own supervised student
+            // 2. Must still have examiner quota
+            examiners = examiners
+                .Where(e =>
+                    e.Id != project.SupervisorId &&
+                    examinerCounts.GetValueOrDefault(e.Id, 0) < e.MaxStudentSlots)
+                .ToList();
 
             if (!examiners.Any())
             {
-                TempData["Error"] = "No active examiners found in the system.";
+                TempData["Error"] = "No examiner is available. All eligible examiners may have reached their quota.";
                 return RedirectToAction(nameof(ManageProjects));
             }
-
-            // Exclude the supervisor from being examiner (conflict of interest)
-            examiners = examiners.Where(e => e.Id != project.SupervisorId).ToList();
 
             // Score each examiner by keyword overlap
             var scored = examiners.Select(e =>
@@ -564,21 +582,33 @@ namespace FYPTracker.Controllers
                     e.FullName ?? ""
                 ).ToLowerInvariant();
 
-                // Tokenize both sides
-                var projectTokens = projectCorpus.Split(new[] { ' ', ',', '.', ';', '/', '\\', '-', '(', ')' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Where(t => t.Length > 3) // ignore short words like "and", "the"
-                    .ToHashSet();
-
-                var examinerTokens = examinerKeywords.Split(new[] { ' ', ',', '.', ';', '/', '\\', '-', '(', ')' }, StringSplitOptions.RemoveEmptyEntries)
+                var projectTokens = projectCorpus
+                    .Split(new[] { ' ', ',', '.', ';', '/', '\\', '-', '(', ')' },
+                        StringSplitOptions.RemoveEmptyEntries)
                     .Where(t => t.Length > 3)
                     .ToHashSet();
 
-                // Count overlap
+                var examinerTokens = examinerKeywords
+                    .Split(new[] { ' ', ',', '.', ';', '/', '\\', '-', '(', ')' },
+                        StringSplitOptions.RemoveEmptyEntries)
+                    .Where(t => t.Length > 3)
+                    .ToHashSet();
+
                 int matchScore = projectTokens.Intersect(examinerTokens).Count();
 
-                return new { Examiner = e, Score = matchScore };
+                int currentExaminerCount =
+                    examinerCounts.GetValueOrDefault(e.Id, 0);
+
+                return new
+                {
+                    Examiner = e,
+                    Score = matchScore,
+                    CurrentCount = currentExaminerCount
+                };
             })
-            .OrderByDescending(x => x.Score)
+            .OrderByDescending(x => x.Score)   // specialization first
+            .ThenBy(x => x.CurrentCount)       // then choose lower workload
+            .ThenBy(x => x.Examiner.FullName)
             .ToList();
 
             var bestMatch = scored.FirstOrDefault();
@@ -849,23 +879,40 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     }
                 }
 
-                if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR"))
+                if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || 
+                    user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR"))
                 {
                     user.Title = title;
-                    if (maxStudentSlots > 0)
+
+                    if (maxStudentSlots < 1)
                     {
-                        user.MaxStudentSlots = maxStudentSlots;
+                        return Json(new
+                        {
+                            status = false,
+                            msg = "Quota must be at least 1."
+                        });
                     }
+
+                    user.MaxStudentSlots = maxStudentSlots;
                 }
-                else if (user.UserRoles.Any(r => r.Role.Name == "Student") || user.UserRoles.Any(r => r.Role.Name == "STUDENT"))
+                else if (user.UserRoles.Any(r => r.Role.Name == "Student") || 
+                        user.UserRoles.Any(r => r.Role.Name == "STUDENT"))
                 {
                     // Save AcademicSession for students from the edit modal
                     if (!string.IsNullOrWhiteSpace(academicSession))
                     {
-                        bool isValidSession = await _context.AcademicSessions.AnyAsync(s => s.Name == academicSession);
+                        bool isValidSession = await _context.AcademicSessions
+                            .AnyAsync(s => s.Name == academicSession);
+
                         if (!isValidSession)
-                            return Json(new { success = false, msg = $"Academic Session '{academicSession}' is invalid." });
-                            
+                        {
+                            return Json(new
+                            {
+                                success = false,
+                                msg = $"Academic Session '{academicSession}' is invalid."
+                            });
+                        }
+
                         user.AcademicSession = academicSession;
                     }
                 }
@@ -1154,7 +1201,11 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                             Programme = newEmployee.Programme,
                             AcademicSession = newEmployee.AcademicSession,
                             Title = newEmployee.Title,
-                            MaxStudentSlots = newEmployee.UserType == "Supervisor" ? 5 : null,
+                            MaxStudentSlots =
+                                newEmployee.UserType == "Supervisor" ||
+                                newEmployee.UserType == "AcademicStaff"
+                                    ? 5
+                                    : null,
                             RequirePasswordChange = true
                     };
                         _context.ApplicationUsers.Add(model);

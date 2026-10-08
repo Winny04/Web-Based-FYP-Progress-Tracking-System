@@ -425,11 +425,12 @@
                     <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
                         <thead>
                             <tr class="fw-bolder text-muted bg-light">
-                                <th class="ps-4 min-w-50px rounded-start">Stage</th>
-                                <th class="min-w-50px">Week</th>
-                                <th class="min-w-100px">Date</th>
-                                <th class="min-w-200px">Topics Discussed</th>
-                                <th class="min-w-150px">Supervisor Comments</th>
+                                <th class="ps-4 min-w-50px rounded-start">Week</th>
+                                <th class="min-w-150px">Date & Time</th>
+                                <th class="min-w-150px">Key Topics Discussed</th>
+                                <th class="min-w-150px">Action Points</th>
+                                <th class="min-w-150px">Completed Actions</th>
+                                <th class="min-w-150px">Supervisor Feedback</th>
                                 <th class="min-w-100px">Status</th>
                                 <th class="min-w-100px text-end rounded-end">View</th>
                             </tr>
@@ -442,33 +443,47 @@
                                     var log = booking.MeetingLog;
                                     <tr>
                                         <td class="ps-4">
-                                            <span class="badge badge-light-primary fw-bold">S@(booking.Stage ?? 1)</span>
+                                            <span class="fw-bold text-dark">Week @(booking.WeekNumber ?? 0)</span>
+                                            <div class="text-muted fs-8">Stage @(booking.Stage ?? 1)</div>
                                         </td>
                                         <td>
-                                            <span class="fw-bold text-dark">W@(booking.WeekNumber ?? 0)</span>
+                                            @booking.MeetingDate.ToString("dd MMM yyyy") <br/>
+                                            <span class="text-muted fs-7">@booking.MeetingTime</span>
                                         </td>
-                                        <td>@booking.MeetingDate.ToString("dd MMM yyyy")</td>
-                                        <td>@log.KeyTopicsDiscussed</td>
-                                        <td>@log.SupervisorComments</td>
-                                        <td>
-                                            @if(log.LogStatus == "Signed") {
-                                                <span class="badge badge-light-success"><i class="fas fa-check-circle text-success me-1"></i>Signed</span>
-                                            } else {
-                                                <span class="badge badge-light-warning">@log.LogStatus</span>
-                                            }
-                                        </td>
-                                        <td class="text-end">
-                                            @if(!string.IsNullOrEmpty(log.PdfLogbookPath))
-                                            {
-                                                <a href="@log.PdfLogbookPath" class="btn btn-sm btn-light btn-active-light-primary px-3" target="_blank" title="View PDF">
-                                                    View
-                                                </a>
-                                            }
-                                            else
-                                            {
-                                                <span class="text-muted fs-8">No PDF</span>
-                                            }
-                                        </td>
+                                        
+                                        @if (log != null)
+                                        {
+                                            <td>@log.KeyTopicsDiscussed</td>
+                                            <td>@log.ActionPointsForNextMeeting</td>
+                                            <td>@log.CompletedActionsAndNotes</td>
+                                            <td>@(string.IsNullOrWhiteSpace(log.SupervisorComments) ? "-" : log.SupervisorComments)</td>
+                                            <td>
+                                                @if(log.LogStatus == "Signed") {
+                                                    <span class="badge badge-light-success"><i class="fas fa-check-circle text-success me-1"></i>Signed</span>
+                                                } else {
+                                                    <span class="badge badge-light-warning">@log.LogStatus</span>
+                                                }
+                                            </td>
+                                            <td class="text-end">
+                                                @if(!string.IsNullOrEmpty(log.PdfLogbookPath))
+                                                {
+                                                    <a href="@log.PdfLogbookPath" class="btn btn-sm btn-light btn-active-light-primary px-3" target="_blank" title="View PDF">
+                                                        View
+                                                    </a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted fs-8">No PDF</span>
+                                                }
+                                            </td>
+                                        }
+                                        else
+                                        {
+                                            <td colspan="3" class="text-muted fst-italic">Not submitted yet</td>
+                                            <td class="text-muted">-</td>
+                                            <td><span class="badge badge-light-secondary">Pending Log</span></td>
+                                            <td class="text-end"><span class="text-muted fs-8">-</span></td>
+                                        }
                                     </tr>
                                 }
                             }

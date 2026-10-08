@@ -2,26 +2,23 @@
 @model IEnumerable<FYPProject>
 @{
     ViewData["Title"] = "My Students";
-    var distinctMilestones = Model.SelectMany(p => p.Milestones).Select(m => m.Title).Distinct().OrderBy(t => t).ToList();
-    
     var allMilestoneTemplates = Model.SelectMany(p => p.Milestones)
-                                    .GroupBy(m => m.Title)
+                                    .GroupBy(m => new { m.Title, m.Stage, m.MilestoneSource })
                                     .Select(g => g.First())
                                     .OrderBy(m => m.DueDate ?? DateTime.MaxValue)
                                     .ToList();
                                     
-    var stage1Templates = allMilestoneTemplates.Where(m => !m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
-    var stage2Templates = allMilestoneTemplates.Where(m => m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
+    var stage1Templates = allMilestoneTemplates.Where(m => m.Stage == 1).ToList();
+    var stage2Templates = allMilestoneTemplates.Where(m => m.Stage == 2).ToList();
     
-    var defaultMilestoneTitles = new List<string> {
-        "FYP 1: Initial Assessment Form (IAF)",
-        "FYP 1: Stage 1 Final Submission",
-        "Step 1: Turnitin Checking",
-        "Step 2: Final Report Submission",
-        "Step 3: Marksheet Submission",
-        "Step 4: Record of Supervisor Meeting Form Submission",
-        "Step 5: Presentation Slides Submission"
-    };
+    var defaultMilestones = allMilestoneTemplates.Where(m => m.MilestoneSource == "Default").ToList();
+    var supervisorMilestones = allMilestoneTemplates.Where(m => m.MilestoneSource == "Supervisor").ToList();
+    
+    var supervisorMilestoneTitles = supervisorMilestones
+                                    .Select(m => m.Title)
+                                    .Distinct()
+                                    .OrderBy(t => t)
+                                    .ToList();
 }
 
 <style>
@@ -380,11 +377,9 @@
                         </label>
                         <select name="targetTitle" class="form-select form-select-solid" id="editTargetTitle" onchange="validateBulkEditRealtime()" required>
                             <option value="">-- Select Milestone --</option>
-                            @foreach(var t in distinctMilestones)
+                            @foreach(var t in supervisorMilestoneTitles)
                             {
-                                if (!defaultMilestoneTitles.Contains(t)) {
-                                    <option value="@t">@t</option>
-                                }
+                                <option value="@t">@t</option>
                             }
                         </select>
                         <div id="editTargetError" class="text-danger fw-bold small mt-1 d-none">Please select a milestone to edit.</div>
@@ -487,11 +482,9 @@
                         </label>
                         <select name="targetTitle" class="form-select form-select-solid" id="deleteTargetTitle" onchange="validateBulkDeleteRealtime()" required>
                             <option value="">-- Select Milestone --</option>
-                            @foreach(var t in distinctMilestones)
+                            @foreach(var t in supervisorMilestoneTitles)
                             {
-                                if (!defaultMilestoneTitles.Contains(t)) {
-                                    <option value="@t">@t</option>
-                                }
+                                <option value="@t">@t</option>
                             }
                         </select>
                         <div id="deleteTargetError" class="text-danger fw-bold small mt-1 d-none">Please select a milestone to delete.</div>
@@ -621,9 +614,9 @@
                 preview.value = "";
             } else {
                 if (stage === "1") {
-                    preview.value = "FYP 1: " + baseTitle;
+                    preview.value = "" + baseTitle;
                 } else {
-                    preview.value = "Step - " + baseTitle;
+                    preview.value = "" + baseTitle;
                 }
             }
             window.validateBulkAddRealtime();
@@ -717,7 +710,7 @@
                         } else if (propDate && selectedDate > propDate) {
                             date.classList.remove('is-valid');
                             date.classList.add('is-invalid');
-                            dateError.innerText = "Date Error: Cannot be after the FYP 1: Stage 1 Final Submission due date (" + formatDate(propDate) + ").";
+                            dateError.innerText = "Date Error: Cannot be after the Stage 1 Final Submission due date (" + formatDate(propDate) + ").";
                             dateError.classList.remove('d-none');
                             isValid = false;
                         } else {
@@ -859,7 +852,7 @@
                         } else if (propDate && selectedDate > propDate) {
                             date.classList.remove('is-valid');
                             date.classList.add('is-invalid');
-                            dateError.innerText = "Date Error: Cannot be after the FYP 1: Stage 1 Final Submission due date (" + formatDate(propDate) + ").";
+                            dateError.innerText = "Date Error: Cannot be after the Stage 1 Final Submission due date (" + formatDate(propDate) + ").";
                             dateError.style.display = 'block';
                             isValid = false;
                         } else {

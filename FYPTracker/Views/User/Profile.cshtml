@@ -129,20 +129,23 @@
                     <input type="hidden" name="Title" value="@Model.Title" />
 
                     <!-- Circular Photo Upload -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Upload Profile Photo</label>
-                        <input type="file" name="picture" class="form-control" accept="image/*" onchange="previewImage(this)" />
+                    <div class="mb-4 text-center">
+                        <label class="btn btn-outline-primary btn-sm fw-bold px-4 rounded-pill" style="cursor: pointer;">
+                            <i class="fas fa-camera me-2"></i> Change Photo
+                            <input type="file" name="picture" class="d-none" accept="image/*" onchange="previewImage(this)" />
+                        </label>
+                        <div class="form-text mt-2">Allowed file types: png, jpg, jpeg.</div>
                     </div>
 
                     <!-- Display Info & Editable Fields -->
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Full Name</label>
-                            <input type="text" name="FullName" class="form-control bg-light border-0" value="@Model.FullName" readonly />
+                            <input type="text" name="FullName" class="form-control-plaintext fw-bold text-dark" value="@Model.FullName" readonly />
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Email Address</label>
-                            <input type="email" name="Email" class="form-control bg-light" value="@Model.Email" readonly />
+                            <input type="email" name="Email" class="form-control-plaintext fw-bold text-dark" value="@Model.Email" readonly />
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Phone Number</label>
@@ -154,20 +157,20 @@
                         {
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Matric ID</label>
-                                <input type="text" class="form-control bg-light border-0" value="@Model.EmployeeId" readonly />
+                                <input type="text" class="form-control-plaintext fw-bold text-dark" value="@Model.EmployeeId" readonly />
                             </div>
 
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Programme</label>
-                                <input type="text" class="form-control bg-light border-0" value="@(Model.Programme ?? "Not Assigned")" readonly />
+                                <input type="text" class="form-control-plaintext fw-bold text-dark" value="@(Model.Programme ?? "Not Assigned")" readonly />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Academic Session</label>
-                                <input type="text" class="form-control bg-light border-0" value="@(Model.AcademicSession ?? "Not Assigned")" readonly />
+                                <input type="text" class="form-control-plaintext fw-bold text-dark" value="@(Model.AcademicSession ?? "Not Assigned")" readonly />
                             </div>
                             <div class="col-md-12">
                                 <label class="form-label fw-semibold">Assigned Supervisor</label>
-                                <input type="text" class="form-control bg-light border-0" value="@supervisorName" readonly />
+                                <input type="text" class="form-control-plaintext fw-bold text-dark" value="@supervisorName" readonly />
                             </div>
                         }
                         else if (displayRole == "Supervisor" || displayRole == "Examiner")
@@ -175,19 +178,19 @@
                             var currentStudents = ViewBag.FilledSlots ?? 0;
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Title</label>
-                                <input type="text" class="form-control bg-light border-0" value="@(Model.Title ?? "Not Assigned")" readonly />
+                                <input type="text" class="form-control-plaintext fw-bold text-dark" value="@(Model.Title ?? "Not Assigned")" readonly />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Department</label>
-                                <input type="text" class="form-control bg-light border-0" value="@(Model.EmpDepartment?.Name ?? "Not Assigned")" readonly />
+                                <input type="text" class="form-control-plaintext fw-bold text-dark" value="@(Model.EmpDepartment?.Name ?? "Not Assigned")" readonly />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Programme</label>
-                                <input type="text" class="form-control bg-light border-0" value="@(Model.Programme ?? "Not Assigned")" readonly />
+                                <input type="text" class="form-control-plaintext fw-bold text-dark" value="@(Model.Programme ?? "Not Assigned")" readonly />
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">Specialization</label>
-                                <input type="text" class="form-control bg-light border-0" value="@(Model.Specialization ?? "Not Assigned")" readonly />
+                                <input type="text" class="form-control-plaintext fw-bold text-dark" value="@(Model.Specialization ?? "Not Assigned")" readonly />
                             </div>
 
                             @if (displayRole == "Supervisor")
@@ -214,10 +217,12 @@
             </div>
         </div>
 
-        @* ── RIGHT COLUMN: Security Section (Change Password) ── *@
+        @* ── RIGHT COLUMN: Security Section (Change Password & 2FA) ── *@
         <div class="col-lg-5">
-            <div class="premium-card p-4 h-100">
-                <h5 class="fw-bold text-dark mb-4"><i class="fas fa-shield-alt text-primary me-2"></i>Security Section</h5>
+            <div class="d-flex flex-column gap-4 h-100">
+                <!-- Change Password Card -->
+                <div class="premium-card p-4">
+                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-key text-primary me-2"></i>Change Password</h5>
                 
                 <form asp-action="ChangePassword" asp-controller="User" method="post" id="changePasswordForm">
                     <div class="mb-3">
@@ -283,35 +288,36 @@
                         </button>
                     </div>
                 </form>
-                
-                <hr class="my-5" />
+                </div>
 
-                <h5 class="fw-bold text-dark mb-3"><i class="fas fa-lock text-primary me-2"></i>Two-Factor Authentication</h5>
-                @if (Model.IsMfaEnabled)
-                {
-                    <div class="alert alert-success d-flex align-items-center p-4">
-                        <i class="fas fa-check-circle fs-2hx text-success me-4"></i>
-                        <div class="d-flex flex-column">
-                            <h4 class="mb-1 text-success">2FA is Enabled</h4>
-                            <span>Your account is protected with an authenticator app.</span>
+                <!-- 2FA Card -->
+                <div class="premium-card p-4">
+                    <h5 class="fw-bold text-dark mb-3"><i class="fas fa-shield-alt text-primary me-2"></i>Two-Factor Authentication</h5>
+                    @if (Model.IsMfaEnabled)
+                    {
+                        <div class="alert alert-success d-flex align-items-center p-4 border-0 shadow-sm">
+                            <i class="fas fa-check-circle fs-2hx text-success me-4"></i>
+                            <div class="d-flex flex-column">
+                                <h5 class="mb-1 fw-bold text-success">2FA is Enabled</h5>
+                                <span class="text-dark">Your account is protected with an authenticator app.</span>
+                            </div>
                         </div>
-                    </div>
-                    <form action="@Url.Action("DisableMfa", "User")" method="post" onsubmit="return confirm('Are you sure you want to disable Two-Factor Authentication? This will make your account less secure.');">
-                        <button type="submit" class="btn btn-outline-danger w-100 fw-bold">Disable 2FA</button>
-                    </form>
-                }
-                else
-                {
-                    <div class="alert alert-warning d-flex align-items-center p-4">
-                        <i class="fas fa-exclamation-triangle fs-2hx text-warning me-4"></i>
-                        <div class="d-flex flex-column">
-                            <h4 class="mb-1 text-warning">2FA is Disabled</h4>
-                            <span>Protect your account by enabling Two-Factor Authentication.</span>
+                        <form action="@Url.Action("DisableMfa", "User")" method="post" onsubmit="return confirm('Are you sure you want to disable Two-Factor Authentication? This will make your account less secure.');">
+                            <button type="submit" class="btn btn-outline-danger w-100 fw-bold rounded-3">Disable 2FA</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <div class="alert alert-warning d-flex align-items-center p-4 border-0 shadow-sm">
+                            <i class="fas fa-exclamation-triangle fs-2hx text-warning me-4"></i>
+                            <div class="d-flex flex-column">
+                                <h5 class="mb-1 fw-bold text-warning">2FA is Disabled</h5>
+                                <span class="text-dark">Protect your account by enabling Two-Factor Authentication.</span>
+                            </div>
                         </div>
-                    </div>
-                    <a href="@Url.Action("SetupMfa", "User")" class="btn btn-primary w-100 fw-bold">Enable 2FA</a>
-                }
-
+                        <a href="@Url.Action("SetupMfa", "User")" class="btn btn-primary w-100 fw-bold rounded-3">Enable 2FA</a>
+                    }
+                </div>
             </div>
         </div>
     </div>
