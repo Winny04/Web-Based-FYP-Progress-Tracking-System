@@ -240,7 +240,7 @@
     @if (hasActionRequired)
     {
         <div class="premium-card p-4 mb-5 border-0 shadow-sm" style="border-top: 4px solid var(--accent-dark) !important;">
-            <h5 class="fw-bold mb-4 text-dark"><i class="fas fa-clipboard-list me-2"></i>Priority Action Required</h5>
+            <h5 class="fw-bold mb-4 text-dark"><i class="fas fa-clipboard-list me-2"></i>Action Required</h5>
             
             <div class="d-flex flex-column gap-2">
                 @if (pendingRequestsCount > 0)
@@ -248,8 +248,10 @@
                     <div class="action-alert shadow-sm">
                         <i class="fas fa-user-plus action-alert-icon"></i>
                         <div class="flex-grow-1">
-                            <h6 class="fw-bold mb-1">New Project Requests</h6>
-                            <p class="mb-0 text-muted" style="font-size: 0.9rem;">You have <strong>@pendingRequestsCount</strong> student(s) requesting your supervision.</p>
+                            <h6 class="fw-bold mb-1">Pending Supervision Requests</h6>
+                            <p class="mb-0 text-muted" style="font-size: 0.9rem;">
+                                You have <strong>@pendingRequestsCount</strong> supervision request@(pendingRequestsCount == 1 ? "" : "s") awaiting your response.
+                            </p>
                         </div>
                         <a href="/Supervisor/StudentRequests" class="btn btn-sm btn-monochrome px-4 rounded-pill">Review Requests</a>
                     </div>
@@ -331,7 +333,7 @@
             <!-- Pending Milestone Reviews -->
             <div class="premium-card mb-4 shadow-sm">
                 <div class="d-flex justify-content-between align-items-center p-4 border-bottom">
-                    <h5 class="fw-bold mb-0 text-dark"><i class="fas fa-inbox me-2 text-muted"></i>Awaiting Your Review</h5>
+                    <h5 class="fw-bold mb-0 text-dark"><i class="fas fa-inbox me-2 text-muted"></i>Submissions Awaiting Review</h5>
                     <a href="/Supervisor/ReviewSubmissions" class="btn btn-sm btn-outline-monochrome rounded-pill px-3">View All</a>
                 </div>
                 
@@ -339,7 +341,7 @@
                 {
                     <div class="text-center py-5 text-muted">
                         <i class="fas fa-check-double fs-1 mb-3" style="color: #e2e8f0;"></i>
-                        <p class="mb-0">You're all caught up! No documents to review.</p>
+                        <p class="mb-0">No submissions are currently awaiting your review.</p>
                     </div>
                 }
                 else
@@ -366,10 +368,10 @@
                 }
             </div>
 
-            <!-- Recent Project Requests -->
+            <!-- Recent Supervision Requests -->
             <div class="premium-card shadow-sm">
                 <div class="d-flex justify-content-between align-items-center p-4 border-bottom">
-                    <h5 class="fw-bold mb-0 text-dark"><i class="fas fa-user-plus me-2 text-muted"></i>Recent Project Requests</h5>
+                    <h5 class="fw-bold mb-0 text-dark"><i class="fas fa-user-plus me-2 text-muted"></i>Recent Supervision Requests</h5>
                     <a href="/Supervisor/StudentRequests" class="btn btn-sm btn-outline-monochrome rounded-pill px-3">View All</a>
                 </div>
 
@@ -393,7 +395,7 @@
                                     <div class="fw-bold text-dark">@req.Student?.FullName</div>
                                     <div class="text-muted fs-7 mt-1">Requested on @req.RequestedDate.ToString("dd MMM yyyy")</div>
                                 </div>
-                                <a href="/Supervisor/StudentRequests" class="btn btn-sm btn-outline-monochrome px-3">Evaluate</a>
+                                <a href="/Supervisor/StudentRequests" class="btn btn-sm btn-outline-monochrome px-3">Review Request</a>
                             </div>
                         }
                     </div>

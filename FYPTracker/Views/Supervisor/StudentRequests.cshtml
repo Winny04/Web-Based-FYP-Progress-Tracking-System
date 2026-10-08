@@ -1,7 +1,7 @@
 @using FYPTracker.Models
 @model IEnumerable<SupervisorRequest>
 @{
-    ViewData["Title"] = "Student Requests";
+    ViewData["Title"] = "Supervision Requests";
 }
 
 <style>
@@ -35,17 +35,21 @@
     {
         <div class="alert alert-success border-0 rounded-3 shadow-sm mb-3">@TempData["Success"]</div>
     }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-3">@TempData["Error"]</div>
+    }
 
     <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
-            <h2 class="fw-bold mb-1"><i class="fas fa-user-clock me-2"></i>Student Supervision Requests</h2>
-            <p class="mb-0 opacity-80">Review student applications and approve or reject requests to supervise their projects.</p>
+            <h2 class="fw-bold mb-1"><i class="fas fa-user-clock me-2"></i>Supervision Requests</h2>
+            <p class="mb-0 opacity-80">Review and respond to students requesting your supervision.</p>
         </div>
         <div class="text-end d-flex flex-wrap gap-2 align-items-center">
             @await Html.PartialAsync("_SessionFilter")
             <div class="d-flex align-items-center position-relative my-1">
                 <i class="fas fa-user position-absolute ms-3 text-muted"></i>
-                <select id="studentFilter" class="form-select border-0 shadow-sm ps-10 w-200px" style="border-radius: 10px;">
+                <select id="studentFilter" class="form-select border-0 shadow-sm ps-10" style="border-radius: 10px; min-width: 200px;">
                     <option value="">All Students</option>
                     @foreach (var studentName in Model.Select(m => m.Student?.FullName).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s))
                     {
@@ -55,28 +59,31 @@
             </div>
             <div class="d-flex align-items-center position-relative my-1">
                 <i class="fas fa-info-circle position-absolute ms-3 text-muted"></i>
-                <select id="statusFilter" class="form-select border-0 shadow-sm ps-10 w-150px" style="border-radius: 10px;">
+                <select id="statusFilter" class="form-select border-0 shadow-sm ps-10" style="border-radius: 10px; min-width: 160px;">
                     <option value="">All Statuses</option>
                     <option value="Pending">Pending</option>
                     <option value="Approved">Approved</option>
                     <option value="Rejected">Rejected</option>
                 </select>
             </div>
-            <span class="badge bg-white text-dark fw-bold px-3 py-2 rounded-pill ms-2">
-                @Model.Count(r => r.Status == "Pending") Pending Applications
+            @{
+                int pendingCount = Model.Count(r => r.Status == "Pending");
+            }
+            <span class="badge bg-white text-dark fw-bold px-3 py-2 rounded-pill ms-2" id="pendingCountBadge">
+                @pendingCount Pending Request@(pendingCount == 1 ? "" : "s")
             </span>
         </div>
     </div>
 
     <div class="glass-card p-4">
         <div class="table-responsive">
-            <table class="table table-hover align-middle">
+            <table class="table table-hover align-middle mb-0">
                 <thead>
                     <tr class="text-muted small fw-bold text-uppercase">
                         <th>Student</th>
-                        <th>Project Topic</th>
-                        <th>Requested Date</th>
-                        <th class="text-end">Action</th>
+                        <th>Proposed Project Title</th>
+                        <th>Date Requested</th>
+                        <th class="text-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -91,27 +98,43 @@
                                 <div class="fw-bold text-primary">@req.ProjectTopic</div>
                                 <div class="text-muted small">@(req.RequestMessage?.Length > 50 ? req.RequestMessage.Substring(0, 47) + "..." : req.RequestMessage)</div>
                             </td>
-                            <td>@req.RequestedDate.ToString("dd MMM yyyy")</td>
-                            <td class="text-end">
-                                <button class="btn btn-sm btn-light-warning rounded-3 me-1" onclick="viewFullForm(@req.Id, @(req.Status == "Pending" ? "true" : "false"))">
-                                    <i class="fas fa-file-alt me-1"></i> Review
-                                </button>
-                                
+                            <td>
+                                <div class="text-dark small">Requested: @req.RequestedDate.ToString("dd MMM yyyy")</div>
                                 @if (req.Status == "Pending")
                                 {
-                                    <div class="d-inline-flex gap-1">
-                                        <form asp-action="RespondRequest" method="post" id="acceptForm_@req.Id">
-                                            <input type="hidden" name="requestId" value="@req.Id" />
-                                            <input type="hidden" name="status" value="Approved" />
-                                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3" onclick="openAcceptModal(@req.Id)">Accept</button>
-                                        </form>
-                                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3" onclick="openRejectModal(@req.Id)">Reject</button>
+                                    int timeoutDays = ViewBag.SupervisorRequestTimeoutDays ?? 3;
+                                    var dueDate = req.RequestedDate.AddDays(timeoutDays);
+                                    var isOverdue = dueDate.Date < DateTime.Now.Date;
+                                    <div class="mt-1 @(isOverdue ? "text-danger" : "text-warning text-dark") small fw-bold">
+                                        Response Due: @dueDate.ToString("dd MMM yyyy")
                                     </div>
                                 }
-                                else
-                                {
-                                    <span class="badge bg-light text-muted rounded-pill px-3">@req.Status</span>
-                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="d-flex justify-content-end align-items-center gap-2">
+                                    @if (req.Status == "Approved")
+                                    {
+                                        <span class="badge bg-success px-3 py-1 rounded-pill">Accepted</span>
+                                    }
+                                    else if (req.Status == "Rejected")
+                                    {
+                                        <span class="badge bg-danger px-3 py-1 rounded-pill">Declined</span>
+                                    }
+
+                                    <button class="btn btn-sm btn-outline-primary rounded-3 text-nowrap" onclick="viewFullForm(@req.Id, @(req.Status == "Pending" ? "true" : "false"))">
+                                        <i class="fas fa-file-alt me-1"></i> View Details
+                                    </button>
+                                    
+                                    @if (req.Status == "Pending")
+                                    {
+                                        <form asp-action="RespondRequest" method="post" id="acceptForm_@req.Id" class="m-0">
+                                            <input type="hidden" name="requestId" value="@req.Id" />
+                                            <input type="hidden" name="status" value="Approved" />
+                                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3 text-nowrap" onclick="openAcceptModal(@req.Id)">Accept Request</button>
+                                        </form>
+                                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3 text-nowrap" onclick="openRejectModal(@req.Id)">Decline</button>
+                                    }
+                                </div>
                             </td>
                         </tr>
 
@@ -140,36 +163,36 @@
                 <h5 class="fw-bold mb-0">Student Supervision Application</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-5">
+            <div class="modal-body p-4">
                 <div class="section-title">Part A: Personal Information</div>
-                <div class="row">
-                    <div class="col-md-6">
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
                         <div class="info-label">Full Name</div>
-                        <div id="modal_name" class="info-value"></div>
+                        <div id="modal_name" class="info-value mb-2"></div>
                         <div class="info-label">Matric Number</div>
-                        <div id="modal_matric" class="info-value"></div>
+                        <div id="modal_matric" class="info-value mb-2"></div>
                         <div class="info-label">Program</div>
-                        <div id="modal_program" class="info-value"></div>
+                        <div id="modal_program" class="info-value mb-2"></div>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-12 col-md-6">
                         <div class="info-label">Phone Number</div>
-                        <div id="modal_phone" class="info-value"></div>
+                        <div id="modal_phone" class="info-value mb-2"></div>
                         <div class="info-label">Session / Semester</div>
-                        <div id="modal_session" class="info-value"></div>
+                        <div id="modal_session" class="info-value mb-2"></div>
                     </div>
                 </div>
 
-                <div class="section-title mt-4">Part B: Project Information</div>
-                <div class="info-label">Project Topic</div>
-                <div id="modal_topic" class="info-value text-primary fs-5"></div>
+                <div class="section-title mt-3">Part B: Project Information</div>
+                <div class="info-label">Proposed Project Title</div>
+                <div id="modal_topic" class="info-value text-primary fs-6 mb-2"></div>
                 <div class="info-label">Description / Notes</div>
-                <div id="modal_desc" class="info-value" style="white-space:pre-wrap; font-weight:400; line-height:1.6;"></div>
+                <div id="modal_desc" class="info-value mb-0" style="white-space:pre-wrap; font-weight:400; line-height:1.5;"></div>
             </div>
-            <div class="modal-footer border-0 p-4 pt-0 d-flex justify-content-between align-items-center bg-light rounded-bottom-4">
-                <button type="button" class="btn btn-secondary rounded-3 px-4" data-bs-dismiss="modal">Close</button>
+            <div class="modal-footer border-0 p-3 bg-light rounded-bottom-4 d-flex justify-content-between align-items-center">
+                <button type="button" class="btn btn-secondary rounded-3 px-3" data-bs-dismiss="modal">Close</button>
                 <div id="modalActionButtons" class="d-flex gap-2">
-                    <button type="button" class="btn btn-outline-danger rounded-3 px-4" id="modalBtnReject">Reject</button>
-                    <button type="button" class="btn btn-success rounded-3 px-4 fw-bold" id="modalBtnAccept">Approve & Accept</button>
+                    <button type="button" class="btn btn-outline-danger rounded-3 px-3" id="modalBtnReject">Decline</button>
+                    <button type="button" class="btn btn-success rounded-3 px-3 fw-bold" id="modalBtnAccept">Accept Request</button>
                 </div>
             </div>
         </div>
@@ -180,20 +203,24 @@
 <div class="modal fade" id="rejectModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4">
-            <form asp-action="RespondRequest" method="post">
+            <form asp-action="RespondRequest" method="post" id="rejectRequestForm" onsubmit="preventDuplicateSubmit(this)">
                 <input type="hidden" name="requestId" id="rejectRequestId" />
                 <input type="hidden" name="status" value="Rejected" />
                 <div class="modal-header border-0 pb-0">
-                    <h5 class="fw-bold">Reject Application</h5>
+                    <h5 class="fw-bold">Decline Supervision Request</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small mb-3">Please provide a reason for rejecting <strong id="rejectStudentName"></strong>'s request.</p>
-                    <textarea name="responseNote" class="form-control rounded-3" rows="3" placeholder="e.g. Research topic not aligned, Supervisor full capacity..." required></textarea>
+                    <p class="text-muted small mb-3">Please provide a reason for declining <strong id="rejectStudentName"></strong>'s supervision request.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Reason for Declining <span class="text-danger">*</span></label>
+                        <textarea name="responseNote" class="form-control rounded-3" rows="3" placeholder="e.g. Research topic not aligned, Supervisor full capacity..." required></textarea>
+                        <div class="form-text text-muted">This reason is mandatory and will be shared with the student.</div>
+                    </div>
                 </div>
-                <div class="modal-footer border-0">
+                <div class="modal-footer border-0 d-flex justify-content-between">
                     <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger rounded-3 px-4">Confirm Reject</button>
+                    <button type="submit" class="btn btn-danger rounded-3 px-4" id="btnConfirmDecline">Confirm Decline</button>
                 </div>
             </form>
         </div>
@@ -204,20 +231,24 @@
 <div class="modal fade" id="acceptModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4">
-            <form asp-action="RespondRequest" method="post">
+            <form asp-action="RespondRequest" method="post" id="acceptRequestForm" onsubmit="preventDuplicateSubmit(this)">
                 <input type="hidden" name="requestId" id="acceptRequestId" />
                 <input type="hidden" name="status" value="Approved" />
                 <div class="modal-header border-0 pb-0">
-                    <h5 class="fw-bold text-success">Approve Application</h5>
+                    <h5 class="fw-bold text-success">Accept Supervision Request</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small mb-3">Please provide a welcome note or any comments for <strong id="acceptStudentName"></strong> (Required).</p>
-                    <textarea name="responseNote" class="form-control rounded-3" rows="3" placeholder="e.g. Welcome! Please book your first meeting soon." required></textarea>
+                    <p class="text-muted small mb-3">You are about to accept <strong id="acceptStudentName"></strong> as your supervised student.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Welcome Message <span class="text-danger">*</span></label>
+                        <textarea name="responseNote" class="form-control rounded-3" rows="3" placeholder="e.g. Welcome! Please book your first meeting soon." required></textarea>
+                        <div class="form-text text-muted">Write a short message to welcome the student and explain the next steps.</div>
+                    </div>
                 </div>
-                <div class="modal-footer border-0">
+                <div class="modal-footer border-0 d-flex justify-content-between">
                     <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success rounded-3 px-4 fw-bold">Confirm Accept</button>
+                    <button type="submit" class="btn btn-success rounded-3 px-4 fw-bold" id="btnConfirmAccept">Confirm Acceptance</button>
                 </div>
             </form>
         </div>
@@ -276,6 +307,18 @@
         bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectModal')).show();
     }
 
+    function preventDuplicateSubmit(form) {
+        if (!form.checkValidity()) {
+            return false;
+        }
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = 'Processing...';
+        }
+        return true;
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         const urlParams = new URLSearchParams(window.location.search);
         const openId = urlParams.get('openRequestId');
@@ -314,11 +357,22 @@
         if(reqStudentFilter) reqStudentFilter.addEventListener('change', applyReqFilters);
         if(reqStatusFilter) reqStatusFilter.addEventListener('change', applyReqFilters);
     });
+    
     document.addEventListener('NewSupervisorRequestEvent', function(e) {
         const d = e.detail;
         const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
         const tokenHtml = token ? `<input type="hidden" name="__RequestVerificationToken" value="${token}" />` : '';
         
+        var reqDate = new Date(d.date);
+        var dueDateHtml = '';
+        if (!isNaN(reqDate.getTime())) {
+            var timeoutDays = @(ViewBag.SupervisorRequestTimeoutDays ?? 3);
+            reqDate.setDate(reqDate.getDate() + timeoutDays);
+            var isOverdue = reqDate.setHours(0,0,0,0) < new Date().setHours(0,0,0,0);
+            var dateOpts = { day: 'numeric', month: 'short', year: 'numeric' };
+            dueDateHtml = '<div class="mt-1 ' + (isOverdue ? 'text-danger' : 'text-warning text-dark') + ' small fw-bold">Response Due: ' + reqDate.toLocaleDateString('en-GB', dateOpts) + '</div>';
+        }
+
         var newRow = `
             <tr class="request-item" data-student-name="${d.studentName}" data-status="Pending">
                 <td>
@@ -329,20 +383,24 @@
                     <div class="fw-bold text-primary">${d.topic}</div>
                     <div class="text-muted small">${d.message.length > 50 ? d.message.substring(0, 47) + "..." : d.message}</div>
                 </td>
-                <td>${d.date}</td>
+                <td>
+                    <div class="text-dark small">Requested: ${d.date}</div>
+                    ${dueDateHtml}
+                </td>
                 <td class="text-end">
-                    <button class="btn btn-sm btn-light-warning rounded-3 me-1" onclick="viewFullForm(${d.id}, true)">
-                        <i class="fas fa-file-alt me-1"></i> Review
-                    </button>
-                    
-                    <div class="d-inline-flex gap-1">
-                        <form action="/Supervisor/RespondRequest" method="post" id="acceptForm_${d.id}">
+                    <div class="d-flex justify-content-end align-items-center gap-2">
+
+                        <button class="btn btn-sm btn-outline-primary rounded-3 text-nowrap" onclick="viewFullForm(${d.id}, true)">
+                            <i class="fas fa-file-alt me-1"></i> View Details
+                        </button>
+                        
+                        <form action="/Supervisor/RespondRequest" method="post" id="acceptForm_${d.id}" class="m-0">
                             ${tokenHtml}
                             <input type="hidden" name="requestId" value="${d.id}" />
                             <input type="hidden" name="status" value="Approved" />
-                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3" onclick="openAcceptModal(${d.id})">Accept</button>
+                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3 text-nowrap" onclick="openAcceptModal(${d.id})">Accept Request</button>
                         </form>
-                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3" onclick="openRejectModal(${d.id})">Reject</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3 text-nowrap" onclick="openRejectModal(${d.id})">Decline</button>
                     </div>
                 </td>
             </tr>
@@ -367,12 +425,13 @@
             tbody.insertAdjacentHTML('afterbegin', newRow);
         }
         
-        var badge = document.querySelector('.badge.bg-white');
+        var badge = document.getElementById('pendingCountBadge');
         if (badge) {
             var currentText = badge.innerText;
             var num = parseInt(currentText);
             if (!isNaN(num)) {
-                badge.innerText = (num + 1) + " Pending Applications";
+                var next = num + 1;
+                badge.innerText = next + " Pending Request" + (next === 1 ? "" : "s");
             }
         }
     });

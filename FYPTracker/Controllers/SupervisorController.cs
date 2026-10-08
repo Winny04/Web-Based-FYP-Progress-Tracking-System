@@ -1028,7 +1028,7 @@ namespace FYPTracker.Controllers
             }
         }
 
-        public async Task<IActionResult> ReviewSubmissions(string? sessionFilter = null)
+        public async Task<IActionResult> ReviewSubmissions(string? sessionFilter = null, string tab = "pending", int page = 1, int pageSize = 10, string searchQuery = "", string milestoneFilter = "", string statusFilter = "", string stageFilter = "")
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "User");
@@ -1037,18 +1037,85 @@ namespace FYPTracker.Controllers
 
             var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
 
-            // Fetch pending milestones for all projects supervised by this user
-            var submissions = await _context.FYPMilestones
-                .Include(m => m.Project)
-                    .ThenInclude(p => p.Student)
-                .Include(m => m.Feedbacks)
-                .Include(m => m.SubmissionFiles)
-                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (m.Status == "PendingSupervisorReview" || m.Status == "Submitted" || m.Status == "Pending" || m.Status == "Approved" || m.Status == "Completed" || m.Status == "Revision" || m.Status == "Rejected" || m.Status == "UnderReview") && (activeSession == null || m.Project.AcademicSession == activeSession))
-                .OrderBy(m => (m.Status == "Submitted" || m.Status == "PendingSupervisorReview") ? 0 : 1)
-                .ThenBy(m => m.DueDate)
+            var baseQuery = _context.FYPMilestones
+                .Include(m => m.Project).ThenInclude(p => p.Student)
+                .Include(m => m.SubmissionFiles.Where(f => !f.IsDeleted))
+                .Where(m => m.Project.SupervisorId == user.Id && !m.Project.Student.IsResign && (activeSession == null || m.Project.AcademicSession == activeSession));
+
+            ViewBag.TotalStudents = await _context.FYPProjects.CountAsync(p => p.SupervisorId == user.Id && !p.Student.IsResign && (activeSession == null || p.AcademicSession == activeSession));
+            ViewBag.PendingReviewsCount = await baseQuery.CountAsync(m => m.Status == "Submitted" || m.Status == "PendingSupervisorReview" || m.Status == "UnderReview");
+            ViewBag.ReviewedCount = await baseQuery.CountAsync(m => m.Status == "Approved" || m.Status == "ReturnedForChanges" || m.Status == "ReturnedForEdits" || m.Status == "Rejected" || m.Status == "Completed" || m.Status == "SupervisorSigned");
+
+            var pendingQuery = baseQuery.Where(m => m.Status == "Submitted" || m.Status == "PendingSupervisorReview" || m.Status == "UnderReview");
+            
+            var allStudentsQuery = _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Milestones).ThenInclude(m => m.SubmissionFiles.Where(f => !f.IsDeleted))
+                .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign && (activeSession == null || p.AcademicSession == activeSession));
+
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                pendingQuery = pendingQuery.Where(m => m.Project.Student.FullName.Contains(searchQuery) || m.Project.Student.EmployeeId.Contains(searchQuery));
+                allStudentsQuery = allStudentsQuery.Where(p => p.Student.FullName.Contains(searchQuery) || p.Student.EmployeeId.Contains(searchQuery));
+            }
+            if (!string.IsNullOrWhiteSpace(milestoneFilter))
+            {
+                pendingQuery = pendingQuery.Where(m => m.Title == milestoneFilter);
+                allStudentsQuery = allStudentsQuery.Where(p => p.Milestones.Any(m => m.Title == milestoneFilter));
+            }
+            if (!string.IsNullOrWhiteSpace(stageFilter) && int.TryParse(stageFilter, out int stg))
+            {
+                pendingQuery = pendingQuery.Where(m => m.Stage == stg);
+                allStudentsQuery = allStudentsQuery.Where(p => p.Milestones.Any(m => m.Stage == stg));
+            }
+            if (!string.IsNullOrWhiteSpace(statusFilter))
+            {
+                if (statusFilter == "Not Submitted")
+                {
+                    allStudentsQuery = allStudentsQuery.Where(p => p.Milestones.Any(m => !m.SubmittedDate.HasValue && (string.IsNullOrEmpty(m.Status) || m.Status == "Pending")));
+                }
+                else if (statusFilter == "Approved")
+                {
+                    allStudentsQuery = allStudentsQuery.Where(p => p.Milestones.Any(m => m.Status == "Approved" || m.Status == "Completed" || m.Status == "SupervisorSigned" || m.Status == "AdminApproved" || m.Status == "PendingPanelReview"));
+                }
+                else if (statusFilter == "Revision Required")
+                {
+                    allStudentsQuery = allStudentsQuery.Where(p => p.Milestones.Any(m => m.Status == "ReturnedForChanges" || m.Status == "ReturnedForEdits" || m.Status == "Rejected"));
+                }
+                else if (statusFilter == "Locked")
+                {
+                    allStudentsQuery = allStudentsQuery.Where(p => p.Milestones.Any(m => m.Status == "Locked"));
+                }
+            }
+
+            int totalPending = await pendingQuery.CountAsync();
+            var pendingList = await pendingQuery
+                .OrderBy(m => m.SubmittedDate ?? DateTime.MaxValue)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
 
-            return View(submissions);
+            int totalAll = await allStudentsQuery.CountAsync();
+            var allStudentsList = await allStudentsQuery
+                .OrderBy(p => p.Student.FullName)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            ViewBag.PendingList = pendingList;
+            ViewBag.AllStudentsList = allStudentsList;
+            ViewBag.TotalPending = totalPending;
+            ViewBag.TotalAll = totalAll;
+            ViewBag.ActiveTab = tab;
+            ViewBag.CurrentPage = page;
+            ViewBag.PageSize = pageSize;
+            ViewBag.SearchQuery = searchQuery;
+            ViewBag.MilestoneFilter = milestoneFilter;
+            ViewBag.StatusFilter = statusFilter;
+            ViewBag.StageFilter = stageFilter;
+            ViewBag.AllMilestoneTitles = await baseQuery.Select(m => m.Title).Distinct().OrderBy(t => t).ToListAsync();
+
+            return View(new List<FYPMilestone>()); // Passing empty model, since we use ViewBag
         }
 
         [HttpGet]

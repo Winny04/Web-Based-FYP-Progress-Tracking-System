@@ -4,7 +4,7 @@
     ViewData["Title"] = "Digital Library";
 }
 
-<div class="container-fluid py-4">
+<div class="container-xxl py-4">
     <div class="card shadow-sm border-0 rounded-4">
         <div class="card-header border-0 pt-4 px-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
             <div>
@@ -44,53 +44,68 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var item in Model)
+                        @if (!Model.Any())
                         {
                             <tr>
-                                <td>
-                                    <div class="fw-bold text-dark fs-6">@item.Title</div>
-                                    <div class="text-muted small text-truncate" style="max-width: 300px;">@(item.Description ?? "No abstract provided.")</div>
-                                </td>
-                                <td>
-                                    <div class="fw-bold">@(item.Student?.FullName ?? "Unknown")</div>
-                                </td>
-                                <td>
-                                    <div class="badge badge-light-primary">@((!string.IsNullOrEmpty(item.Supervisor?.Title) ? item.Supervisor.Title + " " : "") + (item.Supervisor?.FullName ?? "Unknown"))</div>
-                                </td>
-                                <td>
-                                    @if (!string.IsNullOrEmpty(item.AcademicSession))
-                                    {
-                                        <span class="badge badge-light-dark">@item.AcademicSession</span>
-                                    }
-                                    else
-                                    {
-                                        <span>-</span>
-                                    }
-                                </td>
-                                <td class="text-center">
-                                    @if (item.FinalGrade != null && item.FinalGrade.Contains("Excellent"))
-                                    {
-                                        <span class="badge bg-success rounded-pill px-3">Excellent</span>
-                                    }
-                                    else if (item.FinalGrade != null && item.FinalGrade.Contains("Good"))
-                                    {
-                                        <span class="badge bg-primary rounded-pill px-3">Good</span>
-                                    }
-                                    else if (item.FinalGrade != null && item.FinalGrade.Contains("Average"))
-                                    {
-                                        <span class="badge bg-info rounded-pill px-3">Average</span>
-                                    }
-                                    else 
-                                    {
-                                        <span class="badge bg-secondary rounded-pill px-3">@item.FinalGrade</span>
-                                    }
-                                </td>
-                                <td class="text-end">
-                                    <a href="@Url.Action("Details", "Library", new { id = item.Id })" class="btn btn-sm btn-light-primary rounded-3 fw-bold">
-                                        Read <i class="fas fa-arrow-right ms-1"></i>
-                                    </a>
+                                <td colspan="6" class="text-center py-5">
+                                    <div class="text-muted">
+                                        <i class="fas fa-book-open fs-1 mb-3" style="color: #cbd5e1;"></i>
+                                        <h5 class="fw-bold text-dark mb-1">No Projects Found</h5>
+                                        <p class="mb-0">There are currently no projects in the digital library.</p>
+                                    </div>
                                 </td>
                             </tr>
+                        }
+                        else
+                        {
+                            @foreach (var item in Model)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold text-dark fs-6">@item.Title</div>
+                                        <div class="text-muted small text-truncate" style="max-width: 300px;">@(item.Description ?? "No abstract provided.")</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold">@(item.Student?.FullName ?? "Unknown")</div>
+                                    </td>
+                                    <td>
+                                        <div class="badge badge-light-primary">@((!string.IsNullOrEmpty(item.Supervisor?.Title) ? item.Supervisor.Title + " " : "") + (item.Supervisor?.FullName ?? "Unknown"))</div>
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(item.AcademicSession))
+                                        {
+                                            <span class="badge badge-light-dark">@item.AcademicSession</span>
+                                        }
+                                        else
+                                        {
+                                            <span>-</span>
+                                        }
+                                    </td>
+                                    <td class="text-center">
+                                        @if (item.FinalGrade != null && item.FinalGrade.Contains("Excellent"))
+                                        {
+                                            <span class="badge bg-success rounded-pill px-3">Excellent</span>
+                                        }
+                                        else if (item.FinalGrade != null && item.FinalGrade.Contains("Good"))
+                                        {
+                                            <span class="badge bg-primary rounded-pill px-3">Good</span>
+                                        }
+                                        else if (item.FinalGrade != null && item.FinalGrade.Contains("Average"))
+                                        {
+                                            <span class="badge bg-info rounded-pill px-3">Average</span>
+                                        }
+                                        else 
+                                        {
+                                            <span class="badge bg-secondary rounded-pill px-3">@item.FinalGrade</span>
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="@Url.Action("Details", "Library", new { id = item.Id })" class="btn btn-sm btn-light-primary rounded-3 fw-bold">
+                                            Read <i class="fas fa-arrow-right ms-1"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
                         }
                     </tbody>
                 </table>

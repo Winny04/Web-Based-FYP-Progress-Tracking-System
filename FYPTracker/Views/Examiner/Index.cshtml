@@ -6,8 +6,8 @@
 <div class="card mb-5 mb-xl-8">
     <div class="card-header border-0 pt-5 d-flex justify-content-between align-items-center">
         <h3 class="card-title align-items-start flex-column">
-            <span class="card-label fw-bolder fs-3 mb-1">Assigned Projects</span>
-            <span class="text-muted mt-1 fw-bold fs-7">Manage and evaluate your assigned student projects</span>
+            <span class="card-label fw-bolder fs-3 mb-1">Assigned Projects & Assessments</span>
+            <span class="text-muted mt-1 fw-bold fs-7">Review assigned FYP projects, assess student submissions, and manage evaluation results.</span>
         </h3>
         <div class="d-flex align-items-center position-relative my-1">
             <span class="svg-icon svg-icon-1 position-absolute ms-6">
@@ -24,13 +24,13 @@
         <!-- Tabs -->
         <ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x mb-5 fs-5 fw-bold" id="projectTabs">
             <li class="nav-item">
-                <a class="nav-link active text-primary" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, '')">All Projects</a>
+                <a class="nav-link active text-primary" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, '')">All Assigned Projects</a>
             </li>
             <li class="nav-item">
-                <a class="nav-link text-muted" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, 'Pending')">Pending</a>
+                <a class="nav-link text-muted" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, 'Pending Assessment')">Pending Assessment Assessment</a>
             </li>
             <li class="nav-item">
-                <a class="nav-link text-muted" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, 'Graded')">Graded (Past)</a>
+                <a class="nav-link text-muted" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, 'Graded')">Completed Assessments</a>
             </li>
         </ul>
 
@@ -40,9 +40,9 @@
                     <tr class="fw-bolder text-muted bg-light">
                         <th class="ps-4 min-w-200px rounded-start">Project Title</th>
                         <th class="min-w-150px">Student</th>
-                        <th class="min-w-125px">Stage 1 (Interim)</th>
-                        <th class="min-w-125px">Stage 2 (Final)</th>
-                        <th class="min-w-100px text-end rounded-end">Action</th>
+                        <th class="min-w-125px">Stage 1 Assessment</th>
+                        <th class="min-w-125px">Stage 2 Assessment</th>
+                        <th class="min-w-100px text-end rounded-end">Actionss</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -53,7 +53,7 @@
                             var hasStage1Graded = !string.IsNullOrEmpty(project.Stage1ExaminerMarksheetPath);
                             var hasStage2Graded = !string.IsNullOrEmpty(project.ExaminerMarksheetPath) || !string.IsNullOrEmpty(project.FinalGrade);
                             
-                            string overallStatus = "Pending";
+                            string overallStatus = "Pending Assessment";
                             if (hasStage1Graded && hasStage2Graded) {
                                 overallStatus = "Graded";
                             } else if (hasStage1Graded && project.Stage1Grade != "Pass") {
@@ -75,7 +75,7 @@
                                         <span class="badge badge-light-success fs-7 fw-bold mb-1"><i class="fas fa-check-circle text-success me-1 fs-8"></i> Graded</span>
                                         <span class="text-dark fw-bold d-block fs-8">Score: @(project.Stage1TotalScore?.ToString("0.0") ?? "-")</span>
                                     } else {
-                                        <span class="badge badge-light-warning fs-7 fw-bold"><i class="fas fa-clock text-warning me-1 fs-8"></i> Pending</span>
+                                        <span class="badge badge-light-warning fs-7 fw-bold"><i class="fas fa-clock text-warning me-1 fs-8"></i> Pending Assessment</span>
                                     }
                                 </td>
                                 <td>
@@ -84,7 +84,7 @@
                                         <span class="text-dark fw-bold d-block fs-8">Grade: @(project.FinalGrade ?? "-")</span>
                                     } else {
                                         if (project.Stage1Grade == "Pass") {
-                                            <span class="badge badge-light-warning fs-7 fw-bold"><i class="fas fa-clock text-warning me-1 fs-8"></i> Pending</span>
+                                            <span class="badge badge-light-warning fs-7 fw-bold"><i class="fas fa-clock text-warning me-1 fs-8"></i> Pending Assessment</span>
                                         } else {
                                             <span class="badge badge-light-secondary text-muted fs-7 fw-bold"><i class="fas fa-lock fs-8 text-muted me-1"></i> Locked</span>
                                         }
@@ -126,7 +126,7 @@
             e.preventDefault();
             const table = $('#projectsTable').DataTable();
             
-            // Filter by the Action column (index 4) which contains the hidden status span.
+            // Filter by the Actions column (index 4) which contains the hidden status span.
             table.column(4).search(type).draw();
             
             // Update active tab styling

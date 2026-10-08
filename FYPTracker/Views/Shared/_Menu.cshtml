@@ -128,10 +128,10 @@
         }
         else if (userType == "Supervisor")
         {
-            <div class="menu-item @(pageTitle == "Student Requests" ? "here show" : "")">
-                <a class="menu-link py-3 px-4 @(pageTitle == "Student Requests" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/StudentRequests">
+            <div class="menu-item @(pageTitle == "Supervision Requests" ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(pageTitle == "Supervision Requests" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/StudentRequests">
                     <span class="menu-title text-nowrap d-flex align-items-center">
-                        Student Requests
+                        Supervision Requests
                         @if(pendingRequests > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@pendingRequests</span> }
                     </span>
                 </a>

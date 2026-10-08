@@ -1,773 +1,229 @@
 @using FYPTracker.Models
-@model FYPProject?
+@model FYPProject
 @{
     ViewData["Title"] = "Project Details";
     var currentUser = ViewBag.CurrentUser as ApplicationUser;
-    var milestones  = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
     
-    /* 
-     * PROGRESS BAR MATHEMATICAL FORMULA:
-     * - The progress bar tracks submission completion, not academic marks.
-     * - Total Progress (100%) = Stage 1 Progress (50%) + Stage 2 Progress (50%)
-     * 
-     * Stage 1 Formula: (Approved Stage 1 Submissions / Total Stage 1 Submissions) * 50
-     * Stage 2 Formula: (Approved Stage 2 Submissions / 5 Total Stage 2 Steps) * 50
-     * 
-     * Note: Meeting-log marks (12%) follow the official marksheet and are EXCLUDED from this bar.
-     */
-     
-    // Differentiate milestones by their prefix (Stage 2 steps start with "Step ")
-    var calcStage1Milestones = milestones.Where(m => !m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
-    var calcStage2Milestones = milestones.Where(m => m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).ToList();
+    var milestones = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
+    var stage1 = milestones.Where(m => m.Stage == 1).OrderBy(m => m.DueDate ?? DateTime.MaxValue).ToList();
+    var stage2 = milestones.Where(m => m.Stage == 2).OrderBy(m => m.DueDate ?? DateTime.MaxValue).ToList();
 
-    int totalStage1 = calcStage1Milestones.Count;
-    int approvedStage1 = calcStage1Milestones.Count(m => m.Status == "Approved" || m.Status == "Completed");
-    double stage1Pct = totalStage1 > 0 ? ((double)approvedStage1 / totalStage1) * 50.0 : 0;
+    bool IsSubmitted(FYPMilestone m) {
+        if (m == null) return false;
+        if (m.SubmittedDate.HasValue) return true;
+        if (m.Status == "Approved" || m.Status == "Completed" || m.Status == "AdminApproved" || m.Status == "SupervisorSigned") return true;
+        return false;
+    }
 
-    int totalStage2 = 5; // Stage 2 always has exactly 5 required steps
-    int approvedStage2 = calcStage2Milestones.Count(m => m.Status == "Approved" || m.Status == "Completed");
-    double stage2Pct = ((double)approvedStage2 / totalStage2) * 50.0;
+    var stage1Required = stage1.Where(m => m.IsRequired).ToList();
+    var stage2Required = stage2.Where(m => m.IsRequired).ToList();
 
-    int pct = (int)Math.Round(stage1Pct + stage2Pct);
+    int stage1Completed = stage1Required.Count(m => IsSubmitted(m));
+    int stage2Completed = stage2Required.Count(m => IsSubmitted(m));
+
+    double stage1Contrib = stage1Required.Count > 0 ? ((double)stage1Completed / stage1Required.Count) * 50.0 : 0;
+    double stage2Contrib = stage2Required.Count > 0 ? ((double)stage2Completed / stage2Required.Count) * 50.0 : 0;
+    int overallProgress = (int)Math.Round(stage1Contrib + stage2Contrib);
+    string pbColor = overallProgress > 70 ? "bg-success" : (overallProgress > 30 ? "bg-primary" : "bg-warning");
 }
 
-<style>
-    :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
-
-    .page-hero {
-        background: var(--hero-grad);
-        border-radius: 20px;
-        padding: 28px 32px;
-        color: white;
-        margin-bottom: 28px;
-        box-shadow: 0 8px 32px rgba(30,41,59,.18);
-    }
-
-    .glass-card {
-        background: #fff;
-        border-radius: 16px;
-        border: 1px solid #f1f5f9;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-        transition: transform 0.25s, box-shadow 0.25s;
-    }
-    .glass-card:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,0.1); }
-
-    .info-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; margin-bottom: 2px; }
-    .info-value { font-size: .95rem; font-weight: 600; color: #111827; }
-
-    .timeline-container { padding-left: 12px; }
-    .milestone-row { 
-        border-left: 3px dashed #e5e7eb; 
-        padding-left: 28px; 
-        padding-bottom: 28px;
-        position: relative; 
-    }
-    .milestone-row:last-child { border-left-color: transparent; padding-bottom: 0; }
-    
-    .milestone-row::before {
-        content: '\f111'; /* FontAwesome circle */
-        font-family: 'Font Awesome 5 Free';
-        font-weight: 900;
-        position: absolute;
-        left: -11px; top: 0px;
-        width: 20px; height: 20px;
-        background: #fff;
-        color: #0d9488;
-        font-size: 14px;
-        display: flex; align-items: center; justify-content: center;
-        border-radius: 50%;
-        box-shadow: 0 0 0 4px #fff;
-    }
-    .milestone-row.approved::before  { color: #10b981; content: '\f058'; } /* check-circle */
-    .milestone-row.rejected::before  { color: #ef4444; content: '\f057'; } /* times-circle */
-    .milestone-row.pending::before   { color: #f59e0b; content: '\f017'; } /* clock */
-    .milestone-row.submitted::before { color: #3b82f6; content: '\f144'; } /* play-circle */
-
-    .status-pill {
-        font-size: .72rem; font-weight: 700;
-        padding: 3px 11px; border-radius: 999px;
-        text-transform: uppercase;
-    }
-    .pill-approved    { background: #d1fae5; color: #065f46; }
-    .pill-rejected    { background: #fee2e2; color: #991b1b; }
-    .pill-pending     { background: #fef9c3; color: #854d0e; }
-    .pill-submitted   { background: #dbeafe; color: #1e40af; }
-    .pill-underreview { background: #ede9fe; color: #5b21b6; }
-</style>
-
-<div class="container-fluid py-4">
-
-    @* â”€â”€ Hero â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
-    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <div>
-            <h2 class="display-6 fw-bold mb-2"><i class="fas fa-project-diagram me-2"></i>Project Details</h2>
-            <p class="mb-0 opacity-80">View your FYP information, milestone progress, and deadlines.</p>
-        </div>
-        <div class="text-end">
-            <div class="fw-bold fs-4">@pct%</div>
-            <small class="opacity-75">Overall Completion</small>
+<div class="container-xxl py-4">
+    <!-- Header -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white;">
+        <div class="card-body p-4 p-md-5 d-flex flex-wrap justify-content-between align-items-center gap-4">
+            <div>
+                <h2 class="fw-bolder mb-2">Project Details</h2>
+                <div class="text-white-50 fs-6 fw-bold">Overview and complete timeline for your FYP.</div>
+            </div>
+            <div>
+                <a href="/Student/Index" class="btn btn-outline-light fw-bold px-4 rounded-pill shadow-sm"><i class="fas fa-arrow-left me-2"></i> Back to Dashboard</a>
+            </div>
         </div>
     </div>
 
-    @if (Model == null)
-    {
-        <div class="text-center py-5">
-            <div class="glass-card p-5 d-inline-block">
-                <i class="fas fa-folder-open fs-1 text-muted opacity-40 mb-3 d-block"></i>
-                <h4 class="fw-bold text-muted">No Project Found</h4>
-                <p class="text-muted mb-4">You have not submitted a project proposal yet.</p>
-                <a href="/Student/Forms" class="btn btn-primary rounded-3 px-4" style="background:var(--hero-grad);border:none;">
-                    <i class="fas fa-plus me-1"></i> Submit Stage 1 Final Submission
-                </a>
-            </div>
-        </div>
+    @if(Model == null) {
+        <div class="alert alert-warning border-0 shadow-sm rounded-4 p-4"><i class="fas fa-exclamation-triangle me-2"></i> No active project found.</div>
+        return;
     }
-    else
-    {
-        <div class="row g-4">
 
-            @* ---- Project Info -------------------------------- *@
-            <div class="col-lg-8">
-                <div class="glass-card p-4 mb-4">
-                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-info-circle text-teal me-2" style="color:#0d9488;"></i>Project Information</h5>
+    <div class="row g-4 mb-4">
+        <!-- Project Info -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-bottom pt-4 pb-3">
+                    <h5 class="fw-bolder text-dark mb-0"><i class="fas fa-laptop-code text-primary me-2"></i> Project Overview</h5>
+                </div>
+                <div class="card-body p-4">
+                    <h4 class="fw-bold text-dark mb-3">@(Model.Title ?? "Untitled Project")</h4>
+                    <p class="text-muted fs-6 mb-4">@(string.IsNullOrEmpty(Model.Description) ? "No description provided." : Model.Description)</p>
+                    
                     <div class="row g-3">
-                        <div class="col-md-12">
-                            <div class="info-label">Project Title</div>
-                            <div class="info-value fs-5">@Model.Title</div>
-                        </div>
                         <div class="col-md-6">
-                            <div class="info-label">Category / Field</div>
-                            <div class="info-value">@(Model.Student?.Programme ?? "N/A")</div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label">Academic Year / Session</div>
-                            <div class="info-value">@(Model.Student?.AcademicSession ?? "N/A")</div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label">Status</div>
-                            @{
-                                var pCls = Model.Status switch {
-                                    "Approved"   => "pill-approved",
-                                    "Rejected"   => "pill-rejected",
-                                    "InProgress" => "pill-submitted",
-                                    "Completed"  => "pill-approved",
-                                    _            => "pill-pending"
-                                };
-                            }
-                            <span class="status-pill @pCls">@Model.Status</span>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label">Supervisor</div>
-                            <div class="info-value">@(Model.Supervisor?.FullName ?? "Not Assigned")</div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label">Start Date</div>
-                            <div class="info-value">@(Model.StartDate?.ToString("dd MMM yyyy") ?? "N/A")</div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="info-label">End Date</div>
-                            <div class="info-value">@(Model.EndDate?.ToString("dd MMM yyyy") ?? "N/A")</div>
-                        </div>
-                        @if (!string.IsNullOrEmpty(Model.Description))
-                        {
-                            <div class="col-md-12">
-                                <div class="info-label">Description</div>
-                                <div class="text-muted" style="font-size:.9rem;line-height:1.6;">@Model.Description</div>
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                @* â”€â”€ Visual Stage Indicator (Step-by-step) â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
-                <div class="glass-card p-4 mb-4">
-                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-route me-2" style="color:#0d9488;"></i>Project Stage Indicator</h5>
-                    @{
-                        var orderedMilestones = milestones.OrderBy(m => m.DueDate).ToList();
-                        int chunkSize = 5;
-                        int totalChunks = (int)Math.Ceiling(orderedMilestones.Count / (double)chunkSize);
-                    }
-
-                    @for (int i = 0; i < totalChunks; i++)
-                    {
-                        var chunk = orderedMilestones.Skip(i * chunkSize).Take(chunkSize).ToList();
-                        int chunkCount = chunk.Count;
-                        double bgWidth = chunkSize > 1 ? ((double)(chunkCount - 1) / (chunkSize - 1)) * 100 : 0;
-                        
-                        <div class="d-flex justify-content-between position-relative align-items-center @(i < totalChunks - 1 ? "mb-5" : "")" style="margin: 0 10px;">
-                            <!-- Connection line background -->
-                            <div class="position-absolute top-50 start-0 translate-middle-y bg-secondary" style="height: 4px; z-index: 1; width: @bgWidth%; opacity: 0.3;"></div>
-                            
-                            <!-- Connection line progress -->
-                            @{
-                                int greenSegments = 0;
-                                for(int s = 0; s < chunkCount; s++) {
-                                    if (chunk[s].Status == "Approved" || chunk[s].Status == "Completed") {
-                                        greenSegments = s;
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                double progressWidth = chunkSize > 1 ? ((double)greenSegments / (chunkSize - 1)) * 100 : 0;
-                            }
-                            <div class="position-absolute top-50 start-0 translate-middle-y bg-success" style="height: 4px; width: @progressWidth%; z-index: 2; transition: width 0.5s ease;"></div>
-                            
-                            @foreach (var ms in chunk)
-                            {
-                                bool isApp = ms.Status == "Approved" || ms.Status == "Completed";
-                                string shortTitle = ms.Title;
-                                if (shortTitle.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)) {
-                                    var parts = shortTitle.Split(':');
-                                    if (parts.Length > 1) {
-                                        shortTitle = parts[1].Trim();
-                                    }
-                                }
-                                if (shortTitle.Length > 14) {
-                                    shortTitle = shortTitle.Substring(0, 12) + "..";
-                                }
-
-                                <div class="text-center position-relative" style="z-index: 3; width: 80px;">
-                                    <div class="rounded-circle d-flex align-items-center justify-content-center mx-auto shadow-sm @(isApp ? "bg-success text-white" : "bg-white border text-muted")" style="width:36px; height:36px; font-weight:700; font-size:14px; transition: all 0.3s ease;">
-                                        @if (isApp)
-                                        {
-                                            <i class="fas fa-check"></i>
-                                        }
-                                        else
-                                        {
-                                            <i class="fas fa-circle" style="font-size: 8px;"></i>
-                                        }
-                                    </div>
-                                    <span class="d-block mt-2 fw-bold text-dark text-truncate" style="font-size:0.7rem;" title="@ms.Title">@shortTitle</span>
-                                    @if (ms.DueDate.HasValue)
-                                    {
-                                        <span class="d-block text-muted" style="font-size:0.65rem;">@ms.DueDate.Value.ToString("MMM dd")</span>
-                                    }
+                            <div class="bg-light rounded p-3 h-100 border">
+                                <div class="text-muted fs-7 fw-bold text-uppercase mb-1">Supervisor</div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;"><i class="fas fa-user-tie"></i></div>
+                                    <span class="fw-bolder text-dark">@(Model.Supervisor?.FullName ?? "Not Assigned")</span>
                                 </div>
-                            }
-                            
-                            @* Add invisible placeholders if chunk is less than 5 to keep spacing uniform *@
-                            @for (int j = chunkCount; j < chunkSize; j++)
-                            {
-                                <div class="text-center position-relative" style="width: 80px; visibility: hidden;"></div>
-                            }
-                        </div>
-                    }
-                </div>
-
-                @* ---- Progress Bar ------------------------------------ *@
-                <div class="glass-card p-4 mb-4">
-                    <h5 class="fw-bold text-dark mb-3"><i class="fas fa-tasks me-2" style="color:#0d9488;"></i>Overall Progress</h5>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span class="text-muted fw-semibold">Completion Rate</span>
-                        <span class="fw-bold" style="color:#0d9488;">@pct%</span>
-                    </div>
-                    <div class="progress mb-2" style="height:14px;border-radius:7px;">
-                        <div class="progress-bar" role="progressbar"
-                             style="width:@pct%;background:var(--hero-grad);"
-                             aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                    <div class="d-flex gap-4 mt-3" style="font-size:.8rem;">
-                        <span class="text-muted"><i class="fas fa-check-circle text-success me-1"></i> Approved: <strong>@milestones.Count(m => m.Status == "Approved" || m.Status == "Completed")</strong></span>
-                        <span class="text-muted"><i class="fas fa-hourglass-half text-warning me-1"></i> Pending: <strong>@milestones.Count(m => m.Status == "Pending")</strong></span>
-                        <span class="text-muted"><i class="fas fa-arrow-circle-up text-primary me-1"></i> Submitted: <strong>@milestones.Count(m => m.Status == "Submitted" || m.Status == "UnderReview")</strong></span>
-                        <span class="text-muted"><i class="fas fa-times-circle text-danger me-1"></i> Rejected: <strong>@milestones.Count(m => m.Status == "Rejected")</strong></span>
-                    </div>
-                </div>
-
-                @* ---- Milestones / Chapters Timeline ----------------------- *@
-                <div class="glass-card p-4">
-                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-stream me-2" style="color:#0d9488;"></i>Milestone Timeline</h5>
-
-                    @{
-                        var stage1Milestones = milestones.Where(m => !m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).OrderBy(m => m.DueDate).ToList();
-                        var stage2Milestones = milestones.Where(m => m.Title.StartsWith("Step ", StringComparison.OrdinalIgnoreCase)).OrderBy(m => m.DueDate).ToList();
-                    }
-
-                    @if (!milestones.Any())
-                    {
-                        <div class="text-center py-4 text-muted">
-                            <i class="fas fa-inbox fs-1 d-block mb-2 opacity-30"></i>
-                            No milestones set for this project yet.
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="mt-2">
-                            @if (stage1Milestones.Any()) {
-                            <h6 class="text-primary fw-bold mb-3 mt-2"><i class="fas fa-flag me-2"></i>Stage 1: Progress & Reports</h6>
-                            <div class="timeline-container mb-5">
-                                @foreach (var ms in stage1Milestones)
-                                {
-                                    var rowCls = ms.Status.ToLower() switch {
-                                        "approved"    => "approved",
-                                        "completed"   => "approved",
-                                        "rejected"    => "rejected",
-                                        "submitted"   => "submitted",
-                                        "underreview" => "submitted",
-                                        _             => "pending"
-                                    };
-                                    var pillCls = ms.Status switch {
-                                        "Approved"    => "pill-approved",
-                                        "Completed"   => "pill-approved",
-                                        "Rejected"    => "pill-rejected",
-                                        "Submitted"   => "pill-submitted",
-                                        "UnderReview" => "pill-underreview",
-                                        _             => "pill-pending"
-                                    };
-                                    int? daysLeft = ms.DueDate.HasValue
-                                        ? (int)(ms.DueDate.Value - DateTime.Today).TotalDays
-                                        : null;
-
-                                    <div class="milestone-row @rowCls">
-                                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 bg-light p-3 rounded-3 border">
-                                            <div>
-                                                <div class="fw-bold text-dark">@ms.Title</div>
-                                                @if (!string.IsNullOrEmpty(ms.Description))
-                                                {
-                                                    <div class="text-muted mt-1" style="font-size:.85rem;">@ms.Description</div>
-                                                }
-                                                @if (ms.DueDate.HasValue)
-                                                {
-                                                    <div class="mt-2 text-muted small fw-semibold">
-                                                        <i class="far fa-calendar-alt me-1"></i> Due: @ms.DueDate.Value.ToString("dd MMM yyyy")
-                                                        @if (daysLeft.HasValue && ms.Status != "Approved" && ms.Status != "Completed")
-                                                        {
-                                                            if (daysLeft < 0)
-                                                            { <span class="text-danger ms-2"><i class="fas fa-exclamation-circle"></i> Overdue by @Math.Abs(daysLeft.Value) days</span> }
-                                                            else if (daysLeft <= 3)
-                                                            { <span class="text-warning ms-2"><i class="fas fa-exclamation-triangle"></i> @daysLeft days left</span> }
-                                                        }
-                                                    </div>
-                                                }
-                                                
-                                                @if (!string.IsNullOrEmpty(ms.SupervisorFeedback))
-                                                {
-                                                    var isRejected = ms.Status == "Rejected";
-                                                    var bgStyle = isRejected ? "background-color: #fef2f2; border-color: #f87171;" : "background-color: #f0f9ff; border-color: #7dd3fc;";
-                                                    var textColor = isRejected ? "color: #991b1b;" : "color: #0c4a6e;";
-                                                    var titleColor = isRejected ? "color: #b91c1c;" : "color: #0284c7;";
-                                                    
-                                                    <div class="mt-3 p-3 rounded-3 border" style="font-size: 0.85rem; max-width: 600px; @bgStyle">
-                                                        <strong class="d-block mb-1" style="@titleColor"><i class="fas fa-comment-dots me-1"></i>Supervisor Feedback:</strong>
-                                                        <span class="fw-semibold" style="white-space: pre-wrap; @textColor">@ms.SupervisorFeedback</span>
-                                                    </div>
-                                                }
-                                            </div>
-                                            <div class="d-flex flex-column align-items-end gap-2">
-                                                <span class="status-pill @pillCls shadow-sm">@ms.Status</span>
-                                                @if (!string.IsNullOrEmpty(ms.Remarks) || !string.IsNullOrEmpty(ms.SupervisorFeedback))
-                                                {
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary mt-1 py-1 px-3 fw-bold" data-bs-toggle="modal" data-bs-target="#viewMs_@ms.Id">
-                                                        <i class="fas fa-folder-open me-1"></i> Details
-                                                    </button>
-                                                }
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-                            </div>
-                        }
-
-                        @if (stage2Milestones.Any()) {
-                            <h6 class="text-success fw-bold mb-3"><i class="fas fa-graduation-cap me-2"></i>Stage 2: Final Submission</h6>
-                            <div class="timeline-container">
-                                @if (Model.Stage1Grade != "Pass")
-                                {
-                                    <div class="text-center py-4 bg-light text-muted" style="border-radius: 8px; border: 1px dashed #cbd5e1;">
-                                        <i class="fas fa-lock fs-3 mb-2 text-secondary opacity-50"></i>
-                                        <div class="fw-bold fs-7">Stage 2 is locked.</div>
-                                        <div class="small opacity-75">You have not passed Stage 1 yet.</div>
-                                    </div>
-                                }
-                                else
-                                {
-                                    @foreach (var ms in stage2Milestones)
-                                    {
-                                        var rowCls = ms.Status.ToLower() switch {
-                                            "approved"    => "approved",
-                                            "completed"   => "approved",
-                                            "rejected"    => "rejected",
-                                            "submitted"   => "submitted",
-                                            "underreview" => "submitted",
-                                            _             => "pending"
-                                        };
-                                        var pillCls = ms.Status switch {
-                                            "Approved"    => "pill-approved",
-                                            "Completed"   => "pill-approved",
-                                            "Rejected"    => "pill-rejected",
-                                            "Submitted"   => "pill-submitted",
-                                            "UnderReview" => "pill-underreview",
-                                            _             => "pill-pending"
-                                        };
-                                        int? daysLeft = ms.DueDate.HasValue
-                                            ? (int)(ms.DueDate.Value - DateTime.Today).TotalDays
-                                            : null;
-
-                                        <div class="milestone-row @rowCls">
-                                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 bg-light p-3 rounded-3 border">
-                                                <div>
-                                                    <div class="fw-bold text-dark">@ms.Title</div>
-                                                    @if (!string.IsNullOrEmpty(ms.Description))
-                                                    {
-                                                        <div class="text-muted mt-1" style="font-size:.85rem;">@ms.Description</div>
-                                                    }
-                                                    @if (ms.DueDate.HasValue)
-                                                    {
-                                                        <div class="mt-2 text-muted small fw-semibold">
-                                                            <i class="far fa-calendar-alt me-1"></i> Due: @ms.DueDate.Value.ToString("dd MMM yyyy")
-                                                            @if (daysLeft.HasValue && ms.Status != "Approved" && ms.Status != "Completed")
-                                                            {
-                                                                if (daysLeft < 0)
-                                                                { <span class="text-danger ms-2"><i class="fas fa-exclamation-circle"></i> Overdue by @Math.Abs(daysLeft.Value) days</span> }
-                                                                else if (daysLeft <= 3)
-                                                                { <span class="text-warning ms-2"><i class="fas fa-exclamation-triangle"></i> @daysLeft days left</span> }
-                                                            }
-                                                        </div>
-                                                    }
-                                                    
-                                                    @if (!string.IsNullOrEmpty(ms.SupervisorFeedback))
-                                                    {
-                                                        var isRejected = ms.Status == "Rejected";
-                                                        var bgStyle = isRejected ? "background-color: #fef2f2; border-color: #f87171;" : "background-color: #f0f9ff; border-color: #7dd3fc;";
-                                                        var textColor = isRejected ? "color: #991b1b;" : "color: #0c4a6e;";
-                                                        var titleColor = isRejected ? "color: #b91c1c;" : "color: #0284c7;";
-                                                        
-                                                        <div class="mt-3 p-3 rounded-3 border" style="font-size: 0.85rem; max-width: 600px; @bgStyle">
-                                                            <strong class="d-block mb-1" style="@titleColor"><i class="fas fa-comment-dots me-1"></i>Supervisor Feedback:</strong>
-                                                            <span class="fw-semibold" style="white-space: pre-wrap; @textColor">@ms.SupervisorFeedback</span>
-                                                        </div>
-                                                    }
-                                                </div>
-                                                <div class="d-flex flex-column align-items-end gap-2">
-                                                    <span class="status-pill @pillCls shadow-sm">@ms.Status</span>
-                                                    @if (!string.IsNullOrEmpty(ms.Remarks) || !string.IsNullOrEmpty(ms.SupervisorFeedback))
-                                                    {
-                                                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1 py-1 px-3 fw-bold" data-bs-toggle="modal" data-bs-target="#viewMs_@ms.Id">
-                                                            <i class="fas fa-folder-open me-1"></i> Details
-                                                        </button>
-                                                    }
-                                                </div>
-                                            </div>
-                                        </div>
-                                    }
-                                }
-                            </div>
-                        }
-                        </div>
-                    }
-                </div>
-            </div>
-
-            @* â”€â”€ Right Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ *@
-            <div class="col-lg-4">
-
-
-
-                @* Supervisor Card *@
-                <div class="glass-card p-4 mb-4">
-                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-user-tie me-2" style="color:#0d9488;"></i>Supervisor</h6>
-                    @if (Model.Supervisor != null)
-                    {
-                        var sup = Model.Supervisor;
-                        var ini = string.Join("", (sup.FullName ?? "S").Split(' ').Take(2).Select(w => w[0]));
-                        <div class="d-flex align-items-center gap-3">
-                            <div style="width:50px;height:50px;border-radius:50%;background:var(--hero-grad);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:18px;flex-shrink:0;">
-                                @ini
-                            </div>
-                            <div>
-                                <div class="fw-bold text-dark">@sup.FullName</div>
-                                <small class="text-muted d-block">@(sup.Email ?? "N/A")</small>
-                                <small class="text-muted d-block">@(sup.EmpDepartment?.Name ?? "N/A")</small>
                             </div>
                         </div>
-                    }
-                    else
-                    {
-                        <div class="text-center text-muted py-3">
-                            <i class="fas fa-user-slash mb-2 d-block opacity-30 fs-2"></i>
-                            Not assigned yet.
-                            <br/>
-                            <a href="/Student/SelectSupervisor" class="btn btn-sm btn-outline-secondary mt-2 rounded-3">Select Supervisor</a>
-                        </div>
-                    }
-                </div>
-
-                @* Upcoming Deadlines *@
-                <div class="glass-card p-4 mb-4">
-                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-clock me-2 text-warning"></i>Upcoming Deadlines</h6>
-                    @{
-                        var upcoming = milestones
-                            .Where(m => m.DueDate.HasValue && m.DueDate.Value >= DateTime.Today && m.Status != "Approved" && m.Status != "Completed")
-                            .OrderBy(m => m.DueDate)
-                            .Take(5)
-                            .ToList();
-                    }
-                    @if (!upcoming.Any())
-                    {
-                        <p class="text-muted text-center py-2">No upcoming deadlines.</p>
-                    }
-                    else
-                    {
-                        <div class="d-flex flex-column gap-2">
-                            @foreach (var ms in upcoming)
-                            {
-                                var d  = (int)(ms.DueDate!.Value - DateTime.Today).TotalDays;
-                                var cl = d <= 3 ? "text-danger" : (d <= 7 ? "text-warning" : "text-muted");
-                                <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
-                                    <div>
-                                        <div class="fw-semibold text-dark" style="font-size:.85rem;">@ms.Title</div>
-                                        <small class="text-muted">@ms.DueDate!.Value.ToString("dd MMM yyyy")</small>
-                                    </div>
-                                    <span class="fw-bold @cl" style="font-size:.82rem;">@d days</span>
+                        <div class="col-md-6">
+                            <div class="bg-light rounded p-3 h-100 border">
+                                <div class="text-muted fs-7 fw-bold text-uppercase mb-1">Examiner</div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="bg-info text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;"><i class="fas fa-user-graduate"></i></div>
+                                    <span class="fw-bolder text-dark">@(Model.AssignedExaminers?.Any() == true ? string.Join(", ", Model.AssignedExaminers.Select(e => e.Examiner?.FullName)) : "Not Assigned")</span>
                                 </div>
-                            }
+                            </div>
                         </div>
-                    }
-                </div>
-
-                @* FYP Key Dates *@
-                <div class="glass-card p-4">
-                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-calendar-check me-2" style="color:#0d9488;"></i>FYP Key Dates</h6>
-                    <div class="d-flex flex-column gap-2">
-                        @if (!string.IsNullOrEmpty(ViewBag.DPPDeadline))
-                        {
-                            <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
-                                <div>
-                                    <div class="fw-semibold text-dark" style="font-size:.85rem;">DPP Submission</div>
-                                    <small class="text-muted">Deadline</small>
-                                </div>
-                                @{
-                                    DateTime dppDate;
-                                    bool hasDpp = DateTime.TryParse(ViewBag.DPPDeadline, out dppDate);
-                                }
-                                <span class="fw-bold text-primary" style="font-size:.85rem;">@(hasDpp ? dppDate.ToString("dd MMM yyyy") : ViewBag.DPPDeadline)</span>
-                            </div>
-                        }
-
-                        @if (!string.IsNullOrEmpty(ViewBag.ExhibitionDate))
-                        {
-                            <div class="d-flex justify-content-between align-items-center py-2">
-                                <div>
-                                    <div class="fw-semibold text-dark" style="font-size:.85rem;">FYP Exhibition</div>
-                                    @if (!string.IsNullOrEmpty(ViewBag.ExhibitionTimeStart) || !string.IsNullOrEmpty(ViewBag.ExhibitionTimeEnd))
-                                    {
-                                        <small class="text-muted">@ViewBag.ExhibitionTimeStart - @ViewBag.ExhibitionTimeEnd</small>
-                                    }
-                                </div>
-                                @{
-                                    DateTime exDate;
-                                    bool hasEx = DateTime.TryParse(ViewBag.ExhibitionDate, out exDate);
-                                }
-                                <span class="fw-bold text-success" style="font-size:.85rem;">@(hasEx ? exDate.ToString("dd MMM yyyy") : ViewBag.ExhibitionDate)</span>
-                            </div>
-                        }
-                        
-                        @if (string.IsNullOrEmpty(ViewBag.DPPDeadline) && string.IsNullOrEmpty(ViewBag.ExhibitionDate))
-                        {
-                            <p class="text-muted text-center py-2 mb-0" style="font-size: 0.85rem;">Dates to be announced by coordinator.</p>
-                        }
                     </div>
                 </div>
             </div>
         </div>
-    }
-</div>
 
-@if (Model != null && Model.Milestones != null)
-{
-    foreach (var ms in Model.Milestones.Where(m => !string.IsNullOrEmpty(m.Remarks) || !string.IsNullOrEmpty(m.SupervisorFeedback)))
-    {
-        <!-- View Modal -->
-        <div class="modal fade" id="viewMs_@ms.Id" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content text-start border-0 shadow-lg">
-                    <div class="modal-header bg-light border-0">
-                        <h5 class="modal-title fw-bold text-dark"><i class="fas fa-file-alt text-primary me-2"></i>@ms.Title - Details</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <!-- Progress Mini -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4 d-flex flex-column justify-content-center text-center">
+                    <h1 class="display-3 fw-bolder text-dark mb-0">@overallProgress%</h1>
+                    <div class="text-muted fw-bold mb-4">Overall Submission Progress</div>
+                    
+                    <div class="progress mb-3" style="height: 10px; border-radius: 99px;">
+                        <div class="progress-bar @pbColor progress-bar-striped progress-bar-animated" role="progressbar" style="width: @overallProgress%"></div>
                     </div>
-                    <div class="modal-body p-4">
-                        
-                        @{
-                            string raw = ms.Remarks ?? "";
-                            string parsedJson = "";
-                            if (raw.Contains("JSON: ")) {
-                                var parts = raw.Split(new[] { "JSON: " }, StringSplitOptions.None);
-                                parsedJson = parts[1];
-                            }
-                        }
-                        
-                        @if (!string.IsNullOrEmpty(parsedJson))
-                        {
-                            <h6 class="fw-bold text-primary mb-3">Submission Information</h6>
-                            <div class="bg-light p-3 rounded-3 mb-4 border border-secondary border-opacity-25">
-                                @{
-                                    try {
-                                        var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parsedJson);
-                                        if (dict != null) {
-                                            <table class="table table-sm table-borderless m-0" style="font-size: 0.95rem;">
-                                            @foreach (var kvp in dict) {
-                                                if (!string.IsNullOrEmpty(kvp.Value)) {
-                                                    <tr>
-                                                        <td class="fw-bold text-muted" style="width: 150px; vertical-align: top;">@kvp.Key:</td>
-                                                        <td class="text-dark fw-semibold" style="white-space: pre-wrap;">@kvp.Value</td>
-                                                    </tr>
-                                                }
-                                            }
-                                            </table>
-                                        }
-                                    } catch {
-                                        <div class="text-muted small" style="white-space: pre-wrap;">@parsedJson</div>
-                                    }
-                                }
-                            </div>
-                        } else if (!string.IsNullOrEmpty(ms.Remarks)) {
-                            <div class="mb-4">
-                                <h6 class="fw-bold text-primary mb-2">Remarks</h6>
-                                <div class="bg-light p-3 rounded-3 border">
-                                    @ms.Remarks
-                                </div>
-                            </div>
-                        }
-                        
-                        @if (!string.IsNullOrEmpty(ms.SupervisorFeedback))
-                        {
-                            <h6 class="fw-bold text-success mb-2"><i class="fas fa-comment-dots me-2"></i>Supervisor Feedback</h6>
-                            <div class="p-3 rounded-3" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; font-weight: 500; white-space: pre-wrap;">
-                                @ms.SupervisorFeedback
-                            </div>
-                        }
-
-                        @if (ms.SubmissionFiles != null && ms.SubmissionFiles.Any(f => f.UploadedBy != ms.Project?.StudentId))
-                        {
-                            var gradedFiles = ms.SubmissionFiles.Where(f => f.UploadedBy != ms.Project?.StudentId).ToList();
-                            <h6 class="fw-bold text-primary mt-4 mb-2"><i class="fas fa-file-pdf me-2"></i>Graded / Feedback Files</h6>
-                            <div class="d-flex flex-column gap-2 mb-3">
-                                @foreach (var file in gradedFiles)
-                                {
-                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" target="_blank" class="btn btn-outline-primary text-start d-flex align-items-center rounded-3 p-3 text-decoration-none bg-light-primary border-primary border-opacity-25">
-                                        <i class="fas fa-file-pdf text-primary me-3"></i>
-                                        <span class="text-dark fw-bold text-truncate flex-grow-1">@file.FileName</span>
-                                        <i class="fas fa-external-link-alt text-primary ms-3"></i>
-                                    </a>
-                                }
-                            </div>
-                        }
-
-                        @if (ms.SubmissionFiles != null && ms.SubmissionFiles.Any(f => f.UploadedBy == ms.Project?.StudentId))
-                        {
-                            var studentFiles = ms.SubmissionFiles.Where(f => f.UploadedBy == ms.Project?.StudentId).ToList();
-                            <h6 class="fw-bold text-dark mt-4 mb-2"><i class="fas fa-file-upload me-2"></i>My Submitted Files</h6>
-                            <div class="d-flex flex-column gap-2 mb-3">
-                                @foreach (var file in studentFiles)
-                                {
-                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" target="_blank" class="btn btn-outline-dark text-start d-flex align-items-center rounded-3 p-3 text-decoration-none bg-light border-secondary border-opacity-25">
-                                        <i class="fas fa-file-alt text-dark me-3"></i>
-                                        <span class="text-dark fw-bold text-truncate flex-grow-1">@file.FileName</span>
-                                        <i class="fas fa-external-link-alt text-secondary ms-3"></i>
-                                    </a>
-                                }
-                            </div>
-                        }
-
-                        @if (!string.IsNullOrEmpty(parsedJson))
-                        {
-                            <h6 class="fw-bold text-primary mt-4 mb-2"><i class="fas fa-file-contract me-2"></i>Digital Form Document</h6>
-                            <div id="pdfLoading_@ms.Id" class="text-center py-3 bg-light rounded-3 border mb-2">
-                                <i class="fas fa-spinner fa-spin text-primary me-2"></i>
-                                <span class="text-muted fw-semibold">Loading preview...</span>
-                            </div>
-                            <div id="pdfContainer_@ms.Id" style="height:600px;display:none;border:1px solid #dee2e6;border-radius:10px;overflow:hidden;">
-                                <iframe id="pdfIframe_@ms.Id" style="width:100%;height:100%;border:none;"></iframe>
-                            </div>
-                            <script id="tpl_@ms.Id" type="text/template"><!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-body { font-family: sans-serif; padding: 40px; background: white; color: #111; }
-h4 { color: #0d6efd; margin-bottom: 10px; font-family: sans-serif; }
-p.meta { font-family: sans-serif; color: #555; margin-bottom: 4px; }
-hr { border: 1px solid #ddd; margin-bottom: 20px; margin-top: 10px; }
-table { width: 100%; font-family: sans-serif; font-size: 14px; border-collapse: collapse; }
-td { padding: 8px; border-bottom: 1px solid #eee; vertical-align: top; }
-td.label { width: 30%; font-weight: bold; }
-td.value { white-space: pre-wrap; }
-.sig { font-family: 'Brush Script MT', cursive; font-size: 24px; color: #00008B; }
-.fb-box { margin-top: 24px; padding: 14px 18px; border-radius: 6px; border: 1px solid #bbf7d0; background: #f0fdf4; }
-.fb-title { color: #15803d; font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
-.fb-text { color: #166534; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
-.footer { margin-top: 40px; font-size: 11px; color: #9ca3af; text-align: center; border-top: 1px solid #eee; padding-top: 12px; }
-</style></head><body>
-<h4>@ms.Title</h4>
-<p class="meta">Student: @(currentUser?.FullName) (@(currentUser?.EmployeeId))</p>
-<hr />
-@{
-    try {
-        var dpdf = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parsedJson);
-        if (dpdf != null && dpdf.Any()) {
-            <table>
-                @foreach (var kv in dpdf) {
-                    if (!string.IsNullOrEmpty(kv.Value)) {
-                        <tr>
-                            <td class="label">@kv.Key:</td>
-                            <td class="value">
-                                @if (kv.Key == "Supervisor Signature") {
-                                    <span class="sig">@kv.Value</span>
-                                } else {
-                                    @kv.Value
-                                }
-                            </td>
-                        </tr>
-                    }
-                }
-            </table>
-        }
-    } catch { }
-}
-@if (!string.IsNullOrEmpty(ms.SupervisorFeedback)) {
-    <div class="fb-box">
-        <div class="fb-title">Supervisor Feedback</div>
-        <div class="fb-text">@ms.SupervisorFeedback</div>
+                    
+                    <div class="d-flex justify-content-between text-muted fs-7 fw-bold mb-1">
+                        <span>Stage 1 Completed:</span>
+                        <span>@stage1Completed / @stage1Required.Count</span>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted fs-7 fw-bold">
+                        <span>Stage 2 Completed:</span>
+                        <span>@stage2Completed / @stage2Required.Count</span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-}
-<div class="footer">FYP Tracking System &mdash; @DateTime.Now.ToString("dd MMMM yyyy")</div>
-</body></html></script>
-                        }
-                        @if (ms.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Progress", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("Final Submission", StringComparison.OrdinalIgnoreCase))
-                        {
-                            <div class="mt-4 pt-3 border-top text-end">
-                                <a href="@Url.Action("Forms", "Student")" class="btn btn-primary fw-bold px-4">
-                                    Go to Digital Forms <i class="fas fa-arrow-right ms-2"></i>
-                                </a>
+
+    <!-- Milestone Timeline -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-bottom pt-4 pb-3">
+            <h5 class="fw-bolder text-dark mb-0"><i class="fas fa-stream text-primary me-2"></i> Milestone Timeline</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="accordion accordion-flush" id="timelineAccordion">
+                
+                <!-- Stage 1 -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingStage1">
+                        <button class="accordion-button fw-bold fs-5 px-4 py-3" type="button" data-bs-toggle="collapse" data-bs-target="#collapseStage1" aria-expanded="true">
+                            <i class="fas fa-tasks text-primary me-2"></i> Stage 1 Milestones
+                            @if(Model.Stage1Grade == "Pass") { <span class="badge bg-success ms-3 fs-7">Passed</span> }
+                            else if(Model.Stage1Grade == "Fail") { <span class="badge bg-danger ms-3 fs-7">Failed</span> }
+                        </button>
+                    </h2>
+                    <div id="collapseStage1" class="accordion-collapse collapse show" data-bs-parent="#timelineAccordion">
+                        <div class="accordion-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th class="ps-4 text-muted fw-bold text-uppercase fs-8">Milestone</th>
+                                            <th class="text-muted fw-bold text-uppercase fs-8">Due Date</th>
+                                            <th class="text-muted fw-bold text-uppercase fs-8">Date Submitted</th>
+                                            <th class="text-center text-muted fw-bold text-uppercase fs-8">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach(var ms in stage1) {
+                                            string statusClass = "bg-light text-muted border";
+                                            string statusText = ms.Status ?? "Pending";
+                                            if (!ms.SubmittedDate.HasValue && statusText == "Pending") { statusText = "Not Submitted"; statusClass = "bg-light text-muted border"; }
+                                            else if (statusText == "Submitted" || statusText == "UnderReview" || statusText == "PendingSupervisorReview") { statusText = "Pending Review"; statusClass = "bg-warning text-dark border border-warning"; }
+                                            else if (statusText == "Approved" || statusText == "Completed" || statusText == "AdminApproved" || statusText == "SupervisorSigned") { statusText = "Approved"; statusClass = "bg-success text-white"; }
+                                            else if (statusText == "Rejected" || statusText == "Revision" || statusText == "ReturnedForChanges") { statusText = "Revision Required"; statusClass = "bg-danger text-white"; }
+                                            else if (statusText == "Locked") { statusText = "Locked"; statusClass = "bg-secondary text-white"; }
+                                            
+                                            <tr>
+                                                <td class="ps-4 py-3">
+                                                    <div class="fw-bolder text-dark">@ms.Title</div>
+                                                    <span class="badge bg-light text-muted border fs-8 mt-1">@(ms.IsRequired ? "Required" : "Optional")</span>
+                                                </td>
+                                                <td class="text-muted fw-bold fs-7">@(ms.DueDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</td>
+                                                <td class="text-dark fw-bold fs-7">@(ms.SubmittedDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</td>
+                                                <td class="text-center"><span class="badge @statusClass px-3 py-2 fw-bold">@statusText</span></td>
+                                            </tr>
+                                        }
+                                        @if(!stage1.Any()) {
+                                            <tr><td colspan="4" class="text-center py-4 text-muted">No milestones found for Stage 1.</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
                             </div>
-                        }
+                        </div>
                     </div>
                 </div>
+
+                <!-- Stage 2 -->
+                <div class="accordion-item border-bottom-0">
+                    <h2 class="accordion-header" id="headingStage2">
+                        <button class="accordion-button @(Model.Stage1Grade == "Pass" ? "" : "collapsed") fw-bold fs-5 px-4 py-3" type="button" data-bs-toggle="collapse" data-bs-target="#collapseStage2" aria-expanded="@(Model.Stage1Grade == "Pass" ? "true" : "false")">
+                            <i class="fas fa-flag-checkered text-success me-2"></i> Stage 2 Milestones
+                            @if(Model.Stage1Grade != "Pass") { <span class="badge bg-secondary ms-3 fs-7"><i class="fas fa-lock me-1"></i> Locked</span> }
+                        </button>
+                    </h2>
+                    <div id="collapseStage2" class="accordion-collapse collapse @(Model.Stage1Grade == "Pass" ? "show" : "")" data-bs-parent="#timelineAccordion">
+                        <div class="accordion-body p-0">
+                            @if(Model.Stage1Grade != "Pass") {
+                                <div class="text-center py-5 bg-light">
+                                    <i class="fas fa-lock text-muted fs-1 opacity-25 mb-3"></i>
+                                    <h6 class="fw-bold text-dark mb-1">Stage 2 is Locked</h6>
+                                    <p class="text-muted fs-7 mb-0">You must pass Stage 1 before you can unlock and access Stage 2 milestones.</p>
+                                </div>
+                            }
+                            else {
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="bg-light">
+                                            <tr>
+                                                <th class="ps-4 text-muted fw-bold text-uppercase fs-8">Milestone</th>
+                                                <th class="text-muted fw-bold text-uppercase fs-8">Due Date</th>
+                                                <th class="text-muted fw-bold text-uppercase fs-8">Date Submitted</th>
+                                                <th class="text-center text-muted fw-bold text-uppercase fs-8">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach(var ms in stage2) {
+                                                string statusClass = "bg-light text-muted border";
+                                                string statusText = ms.Status ?? "Pending";
+                                                if (!ms.SubmittedDate.HasValue && statusText == "Pending") { statusText = "Not Submitted"; statusClass = "bg-light text-muted border"; }
+                                                else if (statusText == "Submitted" || statusText == "UnderReview" || statusText == "PendingSupervisorReview") { statusText = "Pending Review"; statusClass = "bg-warning text-dark border border-warning"; }
+                                                else if (statusText == "Approved" || statusText == "Completed" || statusText == "AdminApproved" || statusText == "SupervisorSigned") { statusText = "Approved"; statusClass = "bg-success text-white"; }
+                                                else if (statusText == "Rejected" || statusText == "Revision" || statusText == "ReturnedForChanges") { statusText = "Revision Required"; statusClass = "bg-danger text-white"; }
+                                                else if (statusText == "Locked") { statusText = "Locked"; statusClass = "bg-secondary text-white"; }
+                                                
+                                                <tr>
+                                                    <td class="ps-4 py-3">
+                                                        <div class="fw-bolder text-dark">@ms.Title</div>
+                                                        <span class="badge bg-light text-muted border fs-8 mt-1">@(ms.IsRequired ? "Required" : "Optional")</span>
+                                                    </td>
+                                                    <td class="text-muted fw-bold fs-7">@(ms.DueDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</td>
+                                                    <td class="text-dark fw-bold fs-7">@(ms.SubmittedDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</td>
+                                                    <td class="text-center"><span class="badge @statusClass px-3 py-2 fw-bold">@statusText</span></td>
+                                                </tr>
+                                            }
+                                            @if(!stage2.Any()) {
+                                                <tr><td colspan="4" class="text-center py-4 text-muted">No milestones found for Stage 2.</td></tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
-    }
-}
-@section Scripts {
-<script>
-(function(){
-    function run(){
-        document.querySelectorAll('.modal').forEach(function(m){
-            m.addEventListener('shown.bs.modal',function(){
-                var id=this.id.replace('viewMs_','');
-                var tpl=document.getElementById('tpl_'+id);
-                var box=document.getElementById('pdfContainer_'+id);
-                var ifr=document.getElementById('pdfIframe_'+id);
-                var ldr=document.getElementById('pdfLoading_'+id);
-                if(!ldr)return;
-                if(!tpl||!box||!ifr){ldr.style.display='none';return;}
-                if(box.style.display==='block')return;
-                try{
-                    var b=new Blob([tpl.innerHTML],{type:'text/html'});
-                    ldr.style.display='none';
-                    box.style.display='block';
-                    ifr.src=URL.createObjectURL(b);
-                }catch(e){
-                    ldr.innerHTML='<span class="text-danger">Could not load preview.</span>';
-                }
-            });
-        });
-    }
-    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run);}else{run();}
-})();
-</script>
-}
+    </div>
+</div>

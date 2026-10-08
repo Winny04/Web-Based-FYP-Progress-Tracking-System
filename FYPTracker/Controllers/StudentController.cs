@@ -44,6 +44,8 @@ namespace FYPTracker.Controllers
                     .ThenInclude(ae => ae.Examiner)
                 .Include(p => p.Milestones)
                     .ThenInclude(m => m.SubmissionFiles)
+                .Include(p => p.Milestones)
+                    .ThenInclude(m => m.Feedbacks)
                 .OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
 
             // Fetch recent activities
@@ -80,6 +82,22 @@ namespace FYPTracker.Controllers
                 .Include(r => r.Supervisor)
                 .Where(r => r.StudentId == user.Id)
                 .ToListAsync();
+
+            var timeoutSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "SupervisorRequestTimeoutDays");
+            int timeoutDays = (timeoutSetting != null && int.TryParse(timeoutSetting.Value, out int t) && t > 0) ? t : 3;
+            ViewBag.SupervisorRequestTimeoutDays = timeoutDays;
+
+            var expiredRequests = myRequests.Where(r => r.Status == "Pending" && r.RequestedDate <= DateTime.Now.AddDays(-timeoutDays)).ToList();
+            foreach (var e in expiredRequests)
+            {
+                e.Status = "Rejected";
+                e.ResponseNote = $"Auto-rejected: No supervisor response within the configured {timeoutDays}-day period.";
+                e.RespondedDate = DateTime.Now;
+            }
+            if (expiredRequests.Any()) await _context.SaveChangesAsync();
+
             ViewBag.MyRequests = myRequests;
 
             return View(project);

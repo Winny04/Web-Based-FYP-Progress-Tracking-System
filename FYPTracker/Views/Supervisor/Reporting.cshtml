@@ -36,11 +36,16 @@
     }
 </style>
 
-<div class="container-fluid py-4">
+<div class="container-xxl py-4">
 
     <div class="page-hero">
-        <h2 class="fw-bold mb-1"><i class="fas fa-chart-pie me-2"></i>Reports & Analytics</h2>
-        <p class="mb-0 opacity-80">Gain insights into your students' progress, meeting trends, and supervision load.</p>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h2 class="fw-bold mb-1"><i class="fas fa-chart-pie me-2"></i>Reports & Analytics</h2>
+                <p class="mb-0 opacity-80">Gain insights into your students' progress, meeting trends, and supervision load.</p>
+            </div>
+            @await Html.PartialAsync("_SessionFilter")
+        </div>
     </div>
 
     <div class="row g-4 mb-4">
@@ -124,7 +129,7 @@
                     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
                 });
             } else {
-                document.getElementById('milestoneChart').outerHTML = '<div class="text-muted text-center w-100">No milestone data available.</div>';
+                document.getElementById('milestoneChart').outerHTML = '<div class="text-center text-muted w-100 py-5"><i class="fas fa-chart-pie fs-1 mb-3" style="color: #cbd5e1;"></i><h6 class="fw-bold text-dark">No Milestone Data</h6><p class="small mb-0">No submissions found for the selected session.</p></div>';
             }
 
             // 2. Program Chart (Pie)
@@ -144,7 +149,7 @@
                     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
                 });
             } else {
-                document.getElementById('programChart').outerHTML = '<div class="text-muted text-center w-100">No student program data available.</div>';
+                document.getElementById('programChart').outerHTML = '<div class="text-center text-muted w-100 py-5"><i class="fas fa-users fs-1 mb-3" style="color: #cbd5e1;"></i><h6 class="fw-bold text-dark">No Program Data</h6><p class="small mb-0">No active students in this session.</p></div>';
             }
 
             // 3. Meeting Status Chart (Bar)
@@ -180,7 +185,7 @@
                     }
                 });
             } else {
-                document.getElementById('meetingChart').outerHTML = '<div class="text-muted text-center w-100">No meeting request data available.</div>';
+                document.getElementById('meetingChart').outerHTML = '<div class="text-center text-muted w-100 py-5"><i class="fas fa-calendar-times fs-1 mb-3" style="color: #cbd5e1;"></i><h6 class="fw-bold text-dark">No Meeting Data</h6><p class="small mb-0">No meeting requests found.</p></div>';
             }
 
             // 4. Monthly Meeting Chart (Line)
@@ -220,7 +225,7 @@
                     }
                 });
             } else {
-                document.getElementById('monthlyChart').outerHTML = '<div class="text-muted text-center w-100">No meeting activity this year.</div>';
+                document.getElementById('monthlyChart').outerHTML = '<div class="text-center text-muted w-100 py-5"><i class="fas fa-chart-line fs-1 mb-3" style="color: #cbd5e1;"></i><h6 class="fw-bold text-dark">No Monthly Data</h6><p class="small mb-0">No meeting activity recorded for this year.</p></div>';
             }
 
         });

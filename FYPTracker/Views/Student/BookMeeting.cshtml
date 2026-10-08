@@ -398,17 +398,21 @@
                                 var maxDate = DateTime.Today.AddYears(1);
                                 if (ViewBag.ActiveSession != null)
                                 {
-                                    var sessionStart = ViewBag.ActiveSession.StartDate;
-                                    var sessionEnd = ViewBag.ActiveSession.EndDate;
-                                    
-                                    if (sessionStart.HasValue && sessionStart.Value > minDate)
+                                    var activeSession = ViewBag.ActiveSession as FYPTracker.Models.AcademicSession;
+                                    if (activeSession != null)
+                                    {
+                                        var sessionStart = activeSession.StartDate;
+                                        var sessionEnd = activeSession.EndDate;
+                                        
+                                        if (sessionStart.HasValue && sessionStart.Value > minDate)
                                     {
                                         minDate = sessionStart.Value;
                                     }
                                     if (sessionEnd.HasValue)
                                     {
                                         // The first meeting must leave at least 13 weeks (91 days) before the end date to finish all 14 meetings.
-                                        maxDate = sessionEnd.Value.AddDays(-91);
+                                            maxDate = sessionEnd.Value.AddDays(-91);
+                                        }
                                     }
                                 }
                             }

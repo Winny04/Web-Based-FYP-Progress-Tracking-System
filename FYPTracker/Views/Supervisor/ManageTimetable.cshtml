@@ -1,63 +1,101 @@
 @model IEnumerable<FYPTracker.Models.SupervisorTimetableEntry>
 
 @{
-    ViewData["Title"] = "Manage Timetable";
-    Layout = "~/Views/Shared/_LayoutAnonymous.cshtml";
+    ViewData["Title"] = "Manage Teaching Timetable";
 }
 
-<div class="container mt-4">
+<style>
+    :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
+    .page-hero {
+        background: var(--hero-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
+    }
+</style>
+
+<div class="container-xxl py-4">
     <div class="mb-4">
-        <a href="/Supervisor/ManageAvailability" class="btn btn-sm btn-light"><i class="fas fa-arrow-left me-2"></i>Back to Availability</a>
+        <a href="/Supervisor" class="btn btn-sm btn-outline-secondary rounded-pill px-3"><i class="fas fa-arrow-left me-2"></i>Back to Dashboard</a>
     </div>
-    <h2>Manage Teaching Timetable</h2>
-    <p>Upload your teaching timetable (CSV format) for the current active session: <strong>@ViewBag.ActiveSessionName</strong>.</p>
-    <p class="text-muted small">CSV Format: DayOfWeek, StartTime, EndTime, Details (e.g. Monday, 09:00, 11:00, Lecture 1)</p>
 
     @if (TempData["Success"] != null)
     {
-        <div class="alert alert-success">@TempData["Success"]</div>
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-4">@TempData["Success"]</div>
     }
     @if (TempData["Error"] != null)
     {
-        <div class="alert alert-danger">@TempData["Error"]</div>
+        <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-4">@TempData["Error"]</div>
     }
 
-    <form asp-action="PreviewTimetable" enctype="multipart/form-data" method="post" class="mb-4">
-        <div class="mb-4">
-            <label for="timetableFile" class="form-label fw-semibold">Teaching Timetable</label>
-            <input class="form-control" type="file" id="timetableFile" name="timetableFile" accept=".csv" required />
-            <div class="form-text">Upload a CSV timetable. Teaching periods will be blocked from student meeting bookings.</div>
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1 text-white"><i class="fas fa-calendar-check me-2"></i>Teaching Timetable</h2>
+            <p class="mb-0 text-white opacity-75">Upload your weekly teaching schedule to block out unavailable meeting times.</p>
         </div>
-        <button class="btn btn-primary" type="submit">Preview Upload</button>
-    </form>
+        <div>
+            <span class="badge bg-white text-dark px-3 py-2 fs-6 rounded-pill">Active Session: @(ViewBag.ActiveSessionName ?? "N/A")</span>
+        </div>
+    </div>
 
-    <hr />
+    <div class="row g-4">
+        <div class="col-md-5">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4">
+                    <h5 class="fw-bold text-dark mb-3"><i class="fas fa-file-upload text-primary me-2"></i>Upload Timetable (CSV)</h5>
+                    <p class="text-muted small mb-4">The CSV format must strictly contain the following columns: <code>DayOfWeek, StartTime, EndTime, Details</code> (e.g. <code>Monday, 09:00, 11:00, Lecture 1</code>).</p>
+                    
+                    <form asp-action="PreviewTimetable" enctype="multipart/form-data" method="post">
+                        <div class="mb-4">
+                            <input class="form-control" type="file" id="timetableFile" name="timetableFile" accept=".csv" required />
+                        </div>
+                        <button class="btn btn-primary w-100 fw-bold rounded-pill" type="submit">Preview & Upload</button>
+                    </form>
+                </div>
+            </div>
+        </div>
 
-    <h4>Current Timetable Busy Periods</h4>
-    @if (Model.Any())
-    {
-        <table class="table table-bordered">
-            <thead>
-                <tr>
-                    <th>Day</th>
-                    <th>Time</th>
-                    <th>Details</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var item in Model)
-                {
-                    <tr>
-                        <td>@item.DayOfWeek</td>
-                        <td>@item.StartTime.ToString(@"hh\:mm") - @item.EndTime.ToString(@"hh\:mm")</td>
-                        <td>@item.Details</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
-    else
-    {
-        <p>No timetable entries found for the current session.</p>
-    }
+        <div class="col-md-7">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4">
+                    <h5 class="fw-bold text-dark mb-4"><i class="fas fa-calendar-times text-primary me-2"></i>Current Busy Periods</h5>
+                    
+                    @if (Model != null && Model.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead>
+                                    <tr class="text-muted small fw-bold text-uppercase">
+                                        <th>Day</th>
+                                        <th>Time</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in Model.OrderBy(i => i.DayOfWeek).ThenBy(i => i.StartTime))
+                                    {
+                                        <tr>
+                                            <td class="fw-bold">@item.DayOfWeek</td>
+                                            <td>@item.StartTime.ToString(@"hh\:mm") - @item.EndTime.ToString(@"hh\:mm")</td>
+                                            <td class="text-muted">@item.Details</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <i class="fas fa-inbox fs-1 mb-3" style="color: #cbd5e1;"></i>
+                            <h5 class="fw-bold text-dark mb-1">No Timetable Uploaded</h5>
+                            <p class="mb-0">You have no busy periods scheduled for this session.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
 </div>

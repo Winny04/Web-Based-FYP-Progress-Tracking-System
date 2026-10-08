@@ -135,7 +135,7 @@
             <p class="mb-0 opacity-90">You may only select one supervisor. Your request will expire in @ViewBag.SupervisorRequestTimeoutDays days if not responded to.</p>
         </div>
         <div class="d-flex gap-2">
-            <span class="badge bg-white text-dark border px-3 py-2 rounded-pill fw-bold">@activeCount Choice Selected</span>
+            <span class="badge bg-white text-dark border px-3 py-2 rounded-pill fw-bold">@activeCount @(activeCount == 1 ? "Pending Request" : "Pending Requests")</span>
         </div>
     </div>
 
@@ -219,7 +219,7 @@
                                         <td>
                                             @if (slotsLeft > 0)
                                             {
-                                                <span class="text-success fw-bold">@slotsLeft / @maxSlots available left</span>
+                                                <span class="text-success fw-bold">@slotsLeft of @maxSlots slots available</span>
                                             }
                                             else
                                             {
@@ -274,14 +274,23 @@
                                 <span class="badge bg-white text-dark rounded-pill border" style="font-size:10px;">#@(reqCounter++)</span>
                                 <span class="status-badge @(req.Status == "Approved" ? "badge-approved" : req.Status == "Rejected" ? "badge-rejected" : "badge-pending")" id="side-status-@req.Id" style="font-size:9px; padding:2px 8px;">@req.Status</span>
                             </div>
-                            <div class="fw-bold text-dark" style="font-size:0.85rem;">@req.Supervisor?.FullName</div>
-                            <div class="text-muted mb-2" style="font-size:11px; font-weight: 500;">Topic: @req.ProjectTopic</div>
+                            <div class="fw-bold text-dark" style="font-size:0.85rem;"><i class="fas fa-user-tie me-1 text-muted"></i>@req.Supervisor?.FullName</div>
+                            <div class="text-muted mb-2 mt-1" style="font-size:11px; font-weight: 500;"><strong>Project Title:</strong> @req.ProjectTopic</div>
                             
+                            <div class="text-muted mb-2" style="font-size:11px; line-height: 1.4;">
+                                <div><strong>Date Requested:</strong> @req.RequestedDate.ToString("dd MMM yyyy")</div>
+                                @if (req.Status == "Pending")
+                                {
+                                    var deadline = req.RequestedDate.AddDays(ViewBag.SupervisorRequestTimeoutDays);
+                                    <div><strong>Response Deadline:</strong> @deadline.ToString("dd MMM yyyy, h:mm tt")</div>
+                                }
+                            </div>
+
                             @if (req.Status == "Pending")
                             {
-                                <div class="countdown-box mt-2 w-100 justify-content-center" id="side-countdown-@req.Id">
+                                <div class="countdown-box mt-1 w-100 justify-content-center" id="side-countdown-@req.Id">
                                     <i class="far fa-clock"></i>
-                                    <span class="countdown-timer" data-expiry="@req.ExpiryDate.ToString("o")">7 Days</span>
+                                    <span class="countdown-timer" data-expiry="@req.RequestedDate.AddDays(ViewBag.SupervisorRequestTimeoutDays).ToString("o")">Calculating...</span>
                                 </div>
                             }
                             else if (!string.IsNullOrEmpty(req.ResponseNote))

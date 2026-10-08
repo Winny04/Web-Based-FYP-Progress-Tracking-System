@@ -9,13 +9,13 @@
     var noSupervisor = ViewBag.NoSupervisor != null && (bool)ViewBag.NoSupervisor;
 }
 
-<div class="container-fluid py-4">
+<div class="container-xxl py-4">
     <div class="row g-0" style="height: 78vh; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.07);">
 
         @if (true)
         {
             <!-- Sidebar: List of Students and Groups -->
-            <div class="col-lg-3 border-end d-flex flex-column bg-white h-100">
+            <div class="col-md-4 col-xl-3 border-end d-flex flex-column bg-white h-100">
                 <!-- Sidebar Header -->
                 <div class="p-4 border-bottom">
                     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -146,8 +146,9 @@
                         @if (!studentList.Any())
                         {
                             <div class="text-center text-muted py-5 px-3">
-                                <i class="fas fa-user-slash fs-2 mb-3 opacity-50"></i>
-                                <p class="small">No active students assigned yet.</p>
+                                <i class="fas fa-users-slash fs-2 mb-3" style="color: #cbd5e1;"></i>
+                                <h6 class="fw-bold text-dark mb-1">No Students</h6>
+                                <p class="small mb-0">No active students assigned yet.</p>
                             </div>
                         }
                     }
@@ -156,18 +157,18 @@
         }
 
         <!-- Chat Window -->
-        <div class="col-lg-9 d-flex flex-column bg-white h-100">
+        <div class="col-md-8 col-xl-9 d-flex flex-column bg-white h-100">
 
             @if (noSupervisor)
             {
                 <!-- No supervisor assigned yet -->
                 <div class="d-flex flex-column align-items-center justify-content-center h-100 py-5">
                     <div class="bg-light rounded-circle d-flex align-items-center justify-content-center mb-4" style="width:90px;height:90px;">
-                        <i class="fas fa-user-tie fs-2 text-primary opacity-50"></i>
+                        <i class="fas fa-user-tie fs-1 text-primary opacity-50"></i>
                     </div>
                     <h5 class="fw-bold text-dark">No Supervisor Assigned</h5>
-                    <p class="text-muted text-center px-4">You don't have an assigned supervisor yet. Please submit a supervisor request first to start messaging.</p>
-                    <a href="/Student/SelectSupervisor" class="btn btn-primary rounded-pill px-4 mt-2">Find a Supervisor</a>
+                    <p class="text-muted text-center px-4" style="max-width: 400px;">You don't have an assigned supervisor yet. Please submit a supervisor request first to start messaging.</p>
+                    <a href="/Student/SelectSupervisor" class="btn btn-primary rounded-pill px-4 mt-2"><i class="fas fa-search me-2"></i>Find a Supervisor</a>
                 </div>
             }
             else if (partnerId.HasValue || activeGroupId.HasValue)
@@ -285,10 +286,10 @@
                 <!-- Supervisor: no student selected yet -->
                 <div class="d-flex flex-column align-items-center justify-content-center h-100 py-5 text-muted">
                     <div class="bg-light rounded-circle d-flex align-items-center justify-content-center mb-4" style="width:90px;height:90px;">
-                        <i class="far fa-comments fs-2 text-primary opacity-50"></i>
+                        <i class="far fa-comments fs-1 text-primary opacity-50"></i>
                     </div>
-                    <h5 class="fw-bold text-dark">Select a Student</h5>
-                    <p class="small">Choose a student from the sidebar to view the conversation.</p>
+                    <h5 class="fw-bold text-dark mb-1">Select a Conversation</h5>
+                    <p class="small mb-0">Choose a student or group from the sidebar to view the chat.</p>
                 </div>
             }
 

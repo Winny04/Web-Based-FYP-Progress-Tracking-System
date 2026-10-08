@@ -1,0 +1,283 @@
+import os
+
+index_path = r"c:\Users\winny\source\repos\Web-Based-FYP-Progress-Tracking-System\FYPTracker\Views\Student\Index.cshtml"
+index_content = """@using FYPTracker.Models
+@model FYPProject?
+@{
+    ViewData["Title"] = "Student Dashboard";
+    var currentUser = ViewBag.CurrentUser as ApplicationUser;
+    var name = currentUser?.FullName ?? "Student";
+    var studentId = currentUser?.EmployeeId ?? "S12345678";
+    var supervisorName = Model?.Supervisor?.FullName ?? "Not Assigned";
+    var session = !string.IsNullOrEmpty(currentUser?.AcademicSession) ? currentUser.AcademicSession : (!string.IsNullOrEmpty(Model?.AcademicSession) ? Model.AcademicSession : "—");
+    
+    var milestones = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
+    
+    // --- Submission Progress Calculation ---
+    bool IsSubmitted(FYPMilestone m) {
+        if (m == null) return false;
+        if (m.SubmittedDate.HasValue) return true;
+        if (m.Status == "Approved" || m.Status == "Completed" || m.Status == "AdminApproved" || m.Status == "SupervisorSigned") return true;
+        return false;
+    }
+
+    var stage1Required = milestones.Where(m => m.Stage == 1 && m.IsRequired).ToList();
+    var stage2Required = milestones.Where(m => m.Stage == 2 && m.IsRequired).ToList();
+
+    int stage1Completed = stage1Required.Count(m => IsSubmitted(m));
+    int stage2Completed = stage2Required.Count(m => IsSubmitted(m));
+
+    double stage1Contrib = stage1Required.Count > 0 ? ((double)stage1Completed / stage1Required.Count) * 50.0 : 0;
+    double stage2Contrib = stage2Required.Count > 0 ? ((double)stage2Completed / stage2Required.Count) * 50.0 : 0;
+    
+    int overallProgress = (int)Math.Round(stage1Contrib + stage2Contrib);
+    string pbColor = overallProgress > 70 ? "bg-success" : (overallProgress > 30 ? "bg-primary" : "bg-warning");
+
+    // --- Next Required Action ---
+    FYPMilestone? nextAction = null;
+    string actionTitle = "You're all caught up!";
+    string actionDesc = "No pending actions are currently required.";
+    string actionStatus = "Completed";
+    string actionBtnText = "View Milestones";
+    string actionLink = "/Student/ProjectDetails";
+    string actionBadge = "bg-success";
+    int? actionDaysLeft = null;
+
+    var rejectedMilestone = milestones.FirstOrDefault(m => m.Status == "Rejected" || m.Status == "Revision" || m.Status == "ReturnedForChanges" || m.Status == "ReturnedForEdits");
+    if (rejectedMilestone != null) {
+        nextAction = rejectedMilestone;
+        actionTitle = nextAction.Title;
+        actionDesc = "Revision is required based on recent feedback. Please update your work and resubmit.";
+        actionStatus = "Revision Required";
+        actionBtnText = "Revise Submission";
+        actionLink = "/Student/Forms"; // Or Stage2 based on Stage
+        actionBadge = "bg-danger";
+    }
+    else {
+        var unsubmitted = milestones.Where(m => m.IsRequired && !IsSubmitted(m) && m.Status != "Locked" && m.Status != "DefenseScheduled")
+                                    .OrderBy(m => m.DueDate ?? DateTime.MaxValue).FirstOrDefault();
+        if (unsubmitted != null) {
+            nextAction = unsubmitted;
+            actionTitle = nextAction.Title;
+            actionDesc = $"Your next required milestone is due soon. Please prepare your submission.";
+            actionStatus = "Not Submitted";
+            actionBtnText = "Submit Now";
+            actionLink = nextAction.Stage == 2 ? "/Student/Stage2" : "/Student/Forms";
+            actionBadge = "bg-warning text-dark";
+        }
+        else {
+            var pendingReview = milestones.Where(m => IsSubmitted(m) && m.Status != "Approved" && m.Status != "Completed" && m.Status != "AdminApproved")
+                                          .OrderByDescending(m => m.SubmittedDate).FirstOrDefault();
+            if (pendingReview != null) {
+                nextAction = pendingReview;
+                actionTitle = nextAction.Title;
+                actionDesc = "Your submission is currently under review by your supervisor or examiner.";
+                actionStatus = "Pending Review";
+                actionBtnText = "View Submission";
+                actionLink = nextAction.Stage == 2 ? "/Student/Stage2" : "/Student/Forms";
+                actionBadge = "bg-info text-dark";
+            }
+        }
+    }
+
+    if (nextAction != null && nextAction.DueDate.HasValue) {
+        actionDaysLeft = (int)(nextAction.DueDate.Value.Date - DateTime.Today).TotalDays;
+    }
+
+    // --- Upcoming Deadlines ---
+    var upcomingDeadlines = milestones.Where(m => m.IsRequired && !IsSubmitted(m) && m.Status != "Locked")
+                                      .OrderBy(m => m.DueDate ?? DateTime.MaxValue)
+                                      .Take(4)
+                                      .ToList();
+
+    // --- Latest Feedback ---
+    var latestFeedbacks = milestones.SelectMany(m => m.Feedbacks ?? new List<FYPFeedback>())
+                                    .OrderByDescending(f => f.CreatedDate)
+                                    .Take(3)
+                                    .ToList();
+}
+
+<div class="container-xxl py-4">
+    <!-- Welcome Header -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4" style="background-color: #0f172a; color: white;">
+        <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <h4 class="fw-bolder mb-1">Welcome Back, @name</h4>
+                <div class="d-flex flex-wrap gap-3 align-items-center text-white-50 fs-7 fw-bold">
+                    <span><i class="fas fa-id-card me-1"></i> @studentId</span>
+                    <span>&bull;</span>
+                    <span><i class="fas fa-calendar-alt me-1"></i> @session</span>
+                    @if(Model != null) {
+                        <span>&bull;</span>
+                        <span><i class="fas fa-user-tie me-1"></i> Supervisor: @supervisorName</span>
+                    }
+                </div>
+            </div>
+            @if(Model == null) {
+                <div>
+                    <a href="/Student/SelectSupervisor" class="btn btn-primary fw-bold px-4 shadow-sm btn-sm">Find a Supervisor <i class="fas fa-arrow-right ms-2"></i></a>
+                </div>
+            }
+            else {
+                <div>
+                    <a href="/Student/ProjectDetails" class="btn btn-light text-dark fw-bold px-4 shadow-sm btn-sm">Project Details <i class="fas fa-arrow-right ms-2"></i></a>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if(Model != null) {
+        <div class="row g-4 mb-4">
+            <!-- Next Required Action (col-lg-8) -->
+            <div class="col-lg-8">
+                <div class="card border-0 shadow-sm rounded-3 h-100">
+                    <div class="card-header bg-white border-bottom pt-3 pb-2">
+                        <h6 class="fw-bolder text-dark mb-0"><i class="fas fa-bolt text-warning me-2"></i> Next Required Action</h6>
+                    </div>
+                    <div class="card-body p-4 d-flex flex-column justify-content-center">
+                        <div class="d-flex align-items-start gap-3 p-3 rounded-3" style="background-color: #f8fafc; border: 1px solid #e2e8f0;">
+                            <div class="flex-shrink-0 mt-1">
+                                @if (actionStatus == "Revision Required") { <i class="fas fa-exclamation-triangle text-danger fs-3"></i> }
+                                else if (actionStatus == "Not Submitted") { <i class="fas fa-file-upload text-warning fs-3"></i> }
+                                else if (actionStatus == "Pending Review") { <i class="fas fa-hourglass-half text-info fs-3"></i> }
+                                else { <i class="fas fa-check-circle text-success fs-3"></i> }
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <h6 class="fw-bolder text-dark mb-0">@actionTitle</h6>
+                                    <span class="badge @actionBadge rounded-pill px-2 py-1 fw-bold fs-8">@actionStatus</span>
+                                </div>
+                                <p class="text-muted fs-7 mb-2">@actionDesc</p>
+                                
+                                @if (nextAction != null && nextAction.DueDate.HasValue) {
+                                    <div class="d-flex align-items-center gap-3 mb-3">
+                                        <div class="text-muted fs-8 fw-bold"><i class="far fa-calendar me-1"></i> Due: @nextAction.DueDate.Value.ToString("dd MMM yyyy")</div>
+                                        @if (actionDaysLeft.HasValue) {
+                                            if (actionDaysLeft.Value < 0) { <span class="badge bg-danger rounded-pill fs-8"><i class="fas fa-exclamation me-1"></i> Overdue by @Math.Abs(actionDaysLeft.Value) days</span> }
+                                            else if (actionDaysLeft.Value <= 5) { <span class="badge bg-warning text-dark rounded-pill fs-8"><i class="fas fa-clock me-1"></i> @actionDaysLeft.Value days left</span> }
+                                            else { <span class="badge bg-light text-muted border rounded-pill fs-8"><i class="fas fa-clock me-1"></i> @actionDaysLeft.Value days left</span> }
+                                        }
+                                    </div>
+                                }
+                                <div class="@(nextAction != null && nextAction.DueDate.HasValue ? "" : "mt-2")">
+                                    <a href="@actionLink" class="btn btn-primary fw-bold px-3 py-1 btn-sm">@actionBtnText</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submission Progress (col-lg-4) -->
+            <div class="col-lg-4">
+                <div class="card border-0 shadow-sm rounded-3 h-100">
+                    <div class="card-header bg-white border-bottom pt-3 pb-2">
+                        <h6 class="fw-bolder text-dark mb-0"><i class="fas fa-chart-pie text-primary me-2"></i> Submission Progress</h6>
+                    </div>
+                    <div class="card-body p-4 d-flex flex-column justify-content-center">
+                        <div class="text-center mb-3">
+                            <h2 class="fw-bolder text-dark mb-0">@overallProgress%</h2>
+                            <div class="text-muted fw-bold fs-7">Overall Progress</div>
+                        </div>
+                        <div class="progress mb-3" style="height: 10px; border-radius: 99px;">
+                            <div class="progress-bar @pbColor progress-bar-striped progress-bar-animated" role="progressbar" style="width: @overallProgress%" aria-valuenow="@overallProgress" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div class="d-flex justify-content-between text-muted fs-8 fw-bold mb-1">
+                            <span>Stage 1 Completed:</span>
+                            <span class="text-dark">@stage1Completed / @stage1Required.Count</span>
+                        </div>
+                        <div class="d-flex justify-content-between text-muted fs-8 fw-bold mb-3">
+                            <span>Stage 2 Completed:</span>
+                            <span class="text-dark">@stage2Completed / @stage2Required.Count</span>
+                        </div>
+                        <div class="text-center">
+                            <span class="badge bg-light text-muted border fs-8 text-wrap px-2 py-1"><i class="fas fa-info-circle me-1"></i> Based on required submissions.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Upcoming Deadlines (col-lg-7) -->
+            <div class="col-lg-7">
+                <div class="card border-0 shadow-sm rounded-3 h-100">
+                    <div class="card-header bg-white border-bottom pt-3 pb-2 d-flex justify-content-between align-items-center">
+                        <h6 class="fw-bolder text-dark mb-0"><i class="far fa-calendar-alt text-info me-2"></i> Upcoming Deadlines</h6>
+                        <a href="/Student/ProjectDetails" class="text-primary fw-bold text-decoration-none fs-8">View All</a>
+                    </div>
+                    <div class="card-body p-0">
+                        @if(upcomingDeadlines.Any()) {
+                            <ul class="list-group list-group-flush rounded-bottom-3">
+                                @foreach(var ms in upcomingDeadlines) {
+                                    int days = ms.DueDate.HasValue ? (int)(ms.DueDate.Value.Date - DateTime.Today).TotalDays : 0;
+                                    <li class="list-group-item px-4 py-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <h6 class="fw-bold text-dark mb-1 fs-7">@ms.Title</h6>
+                                                <div class="text-muted fs-8 fw-bold">Due: @(ms.DueDate?.ToString("dd MMM yyyy") ?? "-")</div>
+                                            </div>
+                                            @if (days < 0) { <span class="badge bg-danger rounded-pill px-2 py-1 fs-8">Overdue</span> }
+                                            else if (days <= 7) { <span class="badge bg-warning text-dark rounded-pill px-2 py-1 fs-8">In @days days</span> }
+                                            else { <span class="badge bg-light border text-muted rounded-pill px-2 py-1 fs-8">In @days days</span> }
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else {
+                            <div class="text-center p-4">
+                                <i class="fas fa-calendar-check text-muted fs-3 opacity-25 mb-2"></i>
+                                <h6 class="fw-bold text-dark mb-1 fs-7">No upcoming deadlines</h6>
+                                <p class="text-muted fs-8 mb-0">You have no pending required milestones.</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Latest Feedback (col-lg-5) -->
+            <div class="col-lg-5">
+                <div class="card border-0 shadow-sm rounded-3 h-100">
+                    <div class="card-header bg-white border-bottom pt-3 pb-2">
+                        <h6 class="fw-bolder text-dark mb-0"><i class="fas fa-comment-dots text-primary me-2"></i> Latest Feedback</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        @if(latestFeedbacks.Any()) {
+                            <ul class="list-group list-group-flush rounded-bottom-3">
+                                @foreach(var fb in latestFeedbacks) {
+                                    <li class="list-group-item px-4 py-3">
+                                        <div class="d-flex align-items-start gap-3">
+                                            <div class="bg-light text-primary rounded-circle d-flex justify-content-center align-items-center border" style="width: 32px; height: 32px; min-width: 32px;">
+                                                <i class="fas fa-user-tie fs-8"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <h6 class="fw-bold text-dark mb-1 fs-7">@fb.Milestone?.Title</h6>
+                                                <p class="text-muted mb-2 fs-8" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">@fb.Comment</p>
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="text-muted fw-bold" style="font-size: 0.7rem;"><i class="far fa-clock me-1"></i> @fb.CreatedDate.ToString("dd MMM yyyy")</span>
+                                                    <a href="/Student/ProjectDetails" class="text-primary fw-bold text-decoration-none" style="font-size: 0.75rem;">View Details</a>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else {
+                            <div class="text-center p-4">
+                                <i class="fas fa-inbox text-muted fs-3 opacity-25 mb-2"></i>
+                                <h6 class="fw-bold text-dark mb-1 fs-7">No feedback yet</h6>
+                                <p class="text-muted fs-8 mb-0">Your latest submission feedback will appear here.</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+"""
+
+with open(index_path, "w", encoding="utf-8") as f:
+    f.write(index_content)

@@ -3,167 +3,212 @@
 }
 
 <style>
-    :root { --admin-grad: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
-
-    .page-hero {
-        background: var(--admin-grad);
-        border-radius: 24px;
-        padding: 40px 48px;
-        color: white;
-        margin-bottom: 32px;
-        box-shadow: 0 15px 35px -5px rgba(15, 23, 42, 0.4);
-        position: relative;
-        overflow: hidden;
+    .card {
+        border: 1px solid rgba(0,0,0,0.08);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        border-radius: 0.75rem;
+    }
+    .card-header {
+        background-color: transparent;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+    .form-control, .form-select {
+        border-color: #dee2e6;
+        border-radius: 0.375rem;
+    }
+    .form-control:focus, .form-select:focus {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    /* Milestone Status Badges */
+    .milestone-status-badge {
+        display: inline-block;
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 6px;
+        line-height: 1.4;
     }
 
-    .premium-card {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border-radius: 20px;
-        border: 1px solid rgba(0,0,0,0.05);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
-        padding: 32px;
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    /* Active - Green */
+    .milestone-status-badge.status-active {
+        background-color: #d1e7dd !important;
+        color: #0f5132 !important;
+        border: 1px solid #a3cfbb !important;
     }
-    
-    .premium-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
-        border-color: rgba(37, 99, 235, 0.2);
+
+    /* Inactive - Gray */
+    .milestone-status-badge.status-inactive {
+        background-color: #e9ecef !important;
+        color: #495057 !important;
+        border: 1px solid #ced4da !important;
     }
-    .z-index-1 { z-index: 1; }
 </style>
 
-<div class="container-fluid py-4">
-
-    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-4 position-relative">
-        <div class="position-absolute top-0 end-0 opacity-10 pe-none" style="transform: translate(10%, -10%);">
-            <i class="fas fa-cogs" style="font-size: 15rem; color: #ffffff;"></i>
-        </div>
-        <div class="position-relative z-index-1">
-            <h1 class="display-5 fw-bolder mb-2 text-white" style="letter-spacing: -1px;">
-                System <span style="background: linear-gradient(to right, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Settings</span>
-            </h1>
-            <p class="text-white-50 fs-5 mt-1 mb-0" style="font-weight: 300;">Manage global system configurations and preferences.</p>
+<div class="container-xxl py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h3 fw-bold text-dark mb-1">System Settings</h1>
+            <p class="text-muted mb-0">Manage academic deadlines, milestones, and system preferences.</p>
         </div>
     </div>
 
-    <div class="row g-4">
-        
-        <!-- Left Column: Dates and Timeouts -->
-        <div class="col-lg-7 d-flex flex-column gap-4">
-            
-            <div class="card premium-card border-top border-4 h-100" style="border-top-color: #10b981 !important;">
-                <h5 class="fw-bolder mb-1 text-dark"><i class="fas fa-calendar-check text-success me-2"></i>FYP Key Submission Dates</h5>
-                <p class="text-muted small mb-4">Configure global deadlines and timeouts for the system.</p>
-
-                @if (TempData["FYPSettingSuccess"] != null)
-                {
-                    <div class="alert alert-light-success border border-success border-opacity-25 shadow-sm p-3 mb-4 rounded-3 text-dark fw-bold"><i class="fas fa-check-circle text-success me-2"></i>@TempData["FYPSettingSuccess"]</div>
-                }
-                @if (TempData["FYPSettingError"] != null)
-                {
-                    <div class="alert alert-light-danger border border-danger border-opacity-25 shadow-sm p-3 mb-4 rounded-3 text-dark fw-bold"><i class="fas fa-exclamation-circle text-danger me-2"></i>@TempData["FYPSettingError"]</div>
-                }
-
-                <form asp-action="UpdateFYPSettings" method="post" class="mt-2">
-                    @Html.AntiForgeryToken()
-                    <div class="row g-4 mb-4">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small text-muted text-uppercase">
-                                <i class="fas fa-file-alt text-primary me-1"></i>DPP Submission Deadline
-                            </label>
-                            <input type="date" name="dppDeadline" class="form-control form-control-solid bg-light rounded-3 shadow-sm border-0 py-2 px-3" value="@ViewBag.DPPDeadline" />
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small text-muted text-uppercase">
-                                <i class="fas fa-star text-warning me-1"></i>FYP Exhibition Date
-                            </label>
-                            <input type="date" name="exhibitionDate" class="form-control form-control-solid bg-light rounded-3 shadow-sm border-0 py-2 px-3" value="@ViewBag.ExhibitionDate" />
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small text-muted text-uppercase">
-                                <i class="far fa-clock text-info me-1"></i>Exhibition Start Time
-                            </label>
-                            <input type="time" name="exhibitionTimeStart" class="form-control form-control-solid bg-light rounded-3 shadow-sm border-0 py-2 px-3" value="@ViewBag.ExhibitionTimeStart" />
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small text-muted text-uppercase">
-                                <i class="far fa-clock text-secondary me-1"></i>Exhibition End Time
-                            </label>
-                            <input type="time" name="exhibitionTimeEnd" class="form-control form-control-solid bg-light rounded-3 shadow-sm border-0 py-2 px-3" value="@ViewBag.ExhibitionTimeEnd" />
-                        </div>
-                    </div>
-
-                    <div class="p-4 bg-light rounded-4 mb-4 border border-opacity-10 shadow-sm">
-                        <label class="form-label fw-bold small text-muted text-uppercase mb-2">
-                            <i class="fas fa-hourglass-half text-danger me-1"></i>Supervisor Request Timeout (Days)
-                        </label>
-                        <div class="d-flex align-items-center gap-3">
-                            <input type="number" name="supervisorRequestTimeoutDays"
-                                   class="form-control form-control-solid bg-white shadow-sm border-0 rounded-3 text-center" style="width: 100px; font-weight: bold;" min="1" max="30"
-                                   value="@ViewBag.SupervisorRequestTimeoutDays" />
-                            <span class="text-muted small">
-                                Pending requests with no response will automatically reject.
-                            </span>
-                        </div>
-                    </div>
-
-                    <div class="text-end mt-4">
-                        <button type="submit" class="btn btn-success fw-bold px-4 py-2 rounded-pill shadow-sm">
-                            <i class="fas fa-save me-2"></i>Save Settings
-                        </button>
-                    </div>
-                </form>
-            </div>
+    <!-- Alert Messages -->
+    @if (TempData["FYPSettingSuccess"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+            <i class="fas fa-check-circle me-2"></i>@TempData["FYPSettingSuccess"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
+    }
+    @if (TempData["FYPSettingError"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <i class="fas fa-exclamation-circle me-2"></i>@TempData["FYPSettingError"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["BulkUpdateSuccess"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+            <i class="fas fa-check-circle me-2"></i>@TempData["BulkUpdateSuccess"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["BulkUpdateInfo"] != null)
+    {
+        <div class="alert alert-info alert-dismissible fade show shadow-sm" role="alert">
+            <i class="fas fa-info-circle me-2"></i>@TempData["BulkUpdateInfo"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["BulkUpdateError"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>@TempData["BulkUpdateError"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
 
-        <!-- Right Column: Tools & Actions -->
-        <div class="col-lg-5 d-flex flex-column gap-4">
-            
-            <div class="card premium-card border-top border-4" style="border-top-color: #8b5cf6 !important;">
-                <h5 class="fw-bolder mb-2 text-dark"><i class="fas fa-graduation-cap me-2 text-purple"></i>Update Milestone Dates</h5>
-                <p class="text-muted small mb-4">Set the global due date for a specific default milestone across all students in the current session.</p>
-                <form asp-action="UpdateDefaultMilestoneDate" method="post">
-                    @if (TempData["BulkUpdateSuccess"] != null)
+    <!-- Global Session Filter -->
+    <div class="card mb-4 border-primary border-opacity-25">
+        <div class="card-body bg-light rounded bg-opacity-50 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="bg-primary bg-opacity-10 text-primary p-2 rounded">
+                    <i class="fas fa-calendar-alt fs-5"></i>
+                </div>
+                <div>
+                    <h6 class="mb-0 fw-bold">Academic Session Context</h6>
+                    <small class="text-muted">Select a session to view and manage its specific milestones.</small>
+                </div>
+            </div>
+            <form method="get" class="m-0">
+                <select name="sessionFilter" class="form-select border-primary shadow-sm fw-bold" style="min-width: 200px;" onchange="this.form.submit()">
+                    @if(ViewBag.DistinctSessions != null)
                     {
-                        <div class="alert alert-light-success border border-success border-opacity-25 p-2 small mb-3 rounded-3 fw-bold text-success"><i class="fas fa-check me-1"></i>@TempData["BulkUpdateSuccess"]</div>
-                    }
-                    @if (TempData["BulkUpdateInfo"] != null)
-                    {
-                        <div class="alert alert-light-info border border-info border-opacity-25 p-2 small mb-3 rounded-3 fw-bold text-info"><i class="fas fa-info-circle me-1"></i>@TempData["BulkUpdateInfo"]</div>
-                    }
-                    @if (TempData["BulkUpdateError"] != null)
-                    {
-                        <div class="alert alert-light-danger border border-danger border-opacity-25 p-2 small mb-3 rounded-3 fw-bold text-danger"><i class="fas fa-exclamation-triangle me-1"></i>@TempData["BulkUpdateError"]</div>
-                    }
-                    @if(ViewBag.DistinctSessions == null || !((IEnumerable<string>)ViewBag.DistinctSessions).Any())
-                    {
-                        <div class="alert alert-warning border-0 p-3 small mb-3 rounded-3"><i class="fas fa-exclamation-circle me-1"></i>No active academic session found.</div>
+                        var hasSessions = false;
+                        foreach (var sessionName in (IEnumerable<string>)ViewBag.DistinctSessions)
+                        {
+                            hasSessions = true;
+                            if (ViewBag.CurrentSessionFilter == sessionName)
+                            {
+                                <option value="@sessionName" selected>@sessionName</option>
+                            }
+                            else
+                            {
+                                <option value="@sessionName">@sessionName</option>
+                            }
+                        }
+                        if (!hasSessions)
+                        {
+                            <option value="">No Active Sessions</option>
+                        }
                     }
                     else
                     {
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted text-uppercase">Academic Session</label>
-                            <select name="sessionFilter" class="form-select bg-light border-0 shadow-sm rounded-3 py-2 px-3" required>
-                                <option value="">-- Choose Session --</option>
-                                @foreach (var sessionName in (IEnumerable<string>)ViewBag.DistinctSessions)
-                                {
-                                    if (ViewBag.CurrentSessionFilter == sessionName)
-                                    {
-                                        <option value="@sessionName" selected>@sessionName</option>
-                                    }
-                                    else
-                                    {
-                                        <option value="@sessionName">@sessionName</option>
-                                    }
-                                }
-                            </select>
+                        <option value="">No Active Sessions</option>
+                    }
+                </select>
+            </form>
+        </div>
+    </div>
+
+    <!-- First Row: Submission Dates & Right Tools -->
+    <div class="row g-4 mb-4">
+        
+        <!-- Submission Dates -->
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header pt-4 pb-3">
+                    <h5 class="card-title fw-bold mb-1"><i class="fas fa-calendar-check text-success me-2"></i>Submission Dates</h5>
+                    <p class="text-muted small mb-0">Deadlines and request timeout</p>
+                </div>
+                <div class="card-body">
+                    <form asp-action="UpdateFYPSettings" method="post" class="h-100 d-flex flex-column">
+                        @Html.AntiForgeryToken()
+                        <div class="row g-3 mb-4">
+                            <div class="col-sm-6">
+                                <label class="form-label small fw-bold text-muted text-uppercase">DPP Deadline</label>
+                                <input type="date" name="dppDeadline" class="form-control" value="@ViewBag.DPPDeadline" />
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label small fw-bold text-muted text-uppercase">Exhibition Date</label>
+                                <input type="date" name="exhibitionDate" class="form-control" value="@ViewBag.ExhibitionDate" />
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label small fw-bold text-muted text-uppercase">Exhibition Start Time</label>
+                                <input type="time" name="exhibitionTimeStart" class="form-control" value="@ViewBag.ExhibitionTimeStart" />
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label small fw-bold text-muted text-uppercase">Exhibition End Time</label>
+                                <input type="time" name="exhibitionTimeEnd" class="form-control" value="@ViewBag.ExhibitionTimeEnd" />
+                            </div>
                         </div>
+                        
+                        <hr class="text-muted opacity-25" />
+                        
+                        <div class="mb-4">
+                            <label class="form-label small fw-bold text-muted text-uppercase">Supervisor Request Timeout</label>
+                            <div class="input-group" style="max-width: 220px;">
+                                <input type="number" name="supervisorRequestTimeoutDays" class="form-control" min="1" max="30" value="@ViewBag.SupervisorRequestTimeoutDays" />
+                                <span class="input-group-text bg-light text-muted">days</span>
+                            </div>
+                            <div class="form-text mt-2 text-muted">
+                                Pending requests with no response will be automatically rejected after this many days.
+                            </div>
+                        </div>
+
+                        <div class="mt-auto text-end">
+                            <button type="submit" class="btn btn-primary px-4 shadow-sm">Save Settings</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right side: Update Milestones & IAF -->
+        <div class="col-lg-5 d-flex flex-column gap-4">
+            
+            <!-- Update Milestone Dates -->
+            <div class="card flex-grow-1">
+                <div class="card-header pt-4 pb-3">
+                    <h5 class="card-title fw-bold mb-0"><i class="fas fa-sync-alt text-primary me-2"></i>Update Milestone Dates</h5>
+                </div>
+                <div class="card-body">
+                    <form asp-action="UpdateDefaultMilestoneDate" method="post" id="bulkUpdateForm">
+                        <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
+                        
                         <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted text-uppercase">Milestone</label>
-                            <select name="milestoneTitle" class="form-select bg-light border-0 shadow-sm rounded-3 py-2 px-3" required>
-                                <option value="">-- Choose Milestone --</option>
+                            <label class="form-label small fw-bold text-muted text-uppercase">Academic Session</label>
+                            <input type="text" class="form-control bg-light" value="@ViewBag.CurrentSessionFilter" disabled />
+                            <div class="form-text text-muted">Updating for the session selected above.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted text-uppercase">Milestone</label>
+                            <select name="milestoneTitle" class="form-select" required onchange="validateBulkUpdate()">
+                                <option value="">Select milestone...</option>
                                 <option value="IAF">FYP 1: Initial Assessment Form (IAF)</option>
                                 <option value="Proposal">FYP 1: Stage 1 Final Submission</option>
                                 <option value="Step 1:">Step 1: Turnitin Checking</option>
@@ -173,191 +218,243 @@
                                 <option value="Step 5:">Step 5: Presentation Slides Submission</option>
                             </select>
                         </div>
+                        
                         <div class="mb-4">
-                            <label class="form-label fw-bold small text-muted text-uppercase">New Due Date</label>
-                            <input type="date" name="deadline" class="form-control bg-light border-0 shadow-sm rounded-3 py-2 px-3" required />
+                            <label class="form-label small fw-bold text-muted text-uppercase">New Due Date</label>
+                            <input type="date" name="deadline" id="bulkUpdateDate" class="form-control" required onchange="validateBulkUpdate()" />
                         </div>
-                        <button type="submit" class="btn text-white w-100 fw-bold py-2 rounded-pill shadow-sm" style="background: #8b5cf6;">
-                            <i class="fas fa-sync-alt me-2"></i>Update Deadlines
+                        
+                        <button type="submit" id="btnBulkUpdate" class="btn btn-outline-primary w-100 shadow-sm" disabled onclick="return confirm('Are you sure you want to update deadlines for all students in this session?');">
+                            Update Deadline
                         </button>
-                    }
-                </form>
+                    </form>
+                </div>
             </div>
 
-            <div class="card premium-card border-top border-4" style="border-top-color: #3b82f6 !important;">
-                <h5 class="fw-bolder mb-2 text-primary"><i class="fas fa-file-signature me-2"></i>Approved IAFs Directory</h5>
-                <p class="text-muted small mb-4">View students who have had their Initial Project Allocation Form (IAF) approved.</p>
-                <a href="/Admin/ApprovedIafList" class="btn btn-outline-primary w-100 fw-bold py-2 rounded-pill shadow-sm">
-                    <i class="fas fa-external-link-alt me-2"></i>View Approved IAFs
-                </a>
+            <!-- Approved IAFs Directory -->
+            <div class="card">
+                <div class="card-body d-flex align-items-center justify-content-between p-4">
+                    <div class="d-flex align-items-center gap-3 w-100">
+                        <div class="bg-primary bg-opacity-10 p-3 rounded-circle text-primary">
+                            <i class="fas fa-file-signature fs-4"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h6 class="fw-bold mb-1">IAF Directory</h6>
+                            <small class="text-muted d-block mb-3">View and manage IAF reviews and approvals.</small>
+                            <a href="/Admin/ApprovedIafList" class="btn btn-sm btn-primary w-100 shadow-sm">View IAF Records</a>
+                        </div>
+                    </div>
+                </div>
             </div>
             
         </div>
     </div>
-    
+
     <!-- Default Milestones Section -->
-    <div class="row mt-4">
+    <div class="row">
         <div class="col-12">
-            <div class="card premium-card border-top border-4" style="border-top-color: #f59e0b !important;">
-                <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="card">
+                <div class="card-header pt-4 pb-3 d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
                     <div>
-                        <h5 class="fw-bolder mb-1 text-dark"><i class="fas fa-list-ol text-warning me-2"></i>Default Milestones (Stage 1)</h5>
-                        <p class="text-muted small mb-0">Manage the dynamic templates seeded to all active projects for the selected session.</p>
+                        <h5 class="card-title fw-bold mb-1"><i class="fas fa-list-ol text-warning me-2"></i>Default Milestones — Stage 1</h5>
+                        <p class="text-muted small mb-0">Manage milestones for each academic session</p>
                     </div>
-                    <form method="get" class="d-flex align-items-center gap-2">
-                        <label class="form-label mb-0 small fw-bold">Session:</label>
-                        <select name="sessionFilter" class="form-select form-select-sm shadow-sm" onchange="this.form.submit()">
-                            @if(ViewBag.DistinctSessions != null)
-                            {
-                                foreach (var sessionName in (IEnumerable<string>)ViewBag.DistinctSessions)
+                    <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#addTemplateModal">
+                        <i class="fas fa-plus me-1"></i> Add Milestone
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4 text-muted text-uppercase small fw-bold">Order</th>
+                                    <th class="text-muted text-uppercase small fw-bold">Milestone</th>
+                                    <th class="text-muted text-uppercase small fw-bold">Code</th>
+                                    <th class="text-muted text-uppercase small fw-bold">Required</th>
+                                    <th class="text-muted text-uppercase small fw-bold">Due Date</th>
+                                    <th class="text-muted text-uppercase small fw-bold">Status</th>
+                                    <th class="pe-4 text-end text-muted text-uppercase small fw-bold">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if(ViewBag.DefaultMilestoneTemplates != null)
                                 {
-                                    if (ViewBag.CurrentSessionFilter == sessionName)
+                                    var templates = (IEnumerable<FYPTracker.Models.DefaultMilestoneTemplate>)ViewBag.DefaultMilestoneTemplates;
+                                    if(templates.Any())
                                     {
-                                        <option value="@sessionName" selected>@sessionName</option>
+                                        foreach(var t in templates)
+                                        {
+                                            <tr>
+                                                <td class="ps-4 fw-bold text-muted">@t.DisplayOrder</td>
+                                                <td class="fw-bold text-dark">@t.Title</td>
+                                                <td><span class="badge bg-light text-dark border">@t.MilestoneCode</span></td>
+                                                <td>
+                                                    @if(t.IsRequired){ <span class="badge bg-primary text-white">Yes</span> }
+                                                    else { <span class="badge bg-light text-dark border">No</span> }
+                                                </td>
+                                                <td>@(t.DueDate?.ToString("dd MMM yyyy") ?? "-")</td>
+                                                <td>
+                                                    @if(t.IsActive){  <span class="badge milestone-status-badge status-active">Active</span> }
+                                                    else { <span class="badge milestone-status-badge status-inactive">Inactive</span> }
+                                                </td>
+                                                <td class="pe-4 text-end">
+                                                    <div class="d-inline-flex gap-2">
+                                                        <button class="btn btn-sm btn-light border text-primary" data-bs-toggle="modal" data-bs-target="#editTemplateModal-@t.Id" title="Edit">
+                                                            <i class="fas fa-pen"></i>
+                                                        </button>
+                                                        <form asp-action="ToggleDefaultMilestoneTemplate" method="post" class="m-0" onsubmit="return confirmToggle(this, '@t.IsActive');">
+                                                            <input type="hidden" name="id" value="@t.Id" />
+                                                            <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
+                                                            <button type="submit" class="btn btn-sm btn-light border @(t.IsActive ? "text-danger" : "text-success")" title="@(t.IsActive ? "Deactivate" : "Activate")">
+                                                                <i class="fas @(t.IsActive ? "fa-power-off" : "fa-check")"></i>
+                                                            </button>
+                                                        </form>
+                                                    </div>
+
+                                                    <!-- Edit Modal -->
+                                                    <div class="modal fade text-start" id="editTemplateModal-@t.Id" tabindex="-1">
+                                                        <div class="modal-dialog">
+                                                            <form asp-action="EditDefaultMilestoneTemplate" method="post" class="modal-content">
+                                                                <input type="hidden" name="id" value="@t.Id" />
+                                                                <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
+                                                                <input type="hidden" name="model.Stage" value="1" />
+                                                                <input type="hidden" name="model.IsActive" value="@(t.IsActive ? "true" : "false")" />
+                                                                
+                                                                <div class="modal-header border-bottom-0">
+                                                                    <h5 class="modal-title fw-bold">Edit Milestone</h5>
+                                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                                </div>
+                                                                <div class="modal-body">
+                                                                    <div class="row g-3">
+                                                                        <div class="col-md-4">
+                                                                            <label class="form-label small fw-bold">Display Order</label>
+                                                                            <input type="number" name="model.DisplayOrder" class="form-control" value="@t.DisplayOrder" required />
+                                                                        </div>
+                                                                        <div class="col-md-8">
+                                                                            <label class="form-label small fw-bold">Milestone Type/Code</label>
+                                                                            <select name="model.MilestoneCode" class="form-select" required>
+                                                                                @if(t.MilestoneCode=="IAF"){<option value="IAF" selected>IAF</option>}else{<option value="IAF">IAF</option>}
+                                                                                @if(t.MilestoneCode=="STAGE1_FINAL"){<option value="STAGE1_FINAL" selected>STAGE1_FINAL</option>}else{<option value="STAGE1_FINAL">STAGE1_FINAL</option>}
+                                                                                @if(t.MilestoneCode=="GENERIC"){<option value="GENERIC" selected>GENERIC</option>}else{<option value="GENERIC">GENERIC</option>}
+                                                                            </select>
+                                                                        </div>
+                                                                        <div class="col-12">
+                                                                            <label class="form-label small fw-bold">Milestone Title</label>
+                                                                            <input type="text" name="model.Title" class="form-control" value="@t.Title" required />
+                                                                        </div>
+                                                                        <div class="col-md-6">
+                                                                            <label class="form-label small fw-bold">Due Date</label>
+                                                                            <input type="date" name="model.DueDate" class="form-control" value="@t.DueDate?.ToString("yyyy-MM-dd")" />
+                                                                        </div>
+                                                                        <div class="col-md-6 d-flex flex-column justify-content-end pb-1">
+                                                                            <div class="form-check form-switch mt-2">
+                                                                                @if(t.IsRequired){ <input class="form-check-input" type="checkbox" name="model.IsRequired" value="true" checked> }
+                                                                                else { <input class="form-check-input" type="checkbox" name="model.IsRequired" value="true"> }
+                                                                                <label class="form-check-label ms-1">Required</label>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="modal-footer bg-light border-top-0">
+                                                                    <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+                                                                    <button type="submit" class="btn btn-primary px-4">Save Changes</button>
+                                                                </div>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
                                     }
                                     else
                                     {
-                                        <option value="@sessionName">@sessionName</option>
+                                        <tr>
+                                            <td colspan="7" class="text-center py-5 text-muted">
+                                                <i class="fas fa-inbox fs-2 mb-3 d-block text-secondary opacity-50"></i>
+                                                No milestones found for the selected session.
+                                            </td>
+                                        </tr>
                                     }
                                 }
-                            }
-                        </select>
-                    </form>
-                </div>
-
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Order</th>
-                                <th>Title & Code</th>
-                                <th>Required</th>
-                                <th>Due Date</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @if(ViewBag.DefaultMilestoneTemplates != null)
-                            {
-                                foreach(var t in (IEnumerable<FYPTracker.Models.DefaultMilestoneTemplate>)ViewBag.DefaultMilestoneTemplates)
-                                {
-                                    <tr>
-                                        <td>@t.DisplayOrder</td>
-                                        <td>
-                                            <div class="fw-bold">@t.Title</div>
-                                            <div class="badge bg-secondary text-white" style="font-size:0.7em;">@t.MilestoneCode</div>
-                                        </td>
-                                        <td>
-                                            @if(t.IsRequired){ <span class="badge bg-danger">Required</span> }
-                                            else { <span class="badge bg-light text-dark border">Optional</span> }
-                                        </td>
-                                        <td>@(t.DueDate?.ToString("dd MMM yyyy") ?? "-")</td>
-                                        <td>
-                                            @if(t.IsActive){ <span class="badge bg-success">Active</span> }
-                                            else { <span class="badge bg-secondary">Inactive</span> }
-                                        </td>
-                                        <td>
-                                            <div class="d-flex gap-2">
-                                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editTemplateModal-@t.Id"><i class="fas fa-edit"></i></button>
-                                                <form asp-action="ToggleDefaultMilestoneTemplate" method="post" class="m-0">
-                                                    <input type="hidden" name="id" value="@t.Id" />
-                                                    <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
-                                                    <button class="btn btn-sm @(t.IsActive ? "btn-outline-warning" : "btn-outline-success")">
-                                                        <i class="fas @(t.IsActive ? "fa-ban" : "fa-check")"></i>
-                                                    </button>
-                                                </form>
-                                            </div>
-
-                                            <!-- Edit Modal -->
-                                            <div class="modal fade" id="editTemplateModal-@t.Id" tabindex="-1">
-                                                <div class="modal-dialog">
-                                                    <form asp-action="EditDefaultMilestoneTemplate" method="post" class="modal-content">
-                                                        <input type="hidden" name="id" value="@t.Id" />
-                                                        <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
-                                                        <input type="hidden" name="model.Stage" value="1" />
-                                                        
-                                                        <div class="modal-header">
-                                                            <h5 class="modal-title">Edit Template</h5>
-                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                        </div>
-                                                        <div class="modal-body">
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Title</label>
-                                                                <input type="text" name="model.Title" class="form-control" value="@t.Title" required />
-                                                            </div>
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Milestone Code</label>
-                                                                <select name="model.MilestoneCode" class="form-select" required>
-                                                                    @if(t.MilestoneCode=="IAF"){<option value="IAF" selected>IAF</option>}else{<option value="IAF">IAF</option>}
-                                                                    @if(t.MilestoneCode=="STAGE1_FINAL"){<option value="STAGE1_FINAL" selected>STAGE1_FINAL</option>}else{<option value="STAGE1_FINAL">STAGE1_FINAL</option>}
-                                                                    @if(t.MilestoneCode=="GENERIC"){<option value="GENERIC" selected>GENERIC</option>}else{<option value="GENERIC">GENERIC</option>}
-                                                                </select>
-                                                            </div>
-                                                            <div class="mb-3">
-                                                                <label class="form-label">Due Date</label>
-                                                                <input type="date" name="model.DueDate" class="form-control" value="@t.DueDate?.ToString("yyyy-MM-dd")" />
-                                                            </div>
-                                                            <div class="row">
-                                                                <div class="col-6 mb-3">
-                                                                    <label class="form-label">Order</label>
-                                                                    <input type="number" name="model.DisplayOrder" class="form-control" value="@t.DisplayOrder" />
-                                                                </div>
-                                                                <div class="col-6 mb-3 pt-4">
-                                                                    <div class="form-check form-switch">
-                                                                        @if(t.IsRequired){ <input class="form-check-input" type="checkbox" name="model.IsRequired" value="true" checked> }
-                                                                        else { <input class="form-check-input" type="checkbox" name="model.IsRequired" value="true"> }
-                                                                        <label class="form-check-label">Is Required?</label>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                            <button type="submit" class="btn btn-primary">Save Changes</button>
-                                                        </div>
-                                                    </form>
-                                                </div>
-                                            </div>
-
-                                        </td>
-                                    </tr>
-                                }
-                            }
-                            
-                            <!-- Add New Row -->
-                            <tr>
-                                <form asp-action="AddDefaultMilestoneTemplate" method="post">
-                                    <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
-                                    <input type="hidden" name="model.Stage" value="1" />
-                                    <input type="hidden" name="model.IsActive" value="true" />
-                                    
-                                    <td><input type="number" name="model.DisplayOrder" class="form-control form-control-sm" value="99" style="width:60px;" /></td>
-                                    <td>
-                                        <input type="text" name="model.Title" class="form-control form-control-sm mb-1" placeholder="Title" required />
-                                        <select name="model.MilestoneCode" class="form-select form-select-sm" required>
-                                            <option value="GENERIC">GENERIC</option>
-                                            <option value="IAF">IAF</option>
-                                            <option value="STAGE1_FINAL">STAGE1_FINAL</option>
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <div class="form-check form-switch mt-2">
-                                            <input class="form-check-input" type="checkbox" name="model.IsRequired" value="true" checked>
-                                        </div>
-                                    </td>
-                                    <td><input type="date" name="model.DueDate" class="form-control form-control-sm" /></td>
-                                    <td><span class="badge bg-success">Active (Default)</span></td>
-                                    <td><button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-plus"></i> Add</button></td>
-                                </form>
-                            </tr>
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Add Milestone Modal -->
+    <div class="modal fade text-start" id="addTemplateModal" tabindex="-1">
+        <div class="modal-dialog">
+            <form asp-action="AddDefaultMilestoneTemplate" method="post" class="modal-content">
+                <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
+                <input type="hidden" name="model.Stage" value="1" />
+                
+                <div class="modal-header border-bottom-0">
+                    <h5 class="modal-title fw-bold">Add Milestone</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">Display Order</label>
+                            <input type="number" name="model.DisplayOrder" class="form-control" value="99" required />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-bold">Milestone Type/Code</label>
+                            <select name="model.MilestoneCode" class="form-select" required>
+                                <option value="GENERIC">GENERIC</option>
+                                <option value="IAF">IAF</option>
+                                <option value="STAGE1_FINAL">STAGE1_FINAL</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold">Milestone Title</label>
+                            <input type="text" name="model.Title" class="form-control" placeholder="e.g. Project Proposal" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Due Date</label>
+                            <input type="date" name="model.DueDate" class="form-control" />
+                        </div>
+                        <div class="col-md-6 d-flex flex-column gap-3 justify-content-end pb-1">
+                            <div class="form-check form-switch mt-2">
+                                <input class="form-check-input" type="checkbox" name="model.IsRequired" value="true" checked>
+                                <label class="form-check-label ms-1">Required</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="model.IsActive" value="true" checked>
+                                <label class="form-check-label ms-1">Active</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top-0">
+                    <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary px-4">Add Milestone</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 </div>
 
-
-
+<script>
+    function validateBulkUpdate() {
+        var milestone = document.querySelector('select[name="milestoneTitle"]').value;
+        var date = document.getElementById('bulkUpdateDate').value;
+        var btn = document.getElementById('btnBulkUpdate');
+        
+        if (milestone && date) {
+            btn.disabled = false;
+        } else {
+            btn.disabled = true;
+        }
+    }
+    
+    function confirmToggle(form, isActive) {
+        var actionText = (isActive === 'True' || isActive === 'true') ? 'disable' : 'enable';
+        return confirm('Are you sure you want to ' + actionText + ' this milestone?');
+    }
+</script>

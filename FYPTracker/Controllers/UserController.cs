@@ -238,6 +238,12 @@ namespace FYPTracker.Controllers
         [Authorize]
         public ActionResult Profile(string name)
         {
+            if (!string.Equals(User.Identity?.Name, name, StringComparison.OrdinalIgnoreCase) && !User.IsInRole("Admin") && !User.IsInRole("SuperAdmin"))
+            {
+                TempData["Error"] = "You are not authorized to view this profile.";
+                return RedirectToAction("Profile", new { name = User.Identity?.Name });
+            }
+
             var model = _context.ApplicationUsers.Include(u => u.EmpDepartment).Where(d => d.UserName == name).FirstOrDefault();
             if (model != null) {
                 var ownedRoles = _context.UserRoleMappings.Where(ur => ur.UserId == model.Id).Select(ur => ur.Role.Name).ToList();
@@ -578,13 +584,25 @@ namespace FYPTracker.Controllers
 
             // Redirect based on role
             if (emp.UserRoles.Any(r => r.Role.Name == "Student"))
+            {
+                HttpContext.Session.SetString("ActiveRole", "Student");
                 return RedirectToAction("Index", "Student");
+            }
             else if (emp.UserRoles.Any(r => r.Role.Name == "Supervisor"))
+            {
+                HttpContext.Session.SetString("ActiveRole", "Supervisor");
                 return RedirectToAction("Index", "Supervisor");
+            }
             else if (emp.UserRoles.Any(r => r.Role.Name == "SuperAdmin") || emp.UserRoles.Any(r => r.Role.Name == "Admin"))
+            {
+                HttpContext.Session.SetString("ActiveRole", "Admin");
                 return RedirectToAction("Index", "Admin");
+            }
             else if (emp.UserRoles.Any(r => r.Role.Name == "Examiner"))
+            {
+                HttpContext.Session.SetString("ActiveRole", "Examiner");
                 return RedirectToAction("Index", "Examiner");
+            }
 
             return RedirectToAction("Index", "Home");
         }
@@ -643,13 +661,25 @@ namespace FYPTracker.Controllers
             if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
 
             if (emp.UserRoles.Any(r => r.Role.Name == "Student"))
+            {
+                HttpContext.Session.SetString("ActiveRole", "Student");
                 return RedirectToAction("Index", "Student");
+            }
             else if (emp.UserRoles.Any(r => r.Role.Name == "Supervisor"))
+            {
+                HttpContext.Session.SetString("ActiveRole", "Supervisor");
                 return RedirectToAction("Index", "Supervisor");
+            }
             else if (emp.UserRoles.Any(r => r.Role.Name == "SuperAdmin") || emp.UserRoles.Any(r => r.Role.Name == "Admin"))
+            {
+                HttpContext.Session.SetString("ActiveRole", "Admin");
                 return RedirectToAction("Index", "Admin");
+            }
             else if (emp.UserRoles.Any(r => r.Role.Name == "Examiner"))
+            {
+                HttpContext.Session.SetString("ActiveRole", "Examiner");
                 return RedirectToAction("Index", "Examiner");
+            }
 
             return RedirectToAction("Index", "Home");
         }
