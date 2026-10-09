@@ -1,0 +1,63 @@
+File: Controllers/StudentController.cs
+Method: SubmitDigitalForm(), inside branch:
+    else if (formType == "Initial Project Allocation Form (IAF)")
+
+Find these lines (after resolving / creating currentAttempt):
+
+    string existingSignature = currentAttempt.SupervisorSignature ?? "";
+
+INSERT the following block IMMEDIATELY BEFORE this line:
+
+    // Preserve the exact Admin IAF form definition on the first save of
+    // each attempt. Later revisions keep the original snapshot.
+    const string iafSnapshotKey = "__iafTemplateSnapshot";
+    if (currentAttempt.FormData != null &&
+        currentAttempt.FormData.TryGetValue(iafSnapshotKey, out var priorTemplateSnapshot) &&
+        !string.IsNullOrWhiteSpace(priorTemplateSnapshot))
+    {
+        currentFormData[iafSnapshotKey] = priorTemplateSnapshot;
+    }
+    else
+    {
+        var iafTemplateFile = System.IO.Path.Combine(
+            _env.ContentRootPath,
+            "FormTemplates",
+            "InitialProjectAllocationForm.default.json");
+
+        if (!System.IO.File.Exists(iafTemplateFile))
+        {
+            TempData["Error"] = "IAF template file is missing.";
+            return RedirectToAction("Forms");
+        }
+
+        var templateJson = await System.IO.File.ReadAllTextAsync(iafTemplateFile);
+        var templateModel = System.Text.Json.JsonSerializer.Deserialize<
+            FYPTracker.ViewModels.MeetingRecordTemplateVM>(
+                templateJson,
+                new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+        if (templateModel?.Fields == null || templateModel.Fields.Count == 0)
+        {
+            TempData["Error"] = "IAF template content is invalid.";
+            return RedirectToAction("Forms");
+        }
+
+        currentFormData[iafSnapshotKey] = templateJson;
+    }
+
+Do NOT change:
+    currentAttempt.FormData = currentFormData;
+    formType guards; Objective validation; Submission/Signing statuses.
+
+Important:
+- Already-signed older attempts have no snapshot; they keep the historical
+  legacy layout in the new ViewIaf.cshtml.
+- New drafts / supervisor-review attempts receive the exact Admin JSON
+  snapshot the first time they are saved and keep it thereafter.
+- This is a minimal patch for a currently changing codebase; don't blindly
+  overwrite your entire StudentController.cs from a previous upload.
+- Verify the FYPMilestone.Remarks SQL column is nvarchar(max); an entire JSON
+  snapshot per IAF attempt is significantly larger than one label/version.

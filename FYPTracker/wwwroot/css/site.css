@@ -52,3 +52,31 @@ textarea.form-control {
     min-height: 100px;
     resize: vertical;
 }
+
+/* =========================================
+   FYP Tracker - Sticky Header
+   ========================================= */
+
+#kt_header {
+    position: sticky !important;
+    top: 0;
+    width: 100%;
+    z-index: 1050;
+    background-color: #ffffff;
+    border-bottom: 1px solid #e9edf3;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+}
+
+/* Smooth header appearance */
+#kt_header .header-menu,
+#kt_header .topbar {
+    transition: background-color 0.2s ease;
+}
+
+/* Responsive profile */
+@media (max-width: 1199.98px) {
+    #kt_header .topbar-profile-info,
+    #kt_header .topbar-profile-arrow {
+        display: none !important;
+    }
+}

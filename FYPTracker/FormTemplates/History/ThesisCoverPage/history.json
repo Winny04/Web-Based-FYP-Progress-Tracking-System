@@ -1,0 +1,49 @@
+[
+  {
+    "eventId": "bc28ba18-3300-4f5c-812e-92a82e48da27",
+    "templateKey": "thesis-cover-page",
+    "templateVersion": "1.0",
+    "previousVersion": null,
+    "actionType": "Created",
+    "modifiedBy": "System Baseline",
+    "dateModifiedUtc": "2026-10-08T23:43:37.8596143Z",
+    "fieldChanges": [],
+    "restoredFromVersion": null
+  },
+  {
+    "eventId": "f9e28ded-bcd7-4cfe-b626-b5017a758ac7",
+    "templateKey": "thesis-cover-page",
+    "templateVersion": "1.1",
+    "previousVersion": "1.0",
+    "actionType": "Updated",
+    "modifiedBy": "Administrator",
+    "dateModifiedUtc": "2026-10-09T09:20:28.1676435Z",
+    "fieldChanges": [
+      {
+        "fieldKey": "ThesisTitle",
+        "propertyName": "Label",
+        "previousValue": "Thesis Title",
+        "newValue": "Thesis TitleS"
+      }
+    ],
+    "restoredFromVersion": null
+  },
+  {
+    "eventId": "8911584f-68bd-4d7c-8898-ac1cc238bd53",
+    "templateKey": "thesis-cover-page",
+    "templateVersion": "1.2",
+    "previousVersion": "1.1",
+    "actionType": "Updated",
+    "modifiedBy": "Administrator",
+    "dateModifiedUtc": "2026-10-09T09:20:41.2452694Z",
+    "fieldChanges": [
+      {
+        "fieldKey": "ThesisTitle",
+        "propertyName": "Label",
+        "previousValue": "Thesis TitleS",
+        "newValue": "Thesis Title"
+      }
+    ],
+    "restoredFromVersion": null
+  }
+]

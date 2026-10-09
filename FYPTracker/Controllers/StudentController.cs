@@ -207,17 +207,61 @@ namespace FYPTracker.Controllers
         // ──────────────────────────────────────────────────────
         private async Task<ApplicationUser?> GetCurrentUserAsync()
         {
-            var user = HttpContext.User;
-            if (user?.Identity == null || !user.Identity.IsAuthenticated) return null;
+            var principal = HttpContext.User;
 
-            if (int.TryParse(user.FindFirst("Id")?.Value, out int id))
-            {
-                return await _context.ApplicationUsers
-                    .Include(u => u.EmpDepartment)
-                    .Include(u => u.UserRoles).ThenInclude(r => r.Role)
-                    .FirstOrDefaultAsync(u => u.Id == id);
-            }
-            return null;
+            if (principal?.Identity?.IsAuthenticated != true)
+                return null;
+
+            if (!int.TryParse(principal.FindFirst("Id")?.Value, out int id))
+                return null;
+
+            return await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.Id == id);
+        }
+        private async Task<AcademicSession?> GetStudentSessionAsync(int studentId)
+        {
+            var sessionName = await _context.FYPProjects
+                .Where(p => p.StudentId == studentId)
+                .OrderByDescending(p => p.CreatedDate)
+                .Select(p => p.AcademicSession)
+                .FirstOrDefaultAsync();
+
+            if (string.IsNullOrWhiteSpace(sessionName))
+                return null;
+
+            return await _context.AcademicSessions
+                .FirstOrDefaultAsync(s => s.Name == sessionName);
+        }
+
+        private async Task<DateTime?> GetMeetingBookingCutoffAsync(int studentId, int stage = 1)
+        {
+            var session = await GetStudentSessionAsync(studentId);
+
+            if (session?.EndDate == null)
+                return null;
+
+            string targetCode = stage == 1 ? "STAGE1_FINAL" : "STAGE2_FINAL";
+
+            // Find Stage Final Default Milestone for student's session
+            var finalDueDate = await _context.DefaultMilestoneTemplates
+                .Where(m =>
+                    m.AcademicSessionId == session.Id &&
+                    m.Stage == stage &&
+                    m.MilestoneCode == targetCode &&
+                    m.IsActive)
+                .Select(m => m.DueDate)
+                .FirstOrDefaultAsync();
+
+            if (!finalDueDate.HasValue)
+                return null;
+
+            // All meetings must be scheduled at least 7 days before final due date
+            var cutoff = finalDueDate.Value.Date.AddDays(-7);
+
+            // Also respect Academic Session end date
+            return cutoff < session.EndDate.Value.Date
+                ? cutoff
+                : session.EndDate.Value.Date;
         }
 
         // ──────────────────────────────────────────────────────
@@ -838,6 +882,10 @@ namespace FYPTracker.Controllers
                         {"obj1", finalObj1},
                         {"obj2", finalObj2},
                         {"obj3", finalObj3},
+                        {"references", references ?? ""},
+                        {"studentName", user.FullName ?? ""},
+                        {"coventryId", user.CoventryId ?? ""},
+                        {"program", user.Programme ?? ""},
                         {"agreedSupervisor", Request.Form.TryGetValue("supervisorName", out var supName) ? supName.ToString() : ""}
                     };
 
@@ -861,6 +909,53 @@ namespace FYPTracker.Controllers
                         history.Attempts.Add(currentAttempt);
                     }
 
+                    // Save the Admin IAF template used by this attempt.
+                    const string iafSnapshotKey = "__iafTemplateSnapshot";
+
+                    if (currentAttempt.FormData != null &&
+                        currentAttempt.FormData.TryGetValue(
+                            iafSnapshotKey, out var priorTemplateSnapshot) &&
+                        !string.IsNullOrWhiteSpace(priorTemplateSnapshot))
+                    {
+                        // Keep the original template for this attempt.
+                        currentFormData[iafSnapshotKey] = priorTemplateSnapshot;
+                    }
+                    else
+                    {
+                        var iafTemplateFile = System.IO.Path.Combine(
+                            _env.ContentRootPath,
+                            "FormTemplates",
+                            "InitialProjectAllocationForm.default.json");
+
+                        if (!System.IO.File.Exists(iafTemplateFile))
+                        {
+                            TempData["Error"] = "IAF template file is missing.";
+                            return RedirectToAction("Forms");
+                        }
+
+                        var templateJson =
+                            await System.IO.File.ReadAllTextAsync(iafTemplateFile);
+
+                        var templateModel =
+                            System.Text.Json.JsonSerializer.Deserialize<
+                                FYPTracker.ViewModels.MeetingRecordTemplateVM>(
+                                    templateJson,
+                                    new System.Text.Json.JsonSerializerOptions
+                                    {
+                                        PropertyNameCaseInsensitive = true
+                                    });
+
+                        if (templateModel?.Fields == null ||
+                            templateModel.Fields.Count == 0)
+                        {
+                            TempData["Error"] = "IAF template content is invalid.";
+                            return RedirectToAction("Forms");
+                        }
+
+                        currentFormData[iafSnapshotKey] = templateJson;
+                    }
+
+                    // KEEP THIS ORIGINAL LINE.
                     string existingSignature = currentAttempt.SupervisorSignature ?? "";
                     if (!string.IsNullOrEmpty(existingSignature))
                     {
@@ -1167,6 +1262,22 @@ namespace FYPTracker.Controllers
             return View(project);
         }
 
+
+        private async Task<AcademicSession?> GetStudentAcademicSessionAsync(int studentId)
+        {
+            var sessionName = await _context.FYPProjects
+                .Where(p => p.StudentId == studentId)
+                .OrderByDescending(p => p.CreatedDate)
+                .Select(p => p.AcademicSession)
+                .FirstOrDefaultAsync();
+
+            if (string.IsNullOrWhiteSpace(sessionName))
+                return null;
+
+            return await _context.AcademicSessions
+                .FirstOrDefaultAsync(s => s.Name == sessionName);
+        }
+
         // ══════════════════════════════════════════════════════
         //  BOOK MEETING
         // ══════════════════════════════════════════════════════
@@ -1187,8 +1298,10 @@ namespace FYPTracker.Controllers
 
             // ── Check if supervisor has configured any availability ──
             bool supervisorHasAvailability = false;
-            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
+            var activeSession = await GetStudentSessionAsync(user.Id);
             ViewBag.ActiveSession = activeSession;
+            ViewBag.MeetingBookingCutoff =
+    await GetMeetingBookingCutoffAsync(user.Id);
             
             if (approvedRequest?.Supervisor != null)
             {
@@ -1230,6 +1343,12 @@ namespace FYPTracker.Controllers
                 .ToListAsync();
 
             ViewBag.Meetings = meetings;
+
+            var pendingReschedules = await _context.MeetingRescheduleRequests
+                .Where(r => r.StudentId == user.Id && (r.Status == "Pending" || r.Status == "CounterProposed"))
+                .ToListAsync();
+            ViewBag.PendingReschedules = pendingReschedules;
+
             return View();
         }
 
@@ -1255,7 +1374,7 @@ namespace FYPTracker.Controllers
             }
 
             // ── Academic Session Validation ──
-            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
+            var activeSession = await GetStudentSessionAsync(user.Id);
             if (activeSession == null || !activeSession.StartDate.HasValue || !activeSession.EndDate.HasValue)
             {
                 TempData["Error"] = "There is no currently active Academic Session with valid dates. Please contact an admin.";
@@ -1268,9 +1387,22 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
-            if (parsedDate.Date.AddDays(91) > activeSession.EndDate.Value.Date)
+            var bookingCutoff = await GetMeetingBookingCutoffAsync(user.Id, stage);
+
+            if (!bookingCutoff.HasValue)
             {
-                TempData["Error"] = "The 14-week meeting schedule cannot be completed within the current academic session. Please select an earlier date.";
+                TempData["Error"] =
+                    "Final Default Milestone due date is not configured. Please contact Admin.";
+
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            if (parsedDate.Date > bookingCutoff.Value.Date)
+            {
+                TempData["Error"] =
+                    $"Meetings must be completed at least 7 days before the Final Default Milestone due date. " +
+                    $"Last available meeting date: {bookingCutoff.Value:dd MMM yyyy}.";
+
                 return RedirectToAction(nameof(BookMeeting));
             }
 
@@ -1457,9 +1589,31 @@ namespace FYPTracker.Controllers
                 return Json(new { slots = new List<string>(), message = "Invalid date" });
 
             // Get supervisor's schedule logic
-            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
+            var user = await GetCurrentUserAsync();
+            if (user == null)
+                return Json(new { slots = new List<string>(), message = "Please log in." });
+            var activeSession = await GetStudentSessionAsync(user.Id);
             if (activeSession == null)
                 return Json(new { slots = new List<string>(), message = "No active academic session found." });
+
+            // Validate meeting date against session and final milestone cutoff
+            var fypProject = await _context.FYPProjects.OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
+            int currentStage = 1;
+            var bookingCutoff = await GetMeetingBookingCutoffAsync(user.Id, currentStage);
+
+            if (!bookingCutoff.HasValue ||
+                !activeSession.StartDate.HasValue ||
+                parsedDate.Date < DateTime.Today ||
+                parsedDate.Date < activeSession.StartDate.Value.Date ||
+                parsedDate.Date > bookingCutoff.Value.Date)
+            {
+                return Json(new
+                {
+                    slots = new List<string>(),
+                    noAvailability = true,
+                    message = "Selected date is outside the allowed meeting period."
+                });
+            }
 
             bool hasTimetable = await _context.SupervisorTimetableEntries.AnyAsync(t => t.SupervisorId == supervisorId && t.AcademicSessionId == activeSession.Id);
             if (!hasTimetable)
@@ -1585,6 +1739,24 @@ namespace FYPTracker.Controllers
 
             if (meeting != null && meeting.ProposedNewDate.HasValue)
             {
+                // Validate proposed date before accepting
+                int stageToUse = meeting.Stage ?? 1;
+                var cutoff = await GetMeetingBookingCutoffAsync(user.Id, stageToUse);
+                var session = await GetStudentSessionAsync(user.Id);
+                var proposedDate = meeting.ProposedNewDate.Value.Date;
+
+                if (!cutoff.HasValue ||
+                    session?.StartDate == null ||
+                    proposedDate < DateTime.Today ||
+                    proposedDate < session.StartDate.Value.Date ||
+                    proposedDate > cutoff.Value.Date)
+                {
+                    TempData["Error"] =
+                        "Proposed meeting date is outside the allowed meeting period.";
+
+                    return RedirectToAction(nameof(BookMeeting));
+                }
+
                 meeting.MeetingDate = meeting.ProposedNewDate.Value;
                 meeting.MeetingDay  = meeting.ProposedNewDate.Value.DayOfWeek.ToString();
                 meeting.Status      = "Approved";
@@ -1620,7 +1792,7 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> RescheduleMeeting(int meetingId, string meetingDate, string meetingTime)
+        public async Task<IActionResult> RescheduleMeeting(int meetingId, string meetingDate, string meetingTime, string reason)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "User");
@@ -1628,6 +1800,29 @@ namespace FYPTracker.Controllers
             if (!DateTime.TryParse(meetingDate, out var parsedDate))
             {
                 TempData["Error"] = "Invalid date format.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            if (string.IsNullOrWhiteSpace(reason) || reason.Length < 10)
+            {
+                TempData["Error"] = "Please provide a valid reason (minimum 10 characters).";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            var meeting = await _context.MeetingBookings
+                .FirstOrDefaultAsync(m => m.Id == meetingId && m.StudentId == user.Id);
+
+            int stageToUse = meeting?.Stage ?? 1;
+            var bookingCutoff = await GetMeetingBookingCutoffAsync(user.Id, stageToUse);
+            var activeSession = await GetStudentSessionAsync(user.Id);
+
+            if (!bookingCutoff.HasValue ||
+                activeSession?.StartDate == null ||
+                parsedDate.Date < DateTime.Today ||
+                parsedDate.Date < activeSession.StartDate.Value.Date ||
+                parsedDate.Date > bookingCutoff.Value.Date)
+            {
+                TempData["Error"] = "Rescheduled meeting date is outside the allowed period.";
                 return RedirectToAction(nameof(BookMeeting));
             }
 
@@ -1641,116 +1836,138 @@ namespace FYPTracker.Controllers
                 meetingTime = firstMeeting.MeetingTime;
             }
 
-            var meeting = await _context.MeetingBookings
-                .FirstOrDefaultAsync(m => m.Id == meetingId && m.StudentId == user.Id);
-
             if (meeting != null)
             {
-                MeetingBooking targetBooking;
-
-                if (meeting.Status == "Pending" || meeting.Status == "Approved")
+                // Prevent multiple active reschedule requests
+                var existingRequest = await _context.MeetingRescheduleRequests
+                    .AnyAsync(r => r.MeetingBookingId == meeting.Id && r.Status == "Pending");
+                
+                if (existingRequest)
                 {
-                    // Update existing meeting instead of duplicating it
-                    meeting.MeetingDate = parsedDate;
-                    meeting.MeetingDay = parsedDate.DayOfWeek.ToString();
-                    meeting.MeetingTime = meetingTime;
-                    meeting.Status = "Pending";
-                    
-                    _context.MeetingBookings.Update(meeting);
-                    targetBooking = meeting;
-                }
-                else
-                {
-                    // Create a completely new booking so the old one (e.g. Rejected) stays in history
-                    var newBooking = new MeetingBooking
-                    {
-                        StudentId = user.Id,
-                        SupervisorId = meeting.SupervisorId,
-                        MeetingDate = parsedDate,
-                        MeetingDay = parsedDate.DayOfWeek.ToString(),
-                        MeetingTime = meetingTime,
-                        Reason = string.IsNullOrEmpty(meeting.Reason) ? "Rescheduled meeting" : meeting.Reason,
-                        Status = "Pending",
-                        CreatedDate = DateTime.Now
-                    };
-                    
-                    _context.MeetingBookings.Add(newBooking);
-                    targetBooking = newBooking;
+                    TempData["Error"] = "There is already a pending reschedule request for this meeting.";
+                    return RedirectToAction(nameof(BookMeeting));
                 }
 
-                // Mark any previous unread notifications for this meeting as read
-                var oldNotifs = await _context.FYPNotifications
-                    .Where(n => n.RelatedRecordId == meeting.Id && n.Type == "MeetingRequest" && !n.IsRead)
-                    .ToListAsync();
-                foreach (var oldNotif in oldNotifs)
+                // Create a Reschedule Request instead of editing the booking directly
+                var request = new MeetingRescheduleRequest
                 {
-                    oldNotif.IsRead = true;
-                    oldNotif.ReadDate = DateTime.Now;
-                }
+                    MeetingBookingId = meeting.Id,
+                    StudentId = user.Id,
+                    SupervisorId = meeting.SupervisorId,
+                    OriginalDate = meeting.MeetingDate,
+                    OriginalTime = meeting.MeetingTime,
+                    ProposedDate = parsedDate,
+                    ProposedTime = meetingTime,
+                    Reason = reason,
+                    Status = "Pending",
+                    CreatedDate = DateTime.Now
+                };
 
-                // Create a new notification for the supervisor with the new details
-                _context.FYPNotifications.Add(new FYPNotification
-                {
-                    RecipientId = meeting.SupervisorId,
-                    Type = "MeetingRequest",
-                    Title = "Meeting Rescheduled",
-                    Message = $"Student {user.FullName} booked a new meeting request to {parsedDate:dd MMM yyyy} at {meetingTime}. Reason: {(string.IsNullOrEmpty(targetBooking.Reason) ? "None provided" : targetBooking.Reason)}",
-                    RelatedRecordId = targetBooking.Id // Note: Id will be assigned after SaveChanges, but it's okay for now or we can save first
-                });
-
+                _context.MeetingRescheduleRequests.Add(request);
                 await _context.SaveChangesAsync();
 
-                // Update the related record ID after save
-                var latestNotif = await _context.FYPNotifications.OrderByDescending(n => n.Id).FirstOrDefaultAsync(n => n.RecipientId == meeting.SupervisorId && n.Type == "MeetingRequest");
-                if (latestNotif != null) {
-                    latestNotif.RelatedRecordId = targetBooking.Id;
-                    await _context.SaveChangesAsync();
-                }
+                await LogActivityAsync(user.Id, "MeetingUpdate", "Meeting Reschedule Requested", 
+                    $"You submitted a request to reschedule the meeting on {meeting.MeetingDate:dd MMM}.");
 
-                await LogActivityAsync(user.Id, "MeetingUpdate", "Meeting Rescheduled", 
-                    $"Meeting booked for {parsedDate:dd MMM} at {meetingTime}.");
-                
-                var supervisor = await _context.ApplicationUsers.FindAsync(meeting.SupervisorId);
-                string supName = supervisor?.FullName ?? "your supervisor";
-
-                if (supervisor != null && !string.IsNullOrEmpty(supervisor.Email))
+                if (meeting.SupervisorId > 0)
                 {
-                    string supSubject = "FYP Meeting Rescheduled by Student";
-                    string message = $"<p>Dear {supervisor.FullName},</p><br/><p>Student <strong>{user.FullName}</strong> has rescheduled a meeting.</p><ul><li><strong>New Date:</strong> {parsedDate:dd MMM yyyy}</li><li><strong>New Time:</strong> {meetingTime}</li></ul>";
-                    var request = HttpContext.Request;
-                    string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
-                    string supBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(supSubject, message, "Log In to Re-Approve", loginUrl);
-                    _emailService.Send(supervisor.Email, supSubject, supBody);
-                }
-                
-                // --- SignalR Real-Time Notification ---
-                var reschedulePayload = new {
-                    Type = "MeetingRescheduled",
-                    MeetingId = targetBooking.Id,
-                    StudentId = user.Id,
-                    StudentName = user.FullName,
-                    StudentMatric = user.EmployeeId,
-                    MeetingDate = targetBooking.MeetingDate.ToString("yyyy-MM-dd"),
-                    MeetingDateFormatted = targetBooking.MeetingDate.ToString("dd MMM yyyy"),
-                    MeetingTime = targetBooking.MeetingTime,
-                    Session = user.AcademicSession,
-                    Status = "Pending",
-                    Title = "Meeting Rescheduled",
-                    Message = $"Student {user.FullName} rescheduled a meeting to {parsedDate:dd MMM yyyy} at {meetingTime}."
-                };
-                await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", reschedulePayload);
+                    await AddNotificationAsync(meeting.SupervisorId, "Meeting", "Reschedule Request",
+                        $"Student {user.FullName} requested to reschedule their meeting on {meeting.MeetingDate:dd MMM}.");
 
-                if (!string.IsNullOrEmpty(user.Email))
+                    var reschedulePayload = new {
+                        Type = "MeetingRescheduled",
+                        MeetingId = meeting.Id,
+                        Session = user.AcademicSession,
+                        StudentName = user.FullName,
+                        Title = "Reschedule Request",
+                        Message = $"Student {user.FullName} requested to reschedule."
+                    };
+                    await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", reschedulePayload);
+                }
+
+                TempData["Success"] = "Reschedule request submitted. Pending supervisor approval.";
+            }
+
+            return RedirectToAction(nameof(BookMeeting));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AcceptRescheduleProposal(int requestId)
+        {
+            var user = await GetCurrentUserAsync();
+            var request = await _context.MeetingRescheduleRequests
+                .Include(r => r.MeetingBooking)
+                .FirstOrDefaultAsync(r => r.Id == requestId && r.StudentId == user.Id && r.Status == "CounterProposed");
+            
+            if (request != null)
+            {
+                var studentSessionName = await _context.FYPProjects.Where(p => p.StudentId == request.StudentId).OrderByDescending(p => p.CreatedDate).Select(p => p.AcademicSession).FirstOrDefaultAsync();
+                var studentSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == studentSessionName);
+
+                if (studentSession == null || request.ProposedDate.Date < studentSession.StartDate?.Date)
                 {
-                    string stuSubject = "Meeting Rescheduled Successfully";
-                    string message = $"<p>Dear {user.FullName},</p><br/><p>Your meeting with <strong>{supName}</strong> has been rescheduled to {parsedDate:dd MMM yyyy} at {meetingTime} and is pending approval.</p>";
-                    var request = HttpContext.Request;
-                    string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
-                    string stuBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(stuSubject, message, "Log In to View Details", loginUrl);
-                    _emailService.Send(user.Email, stuSubject, stuBody);
+                    TempData["Error"] = "The proposed date is invalid or before the session starts.";
+                    return RedirectToAction(nameof(BookMeeting));
                 }
 
-                TempData["Success"] = "Meeting rescheduled successfully! Awaiting supervisor re-approval.";
+                request.Status = "Approved";
+                request.RespondedDate = DateTime.Now;
+
+                if (request.MeetingBooking != null)
+                {
+                    request.MeetingBooking.MeetingDate = request.ProposedDate;
+                    request.MeetingBooking.MeetingTime = request.ProposedTime;
+                    request.MeetingBooking.MeetingDay = request.ProposedDate.DayOfWeek.ToString();
+                    if (request.MeetingBooking.Status == "Pending")
+                    {
+                        request.MeetingBooking.Status = "Approved";
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                await AddNotificationAsync(request.SupervisorId, "Meeting", "Counter Proposal Accepted", $"Student {user.FullName} accepted your proposed date of {request.ProposedDate:dd MMM yyyy}.");
+                TempData["Success"] = "You accepted the supervisor's proposed date. The meeting has been rescheduled.";
+            }
+
+            return RedirectToAction(nameof(BookMeeting));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeclineRescheduleProposal(int requestId)
+        {
+            var user = await GetCurrentUserAsync();
+            var request = await _context.MeetingRescheduleRequests
+                .FirstOrDefaultAsync(r => r.Id == requestId && r.StudentId == user.Id && r.Status == "CounterProposed");
+            
+            if (request != null)
+            {
+                request.Status = "Declined";
+                request.RespondedDate = DateTime.Now;
+                await _context.SaveChangesAsync();
+                
+                await AddNotificationAsync(request.SupervisorId, "Meeting", "Counter Proposal Declined", $"Student {user.FullName} declined your proposed date.");
+                TempData["Success"] = "You declined the supervisor's proposed date.";
+            }
+
+            return RedirectToAction(nameof(BookMeeting));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CancelRescheduleRequest(int requestId)
+        {
+            var user = await GetCurrentUserAsync();
+            var request = await _context.MeetingRescheduleRequests
+                .FirstOrDefaultAsync(r => r.Id == requestId && r.StudentId == user.Id && (r.Status == "Pending" || r.Status == "CounterProposed"));
+            
+            if (request != null)
+            {
+                request.Status = "Cancelled";
+                request.RespondedDate = DateTime.Now;
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Reschedule request cancelled successfully.";
             }
 
             return RedirectToAction(nameof(BookMeeting));
@@ -1759,6 +1976,7 @@ namespace FYPTracker.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SubmitMeetingLogStudent(
+            [FromServices] FYPTracker.Services.Forms.MeetingLogTemplateService templateService,
             int meetingId, 
             string keyTopicsDiscussed,
             string actionPointsForNextMeeting,
@@ -1770,6 +1988,8 @@ namespace FYPTracker.Controllers
             if (user == null) return RedirectToAction("Login", "User");
 
             var meeting = await _context.MeetingBookings
+                .Include(m => m.Student)
+                .Include(m => m.Supervisor)
                 .Include(m => m.MeetingLog)
                 .FirstOrDefaultAsync(m => m.Id == meetingId && m.StudentId == user.Id && m.Status == "Approved");
 
@@ -1779,11 +1999,35 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
-            if (meeting.MeetingLog != null && meeting.MeetingLog.LogStatus == "Signed")
-            {
-                TempData["Error"] = "Progress logbook is already signed by the supervisor.";
-                return RedirectToAction(nameof(BookMeeting));
-            }
+        if (meeting.MeetingLog != null && meeting.MeetingLog.LogStatus == "Signed")
+        {
+            TempData["Error"] = "Progress logbook is already signed by the supervisor.";
+            return RedirectToAction(nameof(BookMeeting));
+        }
+
+        // =====================================================
+        // AUTO-FILL NEXT MEETING DATE
+        // Get the next APPROVED meeting from the database.
+        // Student cannot manually override this date.
+        // =====================================================
+
+        nextMeetingDate = await _context.MeetingBookings
+            .AsNoTracking()
+            .Where(n =>
+                n.StudentId == user.Id &&
+                n.SupervisorId == meeting.SupervisorId &&
+                n.Stage == meeting.Stage &&
+                n.AcademicSessionId == meeting.AcademicSessionId &&
+                n.Status == "Approved" &&
+                n.MeetingDate > meeting.MeetingDate)
+            .OrderBy(n => n.MeetingDate)
+            .ThenBy(n => n.MeetingTime)
+            .Select(n => (DateTime?)n.MeetingDate)
+            .FirstOrDefaultAsync();
+
+        // =====================================================
+        // SAVE MEETING LOGBOOK - KEEP EXISTING CODE
+        // =====================================================
 
             if (meeting.MeetingLog == null)
             {
@@ -1807,7 +2051,90 @@ namespace FYPTracker.Controllers
                 meeting.MeetingLog.LogStatus = "Draft";
             }
 
-            await _context.SaveChangesAsync();
+            // 1. Determine Stage
+            int stage = meeting.Stage ?? 1;
+            
+            // 2. Load active template
+            FYPTracker.ViewModels.MeetingRecordTemplateVM activeTemplate;
+            try
+            {
+                activeTemplate = await templateService.LoadAsync(stage);
+            }
+            catch (Exception)
+            {
+                TempData["Error"] = "Failed to load the active meeting template.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            // 3. Freeze exactly what we're going to generate
+            byte[] pdfBytes;
+            try
+            {
+                pdfBytes = FYPTracker.Utils.MeetingLogPdfGenerator.GeneratePdfBytes(meeting, activeTemplate, isSigned: false);
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "Failed to generate PDF snapshot: " + ex.Message;
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            string serializedTemplate;
+            try 
+            {
+                serializedTemplate = System.Text.Json.JsonSerializer.Serialize(activeTemplate);
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "Failed to serialize the meeting template: " + ex.Message;
+                return RedirectToAction(nameof(BookMeeting));
+            }
+            
+            string uuid = Guid.NewGuid().ToString().Substring(0, 8);
+            string uniquePdfFileName = $"Draft_Log_{meeting.Id}_{uuid}.pdf";
+            string uniqueJsonFileName = $"Draft_Template_{meeting.Id}_{uuid}.json";
+            string newRelativePdfPath = System.IO.Path.Combine("App_Data", "MeetingLogSnapshots", uniquePdfFileName).Replace("\\", "/");
+
+            // 4. Safely write files to disk FIRST
+            string directoryPath = System.IO.Path.Combine(_env.ContentRootPath, "App_Data", "MeetingLogSnapshots");
+            if (!System.IO.Directory.Exists(directoryPath))
+            {
+                System.IO.Directory.CreateDirectory(directoryPath);
+            }
+
+            string absolutePdfPath = System.IO.Path.Combine(directoryPath, uniquePdfFileName);
+            string absoluteJsonPath = System.IO.Path.Combine(directoryPath, uniqueJsonFileName);
+
+            try
+            {
+                await System.IO.File.WriteAllBytesAsync(absolutePdfPath, pdfBytes);
+                await System.IO.File.WriteAllTextAsync(absoluteJsonPath, serializedTemplate);
+            }
+            catch (Exception)
+            {
+                if (System.IO.File.Exists(absolutePdfPath)) System.IO.File.Delete(absolutePdfPath);
+                if (System.IO.File.Exists(absoluteJsonPath)) System.IO.File.Delete(absoluteJsonPath);
+                
+                TempData["Error"] = "Failed to save snapshot files to disk.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            // 5. Update DB now that files are fully accessible
+            meeting.MeetingLog.PdfLogbookPath = newRelativePdfPath;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception)
+            {
+                // DB Save failed. Clean up the unreferenced files.
+                if (System.IO.File.Exists(absolutePdfPath)) System.IO.File.Delete(absolutePdfPath);
+                if (System.IO.File.Exists(absoluteJsonPath)) System.IO.File.Delete(absoluteJsonPath);
+                
+                TempData["Error"] = "Failed to save meeting log to the database.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
             await LogActivityAsync(user.Id, "MeetingLog", "Progress Logbook Drafted", $"You submitted a progress logbook draft for the meeting on {meeting.MeetingDate:dd MMM}.");
             
             // --- SignalR Real-Time Notification ---
@@ -1827,26 +2154,81 @@ namespace FYPTracker.Controllers
         [HttpGet]
         public async Task<IActionResult> ViewMeetingLog(int id)
         {
+            // 1. Verify logged-in student
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "User");
 
+            if (user == null)
+                return RedirectToAction("Login", "User");
+
+            // 2. Student can only view their own signed logbook
             var log = await _context.MeetingLogs
                 .Include(l => l.MeetingBooking)
-                .ThenInclude(mb => mb.Supervisor)
-                .Include(l => l.MeetingBooking.Student)
-                .FirstOrDefaultAsync(l => l.Id == id && l.MeetingBooking.StudentId == user.Id);
+                    .ThenInclude(m => m.Supervisor)
+                .Include(l => l.MeetingBooking)
+                    .ThenInclude(m => m.Student)
+                .FirstOrDefaultAsync(l =>
+                    l.Id == id &&
+                    l.MeetingBooking.StudentId == user.Id);
 
-            if (log == null || log.LogStatus != "Signed") return NotFound();
-            
-            if (!string.IsNullOrEmpty(log.SignedPdfLogbookPath))
-                return Redirect(log.SignedPdfLogbookPath);
-            if (!string.IsNullOrEmpty(log.PdfLogbookPath))
-                return Redirect(log.PdfLogbookPath);
+            if (log == null || log.LogStatus != "Signed")
+                return NotFound();
 
-            var project = await _context.FYPProjects.OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == log.MeetingBooking.StudentId);
+            // 3. Read signed PDF from private storage
+            string? savedPath = log.SignedPdfLogbookPath?
+                .Replace('\\', '/');
+
+            const string allowedPrefix =
+                "App_Data/MeetingLogSnapshots/";
+
+            if (!string.IsNullOrWhiteSpace(savedPath) &&
+                savedPath.StartsWith(
+                    allowedPrefix,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                string fileName = savedPath.Substring(
+                    allowedPrefix.Length);
+
+                // Prevent invalid paths and access to other files
+                if (!string.IsNullOrWhiteSpace(fileName) &&
+                    fileName == Path.GetFileName(fileName) &&
+                    fileName.EndsWith(
+                        ".pdf",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    fileName.StartsWith(
+                        $"Signed_Log_{log.MeetingBookingId}_",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    string physicalPath = Path.Combine(
+                        _env.ContentRootPath,
+                        "App_Data",
+                        "MeetingLogSnapshots",
+                        fileName
+                    );
+
+                    if (System.IO.File.Exists(physicalPath))
+                    {
+                        // Display PDF directly in the browser
+                        return PhysicalFile(
+                            physicalPath,
+                            "application/pdf",
+                            enableRangeProcessing: true
+                        );
+                    }
+                }
+            }
+
+            // 4. Fallback if signed PDF was not generated
+            var project = await _context.FYPProjects
+                .OrderByDescending(p => p.CreatedDate)
+                .FirstOrDefaultAsync(p =>
+                    p.StudentId == log.MeetingBooking.StudentId);
+
             ViewBag.ProjectName = project?.Title ?? "FYP Project";
 
-            return View("~/Views/Shared/MeetingLogPrintable.cshtml", log);
+            return View(
+                "~/Views/Shared/MeetingLogPrintable.cshtml",
+                log
+            );
         }
 
         // ══════════════════════════════════════════════════════

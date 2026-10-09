@@ -79,14 +79,6 @@
 
         @if (userType == "Student")
         {
-            @if (hasSupervisor)
-            {
-                <div class="menu-item @(pageTitle == "Project Details" ? "here show" : "")">
-                    <a class="menu-link py-3 px-4 @(pageTitle == "Project Details" ? "active border-bottom border-3 border-primary" : "")" href="/Student/ProjectDetails">
-                        <span class="menu-title text-nowrap">Project Details</span>
-                    </a>
-                </div>
-            }
             @if (!hasSupervisor)
             {
             <div class="menu-item @(pageTitle == "Select Supervisor" ? "here show" : "")">
@@ -185,6 +177,7 @@
             bool isReporting = currentPath.StartsWith("/Admin/Reporting", StringComparison.OrdinalIgnoreCase);
             bool isSettings = currentPath.StartsWith("/Admin/Settings", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/ApprovedIafList", StringComparison.OrdinalIgnoreCase);
             bool isLookups = currentPath.StartsWith("/Admin/ManageLookups", StringComparison.OrdinalIgnoreCase);
+            bool isFormTemplates = currentPath.StartsWith("/Admin/FormTemplateSettings", StringComparison.OrdinalIgnoreCase);
 
             <div class="menu-item @(isDashboard ? "here show" : "")">
                 <a class="menu-link py-3 px-4 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Admin">
@@ -217,6 +210,11 @@
             <div class="menu-item @(isSettings ? "here show" : "")">
                 <a class="menu-link py-3 px-4 @(isSettings ? "active border-bottom border-3 border-primary" : "")" href="/Admin/Settings">
                     <span class="menu-title text-nowrap">System Settings</span>
+                </a>
+            </div>
+            <div class="menu-item @(isFormTemplates ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(isFormTemplates ? "active border-bottom border-3 border-primary" : "")" asp-controller="Admin" asp-action="FormTemplateSettings">
+                    <span class="menu-title text-nowrap"><i class="fas fa-file-alt me-2"></i>Form Templates</span>
                 </a>
             </div>
         }

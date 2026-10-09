@@ -1,12 +1,21 @@
 @using FYPTracker.Models
 @inject FYPTrackerContext _context
 @model FYPProject?
+@inject FYPTracker.Services.Forms.IafFormTemplateService IafTemplateService
 @{
     ViewData["Title"] = "Digital Submission Forms";
     var currentUser = ViewBag.CurrentUser as ApplicationUser;
     var milestones  = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
     var adminUser = _context.ApplicationUsers.FirstOrDefault(u => u.UserRoles.Any(r => r.Role.Name == "Admin"));
     var moduleLeaderName = adminUser?.FullName ?? "Admin";
+    var iafTemplate = await IafTemplateService.LoadAsync();
+
+    string IafLabel(string key, string fallback)
+    {
+        return iafTemplate.Fields
+            .FirstOrDefault(f => f.Key == key)?.Label
+            ?? fallback;
+    }
 }
 
 <style>
@@ -161,6 +170,222 @@
     }
     .step-text { font-size: 0.85rem; font-weight: 600; margin-top: 4px; pointer-events: none; }
     .stepper-btn:hover:not([disabled]) .step-icon { border-color: #f97316; color: #f97316; }
+
+    /* ===== IAF Card ===== */
+    .iaf-main-card {
+        border-radius: 12px !important;
+    }
+
+    /* IAF heading */
+    .iaf-main-card .iaf-card-heading {
+        padding-bottom: 16px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    /* Form table */
+    .iaf-main-card .iaf-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 12px;
+        margin-bottom: 16px;
+    }
+
+    /* Compact table cells */
+    .iaf-main-card .iaf-table td {
+        padding: 12px 14px;
+        vertical-align: middle;
+        border-color: #e2e8f0;
+    }
+
+    /* Left label column */
+    .iaf-main-card .iaf-table .iaf-label {
+        width: 30%;
+        background-color: #f8fafc;
+        color: #334155;
+        font-weight: 700;
+    }
+
+    /* Right value column */
+    .iaf-main-card .iaf-table .iaf-value {
+        width: 70%;
+        white-space: normal;
+    }
+
+    /* Inputs */
+    .iaf-main-card .iaf-table .form-control,
+    .iaf-main-card .iaf-table .form-select {
+        min-height: 40px;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+    }
+
+    /* Problem Statement */
+    .iaf-main-card .iaf-table textarea.form-control {
+        min-height: 140px;
+        resize: vertical;
+    }
+
+    /* Preserve formatting in history modal */
+    .iaf-main-card .iaf-readonly-view .iaf-value {
+        white-space: pre-wrap;
+    }
+
+    /* Action footer */
+    .iaf-main-card .iaf-action-footer {
+        border-radius: 0 0 12px 12px;
+    }
+
+    /* IAF primary submission button */
+    .iaf-main-card #iafFormElement button[name="iafAction"][value="supervisor_review"] {
+        background-color: #0f172a;
+        border-color: #0f172a;
+        color: #ffffff;
+        border-radius: 8px;
+    }
+
+    .iaf-main-card #iafFormElement button[name="iafAction"][value="supervisor_review"]:hover {
+        background-color: #1e293b;
+        border-color: #1e293b;
+        color: #ffffff;
+    }
+
+    /* ===== IAF Student Information ===== */
+    .iaf-main-card .iaf-student-info {
+        padding: 16px;
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+    }
+
+    .iaf-main-card .iaf-student-info .form-label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #475569;
+        margin-bottom: 6px;
+    }
+
+    .iaf-main-card .iaf-info-value {
+        min-height: 42px;
+        display: flex;
+        align-items: center;
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background-color: #f8fafc;
+        color: #1e293b;
+        font-size: 14px;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+
+    /* Match editable Coventry ID field */
+    .iaf-main-card .iaf-student-info .form-control {
+        min-height: 42px;
+        border-radius: 8px;
+    }
+
+    /* Mobile responsiveness */
+    @@media (max-width: 767.98px) {
+        .iaf-main-card .iaf-student-info {
+            padding: 12px;
+        }
+    }
+
+    /* ===== IAF MOBILE RESPONSIVENESS ===== */
+
+    @@media screen and (max-width: 767.98px) {
+
+        /* Stack label and input vertically */
+        .iaf-main-card .iaf-form-table,
+        .iaf-main-card .iaf-form-table tbody,
+        .iaf-main-card .iaf-form-table tr,
+        .iaf-main-card .iaf-form-table td {
+            display: block;
+            width: 100% !important;
+        }
+
+        .iaf-main-card .iaf-form-table tr {
+            margin-bottom: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        /* Field labels */
+        .iaf-main-card .iaf-form-table td.iaf-label {
+            width: 100% !important;
+            padding: 10px 12px;
+            border: 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        /* Input container */
+        .iaf-main-card .iaf-form-table td.iaf-value {
+            width: 100% !important;
+            padding: 12px;
+            border: 0;
+            overflow-wrap: anywhere;
+        }
+
+        /* Prevent input overflow */
+        .iaf-main-card .iaf-form-table .form-control,
+        .iaf-main-card .iaf-form-table .form-select {
+            max-width: 100%;
+            min-width: 0;
+        }
+
+        /* Objective input group */
+        .iaf-main-card .iaf-form-table .input-group {
+            width: 100%;
+            flex-wrap: nowrap;
+        }
+
+        .iaf-main-card .iaf-form-table .input-group .form-control {
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        /* Action footer */
+        .iaf-main-card .iaf-action-footer > .d-flex {
+            flex-direction: column;
+            align-items: stretch !important;
+        }
+
+        .iaf-main-card .iaf-action-footer > .d-flex > .d-flex {
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .iaf-main-card .iaf-action-footer button {
+            width: 100%;
+        }
+
+        /* IAF Attempt History */
+        .iaf-main-card .iaf-attempt-card {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .iaf-main-card .iaf-attempt-card > .d-flex {
+            flex-wrap: wrap;
+        }
+
+        /* Wizard Stepper */
+        .wizard-stepper .stepper-item {
+            min-width: 0;
+        }
+
+        .wizard-stepper .step-text {
+            font-size: 0.72rem;
+            line-height: 1.35;
+            text-align: center;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            padding: 0 4px;
+        }
+    }
 </style>
 
 <div class="container-xxl py-4">
@@ -287,8 +512,8 @@
                         <!-- Stage 2 is now a separate page, Final Submission tab removed -->
                     </ul>
 
-                    <div class="card border-0 shadow-sm rounded-3 p-3 mb-2 bg-light d-flex align-items-center gap-3">
-                        <i class="fas fa-info-circle text-orange fs-4" style="color:var(--primary-orange);"></i>
+                    <div class="card border-0 shadow-sm rounded-3 p-3 mb-2 bg-light d-flex flex-row align-items-start gap-2">
+                        <i class="fas fa-info-circle text-primary fs-5 mt-1 flex-shrink-0"></i>
                         <div class="small text-muted">
                             <strong>Guidelines:</strong> Ensure all mandatory fields are fully populated before submission. 
                             <span class="text-success fw-bold"><i class="fas fa-save ms-2 me-1"></i>Auto-Save is active.</span> Your progress is automatically stored locally in your browser.
@@ -315,9 +540,18 @@
 
                     @* -- 1. INITIAL PROJECT ALLOCATION FORM (IAF) -------- *@
                     <div class="tab-pane fade @(isIafApproved ? "" : "show active")" id="iaf-form-pane" role="tabpanel" tabindex="0">
-                        <div class="card border-0 shadow-sm rounded-3 p-4">
-                            <h4 class="fw-bold text-dark mb-2"><i class="fas fa-clipboard-list text-orange me-2"></i>1. Initial Project Allocation Form (IAF)</h4>
-                            <p class="text-danger fw-bold mb-4"><i class="far fa-clock me-1"></i> Please complete and submit this form before @ViewBag.IAFDeadline.</p>
+                        <div class="card border-0 shadow-sm rounded-3 p-3 p-md-4 iaf-main-card">
+                            <div class="iaf-card-heading">
+                                <h4 class="fw-bold text-dark mb-2">
+                                    <i class="fas fa-clipboard-list text-primary me-2"></i>
+                                    1. Initial Project Allocation Form (IAF)
+                                </h4>
+
+                                <p class="text-danger fw-semibold mb-0">
+                                    <i class="far fa-clock me-1"></i>
+                                    Please complete and submit this form before @ViewBag.IAFDeadline.
+                                </p>
+                            </div>
                             
                             @if (isIafLocked)
                             {
@@ -448,143 +682,251 @@
                                 <form id="iafFormElement" asp-action="SubmitDigitalForm" method="post" class="needs-validation" novalidate>
                                     <input type="hidden" name="formType" value="Initial Project Allocation Form (IAF)" />
                                     <input type="hidden" name="milestoneId" value="@iafMilestoneId" />
+                                    
+                                    <!-- IAF Validation Summary -->
+                                    <div id="iafValidationSummary"
+                                        class="alert alert-danger border-danger d-none mb-4"
+                                        role="alert"
+                                        tabindex="-1">
 
-                                    <div class="card mb-4 border-0 shadow-sm rounded-3">
-                                        <div class="card-body p-4" style="font-family: Arial, sans-serif; font-size: 14px; color: #000;">
-                                            <h2 class="text-center fw-bold mb-1" style="font-size: 18px;">Initial Project Allocation Form</h2>
-                                            <h3 class="text-center fw-bold mb-4" style="font-size: 16px;">(6000CEM/6002CMD)</h3>
-                                            
-                                            <div style="margin-top: 30px; margin-bottom: 20px;">
-                                                <table class="w-100" style="border: none;">
-                                                    <tr style="border: none;">
-                                                        <td style="border: none; padding: 4px;"><strong>Student Name:</strong> @currentUser?.FullName</td>
-                                                        <td style="border: none; padding: 4px;"><strong>Course Code:</strong> 6002CMD</td>
-                                                    </tr>
-                                                    <tr style="border: none;">
-                                                        <td style="border: none; padding: 4px;" class="d-flex align-items-center">
-                                                            <strong class="me-2">Coventry ID:</strong> 
-                                                            <input type="text" name="coventryId" class="form-control form-control-sm w-auto d-inline-block @(isIafLocked ? "bg-light border-0 fw-bold" : "")" value="@currentUser?.CoventryId" @(isIafLocked ? "readonly" : "") placeholder="Enter your Coventry ID" required />
-                                                        </td>
-                                                        <td style="border: none; padding: 4px;"><strong>INTI ID:</strong> @currentUser?.EmployeeId</td>
-                                                    </tr>
-                                                    <tr style="border: none;">
-                                                        <td style="border: none; padding: 4px;" colspan="2"><strong>Module Leader Name:</strong> @moduleLeaderName</td>
-                                                    </tr>
-                                                </table>
+                                        <div class="d-flex align-items-start gap-2">
+                                            <i class="fas fa-exclamation-circle fs-4 mt-1"></i>
+
+                                            <div>
+                                                <h6 class="fw-bold mb-2">
+                                                    Please review your IAF form
+                                                </h6>
+                                                <p class="mb-2 small">
+                                                    Correct the following fields before submitting.
+                                                </p>
+                                                <ul id="iafValidationList" class="mb-0 small ps-3"></ul>
                                             </div>
+                                        </div>
+                                    </div>
 
+
+                                    <div class="card mb-0 border-0 shadow-none iaf-document-card">
+                                        <div class="card-body p-2 p-md-3" style="font-family: Arial, sans-serif; font-size: 14px; color: #000;">
+                                            <h2 class="text-center fw-bold mb-1"
+                                                style="font-size: 18px;">
+                                                @iafTemplate.Title
+                                            </h2>
+
+                                            <p class="text-center text-muted small mb-4">
+                                                Template Version @iafTemplate.Version
+                                            </p>
+                                            
                                             <style>
                                                 .iaf-table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 20px; }
                                                 .iaf-table, .iaf-table th, .iaf-table td { border: 1px solid #ccc; }
                                                 .iaf-table th, .iaf-table td { padding: 8px; vertical-align: top; text-align: left; }
                                                 .iaf-label { font-weight: bold; width: 30%; }
-                                                .iaf-value { width: 70%; white-space: pre-wrap; }
+                                                .iaf-value { width: 70%; white-space: normal; }
                                                 .iaf-attempt-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 12px 16px; border: 1px solid #e4e6ef; background-color: #fff; border-radius: 10px; transition: box-shadow .2s ease, transform .2s ease; }
                                                 .iaf-attempt-card:hover { box-shadow: 0 4px 14px rgba(13,110,253,0.10); transform: translateY(-1px); }
                                                 .iaf-attempt-card .iaf-attempt-title { font-weight: 700; color: #0d6efd; margin: 0; }
                                                 .iaf-attempt-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; }
-                                                .iaf-readonly-view .iaf-value { background: #fff; }
+                                                .iaf-readonly-view .iaf-value { background: #fff; white-space: pre-wrap }
                                                 @@media print {
                                                     .iaf-attempt-card { box-shadow: none; }
                                                 }
                                             </style>
 
-                                            <table class="iaf-table">
-                                                <tr>
-                                                    <td class="iaf-label">Project Title</td>
-                                                    <td class="iaf-value">
-                                                        <input type="text" name="title" class="form-control form-control-sm @(isIafLocked ? "bg-light border-0 fw-bold" : "")" value="@Model.Title" @(isIafLocked ? "readonly" : "") required />
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="iaf-label">Scope of Project</td>
-                                                    <td class="iaf-value">
-                                                        <select name="scope" id="scope" class="form-select form-select-sm @(isIafLocked ? "bg-light border-0 fw-bold" : "")" @(isIafLocked ? "disabled" : "") required>
-                                                            <option value="">-- Select Scope --</option>
-                                                            <option value="Development" selected="@(Model.Scope == "Development")">Development</option>
-                                                            <option value="Research Based Project" selected="@(Model.Scope == "Research Based Project")">Research Based Project</option>
-                                                            <option value="Hybrid" selected="@(Model.Scope == "Hybrid")">Hybrid</option>
-                                                        </select>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="iaf-label">Problem Statement</td>
-                                                    <td class="iaf-value">
-                                                        <textarea name="problemStatement" id="problemStatement" class="form-control form-control-sm @(isIafLocked ? "bg-light border-0" : "")" rows="5" @(isIafLocked ? "readonly" : "") required placeholder="Provide a problem statement supported with statistics and journal paper references...">@Model.ProblemStatement</textarea>
-                                                        <div id="problemStatementError" class="text-danger small mt-1 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please include in-text citations.</div>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="iaf-label">Objective 1</td>
-                                                    <td class="iaf-value">
-                                                        @{
-                                                            var cleanObj1 = Model.Objective1?.StartsWith("1. To ", StringComparison.OrdinalIgnoreCase) == true ? Model.Objective1.Substring(6).TrimStart() : Model.Objective1;
-                                                            var cleanObj2 = Model.Objective2?.StartsWith("2. To ", StringComparison.OrdinalIgnoreCase) == true ? Model.Objective2.Substring(6).TrimStart() : Model.Objective2;
-                                                            var cleanObj3 = Model.Objective3?.StartsWith("3. To ", StringComparison.OrdinalIgnoreCase) == true ? Model.Objective3.Substring(6).TrimStart() : Model.Objective3;
+                                            @* Unified IAF: use current Admin JSON for all 11 fields. *@
+                                            @{
+                                                var requiredIafKeys = new[]
+                                                {
+                                                    "StudentName", "CoventryId", "Program", "ProjectTitle",
+                                                    "ScopeOfProject", "ProblemStatement", "References",
+                                                    "Objectives", "SupervisorName", "SupervisorSignature",
+                                                    "CommentFeedback"
+                                                };
+                                                var orderedIafFields = iafTemplate.Fields
+                                                    .OrderBy(f => f.Order)
+                                                    .ToList();
+                                                if (requiredIafKeys.Any(k => orderedIafFields.Count(f => f.Key == k) != 1)
+                                                    || orderedIafFields.Count != requiredIafKeys.Length)
+                                                {
+                                                    throw new InvalidOperationException(
+                                                        "The IAF template must contain the expected 11 unique fields.");
+                                                }
+
+                                                string iafReferences = "";
+                                                string agreedSup = "";
+                                                string supervisorSignature = "";
+                                                string supervisorFeedback = iafMilestone?.SupervisorFeedback ?? "";
+
+                                                if (!string.IsNullOrEmpty(iafMilestone?.Remarks)
+                                                    && iafMilestone.Remarks.Contains("JSON: "))
+                                                {
+                                                    try
+                                                    {
+                                                        var rawHistory = iafMilestone.Remarks.Split(
+                                                            new[] { "JSON: " }, 2, StringSplitOptions.None)[1];
+                                                        var historyForFields = IafAttemptHistory.ParseOrMigrate(rawHistory);
+                                                        var currentAttemptForFields = historyForFields.Attempts
+                                                            .FirstOrDefault(a => a.AttemptNumber == historyForFields.CurrentAttempt);
+                                                        if (currentAttemptForFields != null)
+                                                        {
+                                                            var data = currentAttemptForFields.FormData
+                                                                ?? new Dictionary<string, string>();
+                                                            if (!data.TryGetValue("references", out iafReferences))
+                                                                data.TryGetValue("References", out iafReferences);
+                                                            if (!data.TryGetValue("agreedSupervisor", out agreedSup))
+                                                                data.TryGetValue("Agreed Supervisor Name", out agreedSup);
+                                                            supervisorSignature = currentAttemptForFields.SupervisorSignature ?? "";
+                                                            if (!string.IsNullOrWhiteSpace(currentAttemptForFields.SupervisorFeedback))
+                                                                supervisorFeedback = currentAttemptForFields.SupervisorFeedback;
                                                         }
-                                                        <div class="input-group input-group-sm">
-                                                            <span class="input-group-text bg-light fw-bold text-muted border-end-0">1. To</span>
-                                                            <input type="text" name="objective1" id="objective1" class="form-control border-start-0 ps-0 @(isIafLocked ? "bg-light fw-bold border-0" : "")" value="@cleanObj1" @(isIafLocked ? "readonly" : "") placeholder="develop a system..." required />
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="iaf-label">Objective 2</td>
-                                                    <td class="iaf-value">
-                                                        <div class="input-group input-group-sm">
-                                                            <span class="input-group-text bg-light fw-bold text-muted border-end-0">2. To</span>
-                                                            <input type="text" name="objective2" id="objective2" class="form-control border-start-0 ps-0 @(isIafLocked ? "bg-light fw-bold border-0" : "")" value="@cleanObj2" @(isIafLocked ? "readonly" : "") placeholder="analyze the performance..." required />
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="iaf-label">Objective 3</td>
-                                                    <td class="iaf-value">
-                                                        <div class="input-group input-group-sm">
-                                                            <span class="input-group-text bg-light fw-bold text-muted border-end-0">3. To</span>
-                                                            <input type="text" name="objective3" id="objective3" class="form-control border-start-0 ps-0 @(isIafLocked ? "bg-light fw-bold border-0" : "")" value="@cleanObj3" @(isIafLocked ? "readonly" : "") placeholder="evaluate the findings..." />
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="iaf-label">Agreed Supervisor Name<br/><span style="font-weight: normal; font-size: 12px;">OPTIONAL: ONLY if you have made a prior agreement with a supervisor</span></td>
-                                                    <td class="iaf-value">
-                                                        @{
-                                                            string agreedSup = "";
-                                                            if (iafMilestone != null && !string.IsNullOrEmpty(iafMilestone.Remarks) && iafMilestone.Remarks.Contains("JSON: ")) {
-                                                                try {
-                                                                    var parts = iafMilestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
-                                                                    var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parts[1]);
-                                                                    var curr = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
-                                                                    if (curr != null) curr.FormData.TryGetValue("Agreed Supervisor Name", out agreedSup);
-                                                                } catch {}
-                                                            }
+                                                    }
+                                                    catch (Exception)
+                                                    {
+                                                        // Preserve existing editable project fields if old history cannot be parsed.
+                                                    }
+                                                }
+                                                iafReferences ??= "";
+                                                agreedSup ??= "";
+
+                                                var cleanObj1 = Model.Objective1?.StartsWith("1. To ", StringComparison.OrdinalIgnoreCase) == true
+                                                    ? Model.Objective1.Substring(6).TrimStart() : Model.Objective1;
+                                                var cleanObj2 = Model.Objective2?.StartsWith("2. To ", StringComparison.OrdinalIgnoreCase) == true
+                                                    ? Model.Objective2.Substring(6).TrimStart() : Model.Objective2;
+                                                var cleanObj3 = Model.Objective3?.StartsWith("3. To ", StringComparison.OrdinalIgnoreCase) == true
+                                                    ? Model.Objective3.Substring(6).TrimStart() : Model.Objective3;
+                                            }
+
+                                            <div class="row g-3 mb-4" id="iafJsonFields">
+                                                @foreach (var field in orderedIafFields)
+                                                {
+                                                    int width = field.Columns >= 1 && field.Columns <= 12
+                                                        ? field.Columns : 12;
+                                                    int textAreaHeight = field.MinHeightMm > 0 ? field.MinHeightMm : 30;
+
+                                                    <div class="col-12 col-md-@(width)" data-field-key="@field.Key">
+                                                        <div class="form-label fw-semibold mb-2">@field.Label</div>
+
+                                                        @if (field.Key == "StudentName")
+                                                        {
+                                                            <div class="iaf-info-value">@currentUser?.FullName</div>
                                                         }
-                                                        <input type="text" name="supervisorName" class="form-control form-control-sm @(isIafLocked ? "bg-light border-0 fw-bold" : "")" value="@agreedSup" @(isIafLocked ? "readonly" : "") placeholder="Optional Supervisor Name" />
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="iaf-label">Supervisor's name</td>
-                                                    <td class="iaf-value" style="background-color: #DBE5F1;">
-                                                        @Model.Supervisor?.FullName
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="iaf-label">
-                                                        Supervisor's signature<br/><br/>
-                                                        <span style="font-style: italic; background-color: yellow; display: inline; font-size: 12px;">Note: the supervisor has to sign the form in order to acknowledge that they are the supervisor</span>
-                                                    </td>
-                                                    <td class="iaf-value" style="background-color: #DBE5F1; min-height: 80px;">
-                                                        @* Kept blank before approval *@
-                                                    </td>
-                                                </tr>
-                                                <tr>
-                                                    <td class="iaf-label">Comment/Feedback</td>
-                                                    <td class="iaf-value">
-                                                        @* Kept blank before approval *@
-                                                    </td>
-                                                </tr>
-                                            </table>
+                                                        else if (field.Key == "CoventryId")
+                                                        {
+                                                            <input type="text" id="iafCoventryId" name="coventryId"
+                                                                   class="form-control @(isIafLocked ? "bg-light border-0 fw-bold" : "")"
+                                                                   value="@currentUser?.CoventryId"
+                                                                   @(isIafLocked ? "readonly" : "") required />
+                                                        }
+                                                        else if (field.Key == "Program")
+                                                        {
+                                                            <div class="iaf-info-value">@(string.IsNullOrWhiteSpace(currentUser?.Programme) ? "Not configured" : currentUser.Programme)</div>
+                                                        }
+                                                        else if (field.Key == "ProjectTitle")
+                                                        {
+                                                            <input type="text" id="iafProjectTitle" name="title"
+                                                                   class="form-control @(isIafLocked ? "bg-light border-0 fw-bold" : "")"
+                                                                   value="@Model.Title" @(isIafLocked ? "readonly" : "") required />
+                                                        }
+                                                        else if (field.Key == "ScopeOfProject")
+                                                        {
+                                                            <select name="scope" id="scope"
+                                                                    class="form-select @(isIafLocked ? "bg-light border-0 fw-bold" : "")"
+                                                                    @(isIafLocked ? "disabled" : "") required>
+                                                                <option value="">-- Select Scope --</option>
+                                                                <option value="Development" selected="@(Model.Scope == "Development")">Development</option>
+                                                                <option value="Research Based Project" selected="@(Model.Scope == "Research Based Project")">Research Based Project</option>
+                                                                <option value="Hybrid" selected="@(Model.Scope == "Hybrid")">Hybrid</option>
+                                                            </select>
+                                                        }
+                                                        else if (field.Key == "ProblemStatement")
+                                                        {
+                                                            <textarea name="problemStatement" id="problemStatement"
+                                                                      class="form-control @(isIafLocked ? "bg-light border-0" : "")"
+                                                                      rows="5" style="min-height:@(textAreaHeight)mm;"
+                                                                      @(isIafLocked ? "readonly" : "") required
+                                                                      placeholder="Provide a problem statement supported with statistics and journal paper references...">@Model.ProblemStatement</textarea>
+                                                            <div id="problemStatementError" class="text-danger small mt-1 d-none"
+                                                                 role="status">Please include in-text citations.</div>
+                                                        }
+                                                        else if (field.Key == "References")
+                                                        {
+                                                            <textarea name="references" id="iafReferences"
+                                                                      class="form-control @(isIafLocked ? "bg-light border-0" : "")"
+                                                                      rows="4" style="min-height:@(textAreaHeight)mm;"
+                                                                      @(isIafLocked ? "readonly" : "")
+                                                                      placeholder="List the references used in your IAF.">@iafReferences</textarea>
+                                                        }
+                                                        else if (field.Key == "Objectives")
+                                                        {
+                                                            <div class="d-grid gap-3">
+                                                                <div>
+                                                                    <label class="form-label small" for="objective1">Objective 1 (required)</label>
+                                                                    <div class="input-group">
+                                                                        <span class="input-group-text">1. To</span>
+                                                                        <input type="text" name="objective1" id="objective1"
+                                                                               class="form-control @(isIafLocked ? "bg-light" : "")"
+                                                                               value="@cleanObj1" @(isIafLocked ? "readonly" : "")
+                                                                               placeholder="develop a system..." required />
+                                                                    </div>
+                                                                    <div id="objective1Error" class="text-danger small mt-1 d-none" role="status"></div>
+                                                                </div>
+                                                                <div>
+                                                                    <label class="form-label small" for="objective2">Objective 2 (required)</label>
+                                                                    <div class="input-group">
+                                                                        <span class="input-group-text">2. To</span>
+                                                                        <input type="text" name="objective2" id="objective2"
+                                                                               class="form-control @(isIafLocked ? "bg-light" : "")"
+                                                                               value="@cleanObj2" @(isIafLocked ? "readonly" : "")
+                                                                               placeholder="analyse the requirements..." required />
+                                                                    </div>
+                                                                    <div id="objective2Error" class="text-danger small mt-1 d-none" role="status"></div>
+                                                                </div>
+                                                                <div>
+                                                                    <label class="form-label small" for="objective3">Objective 3 (optional)</label>
+                                                                    <div class="input-group">
+                                                                        <span class="input-group-text">3. To</span>
+                                                                        <input type="text" name="objective3" id="objective3"
+                                                                               class="form-control @(isIafLocked ? "bg-light" : "")"
+                                                                               value="@cleanObj3" @(isIafLocked ? "readonly" : "")
+                                                                               placeholder="evaluate the results..." />
+                                                                    </div>
+                                                                    <div id="objective3Error" class="text-danger small mt-1 d-none" role="status"></div>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                        else if (field.Key == "SupervisorName")
+                                                        {
+                                                            <input type="text" id="iafSupervisorName" name="supervisorName"
+                                                                   class="form-control @(isIafLocked ? "bg-light" : "")"
+                                                                   value="@agreedSup" @(isIafLocked ? "readonly" : "")
+                                                                   placeholder="Optional - only if previously agreed" />
+                                                        }
+                                                        else if (field.Key == "SupervisorSignature")
+                                                        {
+                                                            <div class="iaf-info-value" style="min-height:@(textAreaHeight)mm;">
+                                                                @if (supervisorSignature.StartsWith("data:image/png;base64,", StringComparison.OrdinalIgnoreCase)
+                                                                    || supervisorSignature.StartsWith("data:image/jpeg;base64,", StringComparison.OrdinalIgnoreCase))
+                                                                {
+                                                                    <img src="@supervisorSignature" alt="Supervisor signature"
+                                                                         style="max-width:250px;max-height:80px;" />
+                                                                }
+                                                                else if (!string.IsNullOrWhiteSpace(supervisorSignature))
+                                                                {
+                                                                    <span>@supervisorSignature</span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="text-muted">Pending supervisor signature</span>
+                                                                }
+                                                            </div>
+                                                        }
+                                                        else if (field.Key == "CommentFeedback")
+                                                        {
+                                                           <div class="iaf-feedback-display @(string.IsNullOrWhiteSpace(supervisorFeedback) ? "text-muted fst-italic" : "")"
+                                                            style="min-height:@(textAreaHeight)mm;">@(string.IsNullOrWhiteSpace(supervisorFeedback) ? "No feedback yet." : supervisorFeedback.Trim())</div>
+                                                        }
+                                                    </div>
+                                                }
+                                            </div>
                                         </div>
 
                                     @{
@@ -717,7 +1059,7 @@
 
                                     @if (!isIafLocked)
                                     {
-                                        <div class="card shadow-lg border-0 bg-white sticky-bottom mb-2 p-3 mt-4" style="bottom: 1rem; z-index: 1020; border-radius: 12px; border-top: 4px solid var(--primary-orange) !important;">
+                                        <div class="card-footer bg-light border-top p-3 mt-3 iaf-action-footer">
                                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                                                 <div class="text-muted small fw-semibold">
                                                     <span id="autosaveIndicator"><i class="fas fa-check-circle text-success me-1"></i>Auto-saved locally</span>
@@ -1328,13 +1670,28 @@
 
             // Bootstrap Form Validation
             var forms = document.querySelectorAll('.needs-validation');
+
             Array.prototype.slice.call(forms).forEach(function (form) {
                 form.addEventListener('submit', function (event) {
+
+                    // Allow IAF Save Draft without required-field validation
+                    const isIafDraft =
+                        form.id === 'iafFormElement' &&
+                        event.submitter?.name === 'iafAction' &&
+                        event.submitter?.value === 'draft';
+
+                    if (isIafDraft) {
+                        return;
+                    }
+
+                    // Validate normal submissions
                     if (!form.checkValidity()) {
                         event.preventDefault();
                         event.stopPropagation();
                     }
+
                     form.classList.add('was-validated');
+
                 }, false);
             });
 
@@ -1377,11 +1734,22 @@
                     }, 1000);
                 });
                 
-                // 3. Clear Draft on Submit
+                // 3. Clear Draft only for a valid, non-draft submission
                 form.addEventListener('submit', function(e) {
+
+                    const isIafDraft =
+                        form.id === 'iafFormElement' &&
+                        e.submitter?.name === 'iafAction' &&
+                        e.submitter?.value === 'draft';
+
+                    if (isIafDraft || e.defaultPrevented) {
+                        return;
+                    }
+
                     if (form.checkValidity()) {
                         localStorage.removeItem(storageKey);
                     }
+
                 });
             });
             // Initialize Tooltips using jQuery (Bootstrap 4 compatibility)
@@ -1783,6 +2151,213 @@
             });
         });
     $('[id^="iafAttemptModal"]').appendTo('body');
+    
+    /* ===== IAF FORM VALIDATION ===== */
+    (function () {
+        const form = document.getElementById('iafFormElement');
+        if (!form) return;
+
+        const summary = document.getElementById('iafValidationSummary');
+        const errorList = document.getElementById('iafValidationList');
+
+        let attemptedSubmit = false;
+
+        // Each rule applies only to the IAF form.
+        const rules = [
+            {
+                selector: '[name="coventryId"]',
+                label: 'Coventry ID',
+                check: v => v ? '' : 'Coventry ID is required.'
+            },
+            {
+                selector: '[name="title"]',
+                label: 'Project Title',
+                check: v => v ? '' : 'Project Title is required.'
+            },
+            {
+                selector: '#scope',
+                label: 'Scope of Project',
+                check: v => v ? '' : 'Please select a project scope.'
+            },
+            {
+                selector: '#problemStatement',
+                label: 'Problem Statement',
+                errorId: 'problemStatementError',
+                check: v => {
+                    if (v.length < 50) {
+                        return 'Problem Statement must contain at least 50 characters.';
+                    }
+
+                    const hasCitation =
+                        /\([^)]+,\s*(19|20)\d{2}\)|\[\d+\]/.test(v);
+
+                    if (!hasCitation) {
+                        return 'Please include an in-text citation, e.g. (Author, 2024) or [1].';
+                    }
+
+                    return '';
+                }
+            },
+            {
+                selector: '#objective1',
+                label: 'Objective 1',
+                errorId: 'objective1Error',
+                check: v => {
+                    if (v.length < 10 || v.split(/\s+/).length < 3) {
+                        return 'Objective 1 requires at least 10 characters and 3 words.';
+                    }
+                    return '';
+                }
+            },
+            {
+                selector: '#objective2',
+                label: 'Objective 2',
+                errorId: 'objective2Error',
+                check: v => {
+                    if (v.length < 10 || v.split(/\s+/).length < 3) {
+                        return 'Objective 2 requires at least 10 characters and 3 words.';
+                    }
+                    return '';
+                }
+            },
+            {
+                selector: '#objective3',
+                label: 'Objective 3',
+                errorId: 'objective3Error',
+                check: v => {
+                    // Objective 3 is optional in the existing form.
+                    if (!v) return '';
+
+                    if (v.length < 10 || v.split(/\s+/).length < 3) {
+                        return 'Objective 3 requires at least 10 characters and 3 words when provided.';
+                    }
+                    return '';
+                }
+            }
+        ];
+
+        function checkField(rule, showFeedback) {
+            const field = form.querySelector(rule.selector);
+            if (!field || field.disabled || field.readOnly) return '';
+
+            const message = rule.check(field.value.trim());
+
+            field.setCustomValidity(message);
+
+            if (showFeedback) {
+                field.classList.toggle('is-invalid', !!message);
+                field.classList.toggle(
+                    'is-valid',
+                    !message && field.value.trim().length > 0
+                );
+
+                if (rule.errorId) {
+                    const error = document.getElementById(rule.errorId);
+                    if (error) {
+                        error.textContent = message;
+                        error.classList.toggle('d-none', !message);
+                    }
+                }
+            }
+
+            return message;
+        }
+
+        function getErrors(showFeedback) {
+            const errors = [];
+
+            rules.forEach(rule => {
+                const message = checkField(rule, showFeedback);
+                if (message) {
+                    errors.push({
+                        rule: rule,
+                        message: message
+                    });
+                }
+            });
+
+            return errors;
+        }
+
+        function renderSummary(errors) {
+            if (!summary || !errorList) return;
+
+            errorList.replaceChildren();
+
+            errors.forEach(error => {
+                const li = document.createElement('li');
+                li.textContent = error.message;
+                errorList.appendChild(li);
+            });
+
+            summary.classList.toggle('d-none', errors.length === 0);
+        }
+
+        // Real-time and blur validation.
+        rules.forEach(rule => {
+            const field = form.querySelector(rule.selector);
+            if (!field) return;
+
+            function revalidate() {
+                checkField(rule, attemptedSubmit || field.dataset.touched === '1');
+
+                if (attemptedSubmit) {
+                    renderSummary(getErrors(true));
+                }
+            }
+
+            field.addEventListener('input', revalidate);
+            field.addEventListener('change', revalidate);
+
+            field.addEventListener('blur', function () {
+                field.dataset.touched = '1';
+                revalidate();
+            });
+        });
+
+        // Validate only formal IAF submissions.
+        // Keep Save Draft and other workflow actions unchanged.
+        form.addEventListener('submit', function (event) {
+            const submitter = event.submitter;
+            const action = submitter?.name === 'iafAction'
+                ? submitter.value
+                : '';
+
+            if (!['supervisor_review', 'submit', 'submit_new'].includes(action)) {
+                return;
+            }
+
+            attemptedSubmit = true;
+
+            const errors = getErrors(true);
+            renderSummary(errors);
+
+            if (errors.length > 0 || !form.checkValidity()) {
+                event.preventDefault();
+
+                if (errors.length > 0) {
+                    const firstField = form.querySelector(
+                        errors[0].rule.selector
+                    );
+
+                    if (firstField) {
+                        firstField.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'center'
+                        });
+
+                        firstField.focus({ preventScroll: true });
+                    }
+                } else {
+                    form.querySelector(':invalid')?.focus();
+                }
+            }
+
+            // If valid, existing submission handling continues.
+        }, true);
+    })();
+
+
     </script>
 }
 

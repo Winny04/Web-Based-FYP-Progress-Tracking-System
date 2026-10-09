@@ -47,7 +47,7 @@ namespace FYPTracker.Services.Others
             return true;
         }
 
-        public void Send(string to, string subject, string html, string? filePath = null, string from = null, string? cc = null)
+        public void Send(string to, string subject, string html, string? filePath = null, string? from = null, string? cc = null)
         {
             if (smtpSettings.Offline) return;
 
@@ -122,7 +122,7 @@ namespace FYPTracker.Services.Others
             }
         }
 
-        public async Task Send(List<string> to, string subject, string html, string? filePath = null, string from = null)
+        public async Task Send(List<string> to, string subject, string html, string? filePath = null, string? from = null)
         {
             // create message
             if (smtpSettings.Offline) return;

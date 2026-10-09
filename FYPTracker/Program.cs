@@ -113,6 +113,13 @@ builder.Services.Configure<IISServerOptions>(options =>
     options.MaxRequestBodySize = 100L * 1024 * 1024;
 });
 
+builder.Services.AddScoped<
+    FYPTracker.Services.Forms.MeetingLogTemplateService>();
+
+builder.Services.AddScoped<
+    FYPTracker.Services.Forms.IafFormTemplateService>();
+
+builder.Services.AddScoped<WeeklyMeetingSchedulerService>();
 var app = builder.Build();
 
 // === TEMP DEBUG: Log all unhandled exceptions to a file ===

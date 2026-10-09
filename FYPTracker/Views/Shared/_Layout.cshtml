@@ -29,9 +29,10 @@
     <!--end::Global Stylesheets Bundle-->
 
 </head>
-<body id="kt_body" style="background-color: #f8fafc;" class="page-loading-enabled page-loading header-fixed header-tablet-and-mobile-fixed toolbar-enabled">
-    @await Component.InvokeAsync(typeof(LoaderViewComponent))
-    @await Component.InvokeAsync(typeof(MasterViewComponent))
+<body id="kt_body"
+      style="background-color: #f8fafc;"
+      class="page-loading-enabled page-loading toolbar-enabled">
+@await Component.InvokeAsync(typeof(LoaderViewComponent))
 
     <!--begin::Javascript-->
     <script>var hostUrl = "~/assets/";</script>
@@ -392,33 +393,27 @@
         <!--begin::Page-->
         <div class="page d-flex flex-row flex-column-fluid">
             <!--begin::Wrapper-->
-            <div class="wrapper d-flex flex-column flex-row-fluid" id="kt_wrapper">
+            <div class="wrapper d-flex flex-column flex-row-fluid"
+             id="kt_wrapper">
 
-                <!--begin::Chart-->
-                @*                <div class="mixed-widget-5-chart card-rounded-top" data-kt-chart-color="success" style="height: 150px"></div>
-                *@                <!--end::Chart-->
-                @* @await Component.InvokeAsync(typeof(HeaderViewComponent))
+            <!-- Sticky Header -->
+            @await Component.InvokeAsync(typeof(MasterViewComponent))
 
-                    <div class="toolbar py-5 py-lg-15" id="kt_toolbar">
-                    @await Component.InvokeAsync(typeof(PageTitleViewComponent))
-                    </div>*@
+            <!-- Main Content -->
+            <div class="container-fluid d-flex flex-column flex-column-fluid">
+                <main role="main" class="pb-3 flex-column-fluid">
+                    @RenderBody()
+                </main>
+            </div>
 
-                <div class="container-fluid d-flex flex-column flex-column-fluid">
-                    <main role="main" class="pb-3 flex-column-fluid">
-                        @RenderBody()
-                    </main>
-                </div>
-
-                <footer class="border-top footer text-muted">
-                    @await Component.InvokeAsync(typeof(FooterViewComponent))
-                </footer>
+            <!-- Footer -->
+            <footer class="border-top footer text-muted">
+                @await Component.InvokeAsync(typeof(FooterViewComponent))
+            </footer>
             </div>
         </div>
     </div>
-    @if (IsSectionDefined("scripts"))
-    {
-        RenderSection("scripts");
-    }
+    @await RenderSectionAsync("Scripts", required: false)
 
     @if (TempData["success"] != null || TempData["Success"] != null)
     {

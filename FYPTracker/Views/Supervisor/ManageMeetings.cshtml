@@ -1,5 +1,7 @@
 @using FYPTracker.Models
 @model IEnumerable<MeetingBooking>
+@using System.Text.Json
+@inject FYPTracker.Services.Forms.MeetingLogTemplateService MeetingLogTemplateService
 @{
     ViewData["Title"] = "Manage Meetings";
     var user = ViewBag.CurrentUser as ApplicationUser;
@@ -65,6 +67,95 @@
     #meetingTabs .nav-link { color: #475569; transition: all 0.2s; }
     #meetingTabs .nav-link:hover { background-color: #f1f5f9; color: #1e293b; }
     #meetingTabs .nav-link.active { background-color: #0f172a !important; color: #ffffff !important; }
+
+    #reviewLogModal .modal-content {
+    max-height: calc(100dvh - 32px);
+    overflow: hidden;
+}
+
+#reviewLogModal #reviewLogForm {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: calc(100dvh - 32px);
+}
+
+#reviewLogModal .modal-header,
+#reviewLogModal .modal-footer {
+    flex-shrink: 0;
+}
+
+#reviewLogModal .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* ===== Respond Meeting Modal Fix ===== */
+
+.modal[id^="respondModal_"] .modal-dialog {
+    max-width: 860px;
+    width: calc(100% - 32px);
+    height: min(780px, calc(100dvh - 32px));
+    margin: 16px auto;
+}
+
+.modal[id^="respondModal_"] .modal-content {
+    height: 100%;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 14px;
+}
+
+/* Important: form is between modal-content and modal-body */
+.modal[id^="respondModal_"] .modal-content > form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.modal[id^="respondModal_"] .modal-header {
+    flex-shrink: 0;
+    background: #fff;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.modal[id^="respondModal_"] .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    padding: 20px;
+}
+
+.modal[id^="respondModal_"] .modal-footer {
+    flex-shrink: 0;
+    background: #fff;
+    padding: 12px 20px;
+    border-top: 1px solid #e2e8f0;
+}
+
+/* Mobile */
+  @@media (max-width: 576px) {
+    .modal[id^="respondModal_"] .modal-dialog {
+        max-width: none;
+        width: calc(100% - 16px);
+        height: calc(100dvh - 16px);
+        margin: 8px auto;
+    }
+
+    .modal[id^="respondModal_"] .modal-body {
+        padding: 14px;
+    }
+}
+
 </style>
 
 <div class="container-xxl py-4">
@@ -164,6 +255,63 @@
     <div class="tab-content" id="meetingTabsContent">
         <!-- List View -->
         <div class="tab-pane fade show active" id="list-view" role="tabpanel" aria-labelledby="list-tab">
+
+            
+            <!-- Pending Reschedule Requests -->
+            @{
+                var pendingReschedules = ViewBag.PendingReschedules as IEnumerable<FYPTracker.Models.MeetingRescheduleRequest>;
+            }
+            @if (pendingReschedules != null && pendingReschedules.Any())
+            {
+                <div class="glass-card p-4 mb-4" style="border-left: 4px solid #f59e0b;">
+                    <h5 class="fw-bold mb-3"><i class="fas fa-clock text-warning me-2"></i>Pending Reschedule Requests</h5>
+                    <div class="table-responsive">
+                        <table class="table align-middle gs-0 gy-3">
+                            <thead>
+                                <tr class="fw-bolder text-muted bg-light">
+                                    <th class="ps-4 min-w-150px">Student</th>
+                                    <th class="min-w-150px">Original Date & Time</th>
+                                    <th class="min-w-150px">Proposed Date & Time</th>
+                                    <th class="min-w-200px">Reason</th>
+                                    <th class="text-end min-w-200px pe-4">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var req in pendingReschedules)
+                                {
+                                    <tr>
+                                        <td class="ps-4 fw-bold">@req.Student?.FullName</td>
+                                        <td>
+                                            <div class="text-danger"><i class="fas fa-calendar-times me-1"></i>@req.OriginalDate.ToString("dd MMM yyyy")</div>
+                                            <div class="small text-muted">@req.OriginalTime</div>
+                                        </td>
+                                        <td>
+                                            <div class="text-success"><i class="fas fa-calendar-check me-1"></i>@req.ProposedDate.ToString("dd MMM yyyy")</div>
+                                            <div class="small text-muted">@req.ProposedTime</div>
+                                        </td>
+                                        <td>@req.Reason</td>
+                                        <td class="text-end pe-4">
+                                            <form asp-action="RespondRescheduleRequest" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="requestId" value="@req.Id" />
+                                                <input type="hidden" name="status" value="Approved" />
+                                                <button type="submit" class="btn btn-sm btn-success fw-semibold border-0 me-1"><i class="fas fa-check"></i> Approve</button>
+                                            </form>
+                                            <button type="button" class="btn btn-sm btn-danger fw-semibold border-0 me-1" onclick="openRescheduleRejectModal(@req.Id)">
+                                                <i class="fas fa-times"></i> Reject
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-primary fw-semibold border-0" onclick="openRescheduleCounterProposeModal(@req.Id)">
+                                                <i class="fas fa-calendar-plus"></i> Propose Date
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
             <div class="glass-card p-4">
                 <div class="table-responsive">
                     <table class="table align-middle gs-0 gy-4">
@@ -241,7 +389,7 @@
                                 </td>
                                 <td class="text-end pe-4">
                                     <button type="button" class="btn btn-sm btn-light-primary rounded-3" 
-                                            onclick="showMeetingDetails(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")', '@m.MeetingTime', '@(m.Student?.FullName)', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Reason ?? "No agenda provided."))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.SupervisorNote ?? "No notes added."))', '@m.Status', '@(m.ProposedNewDate?.ToString("yyyy-MM-dd") ?? "")', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Location ?? ""))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLink ?? ""))')">
+                                            onclick="showMeetingDetails(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")', '@m.MeetingTime', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Student?.FullName ?? ""))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Reason ?? "No agenda provided."))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.SupervisorNote ?? "No notes added."))', '@m.Status', '@(m.ProposedNewDate?.ToString("yyyy-MM-dd") ?? "")', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.Location ?? ""))', '@(System.Web.HttpUtility.JavaScriptStringEncode(m.MeetingLink ?? ""))')">
                                         <i class="fas fa-info-circle"></i> View Details
                                     </button>
                                     
@@ -253,7 +401,7 @@
 
                                         <!-- Quick Respond Modal -->
                                         <div class="modal fade" id="respondModal_@m.Id" tabindex="-1">
-                                            <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                                                 <div class="modal-content border-0 shadow-lg">
                                                     <form asp-action="RespondMeeting" method="post" id="respondForm_@m.Id" onsubmit="return validateRespondModal(@m.Id)">
                                                         <div class="modal-header">
@@ -281,11 +429,11 @@
                                                                 </select>
                                                             </div>
                                                             <div class="mb-3" id="recurringWeeksContainer_@m.Id">
-                                                                <label class="form-label fw-bold text-success">Auto-Generate Meeting Structure</label>
-                                                                <div class="alert alert-success py-2 px-3 mb-0" style="font-size: 0.9rem;">
-                                                                    <i class="fas fa-info-circle me-1"></i> Week 1–14 structure will be auto-generated.
+                                                                <label class="form-label fw-bold text-primary">Meeting Structure</label>
+                                                                <div class="alert alert-primary py-2 px-3 mb-0" style="font-size: 0.9rem;">
+                                                                    <i class="fas fa-info-circle me-1"></i> Weekly progress tracking runs independently. Approving this request only books this single meeting.
                                                                 </div>
-                                                                <input type="hidden" name="recurringWeeks" id="recurringWeeks_@m.Id" value="14" />
+                                                                <input type="hidden" name="recurringWeeks" id="recurringWeeks_@m.Id" value="1" />
                                                             </div>
                                                             <div class="mb-3" id="proposedDateContainer_@m.Id" style="display: none;">
                                                                 <label class="form-label fw-bold text-primary">Proposed New Date</label>
@@ -337,7 +485,9 @@
                                                     data-topics="@(m.MeetingLog?.KeyTopicsDiscussed)"
                                                     data-completed="@(m.MeetingLog?.CompletedActionsAndNotes)"
                                                     data-action="@(m.MeetingLog?.ActionPointsForNextMeeting)"
-                                                    data-next-date="@(m.MeetingLog.NextMeetingDate?.ToString("yyyy-MM-ddTHH:mm"))"
+                                                    data-next-date="@(m.MeetingLog?.NextMeetingDate?.ToString("yyyy-MM-dd") ?? "")"
+                                                    data-stage="@m.Stage"
+                                                    data-supervisor="@(m.Supervisor?.FullName ?? "")"
                                                     onclick="openReviewLogModal(this)">
                                                 Review Log
                                             </button>
@@ -384,9 +534,74 @@
     </div> <!-- End tab-content -->
 </div>
 
+<!-- Reschedule Reject Modal -->
+<div class="modal fade" id="rescheduleRejectModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+            <form asp-action="RespondRescheduleRequest" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="requestId" id="rejectRequestId" />
+                <input type="hidden" name="status" value="Rejected" />
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="fw-bold text-dark"><i class="fas fa-times-circle text-danger me-2"></i>Reject Reschedule Request</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Reason for Rejection</label>
+                        <textarea name="reason" class="form-control rounded-3" rows="3" required placeholder="Please explain why the request is rejected..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger px-4 rounded-3">Submit Rejection</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Reschedule Counter Propose Modal -->
+<div class="modal fade" id="rescheduleCounterProposeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+            <form asp-action="RespondRescheduleRequest" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="requestId" id="counterProposeRequestId" />
+                <input type="hidden" name="status" value="CounterProposed" />
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="fw-bold text-dark"><i class="fas fa-calendar-plus text-primary me-2"></i>Propose Another Date</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">New Proposed Date</label>
+                        <input type="date" name="proposedDate" id="cpDateInput" class="form-control" required onchange="updateCpAvailability()" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Available Slots</label>
+                        <input type="hidden" name="proposedTime" id="cpTimeInput" required />
+                        <div class="row g-2" id="cpTimeSlots">
+                            <div class="col-12 text-muted small"><i class="fas fa-arrow-up"></i> Please pick a date first.</div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Message / Reason</label>
+                        <textarea name="reason" class="form-control rounded-3" rows="3" required placeholder="Explain why you are proposing this date..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary px-4 rounded-3" id="cpSubmitBtn" disabled>Send Proposal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <!-- Unified Meeting Details & Reschedule Modal -->
 <div class="modal fade" id="detailsModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
             
             <!-- VIEW MODE -->
@@ -440,68 +655,97 @@
     </div>
 </div>
 
+@{
+    var supervisorLogTemplates = new Dictionary<
+        string, FYPTracker.ViewModels.MeetingRecordTemplateVM>
+    {
+        ["1"] = await MeetingLogTemplateService.LoadAsync(1),
+        ["2"] = await MeetingLogTemplateService.LoadAsync(2)
+    };
+
+    var supervisorLogTemplatesJson = JsonSerializer.Serialize(
+        supervisorLogTemplates,
+        new JsonSerializerOptions(JsonSerializerDefaults.Web)
+    );
+}
+
+<script type="application/json" id="supervisorLogTemplatesJson">
+@Html.Raw(supervisorLogTemplatesJson)
+</script>
+
 <!-- Supervisor Review Log Modal -->
-<div class="modal fade" id="reviewLogModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
-            <form asp-action="ReviewMeetingLogSupervisor" method="post" enctype="multipart/form-data" id="reviewLogForm" onsubmit="return confirmReviewLogSubmission(event)">
+<!-- JSON-Based Supervisor Review Modal -->
+<div class="modal fade"
+     id="reviewLogModal"
+     tabindex="-1">
+
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+
+        <div class="modal-content border-0 shadow-lg"
+             style="border-radius:20px;">
+
+            <form asp-action="ReviewMeetingLogSupervisor"
+                  method="post"
+                  id="reviewLogForm"
+                  onsubmit="return confirmReviewLogSubmission(event)">
+
                 @Html.AntiForgeryToken()
-                <input type="hidden" name="meetingId" id="revMeetingId" />
-                
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="fw-bold text-dark"><i class="fas fa-file-signature text-warning me-2"></i>Review & Sign Progress Logbook</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+
+                <input type="hidden"
+                       name="meetingId"
+                       id="revMeetingId" />
+
+                <div class="modal-header">
+
+                    <div>
+                        <h5 class="modal-title fw-bold">
+                            <i class="fas fa-file-signature text-primary me-2"></i>
+                            Review & Sign Meeting Record
+                        </h5>
+
+                        <small id="revTemplateTitle"
+                               class="text-muted">
+                        </small>
+                    </div>
+
+                    <button type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Close">
+                    </button>
+
                 </div>
+
                 <div class="modal-body">
-                    <p class="text-muted small mb-4">Review the student's meeting discussions and provide your feedback. Click "Sign & Approve" to finalize.</p>
-                    
-                    <div class="row mb-3">
-                        <div class="col-6"><strong>Student:</strong> <span id="revStudentName"></span></div>
-                        <div class="col-6 text-end"><strong>Date:</strong> <span id="revMeetingDate"></span></div>
+
+                    <div class="alert alert-info small">
+                        Review the student's meeting record.
+                        Complete the Supervisor Comments
+                        and Digital Signature fields.
                     </div>
 
-                    <div class="bg-light p-4 rounded-3 mb-4">
-                        <h6 class="fw-bold text-dark mb-3"><i class="fas fa-list-ul text-primary me-2"></i>Student's Digital Log</h6>
-                        
-                        <div class="mb-3">
-                            <strong class="d-block mb-1 text-muted small text-uppercase">Key Topics Discussed</strong>
-                            <div id="revKeyTopics" class="bg-white p-3 rounded border text-dark" style="white-space: pre-wrap; font-size: 0.95rem;"></div>
-                        </div>
-
-                        <div class="mb-3">
-                            <strong class="d-block mb-1 text-muted small text-uppercase">Completed Actions & Notes</strong>
-                            <div id="revCompletedActions" class="bg-white p-3 rounded border text-dark" style="white-space: pre-wrap; font-size: 0.95rem;"></div>
-                        </div>
-
-                        <div>
-                            <strong class="d-block mb-1 text-muted small text-uppercase">Action Points for Next Meeting</strong>
-                            <div id="revActionPoints" class="bg-white p-3 rounded border text-dark" style="white-space: pre-wrap; font-size: 0.95rem;"></div>
-                        </div>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="form-label fw-bold text-primary">Supervisor Comments (Feedback)</label>
-                        <textarea name="supervisorComments" id="supervisorComments" class="form-control rounded-3 border-primary" rows="4" placeholder="Provide feedback or additional action points for the student here..."></textarea>
-                        <div class="text-muted small mt-1">This feedback will be visible to the student in their finalized meeting log.</div>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="form-label fw-bold text-primary">Supervisor Signature <span class="text-danger">*</span></label>
-                        <div class="border rounded-3 bg-white" style="height: 150px; position: relative; touch-action: none;">
-                            <canvas id="reviewSignatureCanvas" style="width: 100%; height: 100%; cursor: crosshair;"></canvas>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mt-2">
-                            <div class="text-muted small">Please sign within the box above.</div>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearReviewSignature()">Clear Signature</button>
-                        </div>
-                        <input type="hidden" name="supervisorSignature" id="revSupervisorSignature" />
+                    <div id="revTemplateFields"
+                         class="row g-3">
                     </div>
 
                 </div>
-                <div class="modal-footer border-0">
-                    <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary px-4 rounded-3"><i class="fas fa-file-signature me-1"></i> Sign & Approve</button>
+
+                <div class="modal-footer">
+
+                    <button type="button"
+                            class="btn btn-light"
+                            data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+
+                    <button type="submit"
+                            class="btn btn-primary">
+                        <i class="fas fa-file-signature me-1"></i>
+                        Sign & Approve
+                    </button>
+
                 </div>
+
             </form>
         </div>
     </div>
@@ -510,6 +754,67 @@
 @section Scripts {
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
 <script>
+    function openRescheduleRejectModal(requestId) {
+        document.getElementById('rejectRequestId').value = requestId;
+        new bootstrap.Modal(document.getElementById('rescheduleRejectModal')).show();
+    }
+
+    function openRescheduleCounterProposeModal(requestId) {
+        document.getElementById('counterProposeRequestId').value = requestId;
+        document.getElementById('cpDateInput').value = '';
+        document.getElementById('cpTimeInput').value = '';
+        document.getElementById('cpTimeSlots').innerHTML = '<div class="col-12 text-muted small"><i class="fas fa-arrow-up"></i> Please pick a date first.</div>';
+        document.getElementById('cpSubmitBtn').disabled = true;
+        new bootstrap.Modal(document.getElementById('rescheduleCounterProposeModal')).show();
+    }
+
+    async function updateCpAvailability() {
+        const dateVal = document.getElementById('cpDateInput').value;
+        const container = document.getElementById('cpTimeSlots');
+        const submitBtn = document.getElementById('cpSubmitBtn');
+        const timeInput = document.getElementById('cpTimeInput');
+
+        if (!dateVal) return;
+        
+        container.innerHTML = '<div class="col-12 text-center text-muted py-2"><div class="spinner-border spinner-border-sm me-2"></div>Loading slots...</div>';
+        timeInput.value = '';
+        submitBtn.disabled = true;
+
+        try {
+            const resp = await fetch(`/Supervisor/GetBookedSlots?supervisorId=${@(user?.Id ?? 0)}&date=${dateVal}`);
+            const bookedTimes = await resp.json();
+            
+            container.innerHTML = '';
+            
+            // Hardcode slots 8am to 5pm for counter proposal
+            const allSlots = ['08:00 AM','09:00 AM','10:00 AM','11:00 AM','12:00 PM','01:00 PM','02:00 PM','03:00 PM','04:00 PM','05:00 PM'];
+            
+            allSlots.forEach(slotTime => {
+                const isBooked = bookedTimes.includes(slotTime);
+                const col = document.createElement('div');
+                col.className = 'col-4';
+                
+                if (isBooked) {
+                    col.innerHTML = `<div class="time-slot booked" title="Already booked">${slotTime}</div>`;
+                } else {
+                    col.innerHTML = `<div class="time-slot" data-time="${slotTime}" onclick="selectCpTime(this)">${slotTime}</div>`;
+                }
+                container.appendChild(col);
+            });
+        } catch (err) {
+            console.error(err);
+            container.innerHTML = '<div class="col-12 text-center text-danger">Error loading slots.</div>';
+        }
+    }
+
+    function selectCpTime(el) {
+        if (el.classList.contains('booked')) return;
+        document.getElementById('cpTimeSlots').querySelectorAll('.time-slot').forEach(s => s.classList.remove('selected'));
+        el.classList.add('selected');
+        document.getElementById('cpTimeInput').value = el.dataset.time;
+        document.getElementById('cpSubmitBtn').disabled = false;
+    }
+
     var eventsData = [
         @foreach (var m in Model.Where(x => x.Status == "Approved" || x.Status == "Pending" || x.Status == "Postponed"))
         {
@@ -685,17 +990,161 @@
         new bootstrap.Modal(document.getElementById('detailsModal')).show();
     }
 
-    function openReviewLogModal(btn) {
-        document.getElementById('revMeetingId').value = btn.getAttribute('data-id');
-        document.getElementById('revStudentName').textContent = btn.getAttribute('data-student');
-        document.getElementById('revMeetingDate').textContent = btn.getAttribute('data-date');
-        
-        document.getElementById('revKeyTopics').textContent = btn.getAttribute('data-topics') || 'No topics provided.';
-        document.getElementById('revCompletedActions').textContent = btn.getAttribute('data-completed') || 'No notes provided.';
-        document.getElementById('revActionPoints').textContent = btn.getAttribute('data-action') || 'No action points provided.';
-        
-        document.getElementById('supervisorComments').value = '';
-        new bootstrap.Modal(document.getElementById('reviewLogModal')).show();
+        function openReviewLogModal(btn) {
+
+        const templates = JSON.parse(
+            document.getElementById(
+                'supervisorLogTemplatesJson'
+            ).textContent
+        );
+
+        const stage = String(btn.dataset.stage);
+        const template = templates[stage];
+
+        if (!template) {
+            Swal.fire(
+                'Template Error',
+                'Meeting template not found for Stage ' + stage,
+                'error'
+            );
+            return;
+        }
+
+        document.getElementById('revMeetingId').value =
+            btn.dataset.id;
+
+        document.getElementById('revTemplateTitle').textContent =
+            template.title + ' — Version ' + template.version;
+
+        const container = document.getElementById('revTemplateFields');
+        container.replaceChildren();
+
+        const fieldValues = {
+            Supervisor: btn.dataset.supervisor || '',
+            Student: btn.dataset.student || '',
+            MeetingDate: btn.dataset.date || '',
+            TopicsDiscussed: btn.dataset.topics || '',
+            ActionPoints: btn.dataset.action || '',
+            ActionsCompleted: btn.dataset.completed || '',
+            NextMeetingDate: btn.dataset.nextDate || 'Not specified',
+            SupervisorSignatureDate: 'Automatically recorded when signed'
+        };
+
+        const fields = [...template.fields]
+            .sort((a, b) => a.order - b.order);
+
+        fields.forEach(field => {
+
+            const col = document.createElement('div');
+
+            const width = Number(field.columns);
+
+            col.className = 'col-md-' + (
+                Number.isInteger(width) &&
+                width >= 3 &&
+                width <= 12 ? width : 12
+            );
+
+            const label = document.createElement('label');
+            label.className = 'form-label fw-bold';
+            label.textContent = field.label;
+
+            col.appendChild(label);
+
+            if (field.key === 'SupervisorComments') {
+
+                // Editable Supervisor Comments
+                const textarea = document.createElement('textarea');
+
+                textarea.id = 'supervisorComments';
+                textarea.name = 'supervisorComments';
+                textarea.className = 'form-control rounded-3';
+                textarea.rows = 4;
+                textarea.placeholder =
+                    'Enter supervisor comments and feedback...';
+
+                col.appendChild(textarea);
+
+            } else if (field.key === 'SupervisorSignature') {
+
+                // Digital Signature Canvas
+                const signatureBox = document.createElement('div');
+
+                signatureBox.className =
+                    'border rounded-3 bg-white';
+
+                signatureBox.style.height = '150px';
+                signatureBox.style.touchAction = 'none';
+
+                const canvas = document.createElement('canvas');
+
+                canvas.id = 'reviewSignatureCanvas';
+                canvas.style.width = '100%';
+                canvas.style.height = '100%';
+                canvas.style.cursor = 'crosshair';
+
+                signatureBox.appendChild(canvas);
+                col.appendChild(signatureBox);
+
+                const tools = document.createElement('div');
+
+                tools.className =
+                    'd-flex justify-content-between align-items-center mt-2';
+
+                const hint = document.createElement('small');
+                hint.className = 'text-muted';
+                hint.textContent = 'Please sign inside the box.';
+
+                const clearButton = document.createElement('button');
+                clearButton.type = 'button';
+                clearButton.className =
+                    'btn btn-sm btn-outline-secondary';
+                clearButton.textContent = 'Clear Signature';
+
+                clearButton.addEventListener(
+                    'click',
+                    clearReviewSignature
+                );
+
+                tools.appendChild(hint);
+                tools.appendChild(clearButton);
+
+                col.appendChild(tools);
+
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.id = 'revSupervisorSignature';
+                hidden.name = 'supervisorSignature';
+
+                col.appendChild(hidden);
+
+            } else {
+
+                // Read-only Student / Meeting values
+                const value = document.createElement('div');
+
+                value.className =
+                    'form-control bg-light text-muted rounded-3';
+
+                value.style.whiteSpace = 'pre-wrap';
+
+                if (field.type === 'TextArea') {
+                    value.style.minHeight = '95px';
+                    value.style.height = 'auto';
+                }
+
+                value.textContent =
+                    fieldValues[field.key] || 'Not provided';
+
+                col.appendChild(value);
+            }
+
+            container.appendChild(col);
+        });
+
+        bootstrap.Modal.getOrCreateInstance(
+            document.getElementById('reviewLogModal')
+        ).show();
     }
 
     function toggleRecurringWeeks(id) {
@@ -1019,7 +1468,7 @@
                         
                         <!-- Quick Respond Modal (Injected) -->
                         <div class="modal fade" id="respondModal_${p.meetingId}" tabindex="-1">
-                            <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
                                 <div class="modal-content border-0 shadow-lg">
                                     <form action="/Supervisor/RespondMeeting" method="post" id="respondForm_${p.meetingId}" onsubmit="return validateRespondModal(${p.meetingId})">
                                         <input name="__RequestVerificationToken" type="hidden" value="${token}" />
@@ -1097,7 +1546,6 @@
                 tbody.insertAdjacentHTML('afterbegin', rowHtml);
                 tbody.insertAdjacentHTML('afterbegin', headerHtml);
             }
-            
         } else if (p.type === 'MeetingLogSubmitted') {
             let existingRow = document.getElementById('meetingRow_' + p.meetingId);
             if (existingRow) {

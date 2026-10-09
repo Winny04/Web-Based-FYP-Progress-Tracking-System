@@ -36,6 +36,8 @@ namespace FYPTracker.Models
         // ── Student Module ─────────────────────────────────────────
         public virtual DbSet<SupervisorRequest> SupervisorRequests { get; set; } = null!;
         public virtual DbSet<MeetingBooking>    MeetingBookings    { get; set; } = null!;
+        public virtual DbSet<WeeklyMeetingSchedule> WeeklyMeetingSchedules { get; set; } = null!;
+        public virtual DbSet<MeetingRescheduleRequest> MeetingRescheduleRequests { get; set; } = null!;
         public virtual DbSet<MeetingLog>        MeetingLogs        { get; set; } = null!;
         public virtual DbSet<FYPNotification>   FYPNotifications   { get; set; } = null!;
         public virtual DbSet<FYPActivity>       FYPActivities      { get; set; } = null!;

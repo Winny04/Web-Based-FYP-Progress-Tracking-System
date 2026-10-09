@@ -92,6 +92,7 @@ namespace FYPTracker.Controllers
             return new string(Enumerable.Range(0, 8).Select(_ => chars[rng.Next(chars.Length)]).ToArray());
         }
 
+
         public async Task<IActionResult> Index()
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
@@ -1489,6 +1490,711 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             }
         }
 
+        // ============================================================
+        // ADMIN - MULTIPLE FORM TEMPLATES
+        // GET / POST / AUDIT HISTORY
+        // ============================================================
+
+        private static readonly System.Threading.SemaphoreSlim _templateLock =
+            new System.Threading.SemaphoreSlim(1, 1);
+
+        // Template ID is used for navigation and file selection.
+        // The JSON TemplateKey is preserved separately.
+        private static readonly Dictionary<
+            string, (string FileName, string HistoryFolder)>
+            _formTemplateFiles = new(
+                StringComparer.Ordinal)
+        {
+            ["stage1-meeting"] = (
+                "Stage1RecordOfSupervisorMeeting6000CEM6002CMD.default.json",
+                "RecordOfSupervisorMeeting"
+            ),
+
+            ["stage2-meeting"] = (
+                "Stage2RecordOfSupervisorMeeting6001CEM303COM.default.json",
+                "Stage2RecordOfSupervisorMeeting"
+            ),
+
+            ["iaf"] = (
+                "InitialProjectAllocationForm.default.json",
+                "InitialProjectAllocationForm"
+            ),
+
+            ["thesis-cover"] = (
+                "ThesisCoverPage.default.json",
+                "ThesisCoverPage"
+            ),
+
+            ["group-genai"] = (
+                "GroupGenAiDeclaration.default.json",
+                "GroupGenAiDeclaration"
+            )
+        };
+
+        private static readonly System.Text.Json.JsonSerializerOptions
+            _formTemplateJsonOptions = new()
+        {
+            PropertyNameCaseInsensitive = true,
+            PropertyNamingPolicy =
+                System.Text.Json.JsonNamingPolicy.CamelCase,
+            WriteIndented = true
+        };
+
+        // Generate the next version without resetting decimal versions.
+        // Example: 1.011111 -> 1.011112
+        private static string GetNextFormTemplateVersion(
+            string oldVersion,
+            string versionsDirectory)
+        {
+            var match = Regex.Match(
+                oldVersion ?? "",
+                @"^(v?)(\d+)(?:\.(\d+))?$",
+                RegexOptions.CultureInvariant);
+
+            if (!match.Success)
+                throw new InvalidDataException(
+                    "Unsupported template version format.");
+
+            string prefix = match.Groups[1].Value;
+            string majorText = match.Groups[2].Value;
+
+            long major = long.Parse(
+                majorText,
+                System.Globalization.CultureInfo.InvariantCulture);
+
+            bool hasMinor = match.Groups[3].Success;
+            string minorText = hasMinor
+                ? match.Groups[3].Value
+                : "";
+
+            long minor = hasMinor
+                ? long.Parse(
+                    minorText,
+                    System.Globalization.CultureInfo.InvariantCulture)
+                : 0;
+
+            for (int attempt = 0; attempt < 100000; attempt++)
+            {
+                string candidate;
+
+                if (hasMinor)
+                {
+                    minor = checked(minor + 1);
+
+                    string paddedMinor = minor.ToString(
+                        "D" + minorText.Length,
+                        System.Globalization.CultureInfo.InvariantCulture);
+
+                    candidate = prefix + majorText + "." + paddedMinor;
+                }
+                else
+                {
+                    major = checked(major + 1);
+                    candidate = prefix +
+                        major.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture);
+                }
+
+                string snapshotPath = Path.Combine(
+                    versionsDirectory,
+                    $"version-{candidate}.json");
+
+                if (!System.IO.File.Exists(snapshotPath))
+                    return candidate;
+            }
+
+            throw new InvalidOperationException(
+                "Unable to allocate a unique template version.");
+        }
+
+        // Create snapshots without overwriting existing versions.
+        private static async Task WriteTemplateSnapshotAsync(
+            string path,
+            string json)
+        {
+            await using var stream = new FileStream(
+                path,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None);
+
+            await using var writer = new StreamWriter(
+                stream,
+                new UTF8Encoding(false));
+
+            await writer.WriteAsync(json);
+        }
+
+        // ============================================================
+        // GET - OPEN SELECTED TEMPLATE
+        // ============================================================
+
+        [HttpGet]
+        public async Task<IActionResult> FormTemplateSettings(
+            string? templateId = null,
+            string? templateKey = null)
+        {
+            var loginName = HttpContext.User.Identity?.Name;
+
+            var currentUser = await _context.ApplicationUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u =>
+                    u.UserName == loginName ||
+                    u.Email == loginName);
+
+            if (currentUser == null)
+                return RedirectToAction("Login", "User");
+
+            ViewBag.CurrentUser = currentUser;
+
+            // Backward compatibility with previous templateKey URLs.
+            if (string.IsNullOrWhiteSpace(templateId) &&
+                !string.IsNullOrWhiteSpace(templateKey))
+            {
+                templateId = templateKey switch
+                {
+                    "record-of-supervisor-meeting" =>
+                        "stage1-meeting",
+
+                    "record-of-supervisor-meeting-6001cem-303com" =>
+                        "stage2-meeting",
+
+                    "thesis-cover-page" =>
+                        "thesis-cover",
+
+                    "group-genai-declaration" =>
+                        "group-genai",
+
+                    _ => templateKey
+                };
+            }
+
+            string selectedId = string.IsNullOrWhiteSpace(templateId)
+                ? "stage1-meeting"
+                : templateId.Trim();
+
+            if (!_formTemplateFiles.TryGetValue(
+                selectedId,
+                out var definition))
+            {
+                return BadRequest("Unsupported form template.");
+            }
+
+            string baseDir = Path.Combine(
+                Directory.GetCurrentDirectory(),
+                "FormTemplates");
+
+            string templatePath = Path.Combine(
+                baseDir,
+                definition.FileName);
+
+            string historyPath = Path.Combine(
+                baseDir,
+                "History",
+                definition.HistoryFolder,
+                "history.json");
+
+            if (!System.IO.File.Exists(templatePath))
+                return NotFound(
+                    "Template file not found: " + definition.FileName);
+
+            try
+            {
+                string json = await System.IO.File
+                    .ReadAllTextAsync(templatePath);
+
+                var template =
+                    System.Text.Json.JsonSerializer.Deserialize<
+                        MeetingRecordTemplateVM>(
+                            json,
+                            _formTemplateJsonOptions);
+
+                if (template == null ||
+                    string.IsNullOrWhiteSpace(template.TemplateKey) ||
+                    template.Page == null ||
+                    template.Fields == null ||
+                    template.Fields.Count == 0)
+                {
+                    return StatusCode(
+                        500,
+                        "Form template configuration is invalid.");
+                }
+
+                // Read existing audit records, but never modify them
+                // simply by opening the page.
+                var history = new List<TemplateAuditEvent>();
+
+                if (System.IO.File.Exists(historyPath))
+                {
+                    string historyJson = await System.IO.File
+                        .ReadAllTextAsync(historyPath);
+
+                    history =
+                        System.Text.Json.JsonSerializer.Deserialize<
+                            List<TemplateAuditEvent>>(
+                                historyJson,
+                                _formTemplateJsonOptions)
+                        ?? throw new InvalidDataException(
+                            "Template audit history is invalid.");
+                }
+
+                var vm = new FormTemplateSettingsViewModel
+                {
+                    CurrentTemplate = template,
+                    History = history
+                        .OrderByDescending(h => h.DateModifiedUtc)
+                        .ToList()
+                };
+                
+                ViewBag.SelectedTemplateId = selectedId;
+
+                // Thesis Cover Page date comes from Admin System Settings.
+                // Do not use today's date or a hardcoded cover-page date.
+                ViewBag.CoverPageDeadlineDisplay = "";
+
+                if (selectedId == "thesis-cover")
+                {
+                    string? deadlineValue = await _context.FYPSettings
+                        .AsNoTracking()
+                        .Where(s => s.Key == "DPPDeadline")
+                        .Select(s => s.Value)
+                        .FirstOrDefaultAsync();
+
+                    string[] acceptedFormats =
+                    {
+                        "yyyy-MM-dd",
+                        "yyyy-MM-ddTHH:mm:ss",
+                        "yyyy-MM-ddTHH:mm:ss.fff"
+                    };
+
+                    if (DateTime.TryParseExact(
+                        deadlineValue?.Trim(),
+                        acceptedFormats,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out DateTime dueDate))
+                    {
+                        int day = dueDate.Day;
+
+                        string suffix = day % 100 >= 11 && day % 100 <= 13
+                            ? "th"
+                            : (day % 10) switch
+                            {
+                                1 => "st",
+                                2 => "nd",
+                                3 => "rd",
+                                _ => "th"
+                            };
+
+                        ViewBag.CoverPageDeadlineDisplay =
+                            day.ToString() +
+                            suffix + " " +
+                            dueDate.ToString(
+                                "MMMM yyyy",
+                                System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                }
+
+                return View(vm);
+
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+
+                return StatusCode(
+                    500,
+                    "Error loading form template.");
+            }
+        }
+
+        // ============================================================
+        // POST - SAVE SELECTED TEMPLATE
+        // ============================================================
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SaveFormTemplate(
+            string templateId,
+            MeetingRecordTemplateVM model)
+        {
+            if (string.IsNullOrWhiteSpace(templateId) ||
+                !_formTemplateFiles.TryGetValue(
+                    templateId,
+                    out var definition))
+            {
+                return BadRequest("Invalid template selection.");
+            }
+
+            if (model == null ||
+                model.Fields == null ||
+                model.Fields.Count == 0 ||
+                !ModelState.IsValid)
+            {
+                return BadRequest("Invalid template data.");
+            }
+
+            var loginName = HttpContext.User.Identity?.Name;
+
+            var currentUser = await _context.ApplicationUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u =>
+                    u.UserName == loginName ||
+                    u.Email == loginName);
+
+            if (currentUser == null)
+                return Unauthorized();
+
+            await _templateLock.WaitAsync();
+
+            try
+            {
+                string baseDir = Path.Combine(
+                    Directory.GetCurrentDirectory(),
+                    "FormTemplates");
+
+                string templatePath = Path.Combine(
+                    baseDir,
+                    definition.FileName);
+
+                string historyDir = Path.Combine(
+                    baseDir,
+                    "History",
+                    definition.HistoryFolder);
+
+                string versionsDir = Path.Combine(
+                    historyDir,
+                    "Versions");
+
+                string historyPath = Path.Combine(
+                    historyDir,
+                    "history.json");
+
+                if (!System.IO.File.Exists(templatePath))
+                    return NotFound("Original template not found.");
+
+                string oldJson = await System.IO.File
+                    .ReadAllTextAsync(templatePath);
+
+                var original =
+                    System.Text.Json.JsonSerializer.Deserialize<
+                        MeetingRecordTemplateVM>(
+                            oldJson,
+                            _formTemplateJsonOptions);
+
+                if (original == null ||
+                    original.Fields == null ||
+                    original.Fields.Count == 0 ||
+                    string.IsNullOrWhiteSpace(original.TemplateKey) ||
+                    string.IsNullOrWhiteSpace(original.Version))
+                {
+                    return StatusCode(
+                        500,
+                        "Original template is invalid.");
+                }
+
+                // Never trust TemplateKey from the browser.
+                if (!string.Equals(
+                    model.TemplateKey,
+                    original.TemplateKey,
+                    StringComparison.Ordinal))
+                {
+                    return BadRequest("Template Key mismatch.");
+                }
+
+                // Prevent stale browser tabs from overwriting updates.
+                if (!string.Equals(
+                    model.Version,
+                    original.Version,
+                    StringComparison.Ordinal))
+                {
+                    return Conflict(
+                        "This template was updated elsewhere. " +
+                        "Refresh the page before saving.");
+                }
+
+                // Ensure all immutable field keys match the saved JSON.
+                if (model.Fields.Count != original.Fields.Count)
+                    return BadRequest("Field count mismatch.");
+
+                var submittedFields =
+                    new Dictionary<string, TemplateField>(
+                        StringComparer.Ordinal);
+
+                foreach (var field in model.Fields)
+                {
+                    if (field == null ||
+                        string.IsNullOrWhiteSpace(field.Key) ||
+                        !submittedFields.TryAdd(field.Key, field))
+                    {
+                        return BadRequest(
+                            "Duplicate or missing Field Key.");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(field.Label) ||
+                        field.Label.Length > 250)
+                    {
+                        return BadRequest(
+                            "Field Label is invalid.");
+                    }
+
+                    if (field.Columns < 3 || field.Columns > 12)
+                        return BadRequest(
+                            "Field Width must be between 3 and 12.");
+
+                    if (field.Order < 1 || field.Order > 1000)
+                        return BadRequest(
+                            "Display Order is invalid.");
+                }
+
+                var existingKeys = original.Fields
+                    .Select(f => f.Key)
+                    .ToHashSet(StringComparer.Ordinal);
+
+                if (submittedFields.Keys.Any(
+                    key => !existingKeys.Contains(key)))
+                {
+                    return BadRequest(
+                        "Unknown Field Key detected.");
+                }
+
+                if (submittedFields.Values
+                    .Select(f => f.Order)
+                    .Distinct()
+                    .Count() != submittedFields.Count)
+                {
+                    return BadRequest(
+                        "Display Order values must be unique.");
+                }
+
+                // Update only editable properties.
+                // Keep Title, TemplateKey, Page, Type and MinHeightMm
+                // from the original server-side JSON.
+                var changes = new List<TemplateFieldChange>();
+
+                foreach (var existingField in original.Fields)
+                {
+                    var submitted = submittedFields[existingField.Key];
+
+                    string newLabel = submitted.Label.Trim();
+
+                    if (existingField.Label != newLabel)
+                    {
+                        changes.Add(new TemplateFieldChange
+                        {
+                            FieldKey = existingField.Key,
+                            PropertyName = "Label",
+                            PreviousValue = existingField.Label,
+                            NewValue = newLabel
+                        });
+                    }
+
+                    if (existingField.Order != submitted.Order)
+                    {
+                        changes.Add(new TemplateFieldChange
+                        {
+                            FieldKey = existingField.Key,
+                            PropertyName = "Order",
+                            PreviousValue =
+                                existingField.Order.ToString(),
+                            NewValue =
+                                submitted.Order.ToString()
+                        });
+                    }
+
+                    if (existingField.Columns != submitted.Columns)
+                    {
+                        changes.Add(new TemplateFieldChange
+                        {
+                            FieldKey = existingField.Key,
+                            PropertyName = "Columns",
+                            PreviousValue =
+                                existingField.Columns.ToString(),
+                            NewValue =
+                                submitted.Columns.ToString()
+                        });
+                    }
+
+                    existingField.Label = newLabel;
+                    existingField.Order = submitted.Order;
+                    existingField.Columns = submitted.Columns;
+                }
+
+                if (changes.Count == 0)
+                {
+                    TempData["SuccessMessage"] =
+                        "No template changes detected.";
+
+                    return RedirectToAction(
+                        nameof(FormTemplateSettings),
+                        new { templateId });
+                }
+
+                // Read audit history BEFORE writing any changes.
+                var history = new List<TemplateAuditEvent>();
+
+                bool hasHistory =
+                    System.IO.File.Exists(historyPath);
+
+                if (hasHistory)
+                {
+                    string historyJson = await System.IO.File
+                        .ReadAllTextAsync(historyPath);
+
+                    history =
+                        System.Text.Json.JsonSerializer.Deserialize<
+                            List<TemplateAuditEvent>>(
+                                historyJson,
+                                _formTemplateJsonOptions)
+                        ?? throw new InvalidDataException(
+                            "Existing audit history is invalid.");
+                }
+                else
+                {
+                    // Initial audit event for a newly introduced template.
+                    history.Add(new TemplateAuditEvent
+                    {
+                        ActionType = "Created",
+                        ModifiedBy = "System Baseline",
+                        TemplateKey = original.TemplateKey,
+                        TemplateVersion = original.Version,
+                        DateModifiedUtc = DateTime.UtcNow
+                    });
+                }
+
+                Directory.CreateDirectory(versionsDir);
+
+                string previousVersion = original.Version;
+
+                string newVersion = GetNextFormTemplateVersion(
+                    previousVersion,
+                    versionsDir);
+
+                original.Version = newVersion;
+
+                history.Add(new TemplateAuditEvent
+                {
+                    TemplateKey = original.TemplateKey,
+                    TemplateVersion = newVersion,
+                    PreviousVersion = previousVersion,
+                    ActionType = "Updated",
+                    ModifiedBy =
+                        currentUser.FullName ?? currentUser.UserName,
+                    DateModifiedUtc = DateTime.UtcNow,
+                    FieldChanges = changes
+                });
+
+                string newJson =
+                    System.Text.Json.JsonSerializer.Serialize(
+                        original,
+                        _formTemplateJsonOptions);
+
+                string newHistoryJson =
+                    System.Text.Json.JsonSerializer.Serialize(
+                        history,
+                        _formTemplateJsonOptions);
+
+                string oldSnapshotPath = Path.Combine(
+                    versionsDir,
+                    $"version-{previousVersion}.json");
+
+                string newSnapshotPath = Path.Combine(
+                    versionsDir,
+                    $"version-{newVersion}.json");
+
+                // Never overwrite a historical snapshot.
+                if (!System.IO.File.Exists(oldSnapshotPath))
+                {
+                    await WriteTemplateSnapshotAsync(
+                        oldSnapshotPath,
+                        oldJson);
+                }
+
+                // Prepare the updated active template and audit log.
+                string tempTemplatePath = templatePath + "." +
+                    Guid.NewGuid().ToString("N") + ".tmp";
+
+                string tempHistoryPath = historyPath + "." +
+                    Guid.NewGuid().ToString("N") + ".tmp";
+
+                try
+                {
+                    await System.IO.File.WriteAllTextAsync(
+                        tempTemplatePath,
+                        newJson);
+
+                    await System.IO.File.WriteAllTextAsync(
+                        tempHistoryPath,
+                        newHistoryJson);
+
+                    // FileMode.CreateNew prevents overwriting
+                    // an existing version snapshot.
+                    await WriteTemplateSnapshotAsync(
+                        newSnapshotPath,
+                        newJson);
+
+                    // Replace current files after preparation.
+                    System.IO.File.Move(
+                        tempHistoryPath,
+                        historyPath,
+                        true);
+
+                    System.IO.File.Move(
+                        tempTemplatePath,
+                        templatePath,
+                        true);
+                }
+                finally
+                {
+                    if (System.IO.File.Exists(tempTemplatePath))
+                        System.IO.File.Delete(tempTemplatePath);
+
+                    if (System.IO.File.Exists(tempHistoryPath))
+                        System.IO.File.Delete(tempHistoryPath);
+                }
+
+                TempData["SuccessMessage"] =
+                    "Form Template successfully updated to version " +
+                    newVersion + ".";
+
+                return RedirectToAction(
+                    nameof(FormTemplateSettings),
+                    new { templateId });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+
+                return StatusCode(
+                    500,
+                    "Error saving form template. " +
+                    "Please check the application logs.");
+            }
+            finally
+            {
+                _templateLock.Release();
+            }
+        }
+
+        // ============================================================
+        // LEGACY HISTORY ENDPOINTS
+        // Disabled in the UI. Historical JSON files are preserved.
+        // ============================================================
+
+        [HttpGet]
+        public IActionResult ViewHistoricalTemplate(string version)
+        {
+            return NotFound();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult RestoreFormTemplate(string version)
+        {
+            return NotFound();
+        }
+
+
         public async Task<IActionResult> Settings(string sessionFilter = null)
         {
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
@@ -1797,57 +2503,245 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             }
         }
 
+        
+        // ============================================================
+        // ADMIN - INDEPENDENT GLOBAL SETTINGS SAVE ACTIONS
+        // ============================================================
+
+        // Shared helper: update ONE FYPSetting key.
+        // The caller is responsible for SaveChangesAsync().
+        private async Task SetGlobalSettingAsync(
+            string key,
+            string value,
+            string label)
+        {
+            var setting = await _context.FYPSettings
+                .FirstOrDefaultAsync(s => s.Key == key);
+
+            if (setting != null)
+            {
+                setting.Value = value;
+                setting.UpdatedDate = DateTime.Now;
+            }
+            else
+            {
+                _context.FYPSettings.Add(
+                    new FYPTracker.Models.FYPSetting
+                    {
+                        Key = key,
+                        Value = value,
+                        Label = label,
+                        UpdatedDate = DateTime.Now
+                    });
+            }
+        }
+
+        // ============================================================
+        // POST - SAVE DPP SETTINGS ONLY
+        // ============================================================
+
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UpdateFYPSettings(
-            string dppDeadline, string exhibitionDate,
-            string exhibitionTimeStart, string exhibitionTimeEnd,
-            string supervisorRequestTimeoutDays)
+        public async Task<IActionResult> UpdateDppSettings(
+            string? dppDeadline,
+            string? sessionFilter)
         {
             try
             {
-                var updates = new Dictionary<string, (string value, string label)>
-                {
-                    { "DPPDeadline",         (dppDeadline ?? "",         "DPP Submission Deadline") },
-                    { "ExhibitionDate",      (exhibitionDate ?? "",      "FYP Exhibition Date") },
-                    { "ExhibitionTimeStart", (exhibitionTimeStart ?? "", "Exhibition Start Time") },
-                    { "ExhibitionTimeEnd",   (exhibitionTimeEnd ?? "",   "Exhibition End Time") },
-                    // Supervisor request auto-rejection timeout – must be a positive integer (days)
-                    { "SupervisorRequestTimeoutDays", (supervisorRequestTimeoutDays ?? "3", "Supervisor Request Timeout (Days)") },
-                };
+                string value = (dppDeadline ?? "").Trim();
 
-                foreach (var kv in updates)
+                // Empty is permitted to explicitly clear the
+                // deadline. The UI asks for confirmation.
+                if (!string.IsNullOrEmpty(value) &&
+                    !DateTime.TryParseExact(
+                        value,
+                        "yyyy-MM-dd",
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out _))
                 {
-                    var existing = await _context.FYPSettings.FirstOrDefaultAsync(s => s.Key == kv.Key);
-                    if (existing != null)
-                    {
-                        existing.Value = kv.Value.value;
-                        existing.UpdatedDate = DateTime.Now;
-                        _context.FYPSettings.Update(existing);
-                    }
-                    else
-                    {
-                        _context.FYPSettings.Add(new FYPTracker.Models.FYPSetting
-                        {
-                            Key = kv.Key,
-                            Value = kv.Value.value,
-                            Label = kv.Value.label,
-                            UpdatedDate = DateTime.Now
-                        });
-                    }
+                    TempData["FYPSettingError"] =
+                        "Invalid DPP deadline. Please select a valid date.";
+
+                    return RedirectToAction(
+                        nameof(Settings),
+                        new { sessionFilter });
                 }
 
+                await SetGlobalSettingAsync(
+                    "DPPDeadline",
+                    value,
+                    "DPP Submission Deadline");
+
                 await _context.SaveChangesAsync();
-                TempData["FYPSettingSuccess"] = "FYP submission dates updated successfully.";
+
+                TempData["FYPSettingSuccess"] =
+                    "DPP Settings saved successfully.";
             }
             catch (Exception ex)
             {
-                TempData["FYPSettingError"] = $"Error saving settings: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine(ex);
+
+                TempData["FYPSettingError"] =
+                    "Unable to save DPP Settings.";
             }
 
-            return RedirectToAction(nameof(Settings));
+            return RedirectToAction(
+                nameof(Settings),
+                new { sessionFilter });
         }
 
+        // ============================================================
+        // POST - SAVE EXHIBITION SETTINGS ONLY
+        // ============================================================
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateExhibitionSettings(
+            string? exhibitionDate,
+            string? exhibitionTimeStart,
+            string? exhibitionTimeEnd,
+            string? sessionFilter)
+        {
+            try
+            {
+                string dateValue = (exhibitionDate ?? "").Trim();
+                string startValue = (exhibitionTimeStart ?? "").Trim();
+                string endValue = (exhibitionTimeEnd ?? "").Trim();
+
+                if (!string.IsNullOrEmpty(dateValue) &&
+                    !DateTime.TryParseExact(
+                        dateValue,
+                        "yyyy-MM-dd",
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out _))
+                {
+                    TempData["FYPSettingError"] =
+                        "Invalid Exhibition Date.";
+
+                    return RedirectToAction(
+                        nameof(Settings),
+                        new { sessionFilter });
+                }
+
+                string[] timeFormats =
+                {
+                    "HH:mm",
+                    "HH:mm:ss"
+                };
+
+                if (!string.IsNullOrEmpty(startValue) &&
+                    !DateTime.TryParseExact(
+                        startValue,
+                        timeFormats,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out _))
+                {
+                    TempData["FYPSettingError"] =
+                        "Invalid Exhibition Start Time.";
+
+                    return RedirectToAction(
+                        nameof(Settings),
+                        new { sessionFilter });
+                }
+
+                if (!string.IsNullOrEmpty(endValue) &&
+                    !DateTime.TryParseExact(
+                        endValue,
+                        timeFormats,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out _))
+                {
+                    TempData["FYPSettingError"] =
+                        "Invalid Exhibition End Time.";
+
+                    return RedirectToAction(
+                        nameof(Settings),
+                        new { sessionFilter });
+                }
+
+                await SetGlobalSettingAsync(
+                    "ExhibitionDate",
+                    dateValue,
+                    "FYP Exhibition Date");
+
+                await SetGlobalSettingAsync(
+                    "ExhibitionTimeStart",
+                    startValue,
+                    "Exhibition Start Time");
+
+                await SetGlobalSettingAsync(
+                    "ExhibitionTimeEnd",
+                    endValue,
+                    "Exhibition End Time");
+
+                await _context.SaveChangesAsync();
+
+                TempData["FYPSettingSuccess"] =
+                    "Exhibition Settings saved successfully.";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+
+                TempData["FYPSettingError"] =
+                    "Unable to save Exhibition Settings.";
+            }
+
+            return RedirectToAction(
+                nameof(Settings),
+                new { sessionFilter });
+        }
+
+        // ============================================================
+        // POST - SAVE WORKFLOW POLICY ONLY
+        // ============================================================
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateWorkflowPolicySettings(
+            int? supervisorRequestTimeoutDays,
+            string? sessionFilter)
+        {
+            if (!supervisorRequestTimeoutDays.HasValue ||
+                supervisorRequestTimeoutDays.Value < 1 ||
+                supervisorRequestTimeoutDays.Value > 30)
+            {
+                TempData["FYPSettingError"] =
+                    "Supervisor Request Timeout must be between 1 and 30 days.";
+
+                return RedirectToAction(
+                    nameof(Settings),
+                    new { sessionFilter });
+            }
+
+            try
+            {
+                await SetGlobalSettingAsync(
+                    "SupervisorRequestTimeoutDays",
+                    supervisorRequestTimeoutDays.Value.ToString(),
+                    "Supervisor Request Timeout (Days)");
+
+                await _context.SaveChangesAsync();
+
+                TempData["FYPSettingSuccess"] =
+                    "Workflow Policy saved successfully.";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+
+                TempData["FYPSettingError"] =
+                    "Unable to save Workflow Policy.";
+            }
+
+            return RedirectToAction(
+                nameof(Settings),
+                new { sessionFilter });
+        }
 
         public async Task<IActionResult> ApprovedIafList()
         {

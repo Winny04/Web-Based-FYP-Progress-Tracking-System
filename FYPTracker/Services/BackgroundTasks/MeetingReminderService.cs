@@ -24,8 +24,15 @@ namespace FYPTracker.Services.BackgroundTasks
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            // Wait for application to fully start before running
-            await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+            try 
+            {
+                // Wait for application to fully start before running
+                await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
 
             while (!stoppingToken.IsCancellationRequested)
             {

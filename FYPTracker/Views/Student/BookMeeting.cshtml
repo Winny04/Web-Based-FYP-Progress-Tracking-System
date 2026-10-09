@@ -1,4 +1,6 @@
 @using FYPTracker.Models
+@using System.Text.Json
+@inject FYPTracker.Services.Forms.MeetingLogTemplateService MeetingLogTemplateService
 @{
     ViewData["Title"] = "Book Meeting";
     var currentUser           = ViewBag.CurrentUser as ApplicationUser;
@@ -6,6 +8,16 @@
     var meetings              = ViewBag.Meetings as List<MeetingBooking> ?? new();
     var supervisorHasAvailability = (bool)(ViewBag.SupervisorHasAvailability ?? false);
 }
+
+@{
+    var stage1Template =
+        await MeetingLogTemplateService.LoadAsync(1);
+
+    var stage2Template =
+        await MeetingLogTemplateService.LoadAsync(2);
+}
+
+
 
 <style>
     :root {
@@ -113,6 +125,62 @@
     #meetingTabs .nav-link { color: #475569; transition: all 0.2s; }
     #meetingTabs .nav-link:hover { background-color: #f1f5f9; color: #1e293b; }
     #meetingTabs .nav-link.active { background-color: #0f172a !important; color: #ffffff !important; }
+
+    /* Digital Meeting Logbook — Scroll Fix */
+    #studentLogModal .modal-dialog {
+        max-height: calc(100dvh - 32px);
+    }
+
+    #studentLogModal .modal-content {
+        max-height: calc(100dvh - 32px);
+        overflow: hidden;
+    }
+
+    #studentLogModal #studentLogForm {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+        max-height: calc(100dvh - 32px);
+}
+
+    #studentLogModal .modal-header,
+    #studentLogModal .modal-footer {
+        flex-shrink: 0;
+    }
+
+    #studentLogModal .modal-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    #studentLogModal .modal-content {
+    max-height: calc(100dvh - 32px);
+    overflow: hidden;
+}
+
+#studentLogModal #studentLogForm {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: calc(100dvh - 32px);
+}
+
+#studentLogModal .modal-header,
+#studentLogModal .modal-footer {
+    flex-shrink: 0;
+}
+
+#studentLogModal .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+
 </style>
 
 <div class="container-xxl py-4">
@@ -276,10 +344,45 @@
                             <td>@m.Reason</td>
                             <td><span class="status-badge @badgeCls">@m.Status</span></td>
                             <td class="text-end pe-3">
-                                @if (m.Status == "Pending")
+                                @{
+                                    var pendingReq = ((IEnumerable<FYPTracker.Models.MeetingRescheduleRequest>)ViewBag.PendingReschedules)?.FirstOrDefault(r => r.MeetingBookingId == m.Id);
+                                }
+                                @if (pendingReq != null)
+                                {
+                                    if (pendingReq.Status == "CounterProposed")
+                                    {
+                                        <div class="d-inline-flex flex-column align-items-end me-1">
+                                            <span class="badge bg-info text-dark mb-1">Counter Proposed: @pendingReq.ProposedDate.ToString("dd MMM yyyy") at @pendingReq.ProposedTime</span>
+                                            <div>
+                                                <form asp-action="AcceptRescheduleProposal" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="requestId" value="@pendingReq.Id" />
+                                                    <button type="submit" class="btn btn-sm btn-success fw-semibold border-0 me-1">Accept</button>
+                                                </form>
+                                                <form asp-action="DeclineRescheduleProposal" method="post" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="requestId" value="@pendingReq.Id" />
+                                                    <button type="submit" class="btn btn-sm btn-danger fw-semibold border-0">Decline</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark me-1">Reschedule Pending</span>
+                                        <form asp-action="CancelRescheduleRequest" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="requestId" value="@pendingReq.Id" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger fw-semibold border-0" title="Cancel Reschedule Request">
+                                                Cancel Request
+                                            </button>
+                                        </form>
+                                    }
+                                }
+                                else if (m.Status == "Pending")
                                 {
                                     <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" onclick="openRescheduleModal(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")')">
-                                        Reschedule
+                                        Request Reschedule
                                     </button>
                                     <form asp-action="CancelMeeting" method="post" class="d-inline" id="cancelForm_@m.Id">
                                         @Html.AntiForgeryToken()
@@ -289,36 +392,69 @@
                                 }
                                 else
                                 {
-                                    @if (m.Status == "Approved")
+                                @if (m.Status == "Approved")
+                                {
+                                    if (m.MeetingLog == null || m.MeetingLog.LogStatus == "Draft")
                                     {
-                                        if (m.MeetingLog == null || m.MeetingLog.LogStatus == "Draft")
+                                        var daysUntilMeeting =
+                                            (m.MeetingDate.Date - DateTime.Today).TotalDays;
+
+                                        if (daysUntilMeeting <= 7)
                                         {
-                                            var daysUntilMeeting = (m.MeetingDate.Date - DateTime.Today).TotalDays;
-                                            if (daysUntilMeeting <= 7)
-                                            {
-                                                <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" 
-                                                        data-id="@m.Id"
-                                                        data-topics="@(m.MeetingLog?.KeyTopicsDiscussed)"
-                                                        data-completed="@(m.MeetingLog?.CompletedActionsAndNotes)"
-                                                        data-action="@(m.MeetingLog?.ActionPointsForNextMeeting)"
-                                                        onclick="openStudentLogModal(this)">
-                                                    <i class="fas fa-edit"></i> @(m.MeetingLog == null ? "Record Logbook" : "Edit Logbook")
-                                                </button>
-                                            }
-                                            else
-                                            {
-                                                <button type="button" class="btn btn-sm btn-outline-secondary border-0 fw-semibold me-1" disabled title="Available 7 days before meeting">
-                                                    <i class="fas fa-clock"></i> Available closer to date
-                                                </button>
-                                            }
+                                            var nextApprovedMeeting = meetings
+                                                .Where(n =>
+                                                    n.StudentId == m.StudentId &&
+                                                    n.SupervisorId == m.SupervisorId &&
+                                                    n.Stage == m.Stage &&
+                                                    n.AcademicSessionId == m.AcademicSessionId &&
+                                                    n.Status == "Approved" &&
+                                                    n.MeetingDate.Date > m.MeetingDate.Date)
+                                                .OrderBy(n => n.MeetingDate)
+                                                .ThenBy(n => n.MeetingTime)
+                                                .FirstOrDefault();
+
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1"
+                                                    data-id="@m.Id"
+                                                    data-stage="@m.Stage"
+                                                    data-student="@(currentUser?.FullName ?? "")"
+                                                    data-supervisor="@(m.Supervisor?.FullName ?? "")"
+                                                    data-meeting-date="@m.MeetingDate.ToString("yyyy-MM-dd")"
+                                                    data-next-date="@(nextApprovedMeeting?.MeetingDate.ToString("yyyy-MM-dd") ?? "")"
+                                                    data-topics="@(m.MeetingLog?.KeyTopicsDiscussed ?? "")"
+                                                    data-completed="@(m.MeetingLog?.CompletedActionsAndNotes ?? "")"
+                                                    data-action="@(m.MeetingLog?.ActionPointsForNextMeeting ?? "")"
+                                                    onclick="openStudentLogModal(this)">
+
+                                                <i class="fas fa-edit"></i>
+                                                @(m.MeetingLog == null ? "Record Logbook" : "Edit Logbook")
+                                            </button>
                                         }
-                                        else if (m.MeetingLog.LogStatus == "Signed")
+                                        else
                                         {
-                                            <button type="button" class="btn btn-sm btn-outline-success border-0 fw-semibold me-1" onclick="viewFinalLog(@m.MeetingLog.Id)">
-                                                <i class="fas fa-file-contract"></i> View Log
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-secondary border-0 fw-semibold me-1"
+                                                    disabled
+                                                    title="Available 7 days before meeting">
+                                                <i class="fas fa-clock"></i>
+                                                Available closer to date
                                             </button>
                                         }
                                     }
+                                    else if (m.MeetingLog.LogStatus == "Signed")
+                                    {
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-success border-0 fw-semibold me-1"
+                                                onclick="viewFinalLog(@m.MeetingLog.Id)">
+                                            <i class="fas fa-file-contract"></i>
+                                            View Log
+                                        </button>
+                                    }
+                                }
+else if (m.Status == "Postponed")
+{
+    // 保留你原本的 Postponed 按鈕和表單
+}
                                     else if (m.Status == "Postponed")
                                     {
                                         <form asp-action="AcceptPostponedMeeting" method="post" class="d-inline" id="acceptForm_@m.Id">
@@ -396,29 +532,53 @@
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Date</label>
                             @{
-                                var minDate = DateTime.Today;
-                                var maxDate = DateTime.Today.AddYears(1);
-                                if (ViewBag.ActiveSession != null)
+                                var session = ViewBag.ActiveSession as AcademicSession;
+                                var cutoff = (DateTime?)ViewBag.MeetingBookingCutoff;
+
+                                DateTime minDate = DateTime.Today;
+                                DateTime maxDate = DateTime.Today;
+
+                                bool noValidDates = true;
+
+                                if (session?.StartDate is DateTime start &&
+                                    session.EndDate is DateTime end &&
+                                    cutoff.HasValue)
                                 {
-                                    var activeSession = ViewBag.ActiveSession as FYPTracker.Models.AcademicSession;
-                                    if (activeSession != null)
-                                    {
-                                        var sessionStart = activeSession.StartDate;
-                                        var sessionEnd = activeSession.EndDate;
-                                        
-                                        if (sessionStart.HasValue && sessionStart.Value > minDate)
-                                    {
-                                        minDate = sessionStart.Value;
-                                    }
-                                    if (sessionEnd.HasValue)
-                                    {
-                                        // The first meeting must leave at least 13 weeks (91 days) before the end date to finish all 14 meetings.
-                                            maxDate = sessionEnd.Value.AddDays(-91);
-                                        }
-                                    }
+                                    minDate = start.Date > DateTime.Today
+                                        ? start.Date
+                                        : DateTime.Today;
+
+                                    maxDate = cutoff.Value.Date < end.Date
+                                        ? cutoff.Value.Date
+                                        : end.Date;
+
+                                    noValidDates = minDate > maxDate;
                                 }
                             }
-                            <input type="date" name="meetingDate" id="meetingDate" class="form-control" required onchange="calculateDay()" min="@minDate.ToString("yyyy-MM-dd")" max="@maxDate.ToString("yyyy-MM-dd")" />
+                            @if (noValidDates)
+                            {
+                                <div class="alert alert-warning">
+                                    No available meeting dates in this academic session.
+                                </div>
+                            }
+                            else
+                            {
+                                <input type="date"
+                                    name="meetingDate"
+                                    id="meetingDate"
+                                    class="form-control"
+                                    required
+                                    onchange="calculateDay()"
+                                    min="@minDate.ToString("yyyy-MM-dd")"
+                                    max="@maxDate.ToString("yyyy-MM-dd")" />
+
+                                <small class="text-muted">
+                                    Available dates:
+                                    @minDate.ToString("dd/MM/yyyy")
+                                    -
+                                    @maxDate.ToString("dd/MM/yyyy")
+                                </small>
+                            }
                         </div>
 
                         <!-- Day (Auto-filled & Read-only) -->
@@ -456,7 +616,11 @@
                     
                     <div class="modal-footer border-0">
                         <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-submit px-4 rounded-3">Submit Booking</button>
+                        <button type="submit"
+                            class="btn btn-submit px-4 rounded-3"
+                            disabled="@noValidDates">
+                        Submit Booking
+                    </button>
                     </div>
                 </form>
             </div>
@@ -464,39 +628,185 @@
     </div>
 }
 
-<!-- Student Log Draft Modal -->
-<div class="modal fade" id="studentLogModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+@{
+    var meetingLogTemplates = new Dictionary<
+        string,
+        FYPTracker.ViewModels.MeetingRecordTemplateVM>
+    {
+        ["1"] = await MeetingLogTemplateService.LoadAsync(1),
+        ["2"] = await MeetingLogTemplateService.LoadAsync(2)
+    };
+
+    var meetingLogTemplatesJson = JsonSerializer.Serialize(
+        meetingLogTemplates,
+        new JsonSerializerOptions(JsonSerializerDefaults.Web)
+    );
+}
+
+<script type="application/json" id="meetingLogTemplatesJson">
+@Html.Raw(meetingLogTemplatesJson)
+</script>
+
+    <!-- Student Digital Meeting Logbook Modal -->
+    <div class="modal fade" id="studentLogModal" tabindex="-1">
+
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+
+            <div class="modal-content border-0 shadow-lg"
+                style="border-radius: 20px;">
+
+                <form asp-action="SubmitMeetingLogStudent"
+                    method="post"
+                    id="studentLogForm"
+                    onsubmit="return confirmLogSubmission(event)">
+
+                    @Html.AntiForgeryToken()
+
+                    <input type="hidden"
+                        name="meetingId"
+                        id="logMeetingId" />
+
+                    <div class="modal-header border-0">
+
+                        <div>
+                            <h5 class="modal-title fw-bold">
+                                <i class="fas fa-file-alt text-primary me-2"></i>
+                                Digital Record of Supervisor Meeting
+                            </h5>
+
+                            <small id="logTemplateTitle"
+                                class="text-muted">
+                            </small>
+                        </div>
+
+                        <button type="button"
+                                class="btn-close"
+                                data-bs-dismiss="modal">
+                        </button>
+
+                    </div>
+
+                    <div class="modal-body">
+
+                        <div class="alert alert-info small">
+                            Complete the meeting record using the
+                            official Stage 1 or Stage 2 template.
+
+                            Your supervisor will review and
+                            digitally sign the record.
+                        </div>
+
+                        <!-- Dynamic JSON fields appear here -->
+                        <div id="meetingLogTemplateFields"
+                            class="row g-3">
+                        </div>
+
+                    </div>
+
+                    <div class="modal-footer border-0">
+
+                        <button type="button"
+                                class="btn btn-light"
+                                data-bs-dismiss="modal">
+                            Cancel
+                        </button>
+
+                        <button type="submit"
+                                class="btn btn-primary">
+                            <i class="fas fa-paper-plane me-1"></i>
+                            Submit Logbook
+                        </button>
+
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+<!-- Reschedule Modal -->
+<div class="modal fade" id="rescheduleModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
-            <form asp-action="SubmitMeetingLogStudent" method="post" id="studentLogForm" onsubmit="return confirmLogSubmission(event)">
+            <form asp-action="RescheduleMeeting" method="post" id="studentRescheduleForm">
                 @Html.AntiForgeryToken()
-                <input type="hidden" name="meetingId" id="logMeetingId" />
-                
+                <input type="hidden" name="meetingId" id="reschedMeetingId" />
                 <div class="modal-header border-0 pb-0">
-                    <h5 class="fw-bold text-dark"><i class="fas fa-edit text-primary me-2"></i>Digital Weekly Meeting Logbook</h5>
+                    <h5 class="fw-bold text-dark"><i class="fas fa-calendar-check text-primary me-2"></i>Reschedule Meeting</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small mb-4">Digitally record your meeting discussions here. Your supervisor will review and sign this log directly in the system.</p>
+                    <!-- Date Picker -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">New Date</label>
+                        @{
+                            var rSession = ViewBag.ActiveSession as AcademicSession;
+                            var rCutoff = (DateTime?)ViewBag.MeetingBookingCutoff;
+                            DateTime rMinDate = DateTime.Today;
+                            DateTime rMaxDate = DateTime.Today;
+                            bool rNoValidDates = true;
 
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Key Topics Discussed <span class="text-danger">*</span></label>
-                        <textarea name="keyTopicsDiscussed" id="keyTopicsDiscussed" class="form-control rounded-3" rows="3" required placeholder="What was discussed in this meeting?"></textarea>
+                            if (rSession?.StartDate is DateTime rStart &&
+                                rSession.EndDate is DateTime rEnd &&
+                                rCutoff.HasValue)
+                            {
+                                rMinDate = rStart.Date > DateTime.Today ? rStart.Date : DateTime.Today;
+                                rMaxDate = rCutoff.Value.Date < rEnd.Date ? rCutoff.Value.Date : rEnd.Date;
+                                rNoValidDates = rMinDate > rMaxDate;
+                            }
+                        }
+                        @if (rNoValidDates)
+                        {
+                            <div class="alert alert-warning">No available dates in this academic session.</div>
+                        }
+                        else
+                        {
+                            <input type="date"
+                                   name="meetingDate"
+                                   id="reschedDateInput"
+                                   class="form-control"
+                                   required
+                                   onchange="updateReschedAvailability()"
+                                   min="@rMinDate.ToString("yyyy-MM-dd")"
+                                   max="@rMaxDate.ToString("yyyy-MM-dd")" />
+                        }
                     </div>
 
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Completed Actions & Notes</label>
-                        <textarea name="completedActionsAndNotes" id="completedActionsAndNotes" class="form-control rounded-3" rows="3" placeholder="What progress have you made since the last meeting?"></textarea>
+                    <!-- Available Slots Grid -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Available Slots</label>
+                        @if (ViewBag.FixedTime != null)
+                        {
+                            <input type="hidden" name="meetingTime" value="@ViewBag.FixedTime" id="reschedTimeInput" required />
+                            <input type="text" class="form-control bg-light border-0 text-success fw-bold" value="@ViewBag.FixedTime" readonly title="Your meeting time is fixed." />
+                            <div class="text-muted small mt-1"><i class="fas fa-lock"></i> Your weekly meeting time is locked to your first meeting time.</div>
+                            <div id="reschedTimeSlots" class="d-none"></div>
+                        }
+                        else
+                        {
+                            <input type="hidden" name="meetingTime" id="reschedTimeInput" required />
+                            <div class="row g-2" id="reschedTimeSlots">
+                                <div class="col-12 text-muted small"><i class="fas fa-arrow-up"></i> Please pick a date first to see available slots.</div>
+                            </div>
+                            <div id="reschedTimeError" class="text-danger mt-2 small" style="display:none;">Please pick an available time slot.</div>
+                        }
                     </div>
 
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Action Points for Next Meeting <span class="text-danger">*</span></label>
-                        <textarea name="actionPointsForNextMeeting" id="actionPointsForNextMeeting" class="form-control rounded-3" rows="3" required placeholder="What do you need to do before the next meeting?"></textarea>
+                    <!-- Reason -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Reason for Rescheduling</label>
+                        <textarea name="reason" class="form-control rounded-3" rows="2" required minlength="10" placeholder="e.g. I'm feeling unwell and won't be able to attend the meeting..."></textarea>
+                    </div>
+
+                    <div class="alert alert-info py-2 small mb-0">
+                        <i class="fas fa-info-circle"></i> Your meeting date will not change until your Supervisor approves this request.
                     </div>
                 </div>
+                
                 <div class="modal-footer border-0">
                     <button type="button" class="btn btn-light px-4 rounded-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary px-4 rounded-3">Submit Logbook</button>
+                    <button type="submit" class="btn btn-primary px-4 rounded-3" disabled="@rNoValidDates">Submit Request</button>
                 </div>
             </form>
         </div>
@@ -762,18 +1072,182 @@
 
     // ── Open Student Log Modal ──────────────────────────────────
     function openStudentLogModal(btn) {
-        document.getElementById('logMeetingId').value = btn.getAttribute('data-id');
-        
-        document.getElementById('keyTopicsDiscussed').value = btn.getAttribute('data-topics') || '';
-        document.getElementById('completedActionsAndNotes').value = btn.getAttribute('data-completed') || '';
-        document.getElementById('actionPointsForNextMeeting').value = btn.getAttribute('data-action') || '';
 
-        new bootstrap.Modal(document.getElementById('studentLogModal')).show();
+    // Read Stage 1 and Stage 2 JSON templates
+    const templates = JSON.parse(
+        document.getElementById(
+            'meetingLogTemplatesJson'
+        ).textContent
+    );
+
+    const stage = String(btn.dataset.stage);
+    const template = templates[stage];
+
+    if (!template) {
+        Swal.fire(
+            'Template Error',
+            'Meeting template not found for Stage ' + stage,
+            'error'
+        );
+        return;
     }
+
+    // MeetingBooking ID
+    document.getElementById('logMeetingId').value =
+        btn.dataset.id;
+
+    // Template information
+    document.getElementById('logTemplateTitle').textContent =
+        template.title + ' — Version ' + template.version;
+
+    const container = document.getElementById(
+        'meetingLogTemplateFields'
+    );
+
+    container.replaceChildren();
+
+    // Student-editable fields mapped to the existing Controller
+    const editableFields = {
+
+        TopicsDiscussed: {
+            name: 'keyTopicsDiscussed',
+            value: btn.dataset.topics || '',
+            required: true
+        },
+
+        ActionPoints: {
+            name: 'actionPointsForNextMeeting',
+            value: btn.dataset.action || '',
+            required: true
+        },
+
+        ActionsCompleted: {
+            name: 'completedActionsAndNotes',
+            value: btn.dataset.completed || '',
+            required: false
+        },
+
+        NextMeetingDate: {
+            name: 'nextMeetingDate',
+            value: btn.dataset.nextDate || '',
+            required: false
+        }
+    };
+
+    // Automatically populated or supervisor-owned fields
+    const readonlyFields = {
+
+        Supervisor: btn.dataset.supervisor || 'Not assigned',
+
+        Student: btn.dataset.student || '',
+
+        MeetingDate: btn.dataset.meetingDate || '',
+
+        SupervisorSignature: 'Pending supervisor signature',
+
+        SupervisorSignatureDate: 'Pending',
+
+        SupervisorComments: 'Completed by supervisor'
+    };
+
+    // Follow the JSON display order
+    const fields = [...template.fields].sort(
+        (a, b) => a.order - b.order
+    );
+
+    fields.forEach(field => {
+
+        const col = document.createElement('div');
+
+        // Bootstrap layout based on JSON Columns
+        const width = Number(field.columns);
+
+        col.className = 'col-md-' + (
+            Number.isInteger(width) &&
+            width >= 3 &&
+            width <= 12 ? width : 12
+        );
+
+        // Label
+        const label = document.createElement('label');
+        label.className = 'form-label fw-bold';
+        label.textContent = field.label;
+
+        col.appendChild(label);
+
+        const config = editableFields[field.key];
+
+        if (config) {
+
+            let input;
+
+            if (field.key === 'NextMeetingDate') {
+                input = document.createElement('input');
+                input.type = 'date';
+                input.readOnly = true;
+                input.classList.add('bg-light');
+            } else if (field.type === 'TextArea') {
+
+                input = document.createElement('textarea');
+                input.rows = 3;
+
+                const minHeight = Number(field.minHeightMm);
+
+                if (minHeight > 0 && minHeight <= 80) {
+                    input.style.minHeight = minHeight + 'mm';
+                }
+
+            } else {
+
+                input = document.createElement('input');
+                input.type = 'text';
+            }
+
+            input.className = 'form-control rounded-3';
+
+            if (field.key === 'NextMeetingDate') {
+                input.classList.add('bg-light');
+                input.readOnly = true;
+            }
+
+            input.id = config.name;
+            input.name = config.name;
+            input.value = config.value;
+            input.required = config.required;
+
+            col.appendChild(input);
+
+        } else {
+
+            // Display fields the student cannot edit
+            const value = document.createElement('div');
+
+            value.className =
+                'form-control bg-light text-muted rounded-3';
+
+            value.style.whiteSpace = 'pre-wrap';
+
+            value.textContent =
+                readonlyFields[field.key] ?? 'Not available';
+
+            col.appendChild(value);
+        }
+
+        container.appendChild(col);
+    });
+
+    // Open the modal
+    bootstrap.Modal.getOrCreateInstance(
+        document.getElementById('studentLogModal')
+    ).show();
+}
 
     // ── View Final Log ───────────────────────────────────
     function viewFinalLog(logId) {
-        window.open('/Student/ViewMeetingLog/' + logId, '_blank');
+        window.open(
+            '/Student/ViewMeetingLog/' + logId,
+            '_blank'
+        );
     }
 
     function confirmBookingSubmission(event) {
@@ -871,6 +1345,13 @@
             const actionCell = row.cells[6];
             let actionsHtml = '';
             if (payload.status === 'Approved') {
+                // Reload to render the complete meeting data from Razor.
+                // This includes Stage, Student, Supervisor and Logbook fields.
+                window.location.reload();
+                return;
+                else if (payload.status === 'Postponed') {
+                // Keep existing Postponed logic.
+                }
                 actionsHtml = `
                     <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" 
                             data-id="${payload.meetingId}"

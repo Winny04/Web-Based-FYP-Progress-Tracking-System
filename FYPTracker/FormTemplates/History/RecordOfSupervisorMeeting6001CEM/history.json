@@ -1,0 +1,13 @@
+[
+  {
+    "EventId": "9bfc1b59-51e2-4112-886b-43f6b3d473d7",
+    "TemplateKey": "record-of-supervisor-meeting-6001cem-303com",
+    "TemplateVersion": "1.0",
+    "PreviousVersion": null,
+    "ActionType": "Created",
+    "ModifiedBy": "System Baseline",
+    "DateModifiedUtc": "2026-10-08T23:43:34.4861142Z",
+    "FieldChanges": [],
+    "RestoredFromVersion": null
+  }
+]

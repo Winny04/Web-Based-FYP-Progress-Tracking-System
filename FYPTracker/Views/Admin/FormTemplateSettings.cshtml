@@ -1,0 +1,1160 @@
+@model FYPTracker.ViewModels.FormTemplateSettingsViewModel
+@{
+    ViewData["Title"] = "Form Template Settings";
+}
+
+
+<style>
+    .a4-template-paper {
+        box-sizing: border-box;
+        width: 210mm;
+        max-width: 100%;
+        min-height: 297mm;
+        padding: 20mm;
+        background: white;
+        color: #222;
+    }
+
+    .meeting-record-preview {
+        --bs-gutter-x: 0.75rem;
+        --bs-gutter-y: 0.65rem;
+    }
+
+    .meeting-field-label {
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 5px;
+        overflow-wrap: anywhere;
+    }
+
+    .meeting-single-line {
+        min-height: 9mm;
+        border-bottom: 1px solid #555;
+    }
+
+    .meeting-writing-area {
+        border: 1px solid #ddd;
+        background-image: repeating-linear-gradient(
+            to bottom,
+            transparent 0,
+            transparent 27px,
+            #e5e5e5 28px
+        );
+    }
+
+    .meeting-signature-space {
+        border-bottom: 1px solid #333;
+        min-height: 20mm;
+    }
+
+    .meeting-screenshot-placeholder {
+        border: 1px dashed #bbb;
+        padding: 8px;
+        text-align: center;
+        font-size: 11px;
+        color: #777;
+    }
+
+    @@media (max-width: 576px) {
+        .a4-template-paper {
+            padding: 12px;
+        }
+    }
+
+    
+    /* Thesis Cover Page - official centered document layout */
+    .cover-page-preview {
+        min-height: 257mm;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        text-align: center;
+        font-family: "Times New Roman", Georgia, serif;
+        color: #000;
+        overflow-wrap: anywhere;
+    }
+
+    .cover-title-block {
+        padding-top: 22mm;
+    }
+
+    .cover-thesis-title {
+        font-size: 20pt;
+        font-weight: bold;
+        line-height: 1.5;
+    }
+
+    .cover-student-block,
+    .cover-bottom-block {
+        font-size: 12pt;
+        line-height: 1.8;
+    }
+
+    .cover-bottom-block {
+        padding-bottom: 4mm;
+    }
+
+    .cover-school {
+        margin-top: 10mm;
+    }
+
+    .cover-document-date {
+        margin-top: 12mm;
+    }
+
+    .cover-info-line {
+        margin-bottom: 2mm;
+    }
+
+    /* IAF Form Preview */
+    .iaf-preview {
+        font-family: Arial, Helvetica, sans-serif;
+        color: #222;
+        overflow-wrap: anywhere;
+    }
+
+    .iaf-section-title {
+        font-size: 16px;
+        font-weight: bold;
+        border-bottom: 2px solid #222;
+        padding-bottom: 4px;
+        margin-bottom: 4px;
+        color: #000;
+        text-transform: uppercase;
+    }
+
+    .iaf-instruction {
+        font-size: 12px;
+        font-style: italic;
+        color: #555;
+        margin-bottom: 8px;
+    }
+
+    .iaf-field-label {
+        font-size: 13px;
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
+
+    .iaf-text-line {
+        border-bottom: 1px solid #444;
+        min-height: 8mm;
+    }
+
+    .iaf-text-area {
+        border: 1px solid #888;
+        background-image: repeating-linear-gradient(
+            to bottom,
+            transparent 0,
+            transparent 27px,
+            #e5e5e5 28px
+        );
+        border-radius: 4px;
+    }
+
+    .iaf-signature-box {
+        border-bottom: 1px solid #444;
+        display: flex;
+        align-items: flex-end;
+        padding-bottom: 4px;
+    }
+
+    /* GenAI Group Form Preview */
+    .genai-group-preview {
+        font-family: Arial, Helvetica, sans-serif;
+        color: #222;
+        overflow-wrap: anywhere;
+    }
+
+    .genai-group-title {
+        font-size: 16pt;
+        font-weight: bold;
+        text-align: center;
+        margin-bottom: 20px;
+        text-transform: uppercase;
+    }
+    
+    .genai-group-intro {
+        font-size: 10pt;
+        margin-bottom: 20px;
+        line-height: 1.4;
+    }
+
+    .genai-group-section {
+        border: 1px solid #000;
+        margin-bottom: 20px;
+        padding: 15px;
+    }
+
+    .genai-group-section-title {
+        font-weight: bold;
+        background-color: #e9ecef;
+        padding: 8px;
+        margin: -15px -15px 15px -15px;
+        border-bottom: 1px solid #000;
+    }
+
+    .genai-group-field {
+        margin-bottom: 10px;
+    }
+    
+    .genai-group-label {
+        font-weight: bold;
+        font-size: 10pt;
+    }
+
+    .genai-group-value {
+        border-bottom: 1px solid #000;
+        min-height: 20px;
+        display: inline-block;
+        width: 100%;
+    }
+
+    .genai-group-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+        font-size: 10pt;
+    }
+
+    .genai-group-table th, .genai-group-table td {
+        border: 1px solid #000;
+        padding: 8px;
+        text-align: left;
+    }
+
+    .genai-group-table th {
+        background-color: #f8f9fa;
+        font-weight: bold;
+    }
+
+    .genai-group-checkbox-row {
+        margin-bottom: 10px;
+        font-size: 10pt;
+    }
+
+    .genai-group-checkbox {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 1px solid #000;
+        margin-right: 10px;
+        vertical-align: middle;
+    }
+
+</style>
+
+
+<div class="container-xxl py-4">
+    <!-- Header -->
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-8">
+            <h1 class="h3 fw-bold text-dark mb-1">Form Template Settings</h1>
+            <p class="text-muted mb-0">Configure and preview the dynamic layout for meeting records.</p>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            <a href="/Admin/Settings" class="btn btn-outline-secondary shadow-sm">
+                <i class="fas fa-arrow-left me-2"></i> Back to Settings
+            </a>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-check-circle me-2"></i> @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Template Info -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-primary border-opacity-25 shadow-sm">
+                <div class="card-body bg-light rounded bg-opacity-50">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="bg-primary bg-opacity-10 text-primary p-3 rounded">
+                            <i class="fas fa-file-alt fs-4"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-1 fw-bold">@Model.CurrentTemplate.Title</h5>
+                            <div class="d-flex gap-3 text-muted small">
+                                <span><i class="fas fa-key me-1"></i> @Model.CurrentTemplate.TemplateKey</span>
+                                <span><i class="fas fa-code-branch me-1"></i> v@(Model.CurrentTemplate.Version)</span>
+                                <span><i class="fas fa-print me-1"></i> @Model.CurrentTemplate.Page?.Size, @Model.CurrentTemplate.Page?.Orientation</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs mb-4" id="templateTabs" role="tablist">
+        @{
+            string selectedTemplateId =
+                ViewBag.SelectedTemplateId as string ?? "stage1-meeting";
+        }
+
+        <!-- Template Selection -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body">
+
+                <form asp-controller="Admin"
+                    asp-action="FormTemplateSettings"
+                    method="get"
+                    id="templateSelectorForm">
+
+                    <div class="row g-3 align-items-end">
+
+                        <div class="col-md-9">
+                            <label for="templateIdSelect"
+                                class="form-label fw-bold">
+                                <i class="fas fa-file-alt text-primary me-2"></i>
+                                Select Form Template
+                            </label>
+
+                            <select id="templateIdSelect"
+                                    name="templateId"
+                                    class="form-select">
+
+                                <option value="stage1-meeting"
+                                        selected="@(selectedTemplateId == "stage1-meeting")">
+                                    Stage 1 - Record of Supervisor Meeting (6000CEM/6002CMD)
+                                </option>
+
+                                <option value="stage2-meeting"
+                                        selected="@(selectedTemplateId == "stage2-meeting")">
+                                    Stage 2 - Record of Supervisor Meeting (6001CEM/303COM)
+                                </option>
+
+                                <option value="iaf"
+                                        selected="@(selectedTemplateId == "iaf")">
+                                    Stage 1 - Initial Project Allocation Form (IAF)
+                                </option>
+
+                                <option value="thesis-cover"
+                                        selected="@(selectedTemplateId == "thesis-cover")">
+                                    Thesis Cover Page
+                                </option>
+
+                                <option value="group-genai"
+                                        selected="@(selectedTemplateId == "group-genai")">
+                                    Student GenAI Declaration Form - Group
+                                </option>
+
+                            </select>
+                        </div>
+
+                        <div class="col-md-3">
+                            <button type="submit"
+                                    class="btn btn-outline-primary w-100">
+                                <i class="fas fa-folder-open me-2"></i>
+                                Open Template
+                            </button>
+                        </div>
+
+                    </div>
+                </form>
+
+                <small class="text-muted d-block mt-2">
+                    Select a template and click Open Template.
+                    Unsaved changes will be discarded when opening
+                    another template.
+                </small>
+
+            </div>
+        </div>
+
+
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold px-4" id="edit-tab" data-bs-toggle="tab" data-bs-target="#edit-pane" type="button" role="tab" aria-controls="edit-pane" aria-selected="true">
+                <i class="fas fa-edit me-2"></i> Edit Layout
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold px-4" id="preview-tab" data-bs-toggle="tab" data-bs-target="#preview-pane" type="button" role="tab" aria-controls="preview-pane" aria-selected="false">
+                <i class="fas fa-desktop me-2"></i> Preview Form
+            </button>
+        </li>
+    </ul>
+
+   <form asp-action="SaveFormTemplate" method="post" id="templateForm">
+    @Html.AntiForgeryToken()
+    <input type="hidden"
+           name="templateId"
+           value="@selectedTemplateId" />
+        <input type="hidden" name="TemplateKey" value="@Model.CurrentTemplate.TemplateKey" />
+        <input type="hidden" name="Title" value="@Model.CurrentTemplate.Title" />
+        <input type="hidden" name="Version" value="@Model.CurrentTemplate.Version" />
+        <input type="hidden" name="Page.Size" value="@Model.CurrentTemplate.Page?.Size" />
+        <input type="hidden" name="Page.Orientation" value="@Model.CurrentTemplate.Page?.Orientation" />
+
+        <div class="tab-content" id="templateTabsContent">
+            <!-- Edit Layout Tab -->
+            <div class="tab-pane fade show active" id="edit-pane" role="tabpanel" aria-labelledby="edit-tab">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+                        <h6 class="mb-0 fw-bold"><i class="fas fa-list text-primary me-2"></i> Field Configuration</h6>
+                        <button type="submit" class="btn btn-primary px-4 shadow-sm"><i class="fas fa-save me-2"></i> Save Template</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 20%;">Field Key <span class="text-muted fw-normal">(Read-only)</span></th>
+                                        <th style="width: 40%;">Display Label</th>
+                                        <th style="width: 25%;">Width (Layout)</th>
+                                        <th style="width: 15%;">Display Order</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{ int i = 0; }
+                                    @foreach (var field in Model.CurrentTemplate.Fields.OrderBy(f => f.Order))
+                                    {
+                                        <tr class="field-row" data-key="@field.Key" data-type="@field.Type" data-minheight="@field.MinHeightMm">
+                                            <td>
+                                                <code class="text-muted">@field.Key</code>
+                                                <input type="hidden" name="Fields[@i].Key" value="@field.Key" />
+                                                <input type="hidden" name="Fields[@i].Type" value="@field.Type" />
+                                                <input type="hidden" name="Fields[@i].MinHeightMm" value="@field.MinHeightMm" />
+                                            </td>
+                                            <td>
+                                                <input type="text" name="Fields[@i].Label" class="form-control field-label-input" value="@field.Label" required />
+                                            </td>
+                                            <td>
+                                                <select name="Fields[@i].Columns" class="form-select field-col-input">
+                                                    @for (int col = 3; col <= 12; col++)
+                                                    {
+                                                        if (field.Columns == col)
+                                                        {
+                                                            <option value="@col" selected>@col Columns</option>
+                                                        }
+                                                        else
+                                                        {
+                                                            <option value="@col">@col Columns</option>
+                                                        }
+                                                    }
+                                                </select>
+                                            </td>
+                                            <td>
+                                                <input type="number" name="Fields[@i].Order" class="form-control field-order-input" value="@field.Order" required />
+                                            </td>
+                                        </tr>
+                                        i++;
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Preview Form Tab -->
+            <div class="tab-pane fade" id="preview-pane" role="tabpanel" aria-labelledby="preview-tab">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white py-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0 fw-bold"><i class="fas fa-eye text-primary me-2"></i> Live Document Preview</h6>
+                            <span class="text-muted small"><i class="fas fa-info-circle me-1"></i> Reflects current unsaved changes</span>
+                        </div>
+                    </div>
+                    <div class="card-body bg-secondary bg-opacity-10 py-5">
+                        <div id="cover-deadline-warning"
+                            class="alert alert-warning d-none mx-auto"
+                            style="max-width: 210mm;"
+                            role="alert">
+                            DPP Submission Deadline is not configured or
+                            has an invalid date format.
+                            Please update Admin > System Settings before
+                            generating the final cover page.
+                        </div>
+
+                        <!-- A4 Document Container -->
+                        <div class="bg-white mx-auto shadow a4-template-paper" id="a4-template-paper">
+                            <div id="template-preview-heading" class="text-center border-bottom pb-4 mb-4">
+                                <h3 class="fw-bold text-uppercase mb-2">@Model.CurrentTemplate.Title</h3>
+                            </div>
+                            <div class="row g-4"
+                                 id="live-preview-container"
+                                 data-template-id="@ViewBag.SelectedTemplateId"
+                                 data-dpp-deadline="@ViewBag.CoverPageDeadlineDisplay">
+
+                                <!-- Dynamic fields injected via JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {    
+    <script>
+    document.addEventListener("DOMContentLoaded", function () {
+
+        const previewTab = document.getElementById("preview-tab");
+        const previewContainer =
+            document.getElementById("live-preview-container");
+
+        if (!previewTab || !previewContainer) return;
+
+        const templateId =
+            previewContainer.dataset.templateId || "stage1-meeting";
+
+        // Read current inputs without saving.
+        function getCurrentFields() {
+            const rows = document.querySelectorAll(".field-row");
+
+            return Array.from(rows).map((row) => ({
+                key: row.getAttribute("data-key") || "",
+                type: row.getAttribute("data-type") || "Text",
+                minHeightMm: Number(
+                    row.getAttribute("data-minheight")
+                ) || 0,
+                label: row.querySelector(
+                    ".field-label-input"
+                )?.value || "",
+                columns: Number(row.querySelector(
+                    ".field-col-input"
+                )?.value) || 12,
+                order: Number(row.querySelector(
+                    ".field-order-input"
+                )?.value) || 0
+            })).sort((a, b) => a.order - b.order);
+        }
+
+        function addElement(parent, tag, className, value) {
+            const el = document.createElement(tag);
+
+            if (className) el.className = className;
+
+            if (value !== undefined && value !== null) {
+                el.textContent = String(value);
+            }
+
+            parent.appendChild(el);
+            return el;
+        }
+
+        function getWidth(value) {
+            const number = Number(value);
+            return Number.isFinite(number)
+                ? Math.max(3, Math.min(12, number))
+                : 12;
+        }
+
+        // Stage 1 and Stage 2 official meeting-record preview.
+        function renderMeetingRecord(fields) {
+
+            previewContainer.className =
+                "row meeting-record-preview";
+
+            previewContainer.replaceChildren();
+
+            const isStage2 = templateId === "stage2-meeting";
+
+            fields.forEach((field) => {
+
+                const col = addElement(
+                    previewContainer,
+                    "div",
+                    "col-" + getWidth(field.columns)
+                );
+
+                addElement(
+                    col,
+                    "div",
+                    "meeting-field-label",
+                    field.label
+                );
+
+                if (field.type === "TextArea") {
+
+                    const area = addElement(
+                        col,
+                        "div",
+                        "meeting-writing-area"
+                    );
+
+                    const height = Math.max(
+                        15,
+                        Math.min(100, field.minHeightMm || 35)
+                    );
+
+                    area.style.minHeight = height + "mm";
+
+                    // Stage 2 source document explicitly mentions
+                    // screenshots in its discussion section.
+                    if (isStage2 &&
+                        field.key === "TopicsDiscussed") {
+
+                        addElement(
+                            area,
+                            "div",
+                            "meeting-screenshot-placeholder",
+                            "Task screenshot area (preview placeholder)"
+                        );
+                    }
+
+                } else if (field.type === "Signature") {
+
+                    const line = addElement(
+                        col,
+                        "div",
+                        "meeting-signature-space"
+                    );
+
+                    line.style.minHeight =
+                        Math.max(15, field.minHeightMm || 20) + "mm";
+
+                } else {
+
+                    // Text and Date fields use blank form lines.
+                    addElement(
+                        col,
+                        "div",
+                        "meeting-single-line"
+                    );
+                }
+
+            });
+        }
+
+        // Preserve a safe generic preview for templates whose
+        // specialised A4 layouts have not yet been implemented.
+        function renderGenericForm(fields) {
+
+            previewContainer.className = "row g-4";
+            previewContainer.replaceChildren();
+
+            fields.forEach((field) => {
+
+                const col = addElement(
+                    previewContainer,
+                    "div",
+                    "col-" + getWidth(field.columns)
+                );
+
+                const group = addElement(
+                    col,
+                    "div",
+                    "form-group"
+                );
+
+                const label = addElement(
+                    group,
+                    "label",
+                    "form-label fw-bold text-dark"
+                );
+
+                addElement(
+                    label,
+                    "span",
+                    "",
+                    field.label
+                );
+
+                addElement(
+                    label,
+                    "span",
+                    "text-muted fw-normal ms-1 small",
+                    "(Key: " + field.key + ")"
+                );
+
+                if (field.type === "TextArea") {
+
+                    const area = addElement(
+                        group,
+                        "div",
+                        "border rounded bg-light"
+                    );
+
+                    area.style.minHeight =
+                        Math.max(10, field.minHeightMm) + "mm";
+
+                } else if (field.type === "Signature") {
+
+                    const signature = addElement(
+                        group,
+                        "div",
+                        "border-bottom border-dark mt-4"
+                    );
+
+                    signature.style.minHeight =
+                        Math.max(15, field.minHeightMm) + "mm";
+
+                    addElement(
+                        signature,
+                        "span",
+                        "text-muted small fst-italic",
+                        "Signature Space"
+                    );
+
+                } else {
+
+                    const input = addElement(
+                        group,
+                        "input",
+                        "form-control bg-light text-muted"
+                    );
+
+                    input.type = "text";
+                    input.disabled = true;
+
+                    if (field.type === "Date") {
+                        input.value = "YYYY-MM-DD";
+                    }
+                }
+            });
+        }
+
+
+        // =========================================================
+        // THESIS COVER PAGE - OFFICIAL A4 PREVIEW
+        // =========================================================
+
+        function renderThesisCoverPage(fields) {
+
+            // Use the existing cover page layout.
+            previewContainer.className = "cover-page-preview";
+            previewContainer.replaceChildren();
+
+            // Only use current Admin field configuration.
+            // Do not change immutable field keys.
+            function normalizedKey(field) {
+                return String(field.key || "")
+                    .replace(/[^a-zA-Z0-9]/g, "")
+                    .toLowerCase();
+            }
+
+            // Identify the thesis title field.
+            const titleKeys = [
+                "thesistitle",
+                "projecttitle",
+                "researchtitle",
+                "title"
+            ];
+
+            const titleField = fields.find(field =>
+                titleKeys.includes(normalizedKey(field))
+            ) || null;
+
+            // DocumentDate is automatically supplied by Admin Settings.
+            // It must not be rendered as an editable input.
+            const detailFields = fields.filter(field =>
+                normalizedKey(field) !== "documentdate" &&
+                field !== titleField
+            );
+
+            // =====================================================
+            // TITLE BLOCK
+            // =====================================================
+
+            const titleBlock = addElement(
+                previewContainer,
+                "div",
+                "cover-title-block"
+            );
+
+            const titleLabel = (
+                titleField?.label || "THESIS TITLE"
+            ).trim();
+
+            addElement(
+                titleBlock,
+                "div",
+                "cover-thesis-title",
+                "[" + titleLabel.toUpperCase() + "]"
+            );
+
+            // =====================================================
+            // STUDENT AND PROJECT INFORMATION
+            // =====================================================
+
+            const studentBlock = addElement(
+                previewContainer,
+                "div",
+                "cover-student-block"
+            );
+
+            // Display all other configured fields in their current
+            // order so no template fields are silently omitted.
+            detailFields.forEach(field => {
+
+                const label = (
+                    field.label || field.key || "Field"
+                ).trim();
+
+                const placeholder = "[" +
+                    label.toUpperCase() +
+                    "]";
+
+                addElement(
+                    studentBlock,
+                    "div",
+                    "cover-info-line",
+                    label + ": " + placeholder
+                );
+            });
+
+            // =====================================================
+            // BOTTOM BLOCK
+            // =====================================================
+
+            const bottomBlock = addElement(
+                previewContainer,
+                "div",
+                "cover-bottom-block"
+            );
+
+            const schoolBlock = addElement(
+                bottomBlock,
+                "div",
+                "cover-school"
+            );
+
+            addElement(
+                schoolBlock,
+                "div",
+                "",
+                "School of Computing"
+            );
+
+            addElement(
+                schoolBlock,
+                "div",
+                "",
+                "INTI International College Penang"
+            );
+
+            // Deadline is provided by AdminController GET.
+            const documentDate = (
+                previewContainer.dataset.dppDeadline || ""
+            ).trim();
+
+            addElement(
+                bottomBlock,
+                "div",
+                "cover-document-date",
+                documentDate ||
+                    "[DPP DEADLINE NOT CONFIGURED]"
+            );
+        }
+        
+        // =========================================================
+        // INITIAL PROJECT ALLOCATION FORM - OFFICIAL A4 PREVIEW
+        // =========================================================
+
+        function renderIafForm(fields) {
+            previewContainer.className = "row iaf-preview";
+            previewContainer.replaceChildren();
+
+            let currentSection = "";
+
+            const headingCol = addElement(previewContainer, "div", "col-12 text-center mb-4");
+            addElement(headingCol, "h3", "fw-bold text-uppercase", "Initial Project Allocation Form");
+
+            fields.forEach((field) => {
+                let sectionTitle = "";
+                let instructions = "";
+                
+                if (["StudentName", "CoventryId", "Program", "ProjectTitle"].includes(field.key)) {
+                    sectionTitle = "Student and Project Information";
+                } else if (field.key === "ScopeOfProject") {
+                    sectionTitle = "Scope of Project";
+                } else if (field.key === "ProblemStatement") {
+                    sectionTitle = "Problem Statement";
+                    instructions = "(with academic evidence and in-text citation)";
+                } else if (field.key === "References") {
+                    sectionTitle = "References Listing";
+                } else if (field.key === "Objectives") {
+                    sectionTitle = "Objectives";
+                    instructions = "(2 to 3 measurable objectives in point form)";
+                } else if (["SupervisorName", "SupervisorSignature"].includes(field.key)) {
+                    sectionTitle = "Supervisor Details (Optional - Prior Agreement Only)";
+                } else if (field.key === "CommentFeedback") {
+                    sectionTitle = "Comment / Feedback";
+                } else {
+                    sectionTitle = "Other Information";
+                }
+
+                if (sectionTitle !== currentSection) {
+                    currentSection = sectionTitle;
+                    const sectionWrapper = addElement(previewContainer, "div", "col-12 mt-4");
+                    addElement(sectionWrapper, "div", "iaf-section-title", sectionTitle);
+                    if (instructions) {
+                        addElement(sectionWrapper, "div", "iaf-instruction", instructions);
+                    }
+                }
+
+                const col = addElement(
+                    previewContainer,
+                    "div",
+                    "col-" + getWidth(field.columns)
+                );
+
+                const group = addElement(col, "div", "mb-3");
+                addElement(group, "div", "iaf-field-label", field.label);
+                
+                if (field.type === "TextArea") {
+                    const area = addElement(group, "div", "iaf-text-area");
+                    area.style.minHeight = Math.max(15, field.minHeightMm || 30) + "mm";
+                } else if (field.type === "Signature") {
+                    const sig = addElement(group, "div", "iaf-signature-box");
+                    sig.style.minHeight = Math.max(15, field.minHeightMm || 20) + "mm";
+                    addElement(sig, "span", "text-muted small fst-italic", "[Visual Signature Placeholder]");
+                } else {
+                    const line = addElement(group, "div", "iaf-text-line");
+                    line.style.minHeight = Math.max(8, field.minHeightMm || 8) + "mm";
+                }
+            });
+        }
+        // =========================================================
+        // GROUP GENAI DECLARATION FORM - OFFICIAL A4 PREVIEW
+        // =========================================================
+
+        function renderGroupGenAiForm(fields) {
+            previewContainer.className = "genai-group-preview";
+            previewContainer.replaceChildren();
+
+            addElement(previewContainer, "div", "genai-group-title", "STUDENT DECLARATION OF GENERATIVE AI USE IN ACADEMIC WORK - GROUP");
+
+            const introText = "Students must disclose their GenAI usage. Inaccurate declarations can breach academic integrity.";
+            addElement(previewContainer, "div", "genai-group-intro", introText);
+
+            // Track mapped fields to report unmapped ones
+            const mappedKeys = new Set();
+            
+            // Section 1
+            const assessmentKeys = ["CourseCode", "CourseTitle", "LecturerName", "AssessmentTitle", "SubmissionDate"];
+            const assessmentFields = fields.filter(f => assessmentKeys.includes(f.key));
+            assessmentKeys.forEach(k => mappedKeys.add(k));
+
+            const section1 = addElement(previewContainer, "div", "genai-group-section");
+            addElement(section1, "div", "genai-group-section-title", "Section 1 \u2014 Assessment Information");
+            const sec1Row = addElement(section1, "div", "row g-3");
+            
+            assessmentFields.forEach(field => {
+                const col = addElement(sec1Row, "div", "col-" + getWidth(field.columns));
+                const group = addElement(col, "div", "genai-group-field");
+                addElement(group, "div", "genai-group-label", field.label);
+                addElement(group, "div", "genai-group-value");
+            });
+
+            // Section 2
+            const section2 = addElement(previewContainer, "div", "genai-group-section");
+            addElement(section2, "div", "genai-group-section-title", "Section 2 \u2014 Acknowledgement and Group Members");
+            addElement(section2, "p", "small mb-3", "By signing below, we acknowledge the academic integrity requirements.");
+            
+            const table2 = addElement(section2, "table", "genai-group-table");
+            const thead2 = addElement(table2, "thead");
+            const trHead2 = addElement(thead2, "tr");
+            addElement(trHead2, "th", "", "No.");
+            addElement(trHead2, "th", "", "Full Name");
+            addElement(trHead2, "th", "", "Student ID");
+            addElement(trHead2, "th", "", "Signature");
+            const tbody2 = addElement(table2, "tbody");
+
+            for(let i = 1; i <= 5; i++) {
+                const nameKey = `Member${i}Name`;
+                const idKey = `Member${i}StudentId`;
+                const sigKey = `Member${i}Signature`;
+                mappedKeys.add(nameKey);
+                mappedKeys.add(idKey);
+                mappedKeys.add(sigKey);
+
+                const tr = addElement(tbody2, "tr");
+                addElement(tr, "td", "", i.toString());
+                
+                const nameField = fields.find(f => f.key === nameKey);
+                const idField = fields.find(f => f.key === idKey);
+                const sigField = fields.find(f => f.key === sigKey);
+
+                const tdName = addElement(tr, "td");
+                if (nameField) {
+                    addElement(tdName, "div", "small fw-bold text-muted mb-1", nameField.label);
+                }
+                addElement(tdName, "div", "genai-group-value border-0 mt-2 border-bottom");
+                
+                const tdId = addElement(tr, "td");
+                if (idField) {
+                    addElement(tdId, "div", "small fw-bold text-muted mb-1", idField.label);
+                }
+                addElement(tdId, "div", "genai-group-value border-0 mt-2 border-bottom");
+
+                const tdSig = addElement(tr, "td");
+                if (sigField) {
+                    addElement(tdSig, "div", "small fw-bold text-muted mb-1", sigField.label);
+                    const sigSpace = addElement(tdSig, "div", "text-center text-muted small fst-italic pt-4");
+                    sigSpace.textContent = "[Visual Signature Placeholder]";
+                    sigSpace.style.minHeight = Math.max(15, sigField.minHeightMm) + "mm";
+                } else {
+                    addElement(tdSig, "div", "genai-group-value border-0 mt-2 border-bottom");
+                }
+            }
+
+            // Section A
+            const sectionA = addElement(previewContainer, "div", "genai-group-section");
+            addElement(sectionA, "div", "genai-group-section-title", "Section A \u2014 AI Usage Declaration");
+            
+            const categoryField = fields.find(f => f.key === "AiUsageCategory");
+            mappedKeys.add("AiUsageCategory");
+            if (categoryField) {
+                addElement(sectionA, "div", "genai-group-label mb-3", categoryField.label);
+            }
+
+            const cat1 = addElement(sectionA, "div", "genai-group-checkbox-row");
+            addElement(cat1, "div", "genai-group-checkbox");
+            addElement(cat1, "span", "", "Category 1 \u2014 GenAI Tools Used in Content Creation And/or Proofreading.");
+
+            const cat2 = addElement(sectionA, "div", "genai-group-checkbox-row");
+            addElement(cat2, "div", "genai-group-checkbox");
+            addElement(cat2, "span", "", "Category 2 \u2014 GenAI Tools Used for Proofreading Only.");
+            
+            const cat3 = addElement(sectionA, "div", "genai-group-checkbox-row");
+            addElement(cat3, "div", "genai-group-checkbox");
+            addElement(cat3, "span", "", "Category 3 \u2014 No GenAI Tools Used.");
+
+            // Section B
+            const sectionB = addElement(previewContainer, "div", "genai-group-section");
+            addElement(sectionB, "div", "genai-group-section-title", "Section B \u2014 Details of AI Usage");
+            
+            const aiKeys = ["AiUsageSection", "AiUsagePageNumber", "AiUsageTool", "AiUsagePurpose", "AiUsageModification"];
+            aiKeys.forEach(k => mappedKeys.add(k));
+            
+            const tableB = addElement(sectionB, "table", "genai-group-table");
+            const theadB = addElement(tableB, "thead");
+            const trHeadB = addElement(theadB, "tr");
+
+            const aiSectionField = fields.find(f => f.key === "AiUsageSection");
+            const aiPageField = fields.find(f => f.key === "AiUsagePageNumber");
+            const aiToolField = fields.find(f => f.key === "AiUsageTool");
+            const aiPurposeField = fields.find(f => f.key === "AiUsagePurpose");
+            const aiModField = fields.find(f => f.key === "AiUsageModification");
+
+            addElement(trHeadB, "th", "", aiSectionField ? aiSectionField.label : "Section of Assessment");
+            addElement(trHeadB, "th", "", aiPageField ? aiPageField.label : "Page Number");
+            addElement(trHeadB, "th", "", aiToolField ? aiToolField.label : "GenAI Tool Used");
+            addElement(trHeadB, "th", "", aiPurposeField ? aiPurposeField.label : "Purpose of Use");
+            addElement(trHeadB, "th", "", aiModField ? aiModField.label : "How AI Output Was Modified");
+            
+            const tbodyB = addElement(tableB, "tbody");
+            
+            // Example row
+            const trEx = addElement(tbodyB, "tr", "text-muted fst-italic bg-light");
+            addElement(trEx, "td", "", "e.g. Intro");
+            addElement(trEx, "td", "", "e.g. 1-2");
+            addElement(trEx, "td", "", "e.g. ChatGPT");
+            addElement(trEx, "td", "", "e.g. Brainstorming");
+            addElement(trEx, "td", "", "e.g. Re-wrote points");
+
+            // Empty row placeholder
+            const trEmpty = addElement(tbodyB, "tr");
+            addElement(trEmpty, "td", "", "\u00A0").style.minHeight = "25px";
+            addElement(trEmpty, "td", "", "\u00A0");
+            addElement(trEmpty, "td", "", "\u00A0");
+            addElement(trEmpty, "td", "", "\u00A0");
+            addElement(trEmpty, "td", "", "\u00A0");
+
+            // Unmapped Fields section
+            const unmappedFields = fields.filter(f => !mappedKeys.has(f.key));
+            if (unmappedFields.length > 0) {
+                const unmappedSection = addElement(previewContainer, "div", "genai-group-section border-warning border-dashed mt-4");
+                addElement(unmappedSection, "div", "genai-group-section-title bg-warning bg-opacity-10 text-dark", "Additional Configuration (Unmapped Fields)");
+                const unRow = addElement(unmappedSection, "div", "row g-3");
+                unmappedFields.forEach(field => {
+                    const col = addElement(unRow, "div", "col-" + getWidth(field.columns));
+                    const group = addElement(col, "div", "genai-group-field");
+                    addElement(group, "div", "genai-group-label text-warning-emphasis", field.label + " (Key: " + field.key + ")");
+                    
+                    if (field.type === "TextArea") {
+                        const area = addElement(group, "div", "border rounded bg-light mt-1");
+                        area.style.minHeight = Math.max(10, field.minHeightMm) + "mm";
+                    } else {
+                        addElement(group, "div", "genai-group-value");
+                    }
+                });
+            }
+        }
+        
+function renderPreview() {
+
+    const fields = getCurrentFields();
+
+    const previewHeading = document.getElementById(
+        "template-preview-heading"
+    );
+
+    const deadlineWarning = document.getElementById(
+        "cover-deadline-warning"
+    );
+
+    const isCoverPage = templateId === "thesis-cover";
+    const isIaf = templateId === "iaf";
+    const isGroupGenAi = templateId === "group-genai";
+
+    // The cover page has its own official document layout.
+    // Hide the generic document title for the cover only.
+    if (previewHeading) {
+        previewHeading.classList.toggle(
+            "d-none",
+            isCoverPage || isIaf || isGroupGenAi
+        );
+    }
+
+    const deadlineMissing =
+        !(
+            previewContainer.dataset.dppDeadline || ""
+        ).trim();
+
+    if (deadlineWarning) {
+        deadlineWarning.classList.toggle(
+            "d-none",
+            !(isCoverPage && deadlineMissing)
+        );
+    }
+
+    if (isCoverPage) {
+
+        renderThesisCoverPage(fields);
+
+    } else if (isIaf) {
+
+        renderIafForm(fields);
+
+    } else if (isGroupGenAi) {
+
+        renderGroupGenAiForm(fields);
+
+    } else if (
+        templateId === "stage1-meeting" ||
+        templateId === "stage2-meeting"
+    ) {
+
+        renderMeetingRecord(fields);
+
+    } else {
+
+        renderGenericForm(fields);
+    }
+}
+
+
+        // Live preview uses unsaved input values.
+        previewTab.addEventListener(
+            "shown.bs.tab",
+            renderPreview
+        );
+
+        // Also render if the Preview tab is already active.
+        if (previewTab.classList.contains("active")) {
+            renderPreview();
+        }
+
+    });
+    </script>
+    }

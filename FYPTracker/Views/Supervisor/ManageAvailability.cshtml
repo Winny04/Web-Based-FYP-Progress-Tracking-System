@@ -1,17 +1,15 @@
 @model IEnumerable<FYPTracker.Models.SupervisorAvailability>
-@using Microsoft.EntityFrameworkCore
-@inject FYPTracker.Models.FYPTrackerContext _context
 @{
     ViewData["Title"] = "My Availability";
     Layout = "~/Views/Shared/_Layout.cshtml";
-    var user = ViewBag.CurrentUser as FYPTracker.Models.ApplicationUser;
+   string sessionName =
+    ViewBag.SelectedSessionName as string ?? "N/A";
 
-    var currentSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true);
-    bool hasTimetable = false;
-    string sessionName = currentSession?.Name ?? "N/A";
-    if (currentSession != null && user != null) {
-        hasTimetable = await _context.SupervisorTimetableEntries.AnyAsync(e => e.SupervisorId == user.Id && e.AcademicSessionId == currentSession.Id);
-    }
+    bool hasTimetable =
+        ViewBag.HasTimetable is bool flag && flag;
+
+    var sessions = ViewBag.AllSessions as IEnumerable<string>
+                ?? Enumerable.Empty<string>();
 }
 
 <div class="container-fluid py-4">
@@ -40,6 +38,35 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
+    <div class="mb-4">
+
+    <form asp-controller="Supervisor"
+          asp-action="ManageAvailability"
+          method="get">
+
+        <label class="form-label fw-bold">
+            Academic Session
+        </label>
+
+        <select name="sessionFilter"
+                class="form-select"
+                style="max-width:250px;"
+                onchange="this.form.submit()">
+
+            @foreach (var s in sessions)
+            {
+                if (s == sessionName)
+                {
+                    <option value="@s" selected>@s</option>
+                }
+                else
+                {
+                    <option value="@s">@s</option>
+                }
+            }
+        </select>
+    </form>
+</div>
 
     <!-- Teaching Timetable Card -->
     <div class="card border-0 shadow-sm mb-4">
@@ -49,18 +76,36 @@
         <div class="card-body">
             <p class="text-muted">
                 Your teaching timetable blocks out busy periods so students cannot book meetings during your classes. 
-                These apply to the current active session: <strong>@sessionName</strong>.
+                These apply to the selected academic session: <strong>@sessionName</strong>.
             </p>
             <div class="d-flex align-items-center">
                 @if (hasTimetable)
                 {
-                    <span class="badge bg-success me-3 fs-6 p-2"><i class="fas fa-check me-1"></i> Timetable Uploaded</span>
-                    <a href="/Supervisor/ManageTimetable" class="btn btn-outline-primary">View or Replace Timetable</a>
+                    <span class="badge bg-success me-3 fs-6 p-2">
+                        <i class="fas fa-check me-1"></i>
+                        Timetable Uploaded
+                    </span>
+
+                    <a asp-controller="Supervisor"
+                    asp-action="ManageTimetable"
+                    asp-route-sessionFilter="@sessionName"
+                    class="btn btn-outline-primary">
+                        View or Replace Timetable
+                    </a>
                 }
                 else
                 {
-                    <span class="badge bg-secondary me-3 fs-6 p-2 text-dark"><i class="fas fa-times me-1"></i> No Timetable</span>
-                    <a href="/Supervisor/ManageTimetable" class="btn btn-primary">Upload Timetable</a>
+                    <span class="badge bg-secondary me-3 fs-6 p-2 text-dark">
+                        <i class="fas fa-times me-1"></i>
+                        No Timetable
+                    </span>
+
+                    <a asp-controller="Supervisor"
+                    asp-action="ManageTimetable"
+                    asp-route-sessionFilter="@sessionName"
+                    class="btn btn-primary">
+                        Upload Timetable
+                    </a>
                 }
             </div>
         </div>

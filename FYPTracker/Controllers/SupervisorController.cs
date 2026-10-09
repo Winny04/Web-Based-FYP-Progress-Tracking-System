@@ -6,6 +6,8 @@ using FYPTracker.Services.Others.Interfaces;
 using Microsoft.AspNetCore.SignalR;
 using FYPTracker.Hubs;
 using ClosedXML.Excel;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace FYPTracker.Controllers
 {
@@ -70,8 +72,10 @@ namespace FYPTracker.Controllers
 
         private async Task<string?> GetAndSetSessionFilterAsync(int supervisorId, string? sessionFilter)
         {
+            // Load all configured academic sessions
             var sessions = await _context.FYPProjects
-                .Where(p => p.SupervisorId == supervisorId && !string.IsNullOrEmpty(p.AcademicSession))
+                .Where(p => p.SupervisorId == supervisorId &&
+                            !string.IsNullOrEmpty(p.AcademicSession))
                 .Select(p => p.AcademicSession)
                 .Distinct()
                 .ToListAsync();
@@ -1228,6 +1232,83 @@ namespace FYPTracker.Controllers
             return View(milestone);
         }
 
+        // =====================================================
+        // SUPERVISOR - READ ONLY IAF VIEWER
+        // =====================================================
+        [HttpGet]
+        public async Task<IActionResult> ViewIaf(
+            int milestoneId,
+            int attemptNumber)
+        {
+            // 1. Verify logged-in Supervisor
+            var user = await GetCurrentUserAsync();
+
+            if (user == null)
+                return RedirectToAction("Login", "User");
+
+            if (!user.UserRoles.Any(r => r.Role.Name == "Supervisor"))
+                return RedirectToAction("AccessDenied", "Home");
+
+            // 2. Only access milestones belonging to this Supervisor
+            var milestone = await _context.FYPMilestones
+                .AsNoTracking()
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Supervisor)
+                .Include(m => m.SubmissionFiles)
+                .FirstOrDefaultAsync(m =>
+                    m.Id == milestoneId &&
+                    m.Project.SupervisorId == user.Id);
+
+            if (milestone == null)
+                return NotFound();
+
+            // 3. Ensure this is an IAF milestone
+            bool isIaf =
+                !string.IsNullOrEmpty(milestone.Title) &&
+                (
+                    milestone.Title.Contains(
+                        "Initial Project Allocation",
+                        StringComparison.OrdinalIgnoreCase)
+                    ||
+                    milestone.Title.Contains(
+                        "IAF",
+                        StringComparison.OrdinalIgnoreCase)
+                );
+
+            if (!isIaf)
+                return NotFound();
+
+            // 4. Read IAF Attempt History
+            string raw = milestone.Remarks ?? "";
+
+            int jsonIndex = raw.IndexOf(
+                "JSON: ",
+                StringComparison.Ordinal);
+
+            string parsedJson = jsonIndex >= 0
+                ? raw.Substring(jsonIndex + "JSON: ".Length)
+                : raw;
+
+            var history =
+                IafAttemptHistory.ParseOrMigrate(parsedJson);
+
+            // 5. Validate requested Attempt Number
+            bool attemptExists = history.Attempts.Any(
+                a => a.AttemptNumber == attemptNumber);
+
+            if (!attemptExists)
+                return NotFound();
+
+            // 6. Pass Attempt Number to View
+            ViewData["AttemptNumber"] = attemptNumber;
+            ViewBag.CurrentUser = user;
+
+            // Read-only page
+            return View("ViewIaf", milestone);
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ReviewSubmission(int milestoneId, string status, string? remarks, string? supervisorSignature, string? pctComplete, int? turnitinScore, IFormFile? gradedFile)
@@ -1951,73 +2032,227 @@ namespace FYPTracker.Controllers
             return RedirectToAction(nameof(Notifications));
         }
 
+        // Generates the immutable signed PDF BEFORE committing the Signed status.
+        // The draft's frozen JSON template is reused, never the current Admin template.
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ReviewMeetingLogSupervisor(
-            int meetingId, 
+            int meetingId,
             string? supervisorComments,
             string? supervisorSignature)
         {
             var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "User");
+            if (user == null)
+                return RedirectToAction("Login", "User");
 
             var meeting = await _context.MeetingBookings
+                .Include(m => m.Student)
+                .Include(m => m.Supervisor)
                 .Include(m => m.MeetingLog)
-                .FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
+                .FirstOrDefaultAsync(m =>
+                    m.Id == meetingId && m.SupervisorId == user.Id);
 
-            if (meeting == null || meeting.MeetingLog == null)
+            if (meeting == null || meeting.Status != "Approved" || meeting.MeetingLog == null)
             {
-                TempData["Error"] = "Progress logbook not found.";
+                TempData["Error"] = "Approved meeting logbook not found.";
                 return RedirectToAction(nameof(ManageMeetings));
             }
 
-            meeting.MeetingLog.LogStatus = "Signed";
-            meeting.MeetingLog.SignatureDate = DateTime.Now;
-
-            string finalComments = supervisorComments ?? "";
-            if (!string.IsNullOrEmpty(supervisorSignature))
+            var log = meeting.MeetingLog;
+            if (log.LogStatus == "Signed")
             {
-                finalComments += "|||SIG|||" + supervisorSignature;
-            }
-            if (!string.IsNullOrEmpty(finalComments))
-            {
-                meeting.MeetingLog.SupervisorComments = finalComments;
+                TempData["Error"] = "This logbook is already signed and cannot be signed again.";
+                return RedirectToAction(nameof(ManageMeetings));
             }
 
-            await _context.SaveChangesAsync();
-            await AddNotificationAsync(meeting.StudentId, "MeetingLogSigned", "Progress Logbook Signed", $"Your supervisor has signed the progress logbook for the meeting on {meeting.MeetingDate:dd MMM yyyy}.");
-            
-            // --- SignalR Real-Time Notification ---
-            var logbookSignedPayload = new {
-                Type = "MeetingLogSigned",
-                MeetingId = meeting.Id,
-                Title = "Logbook Signed",
-                Message = $"Your supervisor has signed your progress logbook."
-            };
-            await _hubContext.Clients.Group($"User_{meeting.StudentId}").SendAsync("ReceiveMeetingUpdate", logbookSignedPayload);
-            
-            TempData["Success"] = "Progress logbook signed and approved successfully!";
+            // Canvas sends a PNG data URL. Validate on the server, not only in JavaScript.
+            const string pngPrefix = "data:image/png;base64,";
+            if (string.IsNullOrWhiteSpace(supervisorSignature) ||
+                !supervisorSignature.StartsWith(pngPrefix, StringComparison.OrdinalIgnoreCase) ||
+                supervisorSignature.Length > 2_800_000)
+            {
+                TempData["Error"] = "Please draw a valid supervisor signature before signing.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            try
+            {
+                byte[] imageBytes = Convert.FromBase64String(
+                    supervisorSignature.Substring(pngPrefix.Length));
+
+                byte[] pngHeader = { 137, 80, 78, 71, 13, 10, 26, 10 };
+                if (imageBytes.Length < pngHeader.Length ||
+                    !imageBytes.AsSpan(0, pngHeader.Length).SequenceEqual(pngHeader))
+                {
+                    TempData["Error"] = "Invalid PNG supervisor signature.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+            }
+            catch (FormatException)
+            {
+                TempData["Error"] = "Invalid signature image data. Please sign again.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            // Must use the template frozen when the student submitted this draft.
+            // Do NOT silently use the current Admin template for historical records.
+            var frozenTemplate = FYPTracker.Utils.MeetingLogPdfGenerator
+                .GetFrozenTemplateSnapshot(
+                    _env.ContentRootPath,
+                    meeting.Id,
+                    log.PdfLogbookPath);
+
+            if (frozenTemplate == null ||
+                frozenTemplate.Fields == null ||
+                frozenTemplate.Fields.Count == 0)
+            {
+                TempData["Error"] =
+                    "The original logbook template snapshot is missing. " +
+                    "Signing has been cancelled to protect the original record. " +
+                    "Please restore the draft template snapshot before trying again.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            // The MeetingLog model stores the signature after |||SIG|||.
+            // Apply the signing data in memory so the PDF contains the final values.
+            string safeComments = (supervisorComments ?? string.Empty)
+                .Replace("|||SIG|||", string.Empty)
+                .Trim();
+            log.SupervisorComments = safeComments + "|||SIG|||" + supervisorSignature;
+            log.SignatureDate = DateTime.Now;
+            log.LogStatus = "Signed";
+
+            string? signedPdfPath = null;
+            try
+            {
+                // If PDF generation fails, SaveChangesAsync() is never reached.
+                signedPdfPath = FYPTracker.Utils.MeetingLogPdfGenerator.SavePdfSnapshot(
+                    _env.ContentRootPath,
+                    meeting,
+                    frozenTemplate,
+                    isSigned: true);
+
+                if (string.IsNullOrWhiteSpace(signedPdfPath))
+                    throw new InvalidOperationException("Signed PDF path was not returned.");
+
+                log.SignedPdfLogbookPath = signedPdfPath;
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                HttpContext.RequestServices
+                    .GetRequiredService<ILogger<SupervisorController>>()
+                    .LogError(ex, "Failed to sign MeetingLog {MeetingLogId} (booking {MeetingId}).",
+                        log.Id, meeting.Id);
+
+                // Avoid orphan PDF if the file was created but the DB update failed.
+                if (!string.IsNullOrWhiteSpace(signedPdfPath))
+                {
+                    string name = System.IO.Path.GetFileName(signedPdfPath);
+                    if (name.StartsWith($"Signed_Log_{meeting.Id}_", StringComparison.OrdinalIgnoreCase) &&
+                        name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string path = System.IO.Path.Combine(
+                            _env.ContentRootPath, "App_Data", "MeetingLogSnapshots", name);
+                        try { System.IO.File.Delete(path); }
+                        catch (IOException) { /* Logged error above; clean up manually if needed. */ }
+                        catch (UnauthorizedAccessException) { /* Do not hide original error. */ }
+                    }
+                }
+
+                TempData["Error"] =
+                    "Signing was not completed because the signed PDF could not be saved. " +
+                    "Please check the application logs and try again.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            // Notification delivery is non-critical: the signed PDF is already saved.
+            bool notificationFailed = false;
+            try
+            {
+                await AddNotificationAsync(meeting.StudentId,
+                    "MeetingLogSigned", "Progress Logbook Signed",
+                    $"Your supervisor has signed the progress logbook for the meeting on {meeting.MeetingDate:dd MMM yyyy}.");
+            }
+            catch (Exception ex)
+            {
+                notificationFailed = true;
+                HttpContext.RequestServices
+                    .GetRequiredService<ILogger<SupervisorController>>()
+                    .LogError(ex, "In-app notification failed for signed MeetingLog {MeetingLogId}.", log.Id);
+            }
+
+            try
+            {
+                var payload = new
+                {
+                    Type = "MeetingLogSigned",
+                    MeetingId = meeting.Id,
+                    Title = "Logbook Signed",
+                    Message = "Your supervisor has signed your progress logbook."
+                };
+                await _hubContext.Clients.Group($"User_{meeting.StudentId}")
+                    .SendAsync("ReceiveMeetingUpdate", payload);
+            }
+            catch (Exception ex)
+            {
+                notificationFailed = true;
+                HttpContext.RequestServices
+                    .GetRequiredService<ILogger<SupervisorController>>()
+                    .LogError(ex, "Real-time notification failed for signed MeetingLog {MeetingLogId}.", log.Id);
+            }
+
+            TempData["Success"] = notificationFailed
+                ? "Logbook signed and PDF saved. A notification may be delayed."
+                : "Progress logbook signed and PDF saved successfully!";
             return RedirectToAction(nameof(ManageMeetings));
         }
 
+        // Supervisor's secure, read-only view of the signed PDF.
         [HttpGet]
         public async Task<IActionResult> ViewMeetingLog(int id)
         {
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "User");
-            if (!user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("AccessDenied", "Home");
+            if (!user.UserRoles.Any(r => r.Role.Name == "Supervisor"))
+                return RedirectToAction("AccessDenied", "Home");
 
             var log = await _context.MeetingLogs
                 .Include(l => l.MeetingBooking)
-                .ThenInclude(mb => mb.Student)
-                .Include(l => l.MeetingBooking.Supervisor)
-                .FirstOrDefaultAsync(l => l.Id == id && l.MeetingBooking.SupervisorId == user.Id);
+                    .ThenInclude(m => m.Student)
+                .Include(l => l.MeetingBooking)
+                    .ThenInclude(m => m.Supervisor)
+                .FirstOrDefaultAsync(l =>
+                    l.Id == id && l.MeetingBooking.SupervisorId == user.Id);
 
-            if (log == null || log.LogStatus != "Signed") return NotFound();
-            
-            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == log.MeetingBooking.StudentId);
+            if (log == null || log.LogStatus != "Signed")
+                return NotFound();
+
+            // The PDF lives outside wwwroot: never Redirect() to App_Data.
+            string? stored = log.SignedPdfLogbookPath?.Replace('\\', '/');
+            const string allowedPrefix = "App_Data/MeetingLogSnapshots/";
+
+            if (!string.IsNullOrWhiteSpace(stored) &&
+                stored.StartsWith(allowedPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                string name = stored.Substring(allowedPrefix.Length);
+                if (!string.IsNullOrWhiteSpace(name) &&
+                    name == System.IO.Path.GetFileName(name) &&
+                    name.StartsWith($"Signed_Log_{log.MeetingBookingId}_", StringComparison.OrdinalIgnoreCase) &&
+                    name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    string physicalPath = System.IO.Path.Combine(
+                        _env.ContentRootPath, "App_Data", "MeetingLogSnapshots", name);
+                    if (System.IO.File.Exists(physicalPath))
+                        return PhysicalFile(physicalPath, "application/pdf", enableRangeProcessing: true);
+                }
+            }
+
+            // For legacy signed records without a signed PDF, show printable HTML.
+            // This is not a substitute for the immutable PDF snapshot.
+            var project = await _context.FYPProjects
+                .FirstOrDefaultAsync(p => p.StudentId == log.MeetingBooking.StudentId);
             ViewBag.ProjectName = project?.Title ?? "FYP Project";
-
             return View("~/Views/Shared/MeetingLogPrintable.cshtml", log);
         }
 
@@ -2760,8 +2995,3 @@ namespace FYPTracker.Controllers
         }
     }
 }
-
-
-
-
-
