@@ -23,6 +23,8 @@ namespace FYPTracker.Models
         public int? WeekNumber { get; set; }
         public int? AcademicSessionId { get; set; }
 
+        public int? ParentMeetingBookingId { get; set; }
+
         [Column(TypeName = "date")]
         public DateTime MeetingDate { get; set; }
 

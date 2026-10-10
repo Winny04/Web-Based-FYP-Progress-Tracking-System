@@ -182,6 +182,10 @@ namespace FYPTracker.Models
                 entity.ToTable("MeetingBooking");
                 entity.HasKey(e => e.Id);
 
+                entity.HasIndex(e => new { e.ParentMeetingBookingId, e.WeekNumber })
+                      .IsUnique()
+                      .HasFilter("[ParentMeetingBookingId] IS NOT NULL");
+
                 entity.HasOne(e => e.Student)
                       .WithMany()
                       .HasForeignKey(e => e.StudentId)

@@ -1,0 +1,91 @@
+{
+  "templateKey": "record-of-supervisor-meeting",
+  "version": "1.011112",
+  "title": "6000CEM/6002CMD Record of Supervisor Meeting",
+  "page": {
+    "size": "A4",
+    "orientation": "Portrait"
+  },
+  "fields": [
+    {
+      "key": "Supervisor",
+      "label": "Supervisorssssss",
+      "order": 1,
+      "columns": 6,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "Student",
+      "label": "Student",
+      "order": 2,
+      "columns": 6,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "MeetingDate",
+      "label": "Date of meeting",
+      "order": 3,
+      "columns": 12,
+      "type": "Date",
+      "minHeightMm": 0
+    },
+    {
+      "key": "TopicsDiscussed",
+      "label": "Key topics Discussed",
+      "order": 4,
+      "columns": 12,
+      "type": "TextArea",
+      "minHeightMm": 40
+    },
+    {
+      "key": "ActionPoints",
+      "label": "Individual action points for next meeting (no more than 3)",
+      "order": 5,
+      "columns": 12,
+      "type": "TextArea",
+      "minHeightMm": 40
+    },
+    {
+      "key": "ActionsCompleted",
+      "label": "Record of individual actions completed \u002B notes",
+      "order": 6,
+      "columns": 12,
+      "type": "TextArea",
+      "minHeightMm": 40
+    },
+    {
+      "key": "NextMeetingDate",
+      "label": "Date of next meeting",
+      "order": 7,
+      "columns": 12,
+      "type": "Date",
+      "minHeightMm": 0
+    },
+    {
+      "key": "SupervisorSignature",
+      "label": "Supervisor Signature",
+      "order": 8,
+      "columns": 6,
+      "type": "Signature",
+      "minHeightMm": 20
+    },
+    {
+      "key": "SupervisorSignatureDate",
+      "label": "Supervisor Signature Date",
+      "order": 9,
+      "columns": 6,
+      "type": "Date",
+      "minHeightMm": 0
+    },
+    {
+      "key": "SupervisorComments",
+      "label": "Supervisor Comments \u0026 Feedback",
+      "order": 10,
+      "columns": 12,
+      "type": "TextArea",
+      "minHeightMm": 40
+    }
+  ]
+}

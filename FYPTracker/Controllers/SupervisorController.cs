@@ -19,13 +19,15 @@ namespace FYPTracker.Controllers
         private readonly IEmailService _emailService;
         private readonly IHubContext<NotificationHub> _hubContext;
         private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _env;
+        private readonly FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService _weeklyMeetingSchedulingService;
 
-        public SupervisorController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext, Microsoft.AspNetCore.Hosting.IWebHostEnvironment env)
+        public SupervisorController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext, Microsoft.AspNetCore.Hosting.IWebHostEnvironment env, FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService weeklyMeetingSchedulingService)
         {
             _context = context;
             _emailService = emailService;
             _hubContext = hubContext;
             _env = env;
+            _weeklyMeetingSchedulingService = weeklyMeetingSchedulingService;
         }
 
         private async Task<ApplicationUser?> GetCurrentUserAsync()
@@ -1236,7 +1238,7 @@ namespace FYPTracker.Controllers
         // SUPERVISOR - READ ONLY IAF VIEWER
         // =====================================================
         [HttpGet]
-        public async Task<IActionResult> ViewIaf(
+        public async Task<IActionResult> ViewDigitalForm(
             int milestoneId,
             int attemptNumber)
         {
@@ -1265,20 +1267,7 @@ namespace FYPTracker.Controllers
                 return NotFound();
 
             // 3. Ensure this is an IAF milestone
-            bool isIaf =
-                !string.IsNullOrEmpty(milestone.Title) &&
-                (
-                    milestone.Title.Contains(
-                        "Initial Project Allocation",
-                        StringComparison.OrdinalIgnoreCase)
-                    ||
-                    milestone.Title.Contains(
-                        "IAF",
-                        StringComparison.OrdinalIgnoreCase)
-                );
 
-            if (!isIaf)
-                return NotFound();
 
             // 4. Read IAF Attempt History
             string raw = milestone.Remarks ?? "";
@@ -1306,7 +1295,7 @@ namespace FYPTracker.Controllers
             ViewBag.CurrentUser = user;
 
             // Read-only page
-            return View("ViewIaf", milestone);
+            return View("ViewDigitalForm", milestone);
         }
 
         [HttpPost]
@@ -1327,6 +1316,39 @@ namespace FYPTracker.Controllers
                         status = "SupervisorSigned";
                     } else if (status == "Rejected") {
                         status = "ReturnedForEdits";
+                    }
+                }
+
+                bool isIafSubmission =
+                    milestone.Title.Contains(
+                        "Initial Project Allocation",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    milestone.Title.Contains(
+                        "IAF",
+                        StringComparison.OrdinalIgnoreCase);
+
+                if (isIafSubmission)
+                {
+                    string raw = milestone.Remarks ?? "";
+                    int index = raw.IndexOf("JSON: ", StringComparison.Ordinal);
+
+                    string json = index >= 0
+                        ? raw.Substring(index + "JSON: ".Length)
+                        : raw;
+
+                    var history = IafAttemptHistory.ParseOrMigrate(json);
+
+                    var attempt = history.Attempts.FirstOrDefault(
+                        a => a.AttemptNumber == history.CurrentAttempt);
+
+                    bool alreadySigned =
+                        !string.IsNullOrWhiteSpace(
+                            attempt?.SupervisorSignature);
+
+                    if (alreadySigned)
+                    {
+                        return Conflict(
+                            "This IAF has already been signed and cannot be signed again.");
                     }
                 }
 
@@ -1352,13 +1374,27 @@ namespace FYPTracker.Controllers
                                 currentAttempt.Status = status;
                                 currentAttempt.SupervisorReviewedAt = DateTime.Now;
                                 
-                                if (status == "SupervisorSigned" && !string.IsNullOrEmpty(supervisorSignature))
+                                if (status == "SupervisorSigned" &&
+                                    !string.IsNullOrWhiteSpace(supervisorSignature))
                                 {
                                     currentAttempt.SupervisorSignature = supervisorSignature;
-                                }
-                                else if (status == "ReturnedForEdits")
-                                {
-                                    currentAttempt.SupervisorSignature = "";
+
+                                    currentAttempt.FormData ??=
+                                        new Dictionary<string, string>();
+
+                                    // Preserve the actual signer's identity
+                                    // in this specific IAF attempt.
+                                    if (!currentAttempt.FormData.ContainsKey("__iafSignedByName"))
+                                    {
+                                        currentAttempt.FormData["__iafSignedByName"] =
+                                            user!.FullName?.Trim() ?? "";
+                                    }
+
+                                    if (!currentAttempt.FormData.ContainsKey("__iafSignedById"))
+                                    {
+                                        currentAttempt.FormData["__iafSignedById"] =
+                                            user!.Id.ToString();
+                                    }
                                 }
                                 
                                 if (status == "SupervisorSigned")
@@ -1817,21 +1853,7 @@ namespace FYPTracker.Controllers
             {
                 var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
                 
-                if (status == "Approved" && recurringWeeks > 1)
-                {
-                    if (activeSession == null || !activeSession.EndDate.HasValue)
-                    {
-                        TempData["Error"] = "Approval rejected. There is no active Academic Session configured.";
-                        return RedirectToAction(nameof(ManageMeetings));
-                    }
-                    
-                    // Week 14 is meeting.MeetingDate + 13 weeks (91 days)
-                    if (meeting.MeetingDate.AddDays(91).Date > activeSession.EndDate.Value.Date)
-                    {
-                        TempData["Error"] = $"Approval rejected. The 14-week meeting schedule cannot be completed within the current academic session (ends {activeSession.EndDate.Value:dd MMM yyyy}).";
-                        return RedirectToAction(nameof(ManageMeetings));
-                    }
-                }
+
 
                 meeting.Status = status;
                 meeting.SupervisorNote = note;
@@ -1852,82 +1874,26 @@ namespace FYPTracker.Controllers
                     meeting.MeetingLink = $"https://meet.jit.si/FYP_Meeting_{safeStudentName}_{uniqueId}";
                 }
 
-                await _context.SaveChangesAsync();
-                if (status == "Approved" && recurringWeeks > 1)
+                int generatedCount = 0;
+                var strategy = _context.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
                 {
-                    // Check if it's the first meeting by looking at how many approved meetings exist before we auto-generate
-                    var existingApprovedCount = await _context.MeetingBookings
-                        .CountAsync(m => m.StudentId == meeting.StudentId && m.Status == "Approved");
-
-                    if (existingApprovedCount <= 1) // Only this current one is approved
+                    using var transaction = await _context.Database.BeginTransactionAsync();
+                    
+                    await _context.SaveChangesAsync();
+                    
+                    if (status == "Approved")
                     {
-                        meeting.WeekNumber = 1; // Assign week 1 to the approved first meeting
-                        await _context.SaveChangesAsync(); // save the WeekNumber
-
-                        var newMeetings = new List<MeetingBooking>();
-                        for (int i = 1; i < 14; i++)
+                        var result = await _weeklyMeetingSchedulingService.GenerateWeeklyScheduleAsync(meeting.StudentId, user.Id, meeting.Id);
+                        if (!string.IsNullOrEmpty(result.Message))
                         {
-                            var nextDate = meeting.MeetingDate.AddDays(7 * i);
-
-                            // 1. Check if supervisor is available on this specific date
-                            bool hasTimetable = activeSession != null && await _context.SupervisorTimetableEntries.AnyAsync(t => t.SupervisorId == user.Id && t.AcademicSessionId == activeSession.Id);
-
-                            var availabilities = await _context.SupervisorAvailabilities.Where(a => a.SupervisorId == user.Id).ToListAsync();
-                            var overrideAvail = availabilities.FirstOrDefault(a => a.ScheduleType == "DateOverride" && a.SpecificDate?.Date == nextDate.Date);
-
-                            bool isUnavailable = !hasTimetable || (overrideAvail != null && !overrideAvail.IsAvailable);
-
-                            TimeSpan windowStart = overrideAvail != null ? overrideAvail.StartTime : TimeSpan.FromHours(9);
-                            TimeSpan windowEnd = overrideAvail != null ? overrideAvail.EndTime : TimeSpan.FromHours(17);
-
-                            bool timeValid = TimeSpan.TryParse(meeting.MeetingTime, out var reqTime) && reqTime >= windowStart && reqTime < windowEnd;
-
-                            bool isBusy = false;
-                            if (activeSession != null && timeValid && !isUnavailable)
-                            {
-                                var reqEnd = reqTime.Add(TimeSpan.FromMinutes(30));
-                                var dayStr = nextDate.DayOfWeek.ToString();
-                                isBusy = await _context.SupervisorTimetableEntries.AnyAsync(b => 
-                                    b.SupervisorId == user.Id && b.AcademicSessionId == activeSession.Id && b.DayOfWeek == dayStr &&
-                                    ((reqTime >= b.StartTime && reqTime < b.EndTime) || 
-                                     (reqEnd > b.StartTime && reqEnd <= b.EndTime) ||
-                                     (reqTime <= b.StartTime && reqEnd >= b.EndTime))
-                                );
-                            }
-
-                            // 2. Check for overlapping meeting on this date/time
-                            bool timeConflict = await _context.MeetingBookings.AnyAsync(m => m.SupervisorId == user.Id && m.MeetingDate.Date == nextDate.Date && m.MeetingTime == meeting.MeetingTime && m.Status != "Rejected" && m.Status != "Cancelled");
-
-                            bool hasConflict = isUnavailable || !timeValid || isBusy || timeConflict;
-                            string finalStatus = hasConflict ? "Postponed" : "Approved";
-                            string supervisorNote = hasConflict ? "Needs Reschedule (Timetable or Availability Conflict)" : null;
-
-                            newMeetings.Add(new MeetingBooking
-                            {
-                                StudentId = meeting.StudentId,
-                                SupervisorId = meeting.SupervisorId,
-                                FYPProjectId = meeting.FYPProjectId,
-                                Stage = meeting.Stage,
-                                MeetingDate = nextDate,
-                                MeetingDay = nextDate.DayOfWeek.ToString(),
-                                MeetingTime = meeting.MeetingTime,
-                                WeekNumber = i + 1,
-                                Reason = "Auto-generated weekly recurring meeting.",
-                                SupervisorNote = supervisorNote,
-                                Status = finalStatus,
-                                Location = location,
-                                AcademicSessionId = activeSession?.Id,
-                                CreatedDate = DateTime.Now,
-                                RespondedDate = DateTime.Now
-                            });
+                            TempData["Success"] += $" {result.Message}";
                         }
-                        if (newMeetings.Any())
-                        {
-                            _context.MeetingBookings.AddRange(newMeetings);
-                            await _context.SaveChangesAsync();
-                        }
+                        generatedCount = result.ScheduledCount + result.ConflictCount;
                     }
-                }
+                    
+                    await transaction.CommitAsync();
+                });
 
                 // Send email notification to student
                 if (meeting.Student != null && !string.IsNullOrEmpty(meeting.Student.Email))
@@ -1939,7 +1905,7 @@ namespace FYPTracker.Controllers
                             <li><strong>Date:</strong> {meeting.MeetingDate:dd MMM yyyy}</li>
                             <li><strong>Time:</strong> {meeting.MeetingTime}</li>
                             {(status == "Approved" && !string.IsNullOrEmpty(location) ? $"<li><strong>Location:</strong> {location}</li>" : "")}
-                            {(status == "Approved" && recurringWeeks > 1 ? $"<li><strong>Note:</strong> Auto-generated for the next {recurringWeeks - 1} weeks.</li>" : "")}
+                            {(status == "Approved" && generatedCount > 0 ? $"<li><strong>Note:</strong> Auto-generated for the next {generatedCount} weeks.</li>" : "")}
                         </ul>
                         {(string.IsNullOrEmpty(note) ? "" : $"<p><strong>Supervisor Feedback:</strong> {note}</p>")}";
                     var request = HttpContext.Request;
@@ -1963,7 +1929,10 @@ namespace FYPTracker.Controllers
                 };
                 await _hubContext.Clients.Group($"User_{meeting.StudentId}").SendAsync("ReceiveMeetingUpdate", responsePayload);
 
-                TempData["Success"] = $"Meeting {status.ToLower()}." + (recurringWeeks > 1 && status == "Approved" ? $" Auto-generated for {recurringWeeks} weeks." : "");
+                if (TempData["Success"] == null)
+                {
+                    TempData["Success"] = $"Meeting {status.ToLower()}.";
+                }
             }
             return RedirectToAction(nameof(ManageMeetings));
         }
@@ -1991,7 +1960,24 @@ namespace FYPTracker.Controllers
                     notification.ReadDate = DateTime.Now;
                 }
 
-                await _context.SaveChangesAsync();
+                var strategy = _context.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
+                {
+                    using var transaction = await _context.Database.BeginTransactionAsync();
+                    
+                    await _context.SaveChangesAsync();
+                    
+                    if (status == "Approved")
+                    {
+                        var result = await _weeklyMeetingSchedulingService.GenerateWeeklyScheduleAsync(meeting.StudentId, user.Id, meeting.Id);
+                        if (!string.IsNullOrEmpty(result.Message))
+                        {
+                            TempData["Success"] += $" {result.Message}";
+                        }
+                    }
+                    
+                    await transaction.CommitAsync();
+                });
 
                 string notifMessage = $"Your meeting request for {meeting.MeetingDate:dd MMM yyyy} was {status.ToLower()}.";
                 if (!string.IsNullOrEmpty(note))

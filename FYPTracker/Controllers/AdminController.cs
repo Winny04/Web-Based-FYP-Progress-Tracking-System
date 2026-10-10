@@ -1694,14 +1694,17 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 definition.HistoryFolder,
                 "history.json");
 
-            if (!System.IO.File.Exists(templatePath))
+            string draftPath = templatePath.Replace(".default.json", ".draft.json");
+            string targetPath = System.IO.File.Exists(draftPath) ? draftPath : templatePath;
+
+            if (!System.IO.File.Exists(targetPath))
                 return NotFound(
                     "Template file not found: " + definition.FileName);
 
             try
             {
                 string json = await System.IO.File
-                    .ReadAllTextAsync(templatePath);
+                    .ReadAllTextAsync(targetPath);
 
                 var template =
                     System.Text.Json.JsonSerializer.Deserialize<
@@ -1816,7 +1819,8 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SaveFormTemplate(
             string templateId,
-            MeetingRecordTemplateVM model)
+            MeetingRecordTemplateVM model,
+            string actionType = "publish")
         {
             if (string.IsNullOrWhiteSpace(templateId) ||
                 !_formTemplateFiles.TryGetValue(
@@ -2020,7 +2024,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     existingField.Columns = submitted.Columns;
                 }
 
-                if (changes.Count == 0)
+                if (changes.Count == 0 && actionType != "draft")
                 {
                     TempData["SuccessMessage"] =
                         "No template changes detected.";
@@ -2029,6 +2033,17 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                         nameof(FormTemplateSettings),
                         new { templateId });
                 }
+
+                string draftPath = templatePath.Replace(".default.json", ".draft.json");
+
+                if (actionType == "draft")
+                {
+                    string draftJson = System.Text.Json.JsonSerializer.Serialize(original, _formTemplateJsonOptions);
+                    await System.IO.File.WriteAllTextAsync(draftPath, draftJson);
+                    TempData["SuccessMessage"] = "Draft successfully saved.";
+                    return RedirectToAction(nameof(FormTemplateSettings), new { templateId });
+                }
+
 
                 // Read audit history BEFORE writing any changes.
                 var history = new List<TemplateAuditEvent>();
@@ -2143,6 +2158,11 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                         tempTemplatePath,
                         templatePath,
                         true);
+                        
+                    if (System.IO.File.Exists(draftPath))
+                    {
+                        System.IO.File.Delete(draftPath);
+                    }
                 }
                 finally
                 {
@@ -3639,7 +3659,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 }
                 else if (type == "AcademicSession")
                 {
-                    var data = _context.AcademicSessions.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive, startDate = x.StartDate, endDate = x.EndDate, isCurrent = x.IsCurrent }).ToList();
+                    var data = _context.AcademicSessions.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive, startDate = x.StartDate, endDate = x.EndDate, isCurrent = x.IsCurrent, requiredMeetingsStage1 = x.RequiredMeetingsStage1, requiredMeetingsStage2 = x.RequiredMeetingsStage2 }).ToList();
                     return Json(new { data = data });
                 }
                 return Json(new { data = new List<object>() });
@@ -3652,7 +3672,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult AddLookup(string type, string name, DateTime? startDate = null, DateTime? endDate = null, bool isCurrent = false, bool isActive = true)
+        public IActionResult AddLookup(string type, string name, DateTime? startDate = null, DateTime? endDate = null, bool isCurrent = false, bool isActive = true, int? requiredMeetingsStage1 = null, int? requiredMeetingsStage2 = null)
         {
             try
             {
@@ -3684,7 +3704,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                         foreach (var curr in currents) curr.IsCurrent = false;
                     }
                     
-                    _context.AcademicSessions.Add(new AcademicSession { Name = name, IsActive = true, StartDate = startDate, EndDate = endDate, IsCurrent = isCurrent });
+                    _context.AcademicSessions.Add(new AcademicSession { Name = name, IsActive = true, StartDate = startDate, EndDate = endDate, IsCurrent = isCurrent, RequiredMeetingsStage1 = requiredMeetingsStage1, RequiredMeetingsStage2 = requiredMeetingsStage2 });
                 }
                 _context.SaveChanges();
                 return Json(new { status = true });
@@ -3697,7 +3717,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult EditLookup(string type, int id, string name, DateTime? startDate = null, DateTime? endDate = null, bool isCurrent = false, bool isActive = true)
+        public IActionResult EditLookup(string type, int id, string name, DateTime? startDate = null, DateTime? endDate = null, bool isCurrent = false, bool isActive = true, int? requiredMeetingsStage1 = null, int? requiredMeetingsStage2 = null)
         {
             try
             {
@@ -3729,12 +3749,13 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                             var currents = _context.AcademicSessions.Where(s => s.IsCurrent == true && s.Id != id).ToList();
                             foreach (var curr in currents) curr.IsCurrent = false;
                         }
-                        
                         entity.Name = name; 
                         entity.IsActive = isActive; 
                         entity.StartDate = startDate; 
                         entity.EndDate = endDate; 
                         entity.IsCurrent = isCurrent; 
+                        entity.RequiredMeetingsStage1 = requiredMeetingsStage1;
+                        entity.RequiredMeetingsStage2 = requiredMeetingsStage2;
                         _context.SaveChanges(); 
                     }
                 }

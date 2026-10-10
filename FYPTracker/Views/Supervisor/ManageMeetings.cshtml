@@ -2,6 +2,7 @@
 @model IEnumerable<MeetingBooking>
 @using System.Text.Json
 @inject FYPTracker.Services.Forms.MeetingLogTemplateService MeetingLogTemplateService
+@inject FYPTracker.Services.Meetings.IMeetingRequirementService MeetingReqService
 @{
     ViewData["Title"] = "Manage Meetings";
     var user = ViewBag.CurrentUser as ApplicationUser;
@@ -348,8 +349,16 @@
 
                         @foreach (var stageGroup in group.GroupBy(x => x.Stage).OrderBy(g => g.Key))
                         {
+                            var prog = student != null ? await MeetingReqService.GetStudentProgressAsync(student.Id, stageGroup.Key ?? 1) : null;
                             <tr class="bg-light">
-                                <td colspan="5" class="ps-4 py-2 text-primary fw-bold">Stage @stageGroup.Key</td>
+                                <td colspan="5" class="ps-4 py-2">
+                                    <div class="d-flex justify-content-between align-items-center pe-4">
+                                        <span class="text-primary fw-bold">Stage @stageGroup.Key</span>
+                                        @if(prog != null && prog.Required.HasValue) {
+                                            <span class="badge @(prog.Completed >= prog.Required.Value ? "bg-success" : "bg-warning text-dark")">Progress: @prog.Completed / @prog.Required.Value</span>
+                                        }
+                                    </div>
+                                </td>
                             </tr>
                             @foreach (var m in stageGroup.OrderByDescending(x => x.MeetingDate).ThenByDescending(x => x.MeetingTime))
                             {

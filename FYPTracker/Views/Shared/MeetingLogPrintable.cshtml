@@ -1,137 +1,202 @@
 @model FYPTracker.Models.MeetingLog
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment _env
+@using System.Text.Json
+@using FYPTracker.ViewModels
 @{
     Layout = null;
     var meeting = Model.MeetingBooking;
     var student = meeting?.Student;
     var supervisor = meeting?.Supervisor;
+
+    string templateKey = meeting?.Stage == 2 ? "stage2-meeting" : "stage1-meeting";
+    string fileName = meeting?.Stage == 2 
+        ? "Stage2RecordOfSupervisorMeeting6001CEM303COM.default.json" 
+        : "Stage1RecordOfSupervisorMeeting6000CEM6002CMD.default.json";
+        
+    string templatePath = System.IO.Path.Combine(_env.ContentRootPath, "FormTemplates", fileName);
+    MeetingRecordTemplateVM? templateSnapshot = null;
+    
+    if (System.IO.File.Exists(templatePath))
+    {
+        try
+        {
+            string json = System.IO.File.ReadAllText(templatePath);
+            var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+            templateSnapshot = JsonSerializer.Deserialize<MeetingRecordTemplateVM>(json, opts);
+        }
+        catch { }
+    }
+    
+    if (templateSnapshot == null)
+    {
+        templateSnapshot = new MeetingRecordTemplateVM { Title = "Meeting Log", Fields = new List<TemplateField>() };
+    }
+
+    bool isSigned = Model.LogStatus == "Signed";
+    var sortedFields = templateSnapshot.Fields.OrderBy(f => f.Order).ToList();
 }
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Meeting Log - @student?.FullName</title>
+    <title>@templateSnapshot.Title - @student?.FullName</title>
     <style>
-        .meeting-log-doc {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
+        @@page {
+            size: A4 portrait;
+            margin: 20mm;
+        }
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f4f6f9;
+            margin: 0;
+            padding: 20px;
             color: #333;
-            max-width: 800px;
+        }
+        .a4-template-paper {
+            width: 210mm;
+            max-width: 100%;
+            min-height: 297mm;
             margin: 0 auto;
-            padding: 40px 20px;
-            background: #fff;
+            padding: 20mm;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-sizing: border-box;
         }
-        .meeting-log-doc h2 {
-            text-align: center;
-            border-bottom: 2px solid #000;
-            padding-bottom: 10px;
-            margin-bottom: 30px;
-            font-size: 24px;
-        }
-        .meeting-log-doc .header-info {
-            display: grid;
-            grid-template-columns: 150px 1fr;
-            gap: 10px;
-            margin-bottom: 30px;
-        }
-        .meeting-log-doc .header-info .label {
-            font-weight: bold;
-        }
-        .meeting-log-doc .section-title {
-            font-weight: bold;
-            margin-top: 30px;
-            margin-bottom: 10px;
-            text-decoration: underline;
-        }
-        .meeting-log-doc .content-box {
-            padding: 10px;
-            background: #f9f9f9;
-            border: 1px solid #ddd;
-            min-height: 60px;
-            white-space: pre-wrap;
-        }
-        .meeting-log-doc .signature-section {
-            margin-top: 50px;
+        .meeting-record-preview {
             display: flex;
-            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
         }
-        .meeting-log-doc .signature-box {
-            width: 45%;
+        .meeting-record-preview > div {
+            flex: 1 1 100%;
         }
-        .meeting-log-doc .print-btn {
+        .meeting-record-preview .col-6 { flex: 0 0 calc(50% - 5px); max-width: calc(50% - 5px); }
+        .meeting-record-preview .col-12 { flex: 0 0 100%; max-width: 100%; }
+        
+        .meeting-field-label {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #444;
+            margin-top: 10px;
+        }
+        .meeting-single-line {
+            border-bottom: 1px solid #444;
+            min-height: 8mm;
+            padding: 4px 0;
+            white-space: pre-wrap;
+            text-align: left;
+            font-size: 14px;
+        }
+        .meeting-writing-area {
+            border: 1px solid #888;
+            background-image: repeating-linear-gradient(
+                to bottom,
+                transparent 0,
+                transparent 27px,
+                #e5e5e5 28px
+            );
+            border-radius: 4px;
+            padding: 8px;
+            white-space: pre-wrap;
+            line-height: 28px;
+            text-align: left;
+            height: auto; /* Allow auto expansion */
+            font-size: 14px;
+        }
+        .meeting-signature-space {
+            border-bottom: 1px solid #444;
+            display: flex;
+            align-items: flex-start;
+            padding-bottom: 4px;
+            min-height: 20mm;
+            font-size: 14px;
+        }
+        .meeting-signature-space img {
+            max-height: 15mm;
+            max-width: 200px;
+        }
+        h2.template-heading {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .print-btn {
             display: block;
             margin: 0 auto 30px auto;
             padding: 10px 20px;
-            background: #007bff;
-            color: #fff;
+            background: #0d6efd;
+            color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            font-size: 16px;
+            font-weight: 500;
         }
         @@media print {
-            .meeting-log-doc .print-btn { display: none; }
-            .meeting-log-doc { padding: 0; }
-            .meeting-log-doc .content-box { background: none; border-color: #000; }
+            body { background: white; padding: 0; }
+            .a4-template-paper { box-shadow: none; padding: 0; min-height: auto; width: 100%; }
+            .print-btn { display: none; }
+            .meeting-writing-area { page-break-inside: avoid; }
         }
     </style>
 </head>
 <body>
-<div class="meeting-log-doc">
-
     <button class="print-btn" onclick="window.print()">Print to PDF</button>
 
-    <h2>@ViewBag.ProjectName<br/><small style="font-size: 0.7em; color: #555;">Record of Supervisor Meeting</small></h2>
-
-    <div class="header-info">
-        <div class="label">Stage & Week:</div>
-        <div>Stage @(meeting?.Stage ?? 1) - Week @(meeting?.WeekNumber ?? 0)</div>
-
-        <div class="label">Supervisor:</div>
-        <div>@supervisor?.FullName</div>
-
-        <div class="label">Student:</div>
-        <div>@student?.FullName</div>
-
-        <div class="label">Date of meeting:</div>
-        <div>@meeting?.MeetingDate.ToString("dd/MM/yyyy")</div>
-    </div>
-
-    <div class="section-title">Key topics Discussed:</div>
-    <div class="content-box">@Model.KeyTopicsDiscussed</div>
-
-    <div class="section-title">Individual action points for next meeting (no more than 3):</div>
-    <div class="content-box">@Model.ActionPointsForNextMeeting</div>
-
-    <div class="section-title">Record of individual actions completed + notes:</div>
-    <div class="content-box">@Model.CompletedActionsAndNotes</div>
-
-    <div style="margin-top: 30px;">
-        <span class="label" style="font-weight: bold;">Date of next meeting:</span> 
-        @(Model.NextMeetingDate?.ToString("dd/MM/yyyy") ?? "TBD")
-    </div>
-
-    <div class="signature-section">
-        <div class="signature-box">
-            <div style="font-weight: bold;">Supervisor Signature:</div>
-            @if (!string.IsNullOrEmpty(Model.SupervisorSignature) && Model.SupervisorSignature.StartsWith("data:image"))
+    <div class="a4-template-paper">
+        <h2 class="template-heading">@templateSnapshot.Title</h2>
+        <div class="meeting-record-preview">
+            @foreach (var field in sortedFields)
             {
-                <img src="@Model.SupervisorSignature" style="max-height: 80px; margin-top: 10px;" />
-            }
-            else
-            {
-                <div style="margin-top: 20px; font-style: italic; color: #555;">Not signed</div>
+                string colClass = (field.Columns == 6 || field.Columns == 4 || field.Columns == 3) ? "col-6" : "col-12";
+                
+                string contentHtml = "";
+                switch(field.Key)
+                {
+                    case "Supervisor": contentHtml = supervisor?.FullName ?? "Unknown"; break;
+                    case "Student": contentHtml = $"{student?.FullName ?? "Unknown"} ({student?.EmployeeId ?? ""})"; break;
+                    case "MeetingDate": contentHtml = meeting?.MeetingDate.ToString("dd MMM yyyy") ?? ""; break;
+                    case "TopicsDiscussed": contentHtml = Model.KeyTopicsDiscussed ?? ""; break;
+                    case "ActionPoints": contentHtml = Model.ActionPointsForNextMeeting ?? ""; break;
+                    case "ActionsCompleted": contentHtml = Model.CompletedActionsAndNotes ?? ""; break;
+                    case "NextMeetingDate": contentHtml = Model.NextMeetingDate?.ToString("dd MMM yyyy") ?? "TBD"; break;
+                    case "SupervisorSignature":
+                        if (!isSigned) contentHtml = "<em style='color:#777;'>Pending Signature</em>";
+                        else {
+                            string sig = Model.SupervisorSignature;
+                            if (string.IsNullOrEmpty(sig)) contentHtml = "<em style='color:#777;'>Signed</em>";
+                            else if (sig.StartsWith("data:image/")) contentHtml = $"<img src='{sig}' />";
+                            else contentHtml = $"<span style='font-family: \"Times New Roman\", serif; font-size: 20px; font-style: italic; color: #00008B;'>{sig}</span>";
+                        }
+                        break;
+                    case "SupervisorSignatureDate": contentHtml = isSigned ? (Model.SignatureDate?.ToString("dd MMM yyyy") ?? "TBD") : "TBD"; break;
+                    case "SupervisorComments": contentHtml = isSigned ? (Model.DisplayComments ?? "") : "<em style='color:#777;'>Pending Review</em>"; break;
+                    default: contentHtml = ""; break;
+                }
+
+                <div class="@colClass">
+                    <div class="meeting-field-label">@field.Label</div>
+                    
+                    @if (field.Type == "TextArea")
+                    {
+                        <div class="meeting-writing-area" style="min-height: @(Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 35))mm">@Html.Raw(contentHtml)</div>
+                    }
+                    else if (field.Type == "Signature")
+                    {
+                        <div class="meeting-signature-space" style="min-height: @(Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 20))mm">
+                            @Html.Raw(contentHtml)
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="meeting-single-line">@Html.Raw(contentHtml)</div>
+                    }
+                </div>
             }
         </div>
-        <div class="signature-box">
-            <div style="font-weight: bold;">Supervisor Signature Date:</div>
-            <div style="margin-top: 20px;">@Model.SignatureDate?.ToString("dd/MM/yyyy")</div>
-        </div>
     </div>
-
-    <div class="section-title">Supervisor Comments & Feedback:</div>
-    <div class="content-box">@Model.DisplayComments</div>
-
-</div>
 </body>
 </html>

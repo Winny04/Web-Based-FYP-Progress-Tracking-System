@@ -120,6 +120,9 @@ builder.Services.AddScoped<
     FYPTracker.Services.Forms.IafFormTemplateService>();
 
 builder.Services.AddScoped<WeeklyMeetingSchedulerService>();
+builder.Services.AddScoped<FYPTracker.Services.Meetings.IMeetingRequirementService, FYPTracker.Services.Meetings.MeetingRequirementService>();
+builder.Services.AddScoped<FYPTracker.Services.Meetings.IAcademicSessionResolver, FYPTracker.Services.Meetings.AcademicSessionResolver>();
+builder.Services.AddScoped<FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService, FYPTracker.Services.Meetings.WeeklyMeetingSchedulingService>();
 var app = builder.Build();
 
 // === TEMP DEBUG: Log all unhandled exceptions to a file ===

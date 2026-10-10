@@ -725,7 +725,7 @@
                                             </div>
                                             <div class="d-flex gap-2">
                                                
-                                            <a href="@Url.Action("ViewIaf", "Supervisor",
+                                            <a href="@Url.Action("ViewDigitalForm", "Supervisor",
                                                 new { milestoneId = Model.Id, attemptNumber = attempt.AttemptNumber })"
                                             target="_blank"
                                             rel="noopener noreferrer"
@@ -733,7 +733,7 @@
                                             id="btnViewIaf@(attempt.AttemptNumber)">
 
                                                 <i class="fas fa-external-link-alt me-1"></i>
-                                                View IAF
+                                                View Form
                                             </a>
 
                                                 @if (snapshotFile != null) {

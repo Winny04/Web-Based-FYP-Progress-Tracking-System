@@ -17,13 +17,20 @@ namespace FYPTracker.Controllers
         private readonly IWebHostEnvironment _env;
         private readonly IEmailService _emailService;
         private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly FYPTracker.Services.Meetings.IMeetingRequirementService _meetingRequirementService;
 
-        public StudentController(FYPTrackerContext context, IWebHostEnvironment env, IEmailService emailService, IHubContext<NotificationHub> hubContext)
+        public StudentController(
+            FYPTrackerContext context, 
+            IWebHostEnvironment env, 
+            IEmailService emailService, 
+            IHubContext<NotificationHub> hubContext,
+            FYPTracker.Services.Meetings.IMeetingRequirementService meetingRequirementService)
         {
             _context = context;
             _env     = env;
             _emailService = emailService;
             _hubContext = hubContext;
+            _meetingRequirementService = meetingRequirementService;
         }
 
         // ══════════════════════════════════════════════════════
@@ -1262,6 +1269,65 @@ namespace FYPTracker.Controllers
             return View(project);
         }
 
+        
+        [HttpGet]
+        public async Task<IActionResult> ViewDigitalForm(
+            int milestoneId,
+            int attemptNumber)
+        {
+            var user = await GetCurrentUserAsync();
+
+            if (user == null)
+                return RedirectToAction("Login", "User");
+
+            if (attemptNumber < 1)
+                return NotFound();
+
+            // Only allow the logged-in Student to access
+            // IAF milestones belonging to their own project.
+            var milestone = await _context.FYPMilestones
+                .AsNoTracking()
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Supervisor)
+                .FirstOrDefaultAsync(m =>
+                    m.Id == milestoneId &&
+                    m.Project.StudentId == user.Id);
+
+            if (milestone == null)
+                return NotFound();
+
+
+
+            // Read the existing attempt history.
+            string raw = milestone.Remarks ?? "";
+
+            int jsonIndex = raw.IndexOf(
+                "JSON: ",
+                StringComparison.Ordinal);
+
+            string parsedJson = jsonIndex >= 0
+                ? raw.Substring(jsonIndex + "JSON: ".Length)
+                : raw;
+
+            var history = IafAttemptHistory.ParseOrMigrate(
+                parsedJson);
+
+            if (!history.Attempts.Any(
+                a => a.AttemptNumber == attemptNumber))
+                return NotFound();
+
+            ViewData["AttemptNumber"] = attemptNumber;
+            ViewBag.CurrentUser = user;
+
+            // Reuse the generic digital form viewer.
+            return View(
+                "~/Views/Supervisor/ViewDigitalForm.cshtml",
+                milestone);
+        }
+
+
 
         private async Task<AcademicSession?> GetStudentAcademicSessionAsync(int studentId)
         {
@@ -1343,6 +1409,9 @@ namespace FYPTracker.Controllers
                 .ToListAsync();
 
             ViewBag.Meetings = meetings;
+            
+            ViewBag.ProgressStage1 = await _meetingRequirementService.GetStudentProgressAsync(user.Id, 1);
+            ViewBag.ProgressStage2 = await _meetingRequirementService.GetStudentProgressAsync(user.Id, 2);
 
             var pendingReschedules = await _context.MeetingRescheduleRequests
                 .Where(r => r.StudentId == user.Id && (r.Status == "Pending" || r.Status == "CounterProposed"))
@@ -1838,54 +1907,88 @@ namespace FYPTracker.Controllers
 
             if (meeting != null)
             {
-                // Prevent multiple active reschedule requests
-                var existingRequest = await _context.MeetingRescheduleRequests
-                    .AnyAsync(r => r.MeetingBookingId == meeting.Id && r.Status == "Pending");
-                
-                if (existingRequest)
+                if (meeting.Status == "Postponed")
                 {
-                    TempData["Error"] = "There is already a pending reschedule request for this meeting.";
-                    return RedirectToAction(nameof(BookMeeting));
+                    meeting.MeetingDate = parsedDate;
+                    meeting.MeetingTime = meetingTime;
+                    meeting.MeetingDay = parsedDate.DayOfWeek.ToString();
+                    meeting.Status = "Pending";
+                    meeting.ProposedNewDate = null;
+                    meeting.SupervisorNote = null;
+                    
+                    await _context.SaveChangesAsync();
+
+                    await LogActivityAsync(user.Id, "MeetingUpdate", "Rescheduled Postponed Meeting", 
+                        $"You rescheduled a postponed meeting to {meeting.MeetingDate:dd MMM}.");
+
+                    if (meeting.SupervisorId > 0)
+                    {
+                        await AddNotificationAsync(meeting.SupervisorId, "Meeting", "Meeting Rescheduled",
+                            $"Student {user.FullName} rescheduled their postponed meeting to {meeting.MeetingDate:dd MMM}.");
+                        
+                        var reschedulePayload = new {
+                            Type = "MeetingRescheduled",
+                            MeetingId = meeting.Id,
+                            Session = user.AcademicSession,
+                            StudentName = user.FullName,
+                            Title = "Meeting Rescheduled",
+                            Message = $"Student {user.FullName} rescheduled their postponed meeting."
+                        };
+                        await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", reschedulePayload);
+                    }
+                    TempData["Success"] = "Meeting rescheduled successfully. Pending supervisor approval.";
                 }
-
-                // Create a Reschedule Request instead of editing the booking directly
-                var request = new MeetingRescheduleRequest
+                else
                 {
-                    MeetingBookingId = meeting.Id,
-                    StudentId = user.Id,
-                    SupervisorId = meeting.SupervisorId,
-                    OriginalDate = meeting.MeetingDate,
-                    OriginalTime = meeting.MeetingTime,
-                    ProposedDate = parsedDate,
-                    ProposedTime = meetingTime,
-                    Reason = reason,
-                    Status = "Pending",
-                    CreatedDate = DateTime.Now
-                };
+                    // Prevent multiple active reschedule requests
+                    var existingRequest = await _context.MeetingRescheduleRequests
+                        .AnyAsync(r => r.MeetingBookingId == meeting.Id && r.Status == "Pending");
+                    
+                    if (existingRequest)
+                    {
+                        TempData["Error"] = "There is already a pending reschedule request for this meeting.";
+                        return RedirectToAction(nameof(BookMeeting));
+                    }
 
-                _context.MeetingRescheduleRequests.Add(request);
-                await _context.SaveChangesAsync();
-
-                await LogActivityAsync(user.Id, "MeetingUpdate", "Meeting Reschedule Requested", 
-                    $"You submitted a request to reschedule the meeting on {meeting.MeetingDate:dd MMM}.");
-
-                if (meeting.SupervisorId > 0)
-                {
-                    await AddNotificationAsync(meeting.SupervisorId, "Meeting", "Reschedule Request",
-                        $"Student {user.FullName} requested to reschedule their meeting on {meeting.MeetingDate:dd MMM}.");
-
-                    var reschedulePayload = new {
-                        Type = "MeetingRescheduled",
-                        MeetingId = meeting.Id,
-                        Session = user.AcademicSession,
-                        StudentName = user.FullName,
-                        Title = "Reschedule Request",
-                        Message = $"Student {user.FullName} requested to reschedule."
+                    // Create a Reschedule Request instead of editing the booking directly
+                    var request = new MeetingRescheduleRequest
+                    {
+                        MeetingBookingId = meeting.Id,
+                        StudentId = user.Id,
+                        SupervisorId = meeting.SupervisorId,
+                        OriginalDate = meeting.MeetingDate,
+                        OriginalTime = meeting.MeetingTime,
+                        ProposedDate = parsedDate,
+                        ProposedTime = meetingTime,
+                        Reason = reason,
+                        Status = "Pending",
+                        CreatedDate = DateTime.Now
                     };
-                    await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", reschedulePayload);
-                }
 
-                TempData["Success"] = "Reschedule request submitted. Pending supervisor approval.";
+                    _context.MeetingRescheduleRequests.Add(request);
+                    await _context.SaveChangesAsync();
+
+                    await LogActivityAsync(user.Id, "MeetingUpdate", "Meeting Reschedule Requested", 
+                        $"You submitted a request to reschedule the meeting on {meeting.MeetingDate:dd MMM}.");
+
+                    if (meeting.SupervisorId > 0)
+                    {
+                        await AddNotificationAsync(meeting.SupervisorId, "Meeting", "Reschedule Request",
+                            $"Student {user.FullName} requested to reschedule their meeting on {meeting.MeetingDate:dd MMM}.");
+
+                        var reschedulePayload = new {
+                            Type = "MeetingRescheduled",
+                            MeetingId = meeting.Id,
+                            Session = user.AcademicSession,
+                            StudentName = user.FullName,
+                            Title = "Reschedule Request",
+                            Message = $"Student {user.FullName} requested to reschedule."
+                        };
+                        await _hubContext.Clients.Group($"User_{meeting.SupervisorId}").SendAsync("ReceiveMeetingUpdate", reschedulePayload);
+                    }
+
+                    TempData["Success"] = "Reschedule request submitted. Pending supervisor approval.";
+                }
             }
 
             return RedirectToAction(nameof(BookMeeting));
@@ -1996,6 +2099,12 @@ namespace FYPTracker.Controllers
             if (meeting == null)
             {
                 TempData["Error"] = "Meeting not found or not approved.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
+            if (meeting.MeetingDate.Date > DateTime.Today)
+            {
+                TempData["Error"] = $"This logbook will be available on {meeting.MeetingDate:dd MMM yyyy}.";
                 return RedirectToAction(nameof(BookMeeting));
             }
 

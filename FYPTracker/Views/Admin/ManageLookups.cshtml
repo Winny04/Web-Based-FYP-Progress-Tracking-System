@@ -128,6 +128,17 @@
                                 Set as Current Session
                             </label>
                         </div>
+                        <h6 class="mt-4 mb-2 text-dark fw-bold">Meeting Requirements</h6>
+                        <div class="row">
+                            <div class="col-md-6 fv-row mb-3">
+                                <label class="fs-6 fw-bold form-label text-muted text-uppercase small mb-2">Stage 1 Required Meetings</label>
+                                <input type="number" min="0" max="52" class="form-control form-control-solid rounded-3" id="lookupReq1" placeholder="e.g. 14" />
+                            </div>
+                            <div class="col-md-6 fv-row mb-3">
+                                <label class="fs-6 fw-bold form-label text-muted text-uppercase small mb-2">Stage 2 Required Meetings</label>
+                                <input type="number" min="0" max="52" class="form-control form-control-solid rounded-3" id="lookupReq2" placeholder="e.g. 12" />
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer border-top-0 bg-light p-3 d-flex justify-content-end gap-2">
@@ -166,6 +177,8 @@
                     data.startDate = $('#lookupStartDate').val();
                     data.endDate = $('#lookupEndDate').val();
                     data.isCurrent = $('#lookupIsCurrent').is(':checked');
+                    data.requiredMeetingsStage1 = $('#lookupReq1').val();
+                    data.requiredMeetingsStage2 = $('#lookupReq2').val();
                     if (!data.startDate || !data.endDate) {
                         Swal.fire("Error", "Start Date and End Date are required for Academic Session.", "error");
                         return;
@@ -239,10 +252,14 @@
                                 duration = `${weeks} weeks ${days} days`;
                             }
                             
+                            let req1 = item.requiredMeetingsStage1 !== null ? item.requiredMeetingsStage1 : '-';
+                            let req2 = item.requiredMeetingsStage2 !== null ? item.requiredMeetingsStage2 : '-';
+                            
                             html += `
                                 <tr class="border-bottom border-light align-middle">
                                     <td class="ps-4">
                                         <div class="fw-bolder text-dark fs-6">${item.name}</div>
+                                        <div class="text-muted small">Req (S1/S2): ${req1} / ${req2}</div>
                                     </td>
                                     <td>${sDate}</td>
                                     <td>${eDate}</td>
@@ -251,7 +268,7 @@
                                     <td>${currentBadge}</td>
                                     <td class="text-end pe-4">
                                         <div class="d-flex justify-content-end align-items-center gap-2">
-                                            <button class="btn btn-icon btn-light-primary btn-sm rounded-circle border shadow-sm m-0" onclick="showEditModalSession(${item.id}, '${item.name.replace(/'/g, "\\'")}', '${sDate}', '${eDate}', ${item.isCurrent})" title="Edit">
+                                            <button class="btn btn-icon btn-light-primary btn-sm rounded-circle border shadow-sm m-0" onclick="showEditModalSession(${item.id}, '${item.name.replace(/'/g, "\\'")}', '${sDate}', '${eDate}', ${item.isCurrent}, ${item.requiredMeetingsStage1 === null ? 'null' : item.requiredMeetingsStage1}, ${item.requiredMeetingsStage2 === null ? 'null' : item.requiredMeetingsStage2})" title="Edit">
                                                 <i class="fas fa-pen"></i>
                                             </button>
                                             <button class="btn btn-icon ${toggleBtnClass} btn-sm rounded-circle border shadow-sm m-0" onclick="toggleStatus(${item.id})" title="${toggleTitle}">
@@ -348,6 +365,8 @@
             $('#lookupStartDate').val('');
             $('#lookupEndDate').val('');
             $('#lookupIsCurrent').prop('checked', false);
+            $('#lookupReq1').val('');
+            $('#lookupReq2').val('');
             updateDurationDisplay();
             toggleSessionFields();
             $('#lookupModal').modal('show');
@@ -361,13 +380,15 @@
             $('#lookupModal').modal('show');
         }
 
-        function showEditModalSession(id, name, startDate, endDate, isCurrent) {
+        function showEditModalSession(id, name, startDate, endDate, isCurrent, req1, req2) {
             $('#modalTitle').html('<i class="fas fa-edit text-primary me-2"></i> Edit ' + currentType);
             $('#lookupId').val(id);
             $('#lookupName').val(name);
             $('#lookupStartDate').val(startDate);
             $('#lookupEndDate').val(endDate);
             $('#lookupIsCurrent').prop('checked', isCurrent);
+            $('#lookupReq1').val(req1 !== null ? req1 : '');
+            $('#lookupReq2').val(req2 !== null ? req2 : '');
             updateDurationDisplay();
             toggleSessionFields();
             $('#lookupModal').modal('show');

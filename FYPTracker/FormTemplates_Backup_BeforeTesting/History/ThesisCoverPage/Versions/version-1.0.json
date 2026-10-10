@@ -1,0 +1,60 @@
+
+{
+  "templateKey": "thesis-cover-page",
+  "version": "1.0",
+  "title": "Thesis Cover Page",
+  "page": {
+    "size": "A4",
+    "orientation": "Portrait"
+  },
+  "fields": [
+    {
+      "key": "ThesisTitle",
+      "label": "Thesis Title",
+      "order": 1,
+      "columns": 12,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "StudentName",
+      "label": "Name",
+      "order": 2,
+      "columns": 12,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "CoventryStudentId",
+      "label": "Coventry Student ID",
+      "order": 3,
+      "columns": 12,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "SupervisorName",
+      "label": "Supervisor Name",
+      "order": 4,
+      "columns": 12,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "ProgrammeName",
+      "label": "Program Name",
+      "order": 5,
+      "columns": 12,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+    "key": "DocumentDate",
+    "label": "Document Date",
+    "order": 6,
+    "columns": 12,
+    "type": "Date",
+    "minHeightMm": 0
+    }
+  ]
+}

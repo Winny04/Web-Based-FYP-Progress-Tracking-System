@@ -61,99 +61,86 @@ namespace FYPTracker.Utils
 <html>
 <head>
     <style>
-        body {{ font-family: 'Helvetica', 'Arial', sans-serif; font-size: 12pt; line-height: 1.5; }}
-        h2 {{ text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }}
-        .header-info {{ text-align: right; font-size: 10pt; color: #555; margin-bottom: 20px; }}
-        .field-container {{ margin-bottom: 20px; width: 100%; page-break-inside: avoid; }}
-        .field-label {{ font-weight: bold; margin-bottom: 5px; background-color: #eee; padding: 5px; border-left: 4px solid #0056b3; }}
-        .field-value {{ padding: 10px; border: 1px solid #ccc; min-height: 40px; white-space: pre-wrap; }}
-        .signature-box {{ border: 1px dashed #aaa; padding: 10px; min-height: 80px; text-align: center; }}
+        body {{ font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10pt; line-height: 1.4; margin: 0; padding: 20px; color: #333; }}
+        h2.template-heading {{ text-align: center; margin-bottom: 20px; font-size: 16pt; font-weight: bold; text-transform: uppercase; }}
+        .meeting-field-label {{ font-size: 10pt; font-weight: bold; margin-bottom: 3px; color: #444; margin-top: 8px; }}
+        .meeting-single-line {{ min-height: 25px; border-bottom: 1px solid #777; padding-bottom: 2px; font-size: 10pt; }}
+        .meeting-writing-area {{ border: 1px solid #ccc; padding: 8px; font-size: 10pt; white-space: pre-wrap; }}
+        .meeting-signature-space {{ border-bottom: 1px solid #333; min-height: 60px; text-align: center; padding-top: 15px; font-size: 10pt; }}
+        table.grid {{ width: 100%; border-collapse: collapse; margin-bottom: 10px; }}
+        table.grid td {{ vertical-align: top; padding: 5px; }}
+        .w-50 {{ width: 50%; }}
+        .w-100 {{ width: 100%; }}
     </style>
 </head>
 <body>
-    <div class=""header-info"">Stage {meeting.Stage} - Week {meeting.WeekNumber}</div>
-    <h2>{WebUtility.HtmlEncode(templateSnapshot.Title)}</h2>
+    <h2 class=""template-heading"">{WebUtility.HtmlEncode(templateSnapshot.Title)}</h2>
+    <table class=""grid"">
 ");
 
-            // Map all fields dynamically in exact order
             var sortedFields = templateSnapshot.Fields.OrderBy(f => f.Order).ToList();
-            
-            foreach(var field in sortedFields)
+            bool inRow = false;
+
+            for (int i = 0; i < sortedFields.Count; i++)
             {
-                html.Append($@"<div class=""field-container"">");
-                html.Append($@"<div class=""field-label"">{WebUtility.HtmlEncode(field.Label)}</div>");
+                var field = sortedFields[i];
+                bool isHalf = (field.Columns == 6 || field.Columns == 4 || field.Columns == 3);
                 
                 string contentHtml = "";
-
                 switch(field.Key)
                 {
-                    case "Supervisor":
-                        contentHtml = WebUtility.HtmlEncode(supervisor?.FullName ?? "Unknown");
-                        break;
-                    case "Student":
-                        contentHtml = $"{WebUtility.HtmlEncode(student?.FullName ?? "Unknown")} ({WebUtility.HtmlEncode(student?.EmployeeId ?? "")})";
-                        break;
-                    case "MeetingDate":
-                        contentHtml = meeting.MeetingDate.ToString("dd MMM yyyy");
-                        break;
-                    case "TopicsDiscussed": 
-                        contentHtml = WebUtility.HtmlEncode(log.KeyTopicsDiscussed ?? ""); 
-                        break;
-                    case "ActionPoints": 
-                        contentHtml = WebUtility.HtmlEncode(log.ActionPointsForNextMeeting ?? ""); 
-                        break;
-                    case "ActionsCompleted": 
-                        contentHtml = WebUtility.HtmlEncode(log.CompletedActionsAndNotes ?? ""); 
-                        break;
-                    case "NextMeetingDate": 
-                        contentHtml = log.NextMeetingDate?.ToString("dd MMM yyyy") ?? "TBD"; 
-                        break;
+                    case "Supervisor": contentHtml = WebUtility.HtmlEncode(supervisor?.FullName ?? "Unknown"); break;
+                    case "Student": contentHtml = $"{WebUtility.HtmlEncode(student?.FullName ?? "Unknown")} ({WebUtility.HtmlEncode(student?.EmployeeId ?? "")})"; break;
+                    case "MeetingDate": contentHtml = meeting.MeetingDate.ToString("dd MMM yyyy"); break;
+                    case "TopicsDiscussed": contentHtml = WebUtility.HtmlEncode(log.KeyTopicsDiscussed ?? ""); break;
+                    case "ActionPoints": contentHtml = WebUtility.HtmlEncode(log.ActionPointsForNextMeeting ?? ""); break;
+                    case "ActionsCompleted": contentHtml = WebUtility.HtmlEncode(log.CompletedActionsAndNotes ?? ""); break;
+                    case "NextMeetingDate": contentHtml = log.NextMeetingDate?.ToString("dd MMM yyyy") ?? "TBD"; break;
                     case "SupervisorSignature":
-                        if (!isSigned)
-                        {
-                            contentHtml = @"<div class=""signature-box"" style=""color: #777; font-style: italic;"">Pending Signature</div>";
-                        }
-                        else
-                        {
+                        if (!isSigned) contentHtml = "<em style='color:#777;'>Pending Signature</em>";
+                        else {
                             string sig = log.SupervisorSignature;
-                            if (string.IsNullOrEmpty(sig))
-                            {
-                                contentHtml = @"<div class=""signature-box"" style=""color: #777; font-style: italic;"">Signed (No Signature Image Provided)</div>";
-                            }
-                            else if (sig.StartsWith("data:image/"))
-                            {
-                                contentHtml = $@"<div class=""signature-box""><img src=""{WebUtility.HtmlEncode(sig)}"" style=""max-height: 80px; max-width: 250px;"" /></div>";
-                            }
-                            else
-                            {
-                                contentHtml = $@"<div class=""signature-box""><span style=""font-family: 'Times New Roman', Times, serif; font-size: 24px; font-style: italic; color: #00008B;"">{WebUtility.HtmlEncode(sig)}</span></div>";
-                            }
+                            if (string.IsNullOrEmpty(sig)) contentHtml = "<em style='color:#777;'>Signed</em>";
+                            else if (sig.StartsWith("data:image/")) contentHtml = $"<img src='{WebUtility.HtmlEncode(sig)}' style='max-height: 50px;' />";
+                            else contentHtml = $"<span style='font-family: \"Times New Roman\", serif; font-size: 16pt; font-style: italic; color: #00008B;'>{WebUtility.HtmlEncode(sig)}</span>";
                         }
                         break;
-                    case "SupervisorSignatureDate":
-                        contentHtml = isSigned ? (log.SignatureDate?.ToString("dd MMM yyyy") ?? "TBD") : "TBD";
-                        break;
-                    case "SupervisorComments":
-                        contentHtml = isSigned ? WebUtility.HtmlEncode(log.DisplayComments ?? "") : "<em>Pending Review</em>";
-                        break;
-                    default:
-                        contentHtml = "<em>Unknown Field</em>";
-                        break;
+                    case "SupervisorSignatureDate": contentHtml = isSigned ? (log.SignatureDate?.ToString("dd MMM yyyy") ?? "TBD") : "TBD"; break;
+                    case "SupervisorComments": contentHtml = isSigned ? WebUtility.HtmlEncode(log.DisplayComments ?? "") : "<em style='color:#777;'>Pending Review</em>"; break;
+                    default: contentHtml = ""; break;
                 }
 
-                if (field.Key != "SupervisorSignature")
+                // Render inner field HTML
+                string fieldHtml = $@"<div class=""meeting-field-label"">{WebUtility.HtmlEncode(field.Label)}</div>";
+                if (field.Type == "TextArea")
+                    fieldHtml += $@"<div class=""meeting-writing-area"" style=""min-height: {Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 35)}mm"">{contentHtml.Replace("\n", "<br/>")}</div>";
+                else if (field.Type == "Signature")
+                    fieldHtml += $@"<div class=""meeting-signature-space"" style=""min-height: {Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 20)}mm"">{contentHtml}</div>";
+                else
+                    fieldHtml += $@"<div class=""meeting-single-line"">{contentHtml}</div>";
+
+                if (isHalf)
                 {
-                    html.Append($@"<div class=""field-value"">{contentHtml}</div>");
+                    if (!inRow) { html.Append("<tr>"); inRow = true; }
+                    html.Append($@"<td class=""w-50"">{fieldHtml}</td>");
+                    // If next field is not half, or this is the last field, close the row
+                    if (i == sortedFields.Count - 1 || (sortedFields[i+1].Columns != 6 && sortedFields[i+1].Columns != 4 && sortedFields[i+1].Columns != 3))
+                    {
+                        html.Append("</tr>");
+                        inRow = false;
+                    }
                 }
                 else
                 {
-                    html.Append(contentHtml); // Signature box has its own styling
+                    if (inRow) { html.Append("</tr>"); inRow = false; }
+                    html.Append($@"<tr><td colspan=""2"" class=""w-100"">{fieldHtml}</td></tr>");
                 }
-                
-                html.Append("</div>");
             }
 
+            if (inRow) html.Append("</tr>"); // Fallback safety
+
             html.Append(@"
+    </table>
 </body>
 </html>");
 

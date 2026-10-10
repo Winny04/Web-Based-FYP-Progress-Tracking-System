@@ -44,6 +44,12 @@ namespace FYPTracker.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("SessionName");
 
+                    b.Property<int?>("RequiredMeetingsStage1")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RequiredMeetingsStage2")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("StartDate")
                         .HasColumnType("datetime2");
 
@@ -872,6 +878,9 @@ namespace FYPTracker.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)");
 
+                    b.Property<int?>("ParentMeetingBookingId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("ProposedNewDate")
                         .HasColumnType("date");
 
@@ -909,6 +918,10 @@ namespace FYPTracker.Migrations
                     b.HasIndex("StudentId");
 
                     b.HasIndex("SupervisorId");
+
+                    b.HasIndex("ParentMeetingBookingId", "WeekNumber")
+                        .IsUnique()
+                        .HasFilter("[ParentMeetingBookingId] IS NOT NULL");
 
                     b.ToTable("MeetingBooking", (string)null);
                 });
