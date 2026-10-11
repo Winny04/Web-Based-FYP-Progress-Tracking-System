@@ -76,6 +76,8 @@ using (var scope = builder.Services.BuildServiceProvider().CreateScope())
     // Context initialization logic here if needed...
 }
 
+var serviceProvider = builder.Services.BuildServiceProvider();
+
 builder.Services.Configure<CookiePolicyOptions>(options =>
 {
     options.CheckConsentNeeded = context => false;
@@ -120,6 +122,7 @@ builder.Services.AddScoped<
     FYPTracker.Services.Forms.IafFormTemplateService>();
 
 builder.Services.AddScoped<WeeklyMeetingSchedulerService>();
+builder.Services.AddScoped<FYPTracker.Services.ILecturerAvailabilityService, FYPTracker.Services.LecturerAvailabilityService>();
 builder.Services.AddScoped<FYPTracker.Services.Meetings.IMeetingRequirementService, FYPTracker.Services.Meetings.MeetingRequirementService>();
 builder.Services.AddScoped<FYPTracker.Services.Meetings.IAcademicSessionResolver, FYPTracker.Services.Meetings.AcademicSessionResolver>();
 builder.Services.AddScoped<FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService, FYPTracker.Services.Meetings.WeeklyMeetingSchedulingService>();
@@ -139,13 +142,20 @@ app.Use(async (context, next) =>
 });
 // === END TEMP DEBUG ===
 
-app.UseDeveloperExceptionPage();
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+else
+{
+    app.UseExceptionHandler("/Home/Error");
+    app.UseHsts();
+}
 app.UseCookiePolicy();
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
-var serviceProvider = builder.Services.BuildServiceProvider();
 
 var accessor = serviceProvider.GetService<IHttpContextAccessor>();
 CommonHelpers.SetHttpContextAccessor(accessor,serviceProvider.GetService<IWebHostEnvironment>());

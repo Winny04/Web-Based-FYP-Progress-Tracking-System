@@ -1,0 +1,99 @@
+{
+  "templateKey": "stage1-initial-project-allocation-form-6000cem-6002cmd",
+  "version": "1.3",
+  "title": "Initial Project Allocation Form (6000CEM/6002CMD)",
+  "page": {
+    "size": "A4",
+    "orientation": "Portrait"
+  },
+  "fields": [
+    {
+      "key": "StudentName",
+      "label": "Name",
+      "order": 1,
+      "columns": 12,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "CoventryId",
+      "label": "Coventry ID",
+      "order": 2,
+      "columns": 12,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "Program",
+      "label": "Program",
+      "order": 3,
+      "columns": 12,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "ProjectTitle",
+      "label": "Proposed Project Title",
+      "order": 4,
+      "columns": 12,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "ScopeOfProject",
+      "label": "Scope of Project (Development / Research Based Project / Hybrid)",
+      "order": 5,
+      "columns": 12,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "ProblemStatement",
+      "label": "Problem Statement",
+      "order": 6,
+      "columns": 12,
+      "type": "TextArea",
+      "minHeightMm": 45
+    },
+    {
+      "key": "References",
+      "label": "References Listing",
+      "order": 7,
+      "columns": 12,
+      "type": "TextArea",
+      "minHeightMm": 30
+    },
+    {
+      "key": "Objectives",
+      "label": "Objectives (2 to 3 measurable objectives in point form)",
+      "order": 8,
+      "columns": 12,
+      "type": "TextArea",
+      "minHeightMm": 40
+    },
+    {
+      "key": "SupervisorName",
+      "label": "Supervisor\u0027s Name (Optional - Prior Agreement Only)",
+      "order": 9,
+      "columns": 12,
+      "type": "Text",
+      "minHeightMm": 0
+    },
+    {
+      "key": "SupervisorSignature",
+      "label": "Supervisor\u0027s Signature (Optional - Prior Agreement Only)",
+      "order": 10,
+      "columns": 12,
+      "type": "Signature",
+      "minHeightMm": 20
+    },
+    {
+      "key": "CommentFeedback",
+      "label": "Comment/Feedback",
+      "order": 11,
+      "columns": 12,
+      "type": "TextArea",
+      "minHeightMm": 35
+    }
+  ]
+}

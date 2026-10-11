@@ -12,153 +12,327 @@
                 ?? Enumerable.Empty<string>();
 }
 
+<style>
+    :root {
+        --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+        --glass-bg: rgba(255, 255, 255, 0.95);
+        --glass-border: rgba(255, 255, 255, 0.2);
+    }
+    
+    .hero-section {
+        background: var(--primary-gradient);
+        border-radius: 20px;
+        padding: 30px;
+        color: white;
+        margin-bottom: 30px;
+        box-shadow: 0 10px 30px rgba(59, 130, 246, 0.2);
+    }
+    
+    .premium-card {
+        background: var(--glass-bg);
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .premium-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05);
+    }
+
+    .status-badge {
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+    }
+</style>
+
 <div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <!-- Hero Section -->
+    <div class="hero-section d-flex justify-content-between align-items-center flex-wrap gap-4">
         <div>
-            <h2 class="fw-bold mb-0">My Availability</h2>
-            <p class="text-muted">Meeting availability is automatically calculated from your teaching timetable. Teaching periods are blocked, while free periods between 09:00 and 17:00 are available for student bookings.</p>
+            <h2 class="fw-bolder mb-2 text-white"><i class="fas fa-calendar-alt me-2"></i>My Availability</h2>
+            <p class="mb-0 text-white-50 fs-6" style="max-width: 600px;">
+                Manage your teaching schedule, block out specific dates, and review upcoming leaves. Your availability determines when students can book meetings.
+            </p>
         </div>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addAvailabilityModal">
-            <i class="fas fa-plus me-2"></i> Add Availability
-        </button>
+        <div class="d-flex gap-3">
+            <button class="btn btn-light rounded-pill px-4 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#addAvailabilityModal">
+                <i class="fas fa-plus me-2 text-primary"></i> Add Override
+            </button>
+        </div>
     </div>
 
     @if (TempData["Success"] != null)
     {
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <i class="fas fa-check-circle me-2"></i>@TempData["Success"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <div class="alert alert-success border-0 rounded-4 shadow-sm mb-4 d-flex align-items-center">
+            <i class="fas fa-check-circle fs-4 me-3"></i>
+            <div>@TempData["Success"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (TempData["Warning"] != null)
+    {
+        <div class="alert alert-warning border-0 rounded-4 shadow-sm mb-4 d-flex align-items-center">
+            <i class="fas fa-exclamation-triangle fs-4 me-3 text-warning"></i>
+            <div>@TempData["Warning"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
 
     @if (TempData["Error"] != null)
     {
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <i class="fas fa-exclamation-circle me-2"></i>@TempData["Error"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <div class="alert alert-danger border-0 rounded-4 shadow-sm mb-4 d-flex align-items-center">
+            <i class="fas fa-exclamation-triangle fs-4 me-3"></i>
+            <div>@TempData["Error"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
-    <div class="mb-4">
 
-    <form asp-controller="Supervisor"
-          asp-action="ManageAvailability"
-          method="get">
-
-        <label class="form-label fw-bold">
-            Academic Session
-        </label>
-
-        <select name="sessionFilter"
-                class="form-select"
-                style="max-width:250px;"
-                onchange="this.form.submit()">
-
-            @foreach (var s in sessions)
-            {
-                if (s == sessionName)
-                {
-                    <option value="@s" selected>@s</option>
-                }
-                else
-                {
-                    <option value="@s">@s</option>
-                }
-            }
-        </select>
-    </form>
-</div>
-
-    <!-- Teaching Timetable Card -->
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-            <h5 class="fw-bold"><i class="fas fa-chalkboard-teacher text-info me-2"></i>Teaching Timetable</h5>
-        </div>
-        <div class="card-body">
-            <p class="text-muted">
-                Your teaching timetable blocks out busy periods so students cannot book meetings during your classes. 
-                These apply to the selected academic session: <strong>@sessionName</strong>.
+    @{
+        var activeConflicts = ViewBag.ActiveOverrideConflicts as List<FYPTracker.Models.OverrideMeetingConflictDto> ?? new List<FYPTracker.Models.OverrideMeetingConflictDto>();
+    }
+    @if (activeConflicts.Any())
+    {
+        <div class="alert alert-warning border-0 rounded-4 shadow-sm mb-4 p-4" style="background-color: #fffbeb; border-left: 5px solid #f59e0b !important;">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fas fa-exclamation-triangle text-warning fs-3"></i>
+                    <h5 class="fw-bold text-dark mb-0">Existing Meeting Conflicts Detected (@activeConflicts.Count)</h5>
+                </div>
+                <a asp-controller="Supervisor" asp-action="ManageMeetings" asp-route-sessionFilter="@sessionName" class="btn btn-sm btn-outline-warning text-dark fw-bold rounded-pill px-3 shadow-sm">
+                    <i class="fas fa-calendar-alt me-1"></i> Review in Manage Meetings
+                </a>
+            </div>
+            <p class="text-muted small mb-3">
+                Your Date Override settings conflict with the following existing meeting(s). These meetings remain in their current state and will not be automatically cancelled. Please review each meeting and coordinate with the student if rescheduling is needed.
             </p>
-            <div class="d-flex align-items-center">
-                @if (hasTimetable)
-                {
-                    <span class="badge bg-success me-3 fs-6 p-2">
-                        <i class="fas fa-check me-1"></i>
-                        Timetable Uploaded
-                    </span>
-
-                    <a asp-controller="Supervisor"
-                    asp-action="ManageTimetable"
-                    asp-route-sessionFilter="@sessionName"
-                    class="btn btn-outline-primary">
-                        View or Replace Timetable
-                    </a>
-                }
-                else
-                {
-                    <span class="badge bg-secondary me-3 fs-6 p-2 text-dark">
-                        <i class="fas fa-times me-1"></i>
-                        No Timetable
-                    </span>
-
-                    <a asp-controller="Supervisor"
-                    asp-action="ManageTimetable"
-                    asp-route-sessionFilter="@sessionName"
-                    class="btn btn-primary">
-                        Upload Timetable
-                    </a>
-                }
+            <div class="table-responsive bg-white rounded-3 p-2 shadow-sm border border-warning border-opacity-25">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="text-muted small">
+                        <tr>
+                            <th class="ps-2">Meeting ID</th>
+                            <th>Student</th>
+                            <th>Meeting Date & Time</th>
+                            <th>Meeting Status</th>
+                            <th>Conflict Reason</th>
+                            <th class="text-end pe-2">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in activeConflicts)
+                        {
+                            <tr>
+                                <td class="ps-2 fw-bold text-dark">#@c.MeetingId</td>
+                                <td class="fw-semibold">@c.StudentName</td>
+                                <td>
+                                    <span class="text-dark fw-bold">@c.MeetingDate.ToString("dd MMM yyyy")</span>
+                                    <span class="text-muted small ms-1">(@c.MeetingTime)</span>
+                                </td>
+                                <td>
+                                    @if (c.Status == "Approved")
+                                    {
+                                        <span class="badge px-2 py-1 fw-bold bg-success text-white border border-success shadow-sm" style="font-size: 0.78rem;">
+                                            <i class="fas fa-check-circle me-1"></i>Approved
+                                        </span>
+                                    }
+                                    else if (c.Status == "Pending")
+                                    {
+                                        <span class="badge px-2 py-1 fw-bold bg-warning text-dark border border-warning shadow-sm" style="font-size: 0.78rem;">
+                                            <i class="fas fa-hourglass-half me-1"></i>Pending
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge px-2 py-1 fw-bold bg-secondary text-white border shadow-sm" style="font-size: 0.78rem;">
+                                            @c.Status
+                                        </span>
+                                    }
+                                    <span class="badge px-2 py-1 fw-bold bg-danger text-white border border-danger shadow-sm ms-1" style="font-size: 0.75rem;">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Schedule Conflict
+                                    </span>
+                                </td>
+                                <td class="small text-danger">@c.ConflictReason</td>
+                                <td class="text-end pe-2">
+                                    <a asp-controller="Supervisor" asp-action="ManageMeetings" asp-route-sessionFilter="@sessionName" class="btn btn-xs btn-outline-primary fw-semibold px-2 py-1 rounded" style="font-size: 0.78rem;">
+                                        Manage
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
             </div>
         </div>
+    }
+
+    <!-- Top Controls: Session Selector -->
+    <div class="premium-card p-4 mb-4">
+        <form asp-controller="Timetable" asp-action="ManageAvailability" method="get" class="d-flex flex-wrap align-items-center gap-3">
+            <label class="fw-bold mb-0 text-dark"><i class="fas fa-filter text-primary me-2"></i>Academic Session:</label>
+            <select name="sessionFilter" class="form-select bg-light border-0 shadow-none fw-semibold" style="width: 250px; border-radius: 10px;" onchange="this.form.submit()">
+                @foreach (var s in sessions)
+                {
+                    if (s == sessionName)
+                    {
+                        <option value="@s" selected>@s</option>
+                    }
+                    else
+                    {
+                        <option value="@s">@s</option>
+                    }
+                }
+            </select>
+        </form>
     </div>
 
     <div class="row g-4">
-        <!-- Date Overrides -->
-        <div class="col-md-12">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-                    <h5 class="fw-bold"><i class="fas fa-calendar-day text-warning me-2"></i>Date Overrides</h5>
+        <!-- Weekly Teaching Timetable Card -->
+        <div class="col-lg-6">
+            <div class="premium-card h-100">
+                <div class="card-header bg-transparent border-0 pt-4 pb-0 px-4">
+                    <h5 class="fw-bold text-dark mb-1"><i class="fas fa-chalkboard-teacher text-primary me-2"></i>Teaching Timetable</h5>
+                    <p class="text-muted small">Applies to session: <span class="fw-bold text-dark">@sessionName</span></p>
                 </div>
-                <div class="card-body">
+                <div class="card-body px-4 pb-4 pt-2">
+                    <div class="d-flex align-items-center justify-content-between p-3 rounded-4" style="background-color: #f8fafc;">
+                        <div class="d-flex align-items-center gap-3">
+                            @if (hasTimetable)
+                            {
+                                <div class="bg-success bg-opacity-10 text-success rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                                    <i class="fas fa-check-double fs-5"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold mb-0 text-dark">Timetable Uploaded</h6>
+                                    <small class="text-muted">Your classes are successfully blocked out.</small>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                                    <i class="fas fa-exclamation-triangle fs-5"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold mb-0 text-dark">No Timetable</h6>
+                                    <small class="text-muted">Teaching timetable not configured for this academic session. Availability cannot be confirmed.</small>
+                                </div>
+                            }
+                        </div>
+                        <a asp-controller="Timetable" asp-action="ManageTimetable" asp-route-sessionFilter="@sessionName" class="btn btn-outline-primary rounded-pill px-4 shadow-sm fw-bold">
+                            @(hasTimetable ? "Manage Timetable" : "Upload Timetable")
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Future Leave / MC Status Placeholders -->
+        <div class="col-lg-6">
+            <div class="premium-card h-100">
+                <div class="card-header bg-transparent border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="fw-bold text-dark mb-1"><i class="fas fa-plane-departure text-info me-2"></i>Official Leave & MC</h5>
+                        <p class="text-muted small">Integrated from HR System (Preview)</p>
+                    </div>
+                    <span class="badge bg-secondary rounded-pill">Coming Soon</span>
+                </div>
+                <div class="card-body px-4 pb-4 pt-2">
+                    <div class="text-center py-4 text-muted">
+                        <i class="fas fa-calendar-times fs-2 mb-3 text-light"></i>
+                        <h6 class="fw-bold text-dark mb-1">Leave Integration Pending</h6>
+                        <p class="small mb-0">Once integrated, approved Medical Certificates and Annual Leaves will automatically block your availability here.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Date Overrides -->
+        <div class="col-12">
+            <div class="premium-card">
+                <div class="card-header bg-transparent border-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h5 class="fw-bold text-dark mb-1"><i class="fas fa-calendar-day text-warning me-2"></i>Date Overrides</h5>
+                        <p class="text-muted small mb-0">Manually block out specific days or modify your working hours.</p>
+                    </div>
+                    <div class="btn-group shadow-sm" role="group">
+                        <button type="button" class="btn btn-primary active"><i class="fas fa-list me-2"></i>List View</button>
+                        <button type="button" class="btn btn-outline-primary disabled" title="Calendar View (Pending)"><i class="fas fa-calendar-alt me-2"></i>Calendar</button>
+                    </div>
+                </div>
+                <div class="card-body p-4">
                     @{
                         var overrides = Model.Where(m => m.ScheduleType == "DateOverride" && m.SpecificDate >= DateTime.Today).OrderBy(m => m.SpecificDate).ToList();
                     }
                     @if (!overrides.Any())
                     {
-                        <p class="text-muted">No future date overrides set. Use overrides to block out specific days (e.g. holidays) or change your hours for a specific week.</p>
+                        <div class="text-center py-5 rounded-4" style="background-color: #f8fafc; border: 1px dashed #cbd5e1;">
+                            <i class="fas fa-inbox fs-1 mb-3 text-muted opacity-50"></i>
+                            <h6 class="fw-bold text-dark mb-1">No Future Overrides</h6>
+                            <p class="text-muted small mb-3">You have not scheduled any specific date modifications.</p>
+                            <button class="btn btn-outline-secondary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#addAvailabilityModal">
+                                Add Date Override
+                            </button>
+                        </div>
                     }
                     else
                     {
                         <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Time</th>
+                            <table class="table table-borderless table-hover align-middle mb-0">
+                                <thead class="border-bottom">
+                                    <tr class="text-muted small fw-bold text-uppercase">
+                                        <th class="ps-3">Date</th>
+                                        <th>Available Hours</th>
                                         <th>Status</th>
-                                        <th class="text-end">Actions</th>
+                                        <th class="text-end pe-3">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach(var o in overrides)
                                     {
                                         <tr>
-                                            <td class="fw-bold">@o.SpecificDate?.ToString("dd MMM yyyy (ddd)")</td>
+                                            <td class="ps-3 fw-bold text-dark">
+                                                <i class="far fa-calendar text-primary me-2"></i>
+                                                @o.SpecificDate?.ToString("dd MMM yyyy")
+                                                <span class="badge bg-light text-dark ms-2 border">@o.SpecificDate?.ToString("ddd")</span>
+                                            </td>
                                             <td>
                                                 @if(o.IsAvailable) { 
-                                                    <span>@o.StartTime.ToString(@"hh\:mm") - @o.EndTime.ToString(@"hh\:mm")</span>
+                                                    <span class="fw-semibold text-dark"><i class="far fa-clock text-muted me-1"></i> @o.StartTime.ToString(@"hh\:mm") - @o.EndTime.ToString(@"hh\:mm")</span>
                                                 } else {
-                                                    <span class="text-muted">-</span>
+                                                    <span class="text-muted fst-italic">Entire Day</span>
                                                 }
                                             </td>
                                             <td>
-                                                @if(o.IsAvailable) { <span class="badge bg-success">Available</span> }
-                                                else { <span class="badge bg-danger">Unavailable</span> }
+                                                @if(o.IsAvailable) { 
+                                                    <span class="badge px-2 py-1 fw-bold bg-success text-white border border-success shadow-sm">
+                                                        <i class="fas fa-check me-1"></i>Available
+                                                    </span> 
+                                                }
+                                                else { 
+                                                    <span class="badge px-2 py-1 fw-bold bg-danger text-white border border-danger shadow-sm">
+                                                        <i class="fas fa-ban me-1"></i>Busy / Unavailable
+                                                    </span> 
+                                                    var rowConflicts = activeConflicts.Where(c => c.OverrideId == o.Id || (c.MeetingDate.Date == o.SpecificDate?.Date)).ToList();
+                                                    if (rowConflicts.Any())
+                                                    {
+                                                        <span class="badge px-2 py-1 fw-bold bg-warning text-dark border border-dark border-opacity-25 ms-1 shadow-sm" title="@rowConflicts.Count meeting(s) conflict with this override">
+                                                            <i class="fas fa-exclamation-triangle me-1"></i>Schedule Conflict (@rowConflicts.Count)
+                                                        </span>
+                                                    }
+                                                }
                                             </td>
-                                            <td class="text-end">
+                                            <td class="text-end pe-3">
                                                 <form asp-action="DeleteAvailability" method="post" class="d-inline" onsubmit="return confirm('Delete this override?');">
                                                     @Html.AntiForgeryToken()
                                                     <input type="hidden" name="id" value="@o.Id" />
-                                                    <button type="submit" class="btn btn-sm btn-icon btn-light-danger"><i class="fas fa-trash"></i></button>
+                                                    <input type="hidden" name="sessionFilter" value="@sessionName" />
+                                                    <button type="submit" class="btn btn-sm btn-light text-danger rounded-circle p-2 shadow-sm" title="Remove Override">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
                                                 </form>
                                             </td>
                                         </tr>
@@ -176,46 +350,51 @@
 <!-- Add Availability Modal -->
 <div class="modal fade" id="addAvailabilityModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-light border-0 p-4">
+                <h5 class="fw-bold mb-0 text-dark"><i class="fas fa-calendar-plus text-primary me-2"></i>Add Date Override</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
             <form asp-action="SaveAvailability" method="post">
                 @Html.AntiForgeryToken()
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="fw-bold">Add Availability</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
+                <div class="modal-body p-4 bg-white">
                     
                     <input type="hidden" name="ScheduleType" value="DateOverride" />
+                    <input type="hidden" name="sessionFilter" value="@sessionName" />
 
                     <div class="mb-4" id="specificDateDiv">
-                        <label class="form-label fw-bold">Specific Date</label>
-                        <input type="date" class="form-control" name="SpecificDate" min="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        <label class="form-label fw-bold text-dark">Specific Date <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control form-control-lg bg-light border-0" name="SpecificDate" min="@DateTime.Today.ToString("yyyy-MM-dd")" required />
                     </div>
 
                     <div class="mb-4">
-                        <label class="form-label fw-bold">Status</label>
-                        <select class="form-select" name="IsAvailable" id="isAvailableSelect" onchange="toggleTimeInputs()">
-                            <option value="true">Available</option>
-                            <option value="false">Unavailable (Block out entire day)</option>
+                        <label class="form-label fw-bold text-dark">Override Status</label>
+                        <select class="form-select form-select-lg bg-light border-0 fw-semibold" name="IsAvailable" id="isAvailableSelect" onchange="toggleTimeInputs()">
+                            <option value="false" class="text-danger">Busy (Block out entire day)</option>
+                            <option value="true" class="text-success">Available (Set specific hours)</option>
                         </select>
                     </div>
 
                     <div class="row g-3" id="timeInputsDiv">
                         <div class="col-6">
-                            <label class="form-label fw-bold">Start Time</label>
-                            <input type="time" class="form-control" name="StartTime" value="08:00" />
+                            <label class="form-label fw-bold text-dark">Start Time</label>
+                            <input type="time" class="form-control form-control-lg bg-light border-0" name="StartTime" value="09:00" />
                         </div>
                         <div class="col-6">
-                            <label class="form-label fw-bold">End Time</label>
-                            <input type="time" class="form-control" name="EndTime" value="17:00" />
+                            <label class="form-label fw-bold text-dark">End Time</label>
+                            <input type="time" class="form-control form-control-lg bg-light border-0" name="EndTime" value="17:00" />
                         </div>
-                        <small class="text-muted mt-2">Time is in 24-hour format.</small>
+                        <div class="col-12">
+                            <div class="alert alert-info border-0 py-2 mt-2 mb-0 small">
+                                <i class="fas fa-info-circle me-1"></i> These hours will override any regular weekly teaching timetable.
+                            </div>
+                        </div>
                     </div>
 
                 </div>
-                <div class="modal-footer border-0">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Schedule</button>
+                <div class="modal-footer border-0 bg-light p-4">
+                    <button type="button" class="btn btn-secondary rounded-pill fw-bold px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary rounded-pill fw-bold px-4 shadow-sm">Save Override</button>
                 </div>
             </form>
         </div>
@@ -226,14 +405,21 @@
     <script>
         function toggleTimeInputs() {
             var isAvail = document.getElementById('isAvailableSelect').value;
+            var timeDiv = document.getElementById('timeInputsDiv');
             if (isAvail === 'true') {
-                document.getElementById('timeInputsDiv').classList.remove('d-none');
+                timeDiv.style.display = 'flex';
+                // Trigger a small animation
+                timeDiv.style.opacity = 0;
+                setTimeout(() => {
+                    timeDiv.style.transition = 'opacity 0.3s ease';
+                    timeDiv.style.opacity = 1;
+                }, 10);
             } else {
-                document.getElementById('timeInputsDiv').classList.add('d-none');
+                timeDiv.style.display = 'none';
             }
         }
         
         // Init
-        toggleTimeInputs();
+        document.addEventListener('DOMContentLoaded', toggleTimeInputs);
     </script>
 }

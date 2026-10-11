@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 
 namespace FYPTracker.Helpers
 {
@@ -32,6 +32,37 @@ namespace FYPTracker.Helpers
         {
             int diff = (7 + (dt.DayOfWeek - startOfWeek)) % 7;
             return dt.AddDays(-1 * diff).Date;
+        }
+
+        public static bool TryParseMeetingTime(string? timeStr, out TimeSpan timeSpan)
+        {
+            timeSpan = default;
+            if (string.IsNullOrWhiteSpace(timeStr)) return false;
+
+            timeStr = timeStr.Trim();
+
+            // 1. Standard TimeSpan parse (e.g. "10:00", "10:00:00")
+            if (TimeSpan.TryParse(timeStr, System.Globalization.CultureInfo.InvariantCulture, out timeSpan))
+            {
+                return true;
+            }
+
+            // 2. DateTime parse with invariant culture (e.g. "10:00 AM", "02:30 PM", "10:00")
+            if (DateTime.TryParse(timeStr, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.NoCurrentDateDefault, out var dt))
+            {
+                timeSpan = dt.TimeOfDay;
+                return true;
+            }
+
+            // 3. Fallback with specific format strings
+            string[] formats = { "h:mm tt", "hh:mm tt", "H:mm", "HH:mm", "h:mmtt", "hh:mmtt" };
+            if (DateTime.TryParseExact(timeStr, formats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.NoCurrentDateDefault, out var dtExact))
+            {
+                timeSpan = dtExact.TimeOfDay;
+                return true;
+            }
+
+            return false;
         }
 
         public static string ConvertFileSize(this double len)

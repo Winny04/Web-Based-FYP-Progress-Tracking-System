@@ -449,19 +449,51 @@
             @* -- STAGE 1 STATUS BANNER ------------------------ *@
             @if (isStage1Failed)
             {
-                <div class="col-12 mb-2">
-                    <div class="alert alert-warning d-flex justify-content-between align-items-center shadow-sm" role="alert" style="border-left: 5px solid #f59e0b;">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-exclamation-triangle fs-3 me-3 text-warning"></i>
-                            <div>
-                                <h5 class="alert-heading fw-bold mb-1 text-dark">Stage 1 Failed (Repeat Required)</h5>
-                                <p class="mb-0 text-dark">You have failed Stage 1. However, you are permitted to proceed to Stage 2 concurrently while you retake Stage 1.</p>
+                <div class="col-12 mb-4">
+                    <div class="card border-0 shadow-sm rounded-4 overflow-hidden" style="border-left: 6px solid #dc3545;">
+                        <div class="card-body p-5 bg-white">
+                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-4 border-bottom">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-danger bg-opacity-10 text-danger rounded-circle d-flex align-items-center justify-content-center me-4" style="width: 60px; height: 60px;">
+                                        <i class="fas fa-redo-alt fs-2"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="fw-bolder mb-1 text-dark">Stage 1 Failed — Repeat Workflow Active</h3>
+                                        <p class="mb-0 text-muted fs-6">You have been permitted to continue to Stage 2 concurrently while retaking Stage 1.</p>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                        <div>
-                            <a href="@Url.Action("Stage2", "Student")" class="btn btn-warning btn-lg shadow-sm fw-bold rounded-pill px-4 text-dark">
-                                Proceed to Stage 2 <i class="fas fa-arrow-right ms-2"></i>
-                            </a>
+                            
+                            <div class="row g-4">
+                                <!-- Stage 1 Original -->
+                                <div class="col-md-4">
+                                    <div class="p-4 rounded-4 h-100" style="background-color: #f8fafc; border: 1px solid #e2e8f0;">
+                                        <h5 class="fw-bold text-dark mb-2"><i class="fas fa-history text-secondary me-2"></i>Stage 1 Original</h5>
+                                        <p class="text-muted small mb-3">View your original Stage 1 submissions and evaluation feedback below.</p>
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border px-3 py-2">Scroll Down to View</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Stage 1 Repeat -->
+                                <div class="col-md-4">
+                                    <div class="p-4 rounded-4 h-100" style="background-color: #fffbeb; border: 1px solid #fde68a;">
+                                        <h5 class="fw-bold text-dark mb-2"><i class="fas fa-file-signature text-warning me-2"></i>Stage 1 Repeat</h5>
+                                        <p class="text-muted small mb-3">Submit your revised IAF and DPP for your repeat attempt.</p>
+                                        <span class="badge bg-warning bg-opacity-25 text-dark border border-warning px-3 py-2"><i class="fas fa-tools me-1"></i> Pending Backend</span>
+                                    </div>
+                                </div>
+
+                                <!-- Stage 2 -->
+                                <div class="col-md-4">
+                                    <div class="p-4 rounded-4 h-100 position-relative overflow-hidden" style="background-color: #f0fdf4; border: 1px solid #bbf7d0;">
+                                        <h5 class="fw-bold text-dark mb-2"><i class="fas fa-graduation-cap text-success me-2"></i>Stage 2</h5>
+                                        <p class="text-muted small mb-3">Proceed with your Final Submission for Stage 2.</p>
+                                        <a href="@Url.Action("Stage2", "Student")" class="btn btn-success fw-bold rounded-pill px-4 shadow-sm w-100">
+                                            Go to Stage 2 <i class="fas fa-arrow-right ms-2"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -707,15 +739,6 @@
 
                                     <div class="card mb-0 border-0 shadow-none iaf-document-card">
                                         <div class="card-body p-2 p-md-3" style="font-family: Arial, sans-serif; font-size: 14px; color: #000;">
-                                            <h2 class="text-center fw-bold mb-1"
-                                                style="font-size: 18px;">
-                                                @iafTemplate.Title
-                                            </h2>
-
-                                            <p class="text-center text-muted small mb-4">
-                                                Template Version @iafTemplate.Version
-                                            </p>
-                                            
                                             <style>
                                                 .iaf-table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 20px; }
                                                 .iaf-table, .iaf-table th, .iaf-table td { border: 1px solid #ccc; }
@@ -734,27 +757,12 @@
 
                                             @* Unified IAF: use current Admin JSON for all 11 fields. *@
                                             @{
-                                                var requiredIafKeys = new[]
-                                                {
-                                                    "StudentName", "CoventryId", "Program", "ProjectTitle",
-                                                    "ScopeOfProject", "ProblemStatement", "References",
-                                                    "Objectives", "SupervisorName", "SupervisorSignature",
-                                                    "CommentFeedback"
-                                                };
-                                                var orderedIafFields = iafTemplate.Fields
-                                                    .OrderBy(f => f.Order)
-                                                    .ToList();
-                                                if (requiredIafKeys.Any(k => orderedIafFields.Count(f => f.Key == k) != 1)
-                                                    || orderedIafFields.Count != requiredIafKeys.Length)
-                                                {
-                                                    throw new InvalidOperationException(
-                                                        "The IAF template must contain the expected 11 unique fields.");
-                                                }
-
-                                                string iafReferences = "";
-                                                string agreedSup = "";
+                                                var currentIafTemplate = iafTemplate; // Default to published
                                                 string supervisorSignature = "";
                                                 string supervisorFeedback = iafMilestone?.SupervisorFeedback ?? "";
+                                                int? attemptNumber = null;
+                                                
+                                                var formDataMap = new Dictionary<string, string>();
 
                                                 if (!string.IsNullOrEmpty(iafMilestone?.Remarks)
                                                     && iafMilestone.Remarks.Contains("JSON: "))
@@ -766,14 +774,48 @@
                                                         var historyForFields = IafAttemptHistory.ParseOrMigrate(rawHistory);
                                                         var currentAttemptForFields = historyForFields.Attempts
                                                             .FirstOrDefault(a => a.AttemptNumber == historyForFields.CurrentAttempt);
+                                                            
                                                         if (currentAttemptForFields != null)
                                                         {
+                                                            attemptNumber = currentAttemptForFields.AttemptNumber;
                                                             var data = currentAttemptForFields.FormData
                                                                 ?? new Dictionary<string, string>();
-                                                            if (!data.TryGetValue("references", out iafReferences))
-                                                                data.TryGetValue("References", out iafReferences);
-                                                            if (!data.TryGetValue("agreedSupervisor", out agreedSup))
-                                                                data.TryGetValue("Agreed Supervisor Name", out agreedSup);
+                                                            
+                                                            formDataMap = new Dictionary<string, string>(data);
+
+                                                            // Load the frozen template for this attempt.
+                                                            if (data.TryGetValue("__iafTemplateSnapshot", out var snapJson)
+                                                                && !string.IsNullOrWhiteSpace(snapJson))
+                                                            {
+                                                                var deserialized =
+                                                                    System.Text.Json.JsonSerializer.Deserialize<
+                                                                        FYPTracker.ViewModels.MeetingRecordTemplateVM>(
+                                                                            snapJson,
+                                                                            new System.Text.Json.JsonSerializerOptions
+                                                                            {
+                                                                                PropertyNameCaseInsensitive = true
+                                                                            });
+
+                                                                var requiredKeys = new[]
+                                                                {
+                                                                    "StudentName", "CoventryId", "Program", "ProjectTitle",
+                                                                    "ScopeOfProject", "ProblemStatement", "References",
+                                                                    "Objectives", "SupervisorName", "SupervisorSignature",
+                                                                    "CommentFeedback"
+                                                                };
+
+                                                                if (deserialized?.Fields == null ||
+                                                                    deserialized.Fields.Count != requiredKeys.Length ||
+                                                                    requiredKeys.Any(key =>
+                                                                        deserialized.Fields.Count(f => f.Key == key) != 1))
+                                                                {
+                                                                    throw new InvalidOperationException(
+                                                                        "The saved IAF template snapshot is incomplete.");
+                                                                }
+
+                                                                currentIafTemplate = deserialized;
+                                                            }
+
                                                             supervisorSignature = currentAttemptForFields.SupervisorSignature ?? "";
                                                             if (!string.IsNullOrWhiteSpace(currentAttemptForFields.SupervisorFeedback))
                                                                 supervisorFeedback = currentAttemptForFields.SupervisorFeedback;
@@ -784,148 +826,39 @@
                                                         // Preserve existing editable project fields if old history cannot be parsed.
                                                     }
                                                 }
-                                                iafReferences ??= "";
-                                                agreedSup ??= "";
+                                                
+                                                // Fallback to project defaults if not found in FormData
+                                                if (!formDataMap.ContainsKey("scope") && !string.IsNullOrEmpty(Model.Scope)) formDataMap["scope"] = Model.Scope;
+                                                if (!formDataMap.ContainsKey("problem") && !string.IsNullOrEmpty(Model.ProblemStatement)) formDataMap["problem"] = Model.ProblemStatement;
+                                                if (!formDataMap.ContainsKey("obj1") && !string.IsNullOrEmpty(Model.Objective1)) formDataMap["obj1"] = Model.Objective1;
+                                                if (!formDataMap.ContainsKey("obj2") && !string.IsNullOrEmpty(Model.Objective2)) formDataMap["obj2"] = Model.Objective2;
+                                                if (!formDataMap.ContainsKey("obj3") && !string.IsNullOrEmpty(Model.Objective3)) formDataMap["obj3"] = Model.Objective3;
+                                                
+                                                // Map old keys to new normalized keys
+                                                if (!formDataMap.ContainsKey("references") && formDataMap.ContainsKey("References")) formDataMap["references"] = formDataMap["References"];
+                                                if (!formDataMap.ContainsKey("agreedSupervisor") && formDataMap.ContainsKey("Agreed Supervisor Name")) formDataMap["agreedSupervisor"] = formDataMap["Agreed Supervisor Name"];
 
-                                                var cleanObj1 = Model.Objective1?.StartsWith("1. To ", StringComparison.OrdinalIgnoreCase) == true
-                                                    ? Model.Objective1.Substring(6).TrimStart() : Model.Objective1;
-                                                var cleanObj2 = Model.Objective2?.StartsWith("2. To ", StringComparison.OrdinalIgnoreCase) == true
-                                                    ? Model.Objective2.Substring(6).TrimStart() : Model.Objective2;
-                                                var cleanObj3 = Model.Objective3?.StartsWith("3. To ", StringComparison.OrdinalIgnoreCase) == true
-                                                    ? Model.Objective3.Substring(6).TrimStart() : Model.Objective3;
+                                                var iafViewModel = new FYPTracker.ViewModels.IafDocumentViewModel
+                                                {
+                                                    Template = currentIafTemplate,
+                                                    FormData = formDataMap,
+                                                    RenderMode = "StudentEdit",
+                                                    IsLocked = isIafLocked,
+                                                    AttemptNumber = attemptNumber,
+                                                    MilestoneId = iafMilestoneId,
+                                                    Status = iafMilestone?.Status ?? "Pending",
+                                                    StudentName = currentUser?.FullName ?? "",
+                                                    CoventryId = currentUser?.CoventryId ?? "",
+                                                    Program = currentUser?.Programme ?? "",
+                                                    ProjectTitle = Model.Title ?? "",
+                                                    SupervisorName = formDataMap.ContainsKey("agreedSupervisor") ? formDataMap["agreedSupervisor"] : "",
+                                                    SupervisorSignature = supervisorSignature,
+                                                    SupervisorFeedback = supervisorFeedback
+                                                };
                                             }
 
-                                            <div class="row g-3 mb-4" id="iafJsonFields">
-                                                @foreach (var field in orderedIafFields)
-                                                {
-                                                    int width = field.Columns >= 1 && field.Columns <= 12
-                                                        ? field.Columns : 12;
-                                                    int textAreaHeight = field.MinHeightMm > 0 ? field.MinHeightMm : 30;
-
-                                                    <div class="col-12 col-md-@(width)" data-field-key="@field.Key">
-                                                        <div class="form-label fw-semibold mb-2">@field.Label</div>
-
-                                                        @if (field.Key == "StudentName")
-                                                        {
-                                                            <div class="iaf-info-value">@currentUser?.FullName</div>
-                                                        }
-                                                        else if (field.Key == "CoventryId")
-                                                        {
-                                                            <input type="text" id="iafCoventryId" name="coventryId"
-                                                                   class="form-control @(isIafLocked ? "bg-light border-0 fw-bold" : "")"
-                                                                   value="@currentUser?.CoventryId"
-                                                                   @(isIafLocked ? "readonly" : "") required />
-                                                        }
-                                                        else if (field.Key == "Program")
-                                                        {
-                                                            <div class="iaf-info-value">@(string.IsNullOrWhiteSpace(currentUser?.Programme) ? "Not configured" : currentUser.Programme)</div>
-                                                        }
-                                                        else if (field.Key == "ProjectTitle")
-                                                        {
-                                                            <input type="text" id="iafProjectTitle" name="title"
-                                                                   class="form-control @(isIafLocked ? "bg-light border-0 fw-bold" : "")"
-                                                                   value="@Model.Title" @(isIafLocked ? "readonly" : "") required />
-                                                        }
-                                                        else if (field.Key == "ScopeOfProject")
-                                                        {
-                                                            <select name="scope" id="scope"
-                                                                    class="form-select @(isIafLocked ? "bg-light border-0 fw-bold" : "")"
-                                                                    @(isIafLocked ? "disabled" : "") required>
-                                                                <option value="">-- Select Scope --</option>
-                                                                <option value="Development" selected="@(Model.Scope == "Development")">Development</option>
-                                                                <option value="Research Based Project" selected="@(Model.Scope == "Research Based Project")">Research Based Project</option>
-                                                                <option value="Hybrid" selected="@(Model.Scope == "Hybrid")">Hybrid</option>
-                                                            </select>
-                                                        }
-                                                        else if (field.Key == "ProblemStatement")
-                                                        {
-                                                            <textarea name="problemStatement" id="problemStatement"
-                                                                      class="form-control @(isIafLocked ? "bg-light border-0" : "")"
-                                                                      rows="5" style="min-height:@(textAreaHeight)mm;"
-                                                                      @(isIafLocked ? "readonly" : "") required
-                                                                      placeholder="Provide a problem statement supported with statistics and journal paper references...">@Model.ProblemStatement</textarea>
-                                                            <div id="problemStatementError" class="text-danger small mt-1 d-none"
-                                                                 role="status">Please include in-text citations.</div>
-                                                        }
-                                                        else if (field.Key == "References")
-                                                        {
-                                                            <textarea name="references" id="iafReferences"
-                                                                      class="form-control @(isIafLocked ? "bg-light border-0" : "")"
-                                                                      rows="4" style="min-height:@(textAreaHeight)mm;"
-                                                                      @(isIafLocked ? "readonly" : "")
-                                                                      placeholder="List the references used in your IAF.">@iafReferences</textarea>
-                                                        }
-                                                        else if (field.Key == "Objectives")
-                                                        {
-                                                            <div class="d-grid gap-3">
-                                                                <div>
-                                                                    <label class="form-label small" for="objective1">Objective 1 (required)</label>
-                                                                    <div class="input-group">
-                                                                        <span class="input-group-text">1. To</span>
-                                                                        <input type="text" name="objective1" id="objective1"
-                                                                               class="form-control @(isIafLocked ? "bg-light" : "")"
-                                                                               value="@cleanObj1" @(isIafLocked ? "readonly" : "")
-                                                                               placeholder="develop a system..." required />
-                                                                    </div>
-                                                                    <div id="objective1Error" class="text-danger small mt-1 d-none" role="status"></div>
-                                                                </div>
-                                                                <div>
-                                                                    <label class="form-label small" for="objective2">Objective 2 (required)</label>
-                                                                    <div class="input-group">
-                                                                        <span class="input-group-text">2. To</span>
-                                                                        <input type="text" name="objective2" id="objective2"
-                                                                               class="form-control @(isIafLocked ? "bg-light" : "")"
-                                                                               value="@cleanObj2" @(isIafLocked ? "readonly" : "")
-                                                                               placeholder="analyse the requirements..." required />
-                                                                    </div>
-                                                                    <div id="objective2Error" class="text-danger small mt-1 d-none" role="status"></div>
-                                                                </div>
-                                                                <div>
-                                                                    <label class="form-label small" for="objective3">Objective 3 (optional)</label>
-                                                                    <div class="input-group">
-                                                                        <span class="input-group-text">3. To</span>
-                                                                        <input type="text" name="objective3" id="objective3"
-                                                                               class="form-control @(isIafLocked ? "bg-light" : "")"
-                                                                               value="@cleanObj3" @(isIafLocked ? "readonly" : "")
-                                                                               placeholder="evaluate the results..." />
-                                                                    </div>
-                                                                    <div id="objective3Error" class="text-danger small mt-1 d-none" role="status"></div>
-                                                                </div>
-                                                            </div>
-                                                        }
-                                                        else if (field.Key == "SupervisorName")
-                                                        {
-                                                            <input type="text" id="iafSupervisorName" name="supervisorName"
-                                                                   class="form-control @(isIafLocked ? "bg-light" : "")"
-                                                                   value="@agreedSup" @(isIafLocked ? "readonly" : "")
-                                                                   placeholder="Optional - only if previously agreed" />
-                                                        }
-                                                        else if (field.Key == "SupervisorSignature")
-                                                        {
-                                                            <div class="iaf-info-value" style="min-height:@(textAreaHeight)mm;">
-                                                                @if (supervisorSignature.StartsWith("data:image/png;base64,", StringComparison.OrdinalIgnoreCase)
-                                                                    || supervisorSignature.StartsWith("data:image/jpeg;base64,", StringComparison.OrdinalIgnoreCase))
-                                                                {
-                                                                    <img src="@supervisorSignature" alt="Supervisor signature"
-                                                                         style="max-width:250px;max-height:80px;" />
-                                                                }
-                                                                else if (!string.IsNullOrWhiteSpace(supervisorSignature))
-                                                                {
-                                                                    <span>@supervisorSignature</span>
-                                                                }
-                                                                else
-                                                                {
-                                                                    <span class="text-muted">Pending supervisor signature</span>
-                                                                }
-                                                            </div>
-                                                        }
-                                                        else if (field.Key == "CommentFeedback")
-                                                        {
-                                                           <div class="iaf-feedback-display @(string.IsNullOrWhiteSpace(supervisorFeedback) ? "text-muted fst-italic" : "")"
-                                                            style="min-height:@(textAreaHeight)mm;">@(string.IsNullOrWhiteSpace(supervisorFeedback) ? "No feedback yet." : supervisorFeedback.Trim())</div>
-                                                        }
-                                                    </div>
-                                                }
+                                            <div id="iafJsonFields" class="w-100">
+                                                @await Html.PartialAsync("_IafDocument", iafViewModel)
                                             </div>
                                         </div>
 
@@ -1007,7 +940,7 @@
                                                                             <tr><td class="iaf-label">Objective 2</td><td class="iaf-value">@Fv("obj2")</td></tr>
                                                                             <tr><td class="iaf-label">Objective 3</td><td class="iaf-value">@Fv("obj3")</td></tr>
                                                                             <tr><td class="iaf-label">Agreed Supervisor Name</td><td class="iaf-value">@Fv("agreedSupervisor")</td></tr>
-                                                                            <tr><td class="iaf-label">Supervisor's name</td><td class="iaf-value" style="background-color: #DBE5F1;">@Model.Supervisor?.FullName</td></tr>
+                                                                            <tr><td class="iaf-label">Supervisor's name</td><td class="iaf-value" style="background-color: #DBE5F1;">@(isSigned ? (!string.IsNullOrWhiteSpace(Fv("__iafSignedByName")) ? Fv("__iafSignedByName") : (Model.Supervisor?.FullName ?? "None specified")) : (!string.IsNullOrWhiteSpace(Fv("agreedSupervisor")) ? Fv("agreedSupervisor") : "None specified"))</td></tr>
                                                                             <tr>
                                                                                 <td class="iaf-label">Supervisor's signature</td>
                                                                                 <td class="iaf-value" style="background-color: #DBE5F1;">
@@ -1067,7 +1000,7 @@
                                         </div>
                                     }
 
-                                    @if (!isIafLocked)
+                                    @if (!isIafLocked || iafMilestone?.Status == "SupervisorSigned")
                                     {
                                         <div class="card-footer bg-light border-top p-3 mt-3 iaf-action-footer">
                                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -1846,17 +1779,7 @@
         validateObjective(document.getElementById('objective3'), document.getElementById('objective3Error'));
 
         document.addEventListener("DOMContentLoaded", async function() {
-            // Enable Bootstrap validation
-            var forms = document.querySelectorAll('.needs-validation');
-            Array.prototype.slice.call(forms).forEach(function (form) {
-                form.addEventListener('submit', function (event) {
-                    if (!form.checkValidity()) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                    }
-                    form.classList.add('was-validated');
-                }, false);
-            });
+            // Enable Bootstrap validation was duplicating the validation, removed to fix "Save Draft"
 
             // Final Form Real-time Validation
             const finalAbstract = document.getElementById('finalAbstract');

@@ -48,6 +48,10 @@ namespace FYPTracker.Models
         public virtual DbSet<FYPSetting>        FYPSettings        { get; set; } = null!;
         public virtual DbSet<DefaultMilestoneTemplate> DefaultMilestoneTemplates { get; set; } = null!;
 
+        // ── IAF Defense Module ─────────────────────────────────────
+        public virtual DbSet<IAFDefenseBooking>  IAFDefenseBookings { get; set; } = null!;
+        public virtual DbSet<IAFDefenseHistory>  IAFDefenseHistories { get; set; } = null!;
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
@@ -289,6 +293,105 @@ namespace FYPTracker.Models
             {
                 entity.ToTable("UserRoleMappings");
                 entity.HasIndex(e => new { e.UserId, e.RoleId }).IsUnique();
+            });
+
+            // ── IAF Defense Booking ─────────────────────────────────
+            modelBuilder.Entity<IAFDefenseBooking>(entity =>
+            {
+                entity.ToTable("IAFDefenseBooking");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.RowVersion).IsRowVersion();
+
+                // Unique per milestone attempt (enforces 1 active booking per attempt)
+                entity.HasIndex(e => new { e.MilestoneId, e.AttemptNumber })
+                      .IsUnique()
+                      .HasDatabaseName("UQ_IAFDefenseBooking_Milestone_Attempt");
+
+                // Restrict / NoAction delete behaviors on all relationships
+                entity.HasOne(e => e.Milestone)
+                      .WithMany()
+                      .HasForeignKey(e => e.MilestoneId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.AcademicSession)
+                      .WithMany()
+                      .HasForeignKey(e => e.AcademicSessionId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Examiner)
+                      .WithMany()
+                      .HasForeignKey(e => e.ExaminerId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.OriginalSupervisor)
+                      .WithMany()
+                      .HasForeignKey(e => e.OriginalSupervisorId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.CreatedByUser)
+                      .WithMany()
+                      .HasForeignKey(e => e.CreatedByUserId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.UpdatedByUser)
+                      .WithMany()
+                      .HasForeignKey(e => e.UpdatedByUserId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // Schedule conflict lookup indexes
+                entity.HasIndex(e => new { e.ExaminerId, e.DefenseDate, e.StartTime, e.EndTime, e.BookingStatus })
+                      .HasDatabaseName("IX_IAFDefenseBooking_ExaminerSchedule");
+
+                entity.HasIndex(e => new { e.Venue, e.DefenseDate, e.StartTime, e.EndTime, e.BookingStatus })
+                      .HasDatabaseName("IX_IAFDefenseBooking_VenueSchedule");
+            });
+
+            // ── IAF Defense History (Immutable Academic Audit Trail) ─
+            modelBuilder.Entity<IAFDefenseHistory>(entity =>
+            {
+                entity.ToTable("IAFDefenseHistory");
+                entity.HasKey(e => e.Id);
+
+                // Booking deletion does NOT cascade to history
+                entity.HasOne(e => e.Booking)
+                      .WithMany(b => b.HistoryRecords)
+                      .HasForeignKey(e => e.BookingId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Milestone)
+                      .WithMany()
+                      .HasForeignKey(e => e.MilestoneId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.AcademicSession)
+                      .WithMany()
+                      .HasForeignKey(e => e.AcademicSessionId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Examiner)
+                      .WithMany()
+                      .HasForeignKey(e => e.ExaminerId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.OriginalSupervisor)
+                      .WithMany()
+                      .HasForeignKey(e => e.OriginalSupervisorId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.ActionByUser)
+                      .WithMany()
+                      .HasForeignKey(e => e.ActionByUserId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(e => new { e.MilestoneId, e.AttemptNumber })
+                      .HasDatabaseName("IX_IAFDefenseHistory_Milestone_Attempt");
+
+                entity.HasIndex(e => e.BookingId)
+                      .HasDatabaseName("IX_IAFDefenseHistory_BookingId");
+
+                entity.HasIndex(e => e.Timestamp)
+                      .HasDatabaseName("IX_IAFDefenseHistory_Timestamp");
             });
 
             OnModelCreatingPartial(modelBuilder);

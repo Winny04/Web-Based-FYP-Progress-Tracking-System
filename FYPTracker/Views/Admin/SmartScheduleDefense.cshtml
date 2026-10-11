@@ -1,0 +1,307 @@
+@model FYPTracker.Models.FYPMilestone
+@{
+    ViewData["Title"] = "Smart IAF Defense Scheduling (Preview)";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var student = Model.Project?.Student;
+    var supervisor = Model.Project?.Supervisor;
+    var eligibleExaminers = ViewBag.EligibleExaminers as List<FYPTracker.Models.ApplicationUser> ?? new List<FYPTracker.Models.ApplicationUser>();
+}
+
+<style>
+    :root { 
+        --hero-grad: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+        --glass-bg: rgba(255, 255, 255, 0.95);
+        --glass-border: rgba(255, 255, 255, 0.2);
+    }
+    
+    .page-hero {
+        background: var(--hero-grad);
+        border-radius: 16px;
+        padding: 30px;
+        color: white;
+        margin-bottom: 24px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+    }
+    
+    .premium-card {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+    }
+
+    .info-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        margin-bottom: 4px;
+        font-weight: 700;
+    }
+    
+    .info-val {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .time-slot {
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 10px 15px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-align: center;
+        font-weight: 600;
+        color: #334155;
+    }
+    
+    .time-slot:hover {
+        background: #e0f2fe;
+        border-color: #7dd3fc;
+        color: #0284c7;
+    }
+    
+    .time-slot.selected {
+        background: #0ea5e9;
+        border-color: #0284c7;
+        color: white;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <div class="mb-4">
+        <a asp-controller="Admin" asp-action="ApprovedIafList" class="btn btn-sm btn-outline-secondary rounded-pill px-3 shadow-sm fw-bold">
+            <i class="fas fa-arrow-left me-2"></i>Back to Approved IAF List
+        </a>
+    </div>
+
+    <div class="page-hero">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+                <h2 class="fw-bolder mb-2 text-white"><i class="fas fa-calendar-alt text-info me-2"></i>Smart IAF Defense Scheduling</h2>
+                <p class="mb-0 text-white-50 fs-6">Find mutual availability between the Student, Original Supervisor, and Independent Examiner.</p>
+            </div>
+            <span class="badge bg-warning text-dark px-3 py-2 rounded-pill fw-bold border border-warning border-opacity-50">UI Preview</span>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Project Context -->
+        <div class="col-lg-4">
+            <div class="premium-card h-100 p-4">
+                <h5 class="fw-bold mb-4 text-dark border-bottom pb-3"><i class="fas fa-info-circle text-primary me-2"></i>Project Details</h5>
+                
+                <div class="mb-4">
+                    <div class="info-label">Student</div>
+                    <div class="info-val d-flex align-items-center">
+                        <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px;">
+                            <i class="fas fa-user-graduate fs-6"></i>
+                        </div>
+                        @student?.FullName (@student?.EmployeeId)
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <div class="info-label">Original Supervisor</div>
+                    <div class="info-val d-flex align-items-center">
+                        <div class="bg-success bg-opacity-10 text-success rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px;">
+                            <i class="fas fa-chalkboard-teacher fs-6"></i>
+                        </div>
+                        @supervisor?.FullName
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <div class="info-label">Project Title</div>
+                    <div class="info-val text-wrap">@Model.Project?.Title</div>
+                </div>
+
+                <div class="mb-2">
+                    <div class="info-label">Defense Policy</div>
+                    <div class="info-val fs-6 mt-1" id="policyBadges">
+                        <span class="badge bg-secondary mb-1" id="durationBadge">Duration: @(ViewBag.DefenseDurationMinutes ?? 45) Mins</span><br>
+                        <span class="badge bg-secondary">Mandatory: Examiner, Student</span><br>
+                        <span class="badge bg-secondary" id="supervisorPolicyBadge">Supervisor: @((ViewBag.SupervisorRequired == true) ? "Required" : "Optional")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scheduling Form -->
+        <div class="col-lg-8">
+            <div class="premium-card h-100 p-4">
+                <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+                    <h5 class="fw-bold mb-0 text-dark"><i class="fas fa-cogs text-primary me-2"></i>Configure Defense</h5>
+                    <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-3 py-2 rounded-pill fw-bold">
+                        <i class="fas fa-shield-alt me-1"></i> Conflict-Checked
+                    </span>
+                </div>
+                
+                <div id="statusAlertContainer"></div>
+
+                <form id="scheduleForm" method="post" action="/Admin/AdminScheduleDefense">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="milestoneId" value="@Model.Id" id="milestoneId" />
+                    <input type="hidden" name="defenseTime" id="defenseTime" />
+
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-dark">1. Select Independent Examiner <span class="text-danger">*</span></label>
+                            <select class="form-select bg-light border-0 fw-semibold" name="examinerId" id="examinerId" required>
+                                <option value="" disabled selected>-- Choose an eligible examiner --</option>
+                                @foreach (var ex in eligibleExaminers)
+                                {
+                                    <option value="@ex.Id">@ex.FullName (@ex.Email)</option>
+                                }
+                            </select>
+                            <div class="mt-2 text-end">
+                                <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 fw-bold disabled">
+                                    <i class="fas fa-external-link-alt me-1"></i>View Examiner Timetable
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-dark">2. Pick Defense Date <span class="text-danger">*</span></label>
+                            <input type="date" name="defenseDate" id="defenseDate" class="form-control bg-light border-0 fw-semibold" required />
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-dark">3. Select Available Time Slot <span class="text-danger">*</span></label>
+                        <div id="slotsContainer" class="row g-2">
+                            <div class="col-12"><small class="text-muted">Select an Examiner and Date to view slots.</small></div>
+                        </div>
+                        <small class="text-muted mt-2 d-block"><i class="fas fa-info-circle me-1"></i> Faded slots indicate a scheduling conflict for one of the mandatory participants.</small>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-dark">4. Venue / Link <span class="text-danger">*</span></label>
+                        <input type="text" name="venue" id="venue" class="form-control bg-light border-0" placeholder="e.g. Meeting Room 2 or MS Teams URL" required />
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-3 mt-5 pt-3 border-top">
+                        <a asp-controller="Admin" asp-action="ManageDefenses" class="btn btn-light fw-bold px-4 rounded-pill">Cancel</a>
+                        <button type="submit" id="submitBtn" class="btn btn-primary fw-bold px-4 rounded-pill shadow-sm disabled">
+                            <i class="fas fa-paper-plane me-2"></i>Schedule & Notify
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const examinerSelect = document.getElementById('examinerId');
+        const dateInput = document.getElementById('defenseDate');
+        const slotsContainer = document.getElementById('slotsContainer');
+        const defenseTimeInput = document.getElementById('defenseTime');
+        const submitBtn = document.getElementById('submitBtn');
+        const milestoneId = document.getElementById('milestoneId').value;
+        const venueInput = document.getElementById('venue');
+        const statusAlertContainer = document.getElementById('statusAlertContainer');
+        const durationBadge = document.getElementById('durationBadge');
+        const supervisorPolicyBadge = document.getElementById('supervisorPolicyBadge');
+
+        let activeRequestId = 0;
+
+        function fetchSlots() {
+            const examinerId = examinerSelect.value;
+            const dateVal = dateInput.value;
+            
+            // Increment request ID to cancel/ignore stale responses
+            const currentReq = ++activeRequestId;
+
+            // Reset selection state
+            defenseTimeInput.value = '';
+            submitBtn.classList.add('disabled');
+            statusAlertContainer.innerHTML = '';
+
+            if (!examinerId || !dateVal) {
+                slotsContainer.innerHTML = '<div class="col-12"><small class="text-muted">Select an Examiner and Date to view slots.</small></div>';
+                return;
+            }
+
+            slotsContainer.innerHTML = '<div class="col-12"><div class="p-3 text-center bg-light rounded-3 text-info"><i class="fas fa-spinner fa-spin me-2"></i>Calculating genuine lecturer availability...</div></div>';
+
+            fetch(`/Admin/GetAvailableDefenseSlots?milestoneId=${milestoneId}&examinerId=${examinerId}&defenseDate=${dateVal}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (currentReq !== activeRequestId) return; // Ignore stale AJAX response
+
+                    // Update dynamic policy badges if returned
+                    if (data.durationMinutes) {
+                        durationBadge.textContent = `Duration: ${data.durationMinutes} Mins`;
+                    }
+                    if (data.supervisorRequired !== undefined) {
+                        supervisorPolicyBadge.textContent = `Supervisor: ${data.supervisorRequired ? "Required" : "Optional"}`;
+                    }
+
+                    if (data.configurationRequired) {
+                        statusAlertContainer.innerHTML = `
+                            <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-dark p-3 rounded-4 mb-4 d-flex align-items-center">
+                                <i class="fas fa-exclamation-triangle fs-4 me-3 text-warning"></i>
+                                <div>
+                                    <strong class="d-block mb-1">Academic Configuration Required:</strong>
+                                    <span>${data.message || 'Required configuration missing in Admin Settings.'}</span>
+                                </div>
+                            </div>`;
+                        slotsContainer.innerHTML = '<div class="col-12"><div class="p-3 text-center bg-light rounded-3 text-warning"><i class="fas fa-sliders-h me-2"></i>Availability calculation blocked until configuration is complete.</div></div>';
+                        return;
+                    }
+
+                    if (data.success && data.slots && data.slots.length > 0) {
+                        let html = '';
+                        data.slots.forEach(s => {
+                            html += `<div class="col-md-3 col-6"><div class="time-slot" data-time="${s.startTime}">${s.display}</div></div>`;
+                        });
+                        slotsContainer.innerHTML = html;
+
+                        document.querySelectorAll('.time-slot').forEach(slot => {
+                            slot.addEventListener('click', function() {
+                                if(this.classList.contains('text-muted')) return;
+                                document.querySelectorAll('.time-slot').forEach(s => s.classList.remove('selected'));
+                                this.classList.add('selected');
+                                defenseTimeInput.value = this.getAttribute('data-time');
+                                checkSubmit();
+                            });
+                        });
+                    } else {
+                        const reasonMsg = data.message || "No mutual free time slots found for the selected participants on this date.";
+                        const isBlocked = data.code === "TimetableNotConfigured" || data.code === "DateOverrideBlocked" || data.code === "TeachingConflict";
+                        const iconClass = isBlocked ? "fa-calendar-times" : "fa-info-circle";
+                        
+                        slotsContainer.innerHTML = `
+                            <div class="col-12">
+                                <div class="p-3 text-center bg-light rounded-4 text-secondary">
+                                    <i class="fas ${iconClass} fs-4 mb-2 d-block text-warning"></i>
+                                    <span class="fw-bold d-block text-dark mb-1">No Free Slots Available</span>
+                                    <small class="text-muted">${reasonMsg}</small>
+                                </div>
+                            </div>`;
+                    }
+                })
+                .catch(e => {
+                    if (currentReq !== activeRequestId) return;
+                    slotsContainer.innerHTML = '<div class="col-12"><small class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Failed to fetch availability from server.</small></div>';
+                });
+        }
+
+        function checkSubmit() {
+            if (defenseTimeInput.value && venueInput.value.trim() !== '') {
+                submitBtn.classList.remove('disabled');
+            } else {
+                submitBtn.classList.add('disabled');
+            }
+        }
+
+        examinerSelect.addEventListener('change', fetchSlots);
+        dateInput.addEventListener('change', fetchSlots);
+        venueInput.addEventListener('input', checkSubmit);
+    </script>
+}

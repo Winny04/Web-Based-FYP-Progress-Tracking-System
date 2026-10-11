@@ -1,0 +1,254 @@
+@model IEnumerable<FYPTracker.Models.FYPMilestone>
+@{
+    ViewData["Title"] = "Manage IAF Defenses";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string currentSession = ViewBag.CurrentSession as string ?? "2024/2025 Semester 1";
+
+    var upcoming = Model.Where(m => m.Status == "DefenseRequired" || m.Status == "DefenseScheduled").ToList();
+    var completed = Model.Where(m => m.Status == "AdminApproved" || m.Status == "ChangeOfTopicRequired").ToList();
+    var cancelled = Model.Where(m => m.Status == "DefenseCancelled").ToList();
+}
+
+<style>
+    :root { 
+        --hero-grad: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); 
+        --glass-bg: rgba(255, 255, 255, 0.95);
+        --glass-border: rgba(255, 255, 255, 0.2);
+    }
+    
+    .page-hero {
+        background: var(--hero-grad);
+        border-radius: 16px;
+        padding: 24px 32px;
+        color: white;
+        margin-bottom: 24px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+    }
+    
+    .premium-card {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+    }
+
+    .nav-pills .nav-link {
+        color: #64748b;
+        border-radius: 8px;
+        font-weight: 600;
+        padding: 10px 20px;
+        transition: all 0.2s ease;
+    }
+
+    .nav-pills .nav-link:hover {
+        background-color: #f1f5f9;
+        color: #0f172a;
+    }
+
+    .nav-pills .nav-link.active {
+        background-color: #3b82f6;
+        color: white;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .defense-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        background: white;
+        transition: all 0.2s ease;
+    }
+
+    .defense-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(148, 163, 184, 0.15);
+        border-color: #cbd5e1;
+    }
+
+    .status-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bolder mb-1 text-white"><i class="fas fa-calendar-check text-info me-2"></i>Manage IAF Defenses</h2>
+            <p class="mb-0 text-white-50 fs-6">View upcoming, scheduled, completed, and cancelled defenses.</p>
+        </div>
+        <div class="d-flex gap-3 align-items-center">
+            <span class="badge bg-warning text-dark px-3 py-2 rounded-pill fw-bold">UI Preview</span>
+            <form id="sessionForm" method="get" action="@Url.Action("ManageDefenses", "Admin")">
+                <select name="sessionFilter" class="form-select border-0 bg-white bg-opacity-10 text-white fw-bold shadow-none" style="width: 200px;" onchange="document.getElementById('sessionForm').submit();">
+                    @if (ViewBag.AcademicSessions != null)
+                    {
+                        foreach (var sessionObj in ViewBag.AcademicSessions)
+                        {
+                            if (currentSession == sessionObj.Name)
+                            {
+                                <option value="@sessionObj.Name" selected class="text-dark">@sessionObj.Name</option>
+                            }
+                            else
+                            {
+                                <option value="@sessionObj.Name" class="text-dark">@sessionObj.Name</option>
+                            }
+                        }
+                    }
+                    else
+                    {
+                        <option value="2024/2025 Semester 1" selected class="text-dark">2024/2025 Semester 1</option>
+                    }
+                </select>
+            </form>
+        </div>
+    </div>
+
+    <div class="premium-card p-4">
+        <!-- Filters & Search -->
+        <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+            <ul class="nav nav-pills" id="defenseTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="upcoming-tab" data-bs-toggle="pill" data-bs-target="#upcoming" type="button" role="tab">Upcoming (@upcoming.Count)</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="completed-tab" data-bs-toggle="pill" data-bs-target="#completed" type="button" role="tab">Completed (@completed.Count)</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="cancelled-tab" data-bs-toggle="pill" data-bs-target="#cancelled" type="button" role="tab">Cancelled (@cancelled.Count)</button>
+                </li>
+            </ul>
+            <div class="d-flex gap-2">
+                <div class="input-group" style="width: 250px;">
+                    <span class="input-group-text bg-light border-0"><i class="fas fa-search text-muted"></i></span>
+                    <input type="text" class="form-control bg-light border-0" placeholder="Search student or examiner...">
+                </div>
+                <button class="btn btn-outline-secondary"><i class="fas fa-filter"></i></button>
+            </div>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="defenseTabsContent">
+            
+            <!-- UPCOMING TAB -->
+            <div class="tab-pane fade show active" id="upcoming" role="tabpanel">
+                <div class="row g-4">
+                    @if (!upcoming.Any())
+                    {
+                        <div class="col-12 text-center py-5">
+                            <i class="fas fa-calendar-times fs-1 text-muted mb-3 opacity-50"></i>
+                            <h5 class="fw-bold text-dark">No Upcoming Defenses</h5>
+                            <p class="text-muted">There are no upcoming or scheduled defenses for this academic session.</p>
+                        </div>
+                    }
+                    @foreach (var item in upcoming)
+                    {
+                        <div class="col-xl-4 col-lg-6">
+                            <div class="defense-card p-4 h-100 d-flex flex-column">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                        <span class="badge @(item.Status == "DefenseScheduled" ? "bg-primary" : "bg-warning text-dark") bg-opacity-10 mb-2 border">@item.Status</span>
+                                        <h5 class="fw-bold mb-1">@(item.Project?.Student?.FullName ?? "Unknown")</h5>
+                                        <p class="text-muted small mb-0">Project: @(item.Project?.Title ?? "No Title")</p>
+                                    </div>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-light rounded-circle" type="button" data-bs-toggle="dropdown"><i class="fas fa-ellipsis-v"></i></button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                                            <li><a class="dropdown-item fw-bold text-primary" href="#"><i class="fas fa-eye me-2"></i>View Details</a></li>
+                                            <li><a class="dropdown-item fw-bold" href="@Url.Action("SmartScheduleDefense", "Admin", new { milestoneId = item.Id })"><i class="fas fa-calendar-alt me-2 text-warning"></i>Schedule / Reschedule</a></li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li><a class="dropdown-item fw-bold text-danger" href="#"><i class="fas fa-times me-2"></i>Cancel (Pending Backend)</a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                @if (item.Status == "DefenseScheduled")
+                                {
+                                    <div class="bg-light rounded-3 p-3 mb-3 flex-grow-1">
+                                        <div class="mb-2"><i class="far fa-calendar text-primary me-2 fw-bold"></i> @(item.DefenseDate?.ToString("dd MMM yyyy") ?? "N/A")</div>
+                                        <div class="mb-2"><i class="far fa-clock text-primary me-2 fw-bold"></i> @(item.DefenseTime ?? "N/A")</div>
+                                        <div><i class="fas fa-map-marker-alt text-primary me-2 fw-bold"></i> @(item.DefenseVenue ?? "N/A")</div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="bg-light rounded-3 p-3 mb-3 flex-grow-1 d-flex align-items-center justify-content-center text-muted">
+                                        <em>Not yet scheduled</em>
+                                    </div>
+                                }
+
+                                <div class="d-flex flex-column gap-2 small border-top pt-3">
+                                    <div class="d-flex align-items-center">
+                                        <div class="status-indicator bg-warning me-2"></div>
+                                        <span class="text-muted fw-bold w-25">Supervisor:</span> @(item.Project?.Supervisor?.FullName ?? "N/A")
+                                    </div>
+                                    <div class="d-flex align-items-center">
+                                        <div class="status-indicator bg-success me-2"></div>
+                                        <span class="text-muted fw-bold w-25">Examiner:</span> 
+                                        @{
+                                            var examiner = item.Project?.AssignedExaminers?.FirstOrDefault()?.Examiner?.FullName ?? "Unassigned";
+                                        }
+                                        @examiner
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- COMPLETED TAB -->
+            <div class="tab-pane fade" id="completed" role="tabpanel">
+                <div class="row g-4">
+                    @if (!completed.Any())
+                    {
+                        <div class="col-12 text-center py-5">
+                            <i class="fas fa-check-circle fs-1 text-success mb-3 opacity-50"></i>
+                            <h5 class="fw-bold text-dark">No Completed Defenses</h5>
+                            <p class="text-muted">History of past defenses will appear here.</p>
+                        </div>
+                    }
+                    @foreach (var item in completed)
+                    {
+                        <div class="col-xl-4 col-lg-6">
+                            <div class="defense-card p-4 h-100 d-flex flex-column border-success border-opacity-50">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                        <span class="badge bg-success bg-opacity-10 text-success mb-2 border border-success border-opacity-25">@item.Status</span>
+                                        <h5 class="fw-bold mb-1">@(item.Project?.Student?.FullName ?? "Unknown")</h5>
+                                    </div>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-light rounded-circle" type="button" data-bs-toggle="dropdown"><i class="fas fa-ellipsis-v"></i></button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                                            <li><a class="dropdown-item fw-bold text-primary" href="#"><i class="fas fa-eye me-2"></i>View Details</a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div class="bg-light rounded-3 p-3 mb-3 flex-grow-1">
+                                    <div class="mb-2"><i class="far fa-calendar text-primary me-2 fw-bold"></i> @(item.DefenseDate?.ToString("dd MMM yyyy") ?? "N/A")</div>
+                                    <div><i class="fas fa-map-marker-alt text-primary me-2 fw-bold"></i> @(item.DefenseVenue ?? "N/A")</div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- CANCELLED TAB -->
+            <div class="tab-pane fade" id="cancelled" role="tabpanel">
+                <div class="row g-4">
+                    @if (!cancelled.Any())
+                    {
+                        <div class="col-12 text-center py-5">
+                            <i class="fas fa-times-circle fs-1 text-danger mb-3 opacity-50"></i>
+                            <h5 class="fw-bold text-dark">No Cancelled Defenses</h5>
+                            <p class="text-muted">Cancelled or rescheduled defenses will appear here. (Note: The database currently lacks a dedicated native status for cancellations).</p>
+                        </div>
+                    }
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>

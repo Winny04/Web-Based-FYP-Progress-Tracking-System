@@ -614,6 +614,191 @@
 
     </div>
 
+    @{
+    string defensePolicy =
+        ViewBag.IAFDefenseSupervisorRequired as string ?? "";
+}
+
+<div class="col-md-12 col-xl-4">
+
+    <form asp-controller="Admin"
+          asp-action="UpdateIafDefenseSettings"
+          method="post"
+          class="card h-100">
+
+        @Html.AntiForgeryToken()
+
+        <input type="hidden"
+               name="sessionFilter"
+               value="@ViewBag.CurrentSessionFilter" />
+
+        <div class="card-header">
+            <h5 class="card-title fw-bold">
+                IAF Defense Settings
+            </h5>
+        </div>
+
+        <div class="card-body">
+
+            <label class="form-label">
+                Defense Duration (Minutes)
+            </label>
+
+            <input type="number"
+                   name="durationMinutes"
+                   class="form-control mb-3"
+                   min="15"
+                   max="180"
+                   required
+                   value="@ViewBag.IAFDefenseDurationMinutes" />
+
+            <label class="form-label">
+                Original Supervisor Attendance
+            </label>
+
+            <select name="supervisorRequired"
+                    class="form-select"
+                    required>
+
+                <option value=""
+                        selected="@(defensePolicy == "")">
+                    Select Attendance Policy
+                </option>
+
+                <option value="false"
+                        selected="@(defensePolicy == "false")">
+                    Optional - Not Required
+                </option>
+
+                <option value="true"
+                        selected="@(defensePolicy == "true")">
+                    Required - Must Attend
+                </option>
+
+            </select>
+
+            <label class="form-label mt-3">
+                Lecturer Working Hours Window (Mandatory)
+            </label>
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <label class="form-label small text-muted">Start Time</label>
+                    <input type="time"
+                           name="workingHoursStart"
+                           class="form-control"
+                           value="@ViewBag.LecturerWorkingHoursStart" />
+                </div>
+                <div class="col-6">
+                    <label class="form-label small text-muted">End Time</label>
+                    <input type="time"
+                           name="workingHoursEnd"
+                           class="form-control"
+                           value="@ViewBag.LecturerWorkingHoursEnd" />
+                </div>
+                <div class="col-12">
+                    <small class="text-danger">Mandatory for Defense scheduling. Both start and end times must be configured.</small>
+                </div>
+            </div>
+
+            <label class="form-label mt-2">
+                Final Viva Duration (Minutes)
+            </label>
+            <input type="number"
+                   name="vivaDurationMinutes"
+                   class="form-control mb-1"
+                   min="15"
+                   max="180"
+                   placeholder="e.g. 60"
+                   value="@ViewBag.VivaDurationMinutes" />
+            <small class="text-muted d-block mb-3">Authoritative duration used to detect Viva conflicts during defense scheduling.</small>
+
+            <label class="form-label">
+                Supervisor Meeting Duration (Minutes)
+            </label>
+            <input type="number"
+                   name="meetingDurationMinutes"
+                   class="form-control mb-1"
+                   min="15"
+                   max="180"
+                   placeholder="e.g. 30"
+                   value="@ViewBag.MeetingDurationMinutes" />
+            <small class="text-muted d-block mb-3">Authoritative supervisor meeting duration rule (range: 15–180 mins). Can also be saved in dedicated card.</small>
+
+            <div class="form-text mt-2">
+                Recommended for development testing:
+                45 minutes and Supervisor Optional.
+                Working hours: 09:00 - 17:00.
+            </div>
+
+        </div>
+
+        <div class="card-footer">
+            <button type="submit"
+                    class="btn btn-primary w-100">
+                Save IAF Defense Settings
+            </button>
+        </div>
+
+    </form>
+
+</div>
+
+<div class="col-md-12 col-xl-4">
+
+    <form asp-controller="Admin"
+          asp-action="UpdateMeetingDurationSetting"
+          method="post"
+          class="card h-100">
+
+        @Html.AntiForgeryToken()
+
+        <input type="hidden"
+               name="sessionFilter"
+               value="@ViewBag.CurrentSessionFilter" />
+
+        <div class="card-header">
+            <h5 class="card-title fw-bold">
+                Supervisor Meeting Settings
+            </h5>
+        </div>
+
+        <div class="card-body">
+
+            <label class="form-label">
+                Supervisor Meeting Duration (Minutes) <span class="text-danger">*</span>
+            </label>
+
+            <input type="number"
+                   name="meetingDurationMinutes"
+                   class="form-control mb-1"
+                   min="15"
+                   max="180"
+                   required
+                   placeholder="e.g. 30"
+                   value="@ViewBag.MeetingDurationMinutes" />
+
+            <small class="text-muted d-block mb-3">
+                Authoritative duration for all newly booked and rescheduled supervisor meetings (15–180 mins). Development test value: 30 minutes.
+            </small>
+
+            <div class="alert alert-info py-2 px-3 small mt-3 mb-0">
+                <i class="fas fa-info-circle me-1"></i>
+                <strong>Historical Protection:</strong> Existing approved meetings retain their established intervals. Historical records are never modified.
+            </div>
+
+        </div>
+
+        <div class="card-footer">
+            <button type="submit"
+                    class="btn btn-primary w-100">
+                Save Supervisor Meeting Duration
+            </button>
+        </div>
+
+    </form>
+
+</div>
+
 </div>
 
 

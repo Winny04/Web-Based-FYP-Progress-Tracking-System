@@ -147,65 +147,194 @@ namespace FYPTracker.Utils
             return html.ToString();
         }
 
-        public static byte[] GeneratePdfBytes(MeetingBooking meeting, MeetingRecordTemplateVM templateSnapshot, bool isSigned)
+        // Render directly with iTextSharp tables instead of relying on XMLWorker CSS
+        // min-height and column sizing, which are inconsistently supported in PDFs.
+        // The template passed here MUST be the snapshot selected by the caller.
+        public static byte[] GeneratePdfBytes(
+            MeetingBooking meeting,
+            MeetingRecordTemplateVM templateSnapshot,
+            bool isSigned)
         {
-            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
-            string html = GenerateHtmlContent(meeting, templateSnapshot, isSigned);
+            if (meeting?.MeetingLog == null)
+                throw new ArgumentException("Meeting Log data is required.", nameof(meeting));
+            if (templateSnapshot?.Fields == null || templateSnapshot.Fields.Count == 0)
+                throw new ArgumentException("A valid template snapshot is required.", nameof(templateSnapshot));
 
-            using (MemoryStream ms = new MemoryStream())
+            // Admin currently uses A4; honour its orientation when supplied.
+            Rectangle paper = PageSize.A4;
+            if (string.Equals(templateSnapshot.Page?.Orientation, "Landscape", StringComparison.OrdinalIgnoreCase))
+                paper = paper.Rotate();
+
+            // Admin A4 preview uses approximately 20 mm of paper padding.
+            float margin = MmToPoints(20);
+            using var output = new MemoryStream();
+            using (var document = new Document(paper, margin, margin, margin, margin))
             {
-                Document document = new Document(PageSize.A4, 36, 36, 36, 36);
-                PdfWriter writer = PdfWriter.GetInstance(document, ms);
+                PdfWriter.GetInstance(document, output).CloseStream = false;
                 document.Open();
 
-                // Custom XMLWorker pipeline to support data:image/ base64 images
-                var cssFiles = new CssFilesImpl();
-                cssFiles.Add(XMLWorkerHelper.GetInstance().GetDefaultCSS());
-                var cssResolver = new StyleAttrCSSResolver(cssFiles);
-                var htmlContext = new HtmlPipelineContext(new CssAppliersImpl(new XMLWorkerFontProvider()));
-
-                // FIX: Register HTML tag processors for XMLWorker
-                htmlContext.SetTagFactory(
-                    Tags.GetHtmlTagProcessorFactory());
-
-                // Keep Base64 signature image support
-                htmlContext.SetImageProvider(
-                    new Base64ImageProvider());
-
-                var pipeline = new CssResolverPipeline(
-                    cssResolver,
-                    new HtmlPipeline(
-                        htmlContext,
-                        new PdfWriterPipeline(document, writer)));
-                var worker = new XMLWorker(pipeline, true);
-                var parser = new XMLParser(worker);
-
-                using (var stringReader = new StringReader(html))
+                var titleFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 15f, BaseColor.BLACK);
+                var title = new Paragraph(templateSnapshot.Title ?? "Record of Supervisor Meeting", titleFont)
                 {
-                    try
-                    {
-                        parser.Parse(stringReader);
-                    }
-                    catch (Exception ex)
-                    {
-                        string debugFile = Path.Combine(
-                            Path.GetTempPath(),
-                            "FYPTracker-MeetingLog-Debug.html"
-                        );
+                    Alignment = Element.ALIGN_CENTER,
+                    SpacingAfter = 13f
+                };
+                document.Add(title);
 
-                        File.WriteAllText(debugFile, html);
+                // The Bootstrap Admin preview is a twelve-column grid.
+                // PdfPTable's 12 equal columns preserve 3/4/6/12 spans on A4.
+                var formTable = new PdfPTable(12)
+                {
+                    WidthPercentage = 100f,
+                    SplitRows = true,
+                    SplitLate = false,
+                    SpacingBefore = 2f
+                };
+                formTable.SetWidths(new float[] { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f });
 
-                        throw new InvalidOperationException(
-                            $"Failed to generate Meeting Log PDF. " +
-                            $"Debug HTML saved at: {debugFile}",
-                            ex
-                        );
+                // Keep a signed signature and its date together across PDF page breaks.
+                // Capture row indices in the 12-column grid (the Stage 1 fields use 6+6).
+                int? signatureRow = null;
+                int? signatureDateRow = null;
+                int usedColumns = 0;
+                foreach (var field in templateSnapshot.Fields.OrderBy(f => f.Order))
+                {
+                    int span = field.Columns >= 3 && field.Columns <= 12 ? field.Columns : 12;
+                    if (usedColumns + span > 12)
+                    {
+                        // Finish the current row so a 12-column field starts below.
+                        if (usedColumns > 0) formTable.AddCell(EmptyGridCell(12 - usedColumns));
+                        usedColumns = 0;
                     }
+
+                    // Row count is still the current row before its final cell is added.
+                    // Record AFTER completing a previous partial row, if necessary.
+                    int rowIndex = formTable.Rows.Count;
+                    if (field.Key == "SupervisorSignature") signatureRow = rowIndex;
+                    if (field.Key == "SupervisorSignatureDate") signatureDateRow = rowIndex;
+
+                    var outerCell = new PdfPCell
+                    {
+                        Colspan = span,
+                        Border = Rectangle.NO_BORDER,
+                        PaddingLeft = 3f,
+                        PaddingRight = 7f,
+                        PaddingTop = 5f,
+                        PaddingBottom = 6f
+                    };
+
+                    var labelFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 9f, new BaseColor(54, 62, 78));
+                    outerCell.AddElement(new Paragraph(field.Label ?? field.Key ?? "", labelFont)
+                    {
+                        SpacingAfter = 5f
+                    });
+
+                    var valueTable = new PdfPTable(1) { WidthPercentage = 100f };
+                    var valueCell = BuildValueCell(meeting, field, isSigned);
+                    valueTable.AddCell(valueCell);
+                    outerCell.AddElement(valueTable);
+
+                    formTable.AddCell(outerCell);
+                    usedColumns += span;
+                    if (usedColumns == 12) usedColumns = 0;
                 }
 
+                if (usedColumns > 0)
+                    formTable.AddCell(EmptyGridCell(12 - usedColumns));
+
+                // PdfPTable can otherwise split the signature image and its date
+                // across two pages (especially with SplitRows=true/SplitLate=false).
+                // Only protect the short signature row(s), not long TextArea rows:
+                // long meeting notes must remain allowed to paginate normally.
+                if (signatureRow.HasValue && signatureDateRow.HasValue &&
+                    Math.Abs(signatureRow.Value - signatureDateRow.Value) <= 1)
+                {
+                    int firstRow = Math.Min(signatureRow.Value, signatureDateRow.Value);
+                    int endExclusive = Math.Max(signatureRow.Value, signatureDateRow.Value) + 1;
+                    formTable.KeepRowsTogether(firstRow, endExclusive);
+                }
+                else
+                {
+                    if (signatureRow.HasValue)
+                        formTable.KeepRowsTogether(signatureRow.Value, signatureRow.Value + 1);
+                    if (signatureDateRow.HasValue)
+                        formTable.KeepRowsTogether(signatureDateRow.Value, signatureDateRow.Value + 1);
+                }
+
+                document.Add(formTable);
                 document.Close();
-                return ms.ToArray();
             }
+            return output.ToArray();
+        }
+
+        private static float MmToPoints(float millimetres) => millimetres * 72f / 25.4f;
+
+        private static PdfPCell EmptyGridCell(int span) => new PdfPCell
+        {
+            Colspan = span,
+            Border = Rectangle.NO_BORDER
+        };
+
+        private static PdfPCell BuildValueCell(MeetingBooking meeting, TemplateField field, bool isSigned)
+        {
+            var log = meeting.MeetingLog!;
+            var valueFont = FontFactory.GetFont(FontFactory.HELVETICA, 10f, BaseColor.BLACK);
+            var mutedFont = FontFactory.GetFont(FontFactory.HELVETICA_OBLIQUE, 9f, BaseColor.GRAY);
+            bool isArea = string.Equals(field.Type, "TextArea", StringComparison.OrdinalIgnoreCase);
+            bool isSignature = string.Equals(field.Type, "Signature", StringComparison.OrdinalIgnoreCase);
+            var cell = new PdfPCell
+            {
+                Border = isArea ? Rectangle.BOX : Rectangle.BOTTOM_BORDER,
+                BorderColor = new BaseColor(145, 155, 170),
+                BorderWidth = 0.65f,
+                PaddingLeft = isArea ? 8f : 2f,
+                PaddingRight = isArea ? 8f : 2f,
+                PaddingTop = isArea ? 8f : 5f,
+                PaddingBottom = isArea ? 8f : 5f,
+                MinimumHeight = isArea
+                    ? MmToPoints(Math.Max(15, Math.Min(100, field.MinHeightMm > 0 ? field.MinHeightMm : 35)))
+                    : isSignature
+                        ? MmToPoints(Math.Max(15, Math.Min(100, field.MinHeightMm > 0 ? field.MinHeightMm : 20)))
+                        : MmToPoints(9)
+            };
+
+            // Preserve the original signature image instead of encoding its data URL as text.
+            if (field.Key == "SupervisorSignature" && isSigned &&
+                !string.IsNullOrWhiteSpace(log.SupervisorSignature) &&
+                log.SupervisorSignature.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            {
+                string dataUrl = log.SupervisorSignature;
+                int separator = dataUrl.IndexOf(',');
+                if (separator < 0) throw new InvalidDataException("Invalid supervisor signature data URL.");
+                var signature = iTextSharp.text.Image.GetInstance(
+                    Convert.FromBase64String(dataUrl.Substring(separator + 1)));
+                // PDF point dimensions. ScaleToFit retains the natural aspect ratio.
+                signature.ScaleToFit(180f, MmToPoints(16));
+                signature.Alignment = Element.ALIGN_CENTER;
+                cell.AddElement(signature);
+                return cell;
+            }
+
+            string value = field.Key switch
+            {
+                "Supervisor" => meeting.Supervisor?.FullName ?? "Unknown",
+                "Student" => $"{meeting.Student?.FullName ?? "Unknown"} ({meeting.Student?.EmployeeId ?? ""})",
+                "MeetingDate" => meeting.MeetingDate.ToString("dd MMM yyyy"),
+                "TopicsDiscussed" => log.KeyTopicsDiscussed ?? "",
+                "ActionPoints" => log.ActionPointsForNextMeeting ?? "",
+                "ActionsCompleted" => log.CompletedActionsAndNotes ?? "",
+                "NextMeetingDate" => log.NextMeetingDate?.ToString("dd MMM yyyy") ?? "TBD",
+                "SupervisorSignature" => isSigned ? (log.SupervisorSignature ?? "Signed") : "Pending Signature",
+                "SupervisorSignatureDate" => isSigned ? log.SignatureDate?.ToString("dd MMM yyyy") ?? "TBD" : "TBD",
+                "SupervisorComments" => isSigned ? log.DisplayComments ?? "" : "Pending Review",
+                _ => ""
+            };
+            bool isPending = !isSigned && (field.Key == "SupervisorSignature" || field.Key == "SupervisorComments");
+            cell.AddElement(new Paragraph(value, isPending ? mutedFont : valueFont)
+            {
+                Leading = 14f
+            });
+            return cell;
         }
 
         /// <summary>

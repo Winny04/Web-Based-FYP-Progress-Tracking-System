@@ -178,55 +178,123 @@
             bool isSettings = currentPath.StartsWith("/Admin/Settings", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/ApprovedIafList", StringComparison.OrdinalIgnoreCase);
             bool isLookups = currentPath.StartsWith("/Admin/ManageLookups", StringComparison.OrdinalIgnoreCase);
             bool isFormTemplates = currentPath.StartsWith("/Admin/FormTemplateSettings", StringComparison.OrdinalIgnoreCase);
+            bool isDefenses = currentPath.StartsWith("/Admin/ManageDefenses", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/SmartScheduleDefense", StringComparison.OrdinalIgnoreCase);
 
+            bool isAcademicsGroup = isProjects || isDefenses;
+            bool isConfigGroup = isSettings || isFormTemplates || isLookups;
+
+            <!-- 1. Dashboard -->
             <div class="menu-item @(isDashboard ? "here show" : "")">
                 <a class="menu-link py-3 px-4 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Admin">
                     <span class="menu-title text-nowrap d-flex align-items-center">
+                        <i class="fas fa-th-large me-2 fs-6 text-muted"></i>
                         Dashboard
-                        @if(adminPendingRequests > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@adminPendingRequests</span> }
+                        @if(adminPendingRequests > 0) { 
+                            <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@adminPendingRequests</span> 
+                        }
                     </span>
                 </a>
             </div>
+
+            <!-- 2. Projects & Defenses (Dropdown) -->
+            <div data-kt-menu-trigger="{default: 'click', lg: 'hover'}" data-kt-menu-placement="bottom-start" class="menu-item menu-lg-down-accordion me-lg-1 @(isAcademicsGroup ? "here show" : "")">
+                <span class="menu-link py-3 px-4 @(isAcademicsGroup ? "active border-bottom border-3 border-primary" : "")">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        <i class="fas fa-graduation-cap me-2 fs-6 text-muted"></i>
+                        Projects &amp; Defense
+                        <i class="fas fa-chevron-down ms-2 fs-9 text-muted opacity-75"></i>
+                    </span>
+                    <span class="menu-arrow d-lg-none"></span>
+                </span>
+                <div class="menu-sub menu-sub-lg-dropdown menu-column menu-rounded menu-gray-700 menu-state-bg menu-state-primary fw-bold py-3 px-2 w-225px shadow-lg border border-gray-200">
+                    <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isProjects ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/ManageProjects">
+                            <span class="menu-icon me-2"><i class="fas fa-project-diagram text-primary fs-6"></i></span>
+                            <span class="menu-title">All Projects</span>
+                        </a>
+                    </div>
+                    <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isDefenses ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/ManageDefenses">
+                            <span class="menu-icon me-2"><i class="fas fa-calendar-check text-success fs-6"></i></span>
+                            <span class="menu-title">Manage Defenses</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Users -->
             <div class="menu-item @(isUsers ? "here show" : "")">
                 <a class="menu-link py-3 px-4 @(isUsers ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageUsers">
-                    <span class="menu-title text-nowrap">Manage Users</span>
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        <i class="fas fa-users-cog me-2 fs-6 text-muted"></i>
+                        Manage Users
+                    </span>
                 </a>
             </div>
-            <div class="menu-item @(isLookups ? "here show" : "")">
-                <a class="menu-link py-3 px-4 @(isLookups ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageLookups">
-                    <span class="menu-title text-nowrap">Manage Lookups</span>
-                </a>
-            </div>
-            <div class="menu-item @(isProjects ? "here show" : "")">
-                <a class="menu-link py-3 px-4 @(isProjects ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageProjects">
-                    <span class="menu-title text-nowrap">All Projects</span>
-                </a>
-            </div>
+
+            <!-- 4. Reporting -->
             <div class="menu-item @(isReporting ? "here show" : "")">
                 <a class="menu-link py-3 px-4 @(isReporting ? "active border-bottom border-3 border-primary" : "")" href="/Admin/Reporting">
-                    <span class="menu-title text-nowrap">Reporting</span>
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        <i class="fas fa-chart-line me-2 fs-6 text-muted"></i>
+                        Reporting
+                    </span>
                 </a>
             </div>
-            <div class="menu-item @(isSettings ? "here show" : "")">
-                <a class="menu-link py-3 px-4 @(isSettings ? "active border-bottom border-3 border-primary" : "")" href="/Admin/Settings">
-                    <span class="menu-title text-nowrap">System Settings</span>
-                </a>
-            </div>
-            <div class="menu-item @(isFormTemplates ? "here show" : "")">
-                <a class="menu-link py-3 px-4 @(isFormTemplates ? "active border-bottom border-3 border-primary" : "")" asp-controller="Admin" asp-action="FormTemplateSettings">
-                    <span class="menu-title text-nowrap"><i class="fas fa-file-alt me-2"></i>Form Templates</span>
-                </a>
+
+            <!-- 5. Configuration (Dropdown) -->
+            <div data-kt-menu-trigger="{default: 'click', lg: 'hover'}" data-kt-menu-placement="bottom-start" class="menu-item menu-lg-down-accordion me-lg-1 @(isConfigGroup ? "here show" : "")">
+                <span class="menu-link py-3 px-4 @(isConfigGroup ? "active border-bottom border-3 border-primary" : "")">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        <i class="fas fa-sliders-h me-2 fs-6 text-muted"></i>
+                        System Config
+                        <i class="fas fa-chevron-down ms-2 fs-9 text-muted opacity-75"></i>
+                    </span>
+                    <span class="menu-arrow d-lg-none"></span>
+                </span>
+                <div class="menu-sub menu-sub-lg-dropdown menu-column menu-rounded menu-gray-700 menu-state-bg menu-state-primary fw-bold py-3 px-2 w-225px shadow-lg border border-gray-200">
+                    <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isSettings ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/Settings">
+                            <span class="menu-icon me-2"><i class="fas fa-cog text-primary fs-6"></i></span>
+                            <span class="menu-title">System Settings</span>
+                        </a>
+                    </div>
+                    <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isFormTemplates ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/FormTemplateSettings">
+                            <span class="menu-icon me-2"><i class="fas fa-file-invoice text-warning fs-6"></i></span>
+                            <span class="menu-title">Form Templates</span>
+                        </a>
+                    </div>
+                    <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isLookups ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/ManageLookups">
+                            <span class="menu-icon me-2"><i class="fas fa-database text-info fs-6"></i></span>
+                            <span class="menu-title">Manage Lookups</span>
+                        </a>
+                    </div>
+                </div>
             </div>
         }
         else if (userType == "Examiner")
         {
             bool isDashboard = currentPath == "/Examiner" || currentPath == "/Examiner/" || currentPath.StartsWith("/Examiner/Index", StringComparison.OrdinalIgnoreCase);
+            bool isAvailability = currentPath.StartsWith("/Timetable/ManageAvailability", StringComparison.OrdinalIgnoreCase);
+            bool isTimetable = currentPath.StartsWith("/Timetable/ManageTimetable", StringComparison.OrdinalIgnoreCase);
 
             <div class="menu-item @(isDashboard ? "here show" : "")">
                 <a class="menu-link py-3 px-4 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Examiner">
                     <span class="menu-title text-nowrap d-flex align-items-center">
                         Dashboard
                     </span>
+                </a>
+            </div>
+            <div class="menu-item @(isTimetable ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(isTimetable ? "active border-bottom border-3 border-primary" : "")" href="/Timetable/ManageTimetable">
+                    <span class="menu-title text-nowrap">My Timetable</span>
+                </a>
+            </div>
+            <div class="menu-item @(isAvailability ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(isAvailability ? "active border-bottom border-3 border-primary" : "")" href="/Timetable/ManageAvailability">
+                    <span class="menu-title text-nowrap">My Availability</span>
                 </a>
             </div>
         }

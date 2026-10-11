@@ -843,6 +843,200 @@ namespace FYPTracker.Migrations
                     b.ToTable("FYPSubmissionFile", (string)null);
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.IAFDefenseBooking", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AcademicOutcome")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("AcademicSessionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("int");
+
+                    b.Property<string>("BookingStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("DefenseDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<TimeSpan>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<int>("ExaminerId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsSupervisorRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("MilestoneId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("OriginalSupervisorId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OutcomeComments")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<TimeSpan>("StartTime")
+                        .HasColumnType("time");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime");
+
+                    b.Property<int?>("UpdatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Venue")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcademicSessionId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("OriginalSupervisorId");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("MilestoneId", "AttemptNumber")
+                        .IsUnique()
+                        .HasDatabaseName("UQ_IAFDefenseBooking_Milestone_Attempt");
+
+                    b.HasIndex("ExaminerId", "DefenseDate", "StartTime", "EndTime", "BookingStatus")
+                        .HasDatabaseName("IX_IAFDefenseBooking_ExaminerSchedule");
+
+                    b.HasIndex("Venue", "DefenseDate", "StartTime", "EndTime", "BookingStatus")
+                        .HasDatabaseName("IX_IAFDefenseBooking_VenueSchedule");
+
+                    b.ToTable("IAFDefenseBooking", (string)null);
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.IAFDefenseHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AcademicOutcome")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("AcademicSessionId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ActionByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BookingId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("BookingStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("DefenseDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<TimeSpan>("EndTime")
+                        .HasColumnType("time");
+
+                    b.Property<int>("ExaminerId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsSupervisorRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("MilestoneId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("OriginalSupervisorId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OutcomeComments")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ReasonForChange")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<TimeSpan>("StartTime")
+                        .HasColumnType("time");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("Venue")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcademicSessionId");
+
+                    b.HasIndex("ActionByUserId");
+
+                    b.HasIndex("BookingId")
+                        .HasDatabaseName("IX_IAFDefenseHistory_BookingId");
+
+                    b.HasIndex("ExaminerId");
+
+                    b.HasIndex("OriginalSupervisorId");
+
+                    b.HasIndex("Timestamp")
+                        .HasDatabaseName("IX_IAFDefenseHistory_Timestamp");
+
+                    b.HasIndex("MilestoneId", "AttemptNumber")
+                        .HasDatabaseName("IX_IAFDefenseHistory_Milestone_Attempt");
+
+                    b.ToTable("IAFDefenseHistory", (string)null);
+                });
+
             modelBuilder.Entity("FYPTracker.Models.MeetingBooking", b =>
                 {
                     b.Property<int>("Id")
@@ -856,6 +1050,9 @@ namespace FYPTracker.Migrations
 
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("datetime");
+
+                    b.Property<DateTime?>("EndDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<int?>("FYPProjectId")
                         .HasColumnType("int");
@@ -895,6 +1092,9 @@ namespace FYPTracker.Migrations
 
                     b.Property<int?>("Stage")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("StartDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1518,6 +1718,103 @@ namespace FYPTracker.Migrations
                     b.Navigation("Uploader");
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.IAFDefenseBooking", b =>
+                {
+                    b.HasOne("FYPTracker.Models.AcademicSession", "AcademicSession")
+                        .WithMany()
+                        .HasForeignKey("AcademicSessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "Examiner")
+                        .WithMany()
+                        .HasForeignKey("ExaminerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.FYPMilestone", "Milestone")
+                        .WithMany()
+                        .HasForeignKey("MilestoneId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "OriginalSupervisor")
+                        .WithMany()
+                        .HasForeignKey("OriginalSupervisorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AcademicSession");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Examiner");
+
+                    b.Navigation("Milestone");
+
+                    b.Navigation("OriginalSupervisor");
+
+                    b.Navigation("UpdatedByUser");
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.IAFDefenseHistory", b =>
+                {
+                    b.HasOne("FYPTracker.Models.AcademicSession", "AcademicSession")
+                        .WithMany()
+                        .HasForeignKey("AcademicSessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "ActionByUser")
+                        .WithMany()
+                        .HasForeignKey("ActionByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FYPTracker.Models.IAFDefenseBooking", "Booking")
+                        .WithMany("HistoryRecords")
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "Examiner")
+                        .WithMany()
+                        .HasForeignKey("ExaminerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.FYPMilestone", "Milestone")
+                        .WithMany()
+                        .HasForeignKey("MilestoneId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "OriginalSupervisor")
+                        .WithMany()
+                        .HasForeignKey("OriginalSupervisorId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("AcademicSession");
+
+                    b.Navigation("ActionByUser");
+
+                    b.Navigation("Booking");
+
+                    b.Navigation("Examiner");
+
+                    b.Navigation("Milestone");
+
+                    b.Navigation("OriginalSupervisor");
+                });
+
             modelBuilder.Entity("FYPTracker.Models.MeetingBooking", b =>
                 {
                     b.HasOne("FYPTracker.Models.ApplicationUser", "Student")
@@ -1677,6 +1974,11 @@ namespace FYPTracker.Migrations
                     b.Navigation("AssignedExaminers");
 
                     b.Navigation("Milestones");
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.IAFDefenseBooking", b =>
+                {
+                    b.Navigation("HistoryRecords");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.MeetingBooking", b =>

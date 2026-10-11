@@ -51,6 +51,12 @@ namespace FYPTracker.Models
 
         public string? MeetingLink { get; set; }
 
+        [Column(TypeName = "datetime2")]
+        public DateTime? StartDateTime { get; set; }
+
+        [Column(TypeName = "datetime2")]
+        public DateTime? EndDateTime { get; set; }
+
         [Column(TypeName = "datetime")]
         public DateTime CreatedDate { get; set; } = DateTime.Now;
 

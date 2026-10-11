@@ -537,7 +537,7 @@ namespace FYPTracker.Controllers
                 project.Description ?? "",
                 project.ProblemStatement ?? "",
                 project.Scope ?? "",
-                project.Objective1 ?? "",
+                project.Objective1 ?? "",// Must have the Examiner role.
                 project.Objective2 ?? "",
                 project.Objective3 ?? "",
                 project.Student?.Specialization ?? ""
@@ -2292,7 +2292,24 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             ViewBag.ExhibitionTimeEnd   = GetSetting("ExhibitionTimeEnd");
             // Configurable supervisor request auto-rejection timeout (in days, default 3)
             ViewBag.SupervisorRequestTimeoutDays = GetSetting("SupervisorRequestTimeoutDays") is string v && v != "" ? v : "3";
+            // IAF Defense Settings
+            ViewBag.IAFDefenseDurationMinutes =
+                GetSetting("IAFDefenseDurationMinutes");
 
+            ViewBag.IAFDefenseSupervisorRequired =
+                GetSetting("IAFDefenseSupervisorRequired");
+
+            ViewBag.LecturerWorkingHoursStart =
+                GetSetting("LecturerWorkingHoursStart");
+
+            ViewBag.LecturerWorkingHoursEnd =
+                GetSetting("LecturerWorkingHoursEnd");
+
+            ViewBag.VivaDurationMinutes =
+                GetSetting("VivaDurationMinutes");
+
+            ViewBag.MeetingDurationMinutes =
+                GetSetting("MeetingDurationMinutes");
             return View();
         }
 
@@ -2556,6 +2573,138 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             }
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateIafDefenseSettings(
+            int durationMinutes,
+            string? supervisorRequired,
+            string? workingHoursStart,
+            string? workingHoursEnd,
+            int? vivaDurationMinutes,
+            int? meetingDurationMinutes,
+            string? sessionFilter)
+        {
+            if (durationMinutes < 15 || durationMinutes > 180)
+            {
+                TempData["Error"] =
+                    "Defense duration must be between 15 and 180 minutes.";
+
+                return RedirectToAction(
+                    nameof(Settings), new { sessionFilter });
+            }
+
+            if (!bool.TryParse(supervisorRequired, out bool isRequired))
+            {
+                TempData["Error"] =
+                    "Please select the Supervisor attendance policy.";
+
+                return RedirectToAction(
+                    nameof(Settings), new { sessionFilter });
+            }
+
+            if (!string.IsNullOrWhiteSpace(workingHoursStart) || !string.IsNullOrWhiteSpace(workingHoursEnd))
+            {
+                if (string.IsNullOrWhiteSpace(workingHoursStart) || string.IsNullOrWhiteSpace(workingHoursEnd))
+                {
+                    TempData["Error"] = "Both Lecturer Working Hours Start and End must be provided.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                if (!TimeSpan.TryParse(workingHoursStart, out var wStart) ||
+                    !TimeSpan.TryParse(workingHoursEnd, out var wEnd) ||
+                    wStart >= wEnd)
+                {
+                    TempData["Error"] = "Lecturer Working Hours Start must be earlier than End time.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                await SetGlobalSettingAsync(
+                    "LecturerWorkingHoursStart",
+                    wStart.ToString(@"hh\:mm"),
+                    "Lecturer Working Hours Start");
+
+                await SetGlobalSettingAsync(
+                    "LecturerWorkingHoursEnd",
+                    wEnd.ToString(@"hh\:mm"),
+                    "Lecturer Working Hours End");
+            }
+
+            if (vivaDurationMinutes.HasValue)
+            {
+                if (vivaDurationMinutes.Value < 15 || vivaDurationMinutes.Value > 180)
+                {
+                    TempData["Error"] = "Viva duration must be between 15 and 180 minutes.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                await SetGlobalSettingAsync(
+                    "VivaDurationMinutes",
+                    vivaDurationMinutes.Value.ToString(),
+                    "Final Viva Duration (Minutes)");
+            }
+
+            if (meetingDurationMinutes.HasValue)
+            {
+                if (meetingDurationMinutes.Value < 15 || meetingDurationMinutes.Value > 180)
+                {
+                    TempData["Error"] = "Supervisor meeting duration must be between 15 and 180 minutes.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                await SetGlobalSettingAsync(
+                    "MeetingDurationMinutes",
+                    meetingDurationMinutes.Value.ToString(),
+                    "Supervisor Meeting Duration (Minutes)");
+            }
+
+            await SetGlobalSettingAsync(
+                "IAFDefenseDurationMinutes",
+                durationMinutes.ToString(),
+                "IAF Defense Duration");
+
+            await SetGlobalSettingAsync(
+                "IAFDefenseSupervisorRequired",
+                isRequired ? "true" : "false",
+                "Original Supervisor Attendance Required");
+
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] =
+                "IAF Defense and Lecturer scheduling policies saved successfully.";
+
+            return RedirectToAction(
+                nameof(Settings), new { sessionFilter });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateMeetingDurationSetting(
+            int? meetingDurationMinutes,
+            string? sessionFilter)
+        {
+            if (!meetingDurationMinutes.HasValue)
+            {
+                TempData["Error"] = "Supervisor meeting duration is required and must be a valid positive integer.";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+
+            if (meetingDurationMinutes.Value < 15 || meetingDurationMinutes.Value > 180)
+            {
+                TempData["Error"] = "Supervisor meeting duration must be between 15 and 180 minutes.";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+
+            await SetGlobalSettingAsync(
+                "MeetingDurationMinutes",
+                meetingDurationMinutes.Value.ToString(),
+                "Supervisor Meeting Duration (Minutes)");
+
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Supervisor meeting duration setting saved successfully.";
+            return RedirectToAction(nameof(Settings), new { sessionFilter });
+        }
+
         // ============================================================
         // POST - SAVE DPP SETTINGS ONLY
         // ============================================================
@@ -2789,6 +2938,12 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             var milestone = await _context.FYPMilestones.FindAsync(milestoneId);
             if (milestone != null)
             {
+                if (milestone.Status != "PendingPanelReview")
+                {
+                    TempData["Error"] = "Only IAFs in PendingPanelReview status can be given final approval.";
+                    return RedirectToAction(nameof(ApprovedIafList));
+                }
+                
                 milestone.Status = "AdminApproved";
                 
                 if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
@@ -2821,6 +2976,12 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             var milestone = await _context.FYPMilestones.Include(m => m.Project).ThenInclude(p => p.Student).FirstOrDefaultAsync(m => m.Id == milestoneId);
             if (milestone != null)
             {
+                if (milestone.Status != "PendingPanelReview")
+                {
+                    TempData["Error"] = "Only IAFs in PendingPanelReview status can be rejected/returned for revision by the panel.";
+                    return RedirectToAction(nameof(ApprovedIafList));
+                }
+
                 milestone.Status = "PanelRevisionRequired";
 
                 if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
@@ -2857,10 +3018,397 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             return RedirectToAction(nameof(ApprovedIafList));
         }
 
+        [HttpGet]
+        
+        [HttpGet]
+        public async Task<IActionResult> ManageDefenses(string sessionFilter = null)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+
+            var sessions = await _context.AcademicSessions.OrderByDescending(s => s.StartDate).ToListAsync();
+            ViewBag.AcademicSessions = sessions;
+            
+            var currentSessionObj = sessions.FirstOrDefault(s => s.IsCurrent == true);
+            ViewBag.CurrentSession = sessionFilter ?? currentSessionObj?.Name ?? "2024/2025 Semester 1";
+            string activeSessionFilter = ViewBag.CurrentSession as string;
+
+            var query = _context.FYPMilestones
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Supervisor)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.AssignedExaminers)
+                        .ThenInclude(e => e.Examiner)
+                .Where(m => m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation"));
+
+            if (!string.IsNullOrEmpty(activeSessionFilter))
+            {
+                query = query.Where(m => m.Project.AcademicSession == activeSessionFilter);
+            }
+
+            // Only include IAFs that require defense, are scheduled, or have evidence of a completed defense (DefenseDate != null)
+            var defenseMilestones = await query
+                .Where(m => m.Status == "DefenseRequired" || 
+                            m.Status == "DefenseScheduled" || 
+                            ((m.Status == "AdminApproved" || m.Status == "ChangeOfTopicRequired") && m.DefenseDate != null && m.Remarks != null && m.Remarks.Contains("JSON: ")))
+                .ToListAsync();
+
+            return View(defenseMilestones);
+        }
+
+        private async Task<int?> ResolveDefenseAcademicSessionIdAsync(
+            FYPMilestone milestone)
+        {
+            var project = milestone.Project;
+
+            if (project == null)
+                return null;
+
+            string? sessionName = project.AcademicSession;
+
+            // Fallback for legacy projects without a session value.
+            if (string.IsNullOrWhiteSpace(sessionName))
+            {
+                sessionName = await _context.ApplicationUsers
+                    .AsNoTracking()
+                    .Where(u => u.Id == project.StudentId)
+                    .Select(u => u.AcademicSession)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (string.IsNullOrWhiteSpace(sessionName))
+                return null;
+
+            sessionName = sessionName.Trim();
+
+            // AcademicSession.Name maps to SQL SessionName.
+            return await _context.AcademicSessions
+                .AsNoTracking()
+                .Where(s => s.Name == sessionName)
+                .Select(s => (int?)s.Id)
+                .FirstOrDefaultAsync();
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAvailableDefenseSlots(
+            [FromServices] FYPTracker.Services.ILecturerAvailabilityService availabilityService,
+            int milestoneId,
+            int examinerId,
+            DateTime defenseDate)
+        {
+            // 1. Validate IAF milestone and project
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestone == null || milestone.Project == null)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = "Invalid IAF milestone or project."
+                });
+            }
+
+            // 2. Validate independent Examiner
+            var examiner = await _context.ApplicationUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u =>
+                    u.Id == examinerId &&
+                    !u.IsResign &&
+                    u.UserRoles.Any(r => r.Role.Name == "Examiner"));
+
+            if (examiner == null)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = "Invalid or inactive Examiner."
+                });
+            }
+
+            // 3. Original Supervisor cannot be independent Examiner
+            int? supervisorId = milestone.Project.SupervisorId;
+
+            if (supervisorId.HasValue &&
+                supervisorId.Value == examinerId)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = "Original Supervisor cannot be the independent Examiner."
+                });
+            }
+
+            // 4. Read IAF Defense Duration from FYPSetting
+            var durationSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s =>
+                    s.Key == "IAFDefenseDurationMinutes");
+
+            if (!int.TryParse(
+                    durationSetting?.Value,
+                    out int durationMinutes) ||
+                durationMinutes < 15 ||
+                durationMinutes > 180)
+            {
+                return Json(new
+                {
+                    success = false,
+                    configurationRequired = true,
+                    message = "Please configure IAF Defense Duration in Admin Settings."
+                });
+            }
+
+            // 5. Read Original Supervisor Attendance Policy
+            var supervisorSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s =>
+                    s.Key == "IAFDefenseSupervisorRequired");
+
+            if (!bool.TryParse(
+                    supervisorSetting?.Value,
+                    out bool supervisorRequired))
+            {
+                return Json(new
+                {
+                    success = false,
+                    configurationRequired = true,
+                    code = "AcademicConfigurationRequired",
+                    message = "Please configure Supervisor Attendance Policy in Admin Settings."
+                });
+            }
+
+            // 5.1. Strictly Require Configured Lecturer Working Hours (No automatic 09:00 - 17:00 fallback)
+            var startSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursStart");
+            var endSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursEnd");
+
+            if (startSetting == null || string.IsNullOrWhiteSpace(startSetting.Value) ||
+                !TimeSpan.TryParse(startSetting.Value, out var parsedWorkStart) ||
+                endSetting == null || string.IsNullOrWhiteSpace(endSetting.Value) ||
+                !TimeSpan.TryParse(endSetting.Value, out var parsedWorkEnd) ||
+                parsedWorkStart >= parsedWorkEnd)
+            {
+                return Json(new
+                {
+                    success = false,
+                    configurationRequired = true,
+                    code = "AcademicConfigurationRequired",
+                    message = "Lecturer Working Hours (Start & End Time) are not configured or invalid in Admin Settings. Both values are required.",
+                    slots = Array.Empty<object>()
+                });
+            }
+
+            // 6. Independent Examiner is always mandatory
+            var lecturerIds = new List<int> { examinerId };
+
+            // Include Original Supervisor only when required
+            if (supervisorRequired)
+            {
+                if (!supervisorId.HasValue)
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Original Supervisor is not assigned."
+                    });
+                }
+
+                lecturerIds.Add(supervisorId.Value);
+            }
+
+            // 7. Calculate actual mutual availability
+            // Resolve the session belonging to this IAF project.
+            int? academicSessionId =
+                await ResolveDefenseAcademicSessionIdAsync(milestone);
+
+            if (!academicSessionId.HasValue)
+            {
+                return Json(new
+                {
+                    success = false,
+                    code = "AcademicConfigurationRequired",
+                    message = "The project's Academic Session is not configured or could not be resolved from current records.",
+                    slots = Array.Empty<object>()
+                });
+            }
+
+            // Diagnostic checks for lecturer prerequisites
+            foreach (var lecturerId in lecturerIds.Distinct())
+            {
+                bool hasTimetable = await _context.SupervisorTimetableEntries
+                    .AsNoTracking()
+                    .AnyAsync(t => t.SupervisorId == lecturerId && t.AcademicSessionId == academicSessionId.Value);
+
+                if (!hasTimetable)
+                {
+                    var userObj = await _context.ApplicationUsers.AsNoTracking().FirstOrDefaultAsync(u => u.Id == lecturerId);
+                    string lecturerRole = (lecturerId == examinerId) ? "Independent Examiner" : "Original Supervisor";
+                    return Json(new
+                    {
+                        success = false,
+                        code = "TimetableNotConfigured",
+                        message = $"{lecturerRole} ({userObj?.FullName ?? lecturerId.ToString()}) has not configured a teaching timetable for Academic Session {milestone.Project.AcademicSession}. Genuine availability cannot be determined.",
+                        slots = Array.Empty<object>()
+                    });
+                }
+            }
+
+            // 7.1. Diagnostic check: verify if any participating lecturer has an indeterminate meeting on defenseDate
+            var meetingsOnDate = await _context.MeetingBookings
+                .AsNoTracking()
+                .Where(m => lecturerIds.Contains(m.SupervisorId) && 
+                            m.MeetingDate == defenseDate.Date && 
+                            (m.Status == "Approved" || m.Status == "Pending"))
+                .ToListAsync();
+
+            var indeterminateMeeting = meetingsOnDate.FirstOrDefault(m => 
+                (!m.StartDateTime.HasValue || !m.EndDateTime.HasValue) &&
+                (string.IsNullOrWhiteSpace(m.MeetingTime) || 
+                 (!TimeSpan.TryParse(m.MeetingTime, out _) && !DateTime.TryParse(m.MeetingTime, out _))));
+
+            if (indeterminateMeeting != null)
+            {
+                var lecturer = await _context.ApplicationUsers.AsNoTracking().FirstOrDefaultAsync(u => u.Id == indeterminateMeeting.SupervisorId);
+                string lecturerRole = (indeterminateMeeting.SupervisorId == examinerId) ? "Independent Examiner" : "Original Supervisor";
+                return Json(new
+                {
+                    success = false,
+                    code = "ConflictOrUnavailable",
+                    message = $"{lecturerRole} ({lecturer?.FullName ?? indeterminateMeeting.SupervisorId.ToString()}) has a scheduled meeting (Booking #{indeterminateMeeting.Id}) on {defenseDate:yyyy-MM-dd} with an unresolved duration/time. Slots cannot be safely determined.",
+                    slots = Array.Empty<object>()
+                });
+            }
+
+            // 7.2. Diagnostic check: verify Final Viva presentations and require authoritative duration & participant info
+            var vivasOnDate = await _context.FYPProjects
+                .AsNoTracking()
+                .Include(p => p.AssignedExaminers)
+                .Where(p => p.VivaDate.HasValue && p.VivaDate.Value.Date == defenseDate.Date &&
+                            (lecturerIds.Contains(p.SupervisorId ?? -1) || 
+                             (p.AssignedExaminers != null && p.AssignedExaminers.Any(ae => lecturerIds.Contains(ae.ExaminerId)))))
+                .ToListAsync();
+
+            if (vivasOnDate.Any())
+            {
+                var vivaDurationSetting = await _context.FYPSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.Key == "VivaDurationMinutes");
+
+                if (!int.TryParse(vivaDurationSetting?.Value, out int parsedVivaDur) || parsedVivaDur < 15 || parsedVivaDur > 180)
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        configurationRequired = true,
+                        code = "AcademicConfigurationRequired",
+                        message = "A participating lecturer has a Final Viva presentation scheduled on this date, but Viva Duration is not configured in Admin Settings. Defense slots cannot be safely generated.",
+                        slots = Array.Empty<object>()
+                    });
+                }
+
+                var incompleteViva = vivasOnDate.FirstOrDefault(p => 
+                    p.SupervisorId == null || p.AssignedExaminers == null || !p.AssignedExaminers.Any());
+                if (incompleteViva != null)
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        code = "ConflictOrUnavailable",
+                        message = $"Project '{incompleteViva.Title}' has a Viva scheduled on {defenseDate:yyyy-MM-dd} with incomplete participant assignments. Defense slots cannot be safely confirmed.",
+                        slots = Array.Empty<object>()
+                    });
+                }
+            }
+
+            // Calculate using the correct Academic Session.
+            var slots = await availabilityService
+                .GetMutualAvailableSlotsAsync(
+                    lecturerIds.Distinct().ToList(),
+                    defenseDate.Date,
+                    durationMinutes,
+                    academicSessionId.Value);   
+
+            // 8. Format response for existing JavaScript UI
+            var formattedSlots = slots.Select(s =>
+            {
+                var start = DateTime.Today.Add(s.StartTime);
+                var end = DateTime.Today.Add(s.EndTime);
+
+                return new
+                {
+                    startTime = start.ToString("HH:mm"),
+                    endTime = end.ToString("HH:mm"),
+                    display = $"{start:hh:mm tt} - {end:hh:mm tt}"
+                };
+            }).ToList();
+
+            string noSlotsMessage = "No mutual free time slots found after excluding teaching commitments, meetings, date overrides, and defenses.";
+
+            return Json(new
+            {
+                success = formattedSlots.Any(),
+                code = formattedSlots.Any() ? "Available" : "ConflictOrUnavailable",
+                message = formattedSlots.Any() ? "Slots retrieved successfully." : noSlotsMessage,
+                durationMinutes,
+                supervisorRequired,
+                slots = formattedSlots
+            });
+        }
+
+        public async Task<IActionResult> SmartScheduleDefense(int milestoneId)
+        {
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                .ThenInclude(p => p.Supervisor)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestone == null) return NotFound();
+
+            var examiners = await _context.ApplicationUsers
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Examiner") && !u.IsResign)
+                .ToListAsync();
+            
+            var supervisorId = milestone.Project?.SupervisorId ?? 0;
+            ViewBag.EligibleExaminers = examiners.Where(e => e.Id != supervisorId).OrderBy(e => e.FullName).ToList();
+
+            var durationSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "IAFDefenseDurationMinutes");
+            int.TryParse(durationSetting?.Value, out int durationMinutes);
+            ViewBag.DefenseDurationMinutes = durationMinutes > 0 ? durationMinutes : 45;
+
+            var supervisorSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "IAFDefenseSupervisorRequired");
+            bool.TryParse(supervisorSetting?.Value, out bool supervisorRequired);
+            ViewBag.SupervisorRequired = supervisorRequired;
+
+            return View(milestone);
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AdminScheduleDefense(int milestoneId, DateTime defenseDate, TimeSpan defenseTime, string venue)
+        public async Task<IActionResult> AdminScheduleDefense([FromServices] FYPTracker.Services.ILecturerAvailabilityService availabilityService, int milestoneId, int examinerId, DateTime defenseDate, TimeSpan defenseTime, string venue)
         {
+        // TEMPORARY SAFETY BLOCK
+        // Disable Defense scheduling until database integrity
+        // and booking validation are completed.
+        TempData["Error"] =
+            "IAF Defense scheduling is temporarily disabled " +
+            "until examiner assignment and booking validation are completed.";
+
+        return RedirectToAction(nameof(ManageDefenses));
+
+        // Existing code below - keep it for now.
             var milestone = await _context.FYPMilestones
                 .Include(m => m.Project)
                     .ThenInclude(p => p.Student)
@@ -2871,7 +3419,51 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                         .ThenInclude(e => e.Examiner)
                 .FirstOrDefaultAsync(m => m.Id == milestoneId);
 
-            if (milestone != null && milestone.Status == "DefenseRequired")
+            if (milestone == null) return NotFound();
+
+            // Validate Examiner Role, Status, and Independence
+            var examiner = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.Id == examinerId && u.UserRoles.Any(r => r.Role.Name == "Examiner") && !u.IsResign);
+
+            if (examiner == null)
+            {
+                TempData["Error"] = "Selected Examiner is invalid, inactive, or does not possess the required Examiner role.";
+                return RedirectToAction(nameof(SmartScheduleDefense), new { milestoneId });
+            }
+
+            if (milestone.Project != null && milestone.Project.SupervisorId == examiner.Id)
+            {
+                TempData["Error"] = "A supervisor cannot serve as the independent examiner for their own student's defense.";
+                return RedirectToAction(nameof(SmartScheduleDefense), new { milestoneId });
+            }
+
+            // Missing POST Availability Revalidation (A2)
+            var supervisorId = milestone.Project?.SupervisorId ?? 0;
+            var lecturers = new List<int> { examinerId }; if (supervisorId > 0) lecturers.Add(supervisorId);
+            int? postAcademicSessionId = await ResolveDefenseAcademicSessionIdAsync(milestone);
+
+            if (!postAcademicSessionId.HasValue)
+            {
+                TempData["Error"] = "Invalid Academic Session.";
+
+                return RedirectToAction(nameof(ManageDefenses));
+            }
+
+            var slots = await availabilityService.GetMutualAvailableSlotsAsync(
+                lecturers,
+                defenseDate.Date,
+                45,
+                postAcademicSessionId.Value);
+    
+            var isValidSlot = slots.Any(s => s.StartTime <= defenseTime && s.EndTime >= defenseTime.Add(TimeSpan.FromMinutes(45)));
+            
+            if (!isValidSlot)
+            {
+                TempData["Error"] = "The selected time slot is no longer available.";
+                return RedirectToAction(nameof(SmartScheduleDefense), new { milestoneId });
+            }
+
+            if (milestone.Status == "DefenseRequired" || milestone.Status == "DefenseScheduled")
             {
                 var formattedDate = defenseDate.ToString("dd MMM yyyy");
                 var formattedTime = new DateTime(defenseTime.Ticks).ToString("hh:mm tt");
@@ -2880,6 +3472,15 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 milestone.DefenseDate = defenseDate;
                 milestone.DefenseTime = formattedTime;
                 milestone.DefenseVenue = venue;
+                
+                // Assign or Update Examiner
+                // BLOCKED: Do not overwrite FYPProjectExaminer assignments. 
+                // A new FYPDefenseSchedule migration is required to store independent Defense Examiners safely.
+                if (milestone.Project != null)
+                {
+                    // var existingAssignment = milestone.Project.AssignedExaminers.FirstOrDefault();
+                    // ...
+                }
                 if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
                 {
                     var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
@@ -2908,9 +3509,10 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     CreatedDate = DateTime.Now
                 });
 
+                await _context.SaveChangesAsync();
+                
                 var student = milestone.Project?.Student;
                 var supervisor = milestone.Project?.Supervisor;
-                var examiner = milestone.Project?.AssignedExaminers?.FirstOrDefault()?.Examiner;
 
                 string subject = "FYP IAF Defense Scheduled";
                 string message = $@"<p>An Initial Allocation Form (IAF) defense session has been scheduled.</p>
@@ -2958,7 +3560,6 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     });
                 }
 
-                await _context.SaveChangesAsync();
                 TempData["Success"] = "Successfully scheduled defense and sent invitations to the student, supervisor, and examiner.";
             }
             return RedirectToAction(nameof(ApprovedIafList));
@@ -3034,9 +3635,10 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     catch {}
                 }
                 
-                milestone.DefenseDate = null;
-                milestone.DefenseTime = null;
-                milestone.DefenseVenue = null;
+                // BLOCKED: Do not clear DefenseDate, Time, Venue to preserve history.
+                // milestone.DefenseDate = null;
+                // milestone.DefenseTime = null;
+                // milestone.DefenseVenue = null;
                 
                 _context.FYPNotifications.Add(new FYPNotification
                 {

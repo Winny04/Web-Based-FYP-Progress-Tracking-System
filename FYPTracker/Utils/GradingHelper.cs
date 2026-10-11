@@ -66,6 +66,21 @@ namespace FYPTracker.Utils
             }
         }
 
+        public static double? CalculateJointFinalPercentage(double? supervisorNormalizedPercentage, double? examinerNormalizedPercentage)
+        {
+            if (!supervisorNormalizedPercentage.HasValue || !examinerNormalizedPercentage.HasValue) 
+                return null;
+
+            if (supervisorNormalizedPercentage.Value < 0 || supervisorNormalizedPercentage.Value > 100 ||
+                examinerNormalizedPercentage.Value < 0 || examinerNormalizedPercentage.Value > 100)
+            {
+                throw new ArgumentOutOfRangeException("Assessments must be normalized percentages between 0 and 100.");
+            }
+
+            double totalRaw = (supervisorNormalizedPercentage.Value * 0.8) + (examinerNormalizedPercentage.Value * 0.7);
+            return Math.Round(totalRaw / 1.5, 1);
+        }
+
         private static double GetWeight(JsonElement element, string propName)
         {
             if (element.TryGetProperty(propName, out var prop))

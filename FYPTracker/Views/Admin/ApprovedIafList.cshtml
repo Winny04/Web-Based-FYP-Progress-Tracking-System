@@ -198,38 +198,63 @@
                                 <h5 class="modal-title">Initial Project Allocation Form — Latest Attempt (@latestAttempt.AttemptNumber)</h5>
                                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                             </div>
-                            <div class="modal-body iaf-readonly-view">
-                                <table class="iaf-table">
-                                    <tr><td class="iaf-label">Course Code</td><td class="iaf-value">6002CMD</td></tr>
-                                    <tr><td class="iaf-label">Project Title</td><td class="iaf-value">@Fv("title")</td></tr>
-                                    <tr><td class="iaf-label">Scope of Project</td><td class="iaf-value">@Fv("scope")</td></tr>
-                                    <tr><td class="iaf-label">Problem Statement</td><td class="iaf-value">@Fv("problem")</td></tr>
-                                    <tr><td class="iaf-label">Objective 1</td><td class="iaf-value">@Fv("obj1")</td></tr>
-                                    <tr><td class="iaf-label">Objective 2</td><td class="iaf-value">@Fv("obj2")</td></tr>
-                                    <tr><td class="iaf-label">Objective 3</td><td class="iaf-value">@Fv("obj3")</td></tr>
-                                    <tr><td class="iaf-label">Agreed Supervisor Name</td><td class="iaf-value">@Fv("agreedSupervisor")</td></tr>
-                                    <tr><td class="iaf-label">Supervisor's name</td><td class="iaf-value" style="background-color: #DBE5F1;">@m.Project?.Supervisor?.FullName</td></tr>
-                                    <tr>
-                                        <td class="iaf-label">Supervisor's signature</td>
-                                        <td class="iaf-value" style="background-color: #DBE5F1;">
-                                            @if (isSigned) {
-                                                if (latestAttempt.SupervisorSignature.StartsWith("data:image/")) {
-                                                    <img src="@latestAttempt.SupervisorSignature" alt="Supervisor Signature" style="max-height: 80px; max-width: 250px;" />
-                                                } else {
-                                                    <span style="font-family: 'Brush Script MT', cursive; font-size: 24px; color: #00008B;">@latestAttempt.SupervisorSignature</span>
-                                                }
-                                            } else {
-                                                <span class="text-muted fst-italic">Not signed</span>
-                                            }
-                                        </td>
-                                    </tr>
-                                    <tr><td class="iaf-label">Comment/Feedback</td><td class="iaf-value">@latestAttempt.SupervisorFeedback</td></tr>
-                                    @if (!string.IsNullOrEmpty(latestAttempt.PanelComments)) {
-                                        <tr><td class="iaf-label">Panel Comments</td><td class="iaf-value">@latestAttempt.PanelComments</td></tr>
+                            <div class="modal-body bg-light p-4">
+                                @{
+                                    FYPTracker.ViewModels.MeetingRecordTemplateVM? viewTemplate = null;
+                                    if (fd.TryGetValue("__iafTemplateSnapshot", out var snapshotJson) && !string.IsNullOrWhiteSpace(snapshotJson))
+                                    {
+                                        try
+                                        {
+                                            viewTemplate = JsonSerializer.Deserialize<FYPTracker.ViewModels.MeetingRecordTemplateVM>(
+                                                snapshotJson,
+                                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                            if (viewTemplate?.Fields == null || viewTemplate.Fields.Count == 0)
+                                                viewTemplate = null;
+                                        }
+                                        catch { viewTemplate = null; }
                                     }
-                                </table>
 
+                                    var formDataMap = new Dictionary<string, string>(fd);
+                                    if (!formDataMap.ContainsKey("references") && formDataMap.ContainsKey("References")) formDataMap["references"] = formDataMap["References"];
+                                    if (!formDataMap.ContainsKey("agreedSupervisor") && formDataMap.ContainsKey("Agreed Supervisor Name")) formDataMap["agreedSupervisor"] = formDataMap["Agreed Supervisor Name"];
+                                    
+                                    var displayedSupervisorName = !string.IsNullOrWhiteSpace(Fv("__iafSignedByName")) ? Fv("__iafSignedByName") : (m.Project?.Supervisor?.FullName ?? "");
+
+                                    var iafViewModel = new FYPTracker.ViewModels.IafDocumentViewModel
+                                    {
+                                        Template = viewTemplate ?? new FYPTracker.ViewModels.MeetingRecordTemplateVM(),
+                                        FormData = formDataMap,
+                                        RenderMode = "ReadOnly",
+                                        IsLocked = true,
+                                        AttemptNumber = latestAttempt.AttemptNumber,
+                                        MilestoneId = m.Id,
+                                        Status = m.Status,
+                                        StudentName = !string.IsNullOrWhiteSpace(Fv("studentName")) ? Fv("studentName") : m.Project?.Student?.FullName ?? "",
+                                        CoventryId = !string.IsNullOrWhiteSpace(Fv("coventryId")) ? Fv("coventryId") : m.Project?.Student?.CoventryId ?? "",
+                                        Program = !string.IsNullOrWhiteSpace(Fv("program")) ? Fv("program") : m.Project?.Student?.Programme ?? "",
+                                        ProjectTitle = !string.IsNullOrWhiteSpace(Fv("title")) ? Fv("title") : m.Project?.Title ?? "",
+                                        SupervisorName = isSigned ? displayedSupervisorName : (!string.IsNullOrWhiteSpace(Fv("agreedSupervisor")) ? Fv("agreedSupervisor") : ""),
+                                        SupervisorSignature = latestAttempt.SupervisorSignature ?? "",
+                                        SignatureDate = latestAttempt.SupervisorReviewedAt,
+                                        SupervisorFeedback = latestAttempt.SupervisorFeedback ?? "",
+                                        PanelComments = latestAttempt.PanelComments ?? ""
+                                    };
+                                }
+                                <div class="w-100">
+                                    @if (viewTemplate?.Fields == null ||
+                                        viewTemplate.Fields.Count == 0)
+                                    {
+                                        <div class="alert alert-warning">
+                                            The original IAF template snapshot is unavailable.
+                                            This historical attempt cannot be rendered reliably.
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        @await Html.PartialAsync("_IafDocument", iafViewModel)
+                                    }
                                 </div>
+                            </div>
                             <div class="modal-footer">
                                 <button type="button" class="btn btn-sm btn-primary" data-dismiss="modal">Close</button>
                             </div>
@@ -349,8 +374,11 @@
                                 return `
                                     <div class="d-flex gap-1">
                                         <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF"><i class="fas fa-eye"></i></button>
-                                        <button onclick="scheduleDefense(${params.data.Id})" class="btn btn-sm btn-danger" title="Schedule Defense">
-                                            <i class="fas fa-calendar-alt"></i> Schedule
+                                        <a href="/Admin/SmartScheduleDefense?milestoneId=${params.data.Id}" class="btn btn-sm btn-info text-white" title="Smart Schedule Defense">
+                                            <i class="fas fa-magic"></i> Smart Schedule
+                                        </a>
+                                        <button onclick="scheduleDefense(${params.data.Id})" class="btn btn-sm btn-outline-danger" title="Legacy Schedule Defense">
+                                            <i class="fas fa-calendar-alt"></i> Legacy
                                         </button>
                                     </div>
                                 `;

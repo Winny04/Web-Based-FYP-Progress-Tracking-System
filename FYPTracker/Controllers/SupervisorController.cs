@@ -8,6 +8,7 @@ using FYPTracker.Hubs;
 using ClosedXML.Excel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using FYPTracker.Helpers;
 
 namespace FYPTracker.Controllers
 {
@@ -1384,17 +1385,14 @@ namespace FYPTracker.Controllers
 
                                     // Preserve the actual signer's identity
                                     // in this specific IAF attempt.
-                                    if (!currentAttempt.FormData.ContainsKey("__iafSignedByName"))
-                                    {
-                                        currentAttempt.FormData["__iafSignedByName"] =
-                                            user!.FullName?.Trim() ?? "";
-                                    }
+                                    currentAttempt.FormData["__iafSignedByName"] =
+                                        user!.FullName?.Trim() ?? "";
 
-                                    if (!currentAttempt.FormData.ContainsKey("__iafSignedById"))
-                                    {
-                                        currentAttempt.FormData["__iafSignedById"] =
-                                            user!.Id.ToString();
-                                    }
+                                    currentAttempt.FormData["__iafSignedById"] =
+                                        user!.Id.ToString();
+
+                                    currentAttempt.FormData["agreedSupervisor"] =
+                                        user!.FullName?.Trim() ?? "";
                                 }
                                 
                                 if (status == "SupervisorSigned")
@@ -1671,139 +1669,22 @@ namespace FYPTracker.Controllers
         // ────────────────────────────────────────────────────────
         // Manage Availability
         [HttpGet]
-        public async Task<IActionResult> ManageAvailability()
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "User");
-            if (!user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("AccessDenied", "Home");
-            ViewBag.CurrentUser = user;
-
-            var availabilities = await _context.SupervisorAvailabilities
-                .Where(a => a.SupervisorId == user.Id)
-                .ToListAsync();
-
-            return View(availabilities);
-        }
+        public IActionResult ManageAvailability(string? sessionFilter = null) => RedirectToAction("ManageAvailability", "Timetable", new { sessionFilter });
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> SaveAvailability(SupervisorAvailability model, List<string> SelectedDays)
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "User");
-            if (!user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("AccessDenied", "Home");
-
-            model.SupervisorId = user.Id;
-            
-            if (model.Id == 0)
-            {
-                if (model.ScheduleType == "WeeklyDefault" && SelectedDays != null && SelectedDays.Any())
-                {
-                    // Validation: Prevent overlapping times on the same day
-                    foreach (var day in SelectedDays)
-                    {
-                        bool exists = await _context.SupervisorAvailabilities
-                            .AnyAsync(a => a.SupervisorId == user.Id && a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == day &&
-                                      ((model.StartTime >= a.StartTime && model.StartTime < a.EndTime) || 
-                                       (model.EndTime > a.StartTime && model.EndTime <= a.EndTime) ||
-                                       (model.StartTime <= a.StartTime && model.EndTime >= a.EndTime)));
-                            
-                        if (exists)
-                        {
-                            TempData["Error"] = $"You already have an overlapping schedule set for {day}. Please adjust the times.";
-                            return RedirectToAction(nameof(ManageAvailability));
-                        }
-                    }
-
-                    foreach (var day in SelectedDays)
-                    {
-                        var newModel = new SupervisorAvailability
-                        {
-                            SupervisorId = user.Id,
-                            ScheduleType = model.ScheduleType,
-                            DayOfWeek = day,
-                            SpecificDate = model.SpecificDate,
-                            StartTime = model.StartTime,
-                            EndTime = model.EndTime,
-                            IsAvailable = model.IsAvailable
-                        };
-                        _context.SupervisorAvailabilities.Add(newModel);
-                    }
-                }
-                else
-                {
-                    if (model.ScheduleType == "DateOverride" && model.SpecificDate.HasValue)
-                    {
-                        bool exists = await _context.SupervisorAvailabilities
-                            .AnyAsync(a => a.SupervisorId == user.Id && a.ScheduleType == "DateOverride" && a.SpecificDate.HasValue && a.SpecificDate.Value.Date == model.SpecificDate.Value.Date &&
-                                      ((model.StartTime >= a.StartTime && model.StartTime < a.EndTime) || 
-                                       (model.EndTime > a.StartTime && model.EndTime <= a.EndTime) ||
-                                       (model.StartTime <= a.StartTime && model.EndTime >= a.EndTime)));
-                            
-                        if (exists)
-                        {
-                            TempData["Error"] = $"You already have an overlapping override set for {model.SpecificDate.Value:dd MMM yyyy}. Please adjust the times.";
-                            return RedirectToAction(nameof(ManageAvailability));
-                        }
-                    }
-                    _context.SupervisorAvailabilities.Add(model);
-                }
-            }
-            else
-            {
-                var existing = await _context.SupervisorAvailabilities.FindAsync(model.Id);
-                if (existing != null && existing.SupervisorId == user.Id)
-                {
-                    existing.ScheduleType = model.ScheduleType;
-                    existing.DayOfWeek = model.DayOfWeek;
-                    existing.SpecificDate = model.SpecificDate;
-                    existing.StartTime = model.StartTime;
-                    existing.EndTime = model.EndTime;
-                    existing.IsAvailable = model.IsAvailable;
-                    _context.SupervisorAvailabilities.Update(existing);
-                }
-            }
-
-            await _context.SaveChangesAsync();
-            TempData["Success"] = "Availability saved successfully!";
-            return RedirectToAction(nameof(ManageAvailability));
-        }
+        public IActionResult SaveAvailability(SupervisorAvailability model, List<string> SelectedDays) => RedirectToAction("ManageAvailability", "Timetable");
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteAvailability(int id)
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "User");
-            if (!user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("AccessDenied", "Home");
-
-            var availability = await _context.SupervisorAvailabilities.FindAsync(id);
-            if (availability != null && availability.SupervisorId == user.Id)
-            {
-                _context.SupervisorAvailabilities.Remove(availability);
-                await _context.SaveChangesAsync();
-                TempData["Success"] = "Availability removed.";
-            }
-
-            return RedirectToAction(nameof(ManageAvailability));
-        }
+        public IActionResult DeleteAvailability(int id) => RedirectToAction("ManageAvailability", "Timetable");
 
         // ────────────────────────────────────────────────────────
         // Manage Meetings
         [HttpGet]
-        public async Task<IActionResult> GetBookedSlots(int supervisorId, string date)
-        {
-            if (!DateTime.TryParse(date, out var d)) return Json(new List<string>());
+        public IActionResult GetBookedSlots(int supervisorId, string date) => RedirectToAction("GetBookedSlots", "Timetable", new { supervisorId, date });
 
-            var bookedTimes = await _context.MeetingBookings
-                .Where(m => m.SupervisorId == supervisorId && m.MeetingDate.Date == d.Date && m.Status != "Rejected" && m.Status != "Cancelled")
-                .Select(m => m.MeetingTime)
-                .ToListAsync();
-
-            return Json(bookedTimes);
-        }
-
-        // ────────────────────────────────────────────────────────
+        // Manage Meetings
         public async Task<IActionResult> ManageMeetings(string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
@@ -1837,7 +1718,16 @@ namespace FYPTracker.Controllers
                 .OrderByDescending(m => m.CreatedDate)
                 .ToListAsync();
 
+            ViewBag.PendingReschedules = await _context.MeetingRescheduleRequests
+                .Include(r => r.Student)
+                .Where(r => r.SupervisorId == user.Id && r.Status == "Pending")
+                .ToListAsync();
+
             ViewBag.MsAccountConnected = !string.IsNullOrEmpty(user.MsAccessToken);
+
+            // Detect and attach all unresolved Busy Override conflicts with existing Pending / Approved meetings
+            var activeConflicts = await _weeklyMeetingSchedulingService.GetSupervisorActiveOverrideMeetingConflictsAsync(user.Id);
+            ViewBag.ActiveOverrideConflicts = activeConflicts;
 
             return View(meetings);
         }
@@ -1853,7 +1743,56 @@ namespace FYPTracker.Controllers
             {
                 var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
                 
+                if (status == "Postponed")
+                {
+                    var effectiveTime = !string.IsNullOrEmpty(newMeetingTime) ? newMeetingTime : meeting.MeetingTime;
+                    if (proposedDate.HasValue &&
+                        CommonExtensions.TryParseMeetingTime(effectiveTime, out var proposedTs) &&
+                        CommonExtensions.TryParseMeetingTime(meeting.MeetingTime, out var currentTs))
+                    {
+                        if (proposedDate.Value.Date == meeting.MeetingDate.Date && proposedTs == currentTs)
+                        {
+                            TempData["Error"] = "The proposed date and time are the same as your current meeting. Please select a different date or time.";
+                            return RedirectToAction(nameof(ManageMeetings));
+                        }
+                    }
+                }
 
+                if (status == "Approved")
+                {
+                    var durationMinutes = await _weeklyMeetingSchedulingService.GetMeetingDurationMinutesAsync();
+                    if (!durationMinutes.HasValue)
+                    {
+                        TempData["Error"] = "Meeting approval cannot proceed: Supervisor Meeting Duration has not been configured by the Admin.";
+                        return RedirectToAction(nameof(ManageMeetings));
+                    }
+
+                    var effectiveTime = !string.IsNullOrEmpty(newMeetingTime) ? newMeetingTime : meeting.MeetingTime;
+                    if (!CommonExtensions.TryParseMeetingTime(effectiveTime, out var startTimeSpan))
+                    {
+                        TempData["Error"] = "The meeting time is invalid.";
+                        return RedirectToAction(nameof(ManageMeetings));
+                    }
+
+                    var startDateTime = meeting.MeetingDate.Date.Add(startTimeSpan);
+                    var endDateTime = startDateTime.AddMinutes(durationMinutes.Value);
+
+                    var conflictReason = await _weeklyMeetingSchedulingService.ValidateMeetingConflictAsync(
+                        user.Id,
+                        startDateTime,
+                        endDateTime,
+                        excludeMeetingId: meeting.Id,
+                        sessionId: activeSession?.Id ?? meeting.AcademicSessionId);
+
+                    if (conflictReason != null)
+                    {
+                        TempData["Error"] = $"Cannot approve meeting: {conflictReason}";
+                        return RedirectToAction(nameof(ManageMeetings));
+                    }
+
+                    meeting.StartDateTime = startDateTime;
+                    meeting.EndDateTime = endDateTime;
+                }
 
                 meeting.Status = status;
                 meeting.SupervisorNote = note;
@@ -1948,6 +1887,41 @@ namespace FYPTracker.Controllers
             
             if (meeting != null && meeting.Status == "Pending")
             {
+                if (status == "Approved")
+                {
+                    var durationMinutes = await _weeklyMeetingSchedulingService.GetMeetingDurationMinutesAsync();
+                    if (!durationMinutes.HasValue)
+                    {
+                        TempData["Error"] = "Meeting approval cannot proceed: Supervisor Meeting Duration has not been configured by the Admin.";
+                        return RedirectToAction(nameof(Notifications));
+                    }
+
+                    if (!TimeSpan.TryParse(meeting.MeetingTime, out var startTimeSpan))
+                    {
+                        TempData["Error"] = "The meeting time is invalid.";
+                        return RedirectToAction(nameof(Notifications));
+                    }
+
+                    var startDateTime = meeting.MeetingDate.Date.Add(startTimeSpan);
+                    var endDateTime = startDateTime.AddMinutes(durationMinutes.Value);
+
+                    var conflictReason = await _weeklyMeetingSchedulingService.ValidateMeetingConflictAsync(
+                        user.Id,
+                        startDateTime,
+                        endDateTime,
+                        excludeMeetingId: meeting.Id,
+                        sessionId: meeting.AcademicSessionId);
+
+                    if (conflictReason != null)
+                    {
+                        TempData["Error"] = $"Cannot approve meeting: {conflictReason}";
+                        return RedirectToAction(nameof(Notifications));
+                    }
+
+                    meeting.StartDateTime = startDateTime;
+                    meeting.EndDateTime = endDateTime;
+                }
+
                 meeting.Status = status;
                 meeting.SupervisorNote = note;
                 meeting.RespondedDate = DateTime.Now;
@@ -2016,6 +1990,389 @@ namespace FYPTracker.Controllers
             }
             
             return RedirectToAction(nameof(Notifications));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RespondRescheduleRequest(int requestId, string status, string? reason, DateTime? proposedDate, string? proposedTime)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var request = await _context.MeetingRescheduleRequests
+                .Include(r => r.MeetingBooking)
+                .Include(r => r.Student)
+                .FirstOrDefaultAsync(r => r.Id == requestId && r.SupervisorId == user.Id && r.Status == "Pending");
+
+            if (request == null)
+            {
+                TempData["Error"] = "Reschedule request not found or already processed.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            if (status == "Approved")
+            {
+                if (request.MeetingBooking == null || request.MeetingBooking.Status != "Approved")
+                {
+                    TempData["Error"] = "Cannot approve reschedule: the original meeting is no longer in Approved status.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+
+                var meetingDur = await _weeklyMeetingSchedulingService.GetMeetingDurationMinutesAsync();
+                if (!meetingDur.HasValue)
+                {
+                    TempData["Error"] = "Reschedule approval cannot proceed: Supervisor Meeting Duration has not been configured by the Admin.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+
+                if (!CommonExtensions.TryParseMeetingTime(request.ProposedTime, out var startTimeSpan))
+                {
+                    TempData["Error"] = "The proposed time is invalid.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+
+                string normalizedTime = startTimeSpan.ToString(@"hh\:mm");
+                var startDateTime = request.ProposedDate.Date.Add(startTimeSpan);
+                var endDateTime = startDateTime.AddMinutes(meetingDur.Value);
+
+                var conflictReason = await _weeklyMeetingSchedulingService.ValidateMeetingConflictAsync(
+                    user.Id,
+                    startDateTime,
+                    endDateTime,
+                    excludeMeetingId: request.MeetingBookingId,
+                    sessionId: request.MeetingBooking?.AcademicSessionId);
+
+                if (conflictReason != null)
+                {
+                    TempData["Error"] = $"Cannot approve reschedule: {conflictReason}";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+
+                if (request.MeetingBooking != null)
+                {
+                    request.MeetingBooking.MeetingDate = request.ProposedDate;
+                    request.MeetingBooking.MeetingTime = normalizedTime;
+                    request.MeetingBooking.MeetingDay = request.ProposedDate.DayOfWeek.ToString();
+                    request.MeetingBooking.StartDateTime = startDateTime;
+                    request.MeetingBooking.EndDateTime = endDateTime;
+                    request.MeetingBooking.Status = "Approved";
+                }
+
+                request.Status = "Approved";
+                request.SupervisorResponse = reason;
+                request.RespondedDate = DateTime.Now;
+
+                await _context.SaveChangesAsync();
+                await AddNotificationAsync(request.StudentId, "Meeting", "Reschedule Approved", $"Your meeting reschedule request for {request.ProposedDate:dd MMM yyyy} at {request.ProposedTime} was approved.");
+                TempData["Success"] = "Reschedule request approved.";
+            }
+            else if (status == "Rejected")
+            {
+                request.Status = "Rejected";
+                request.SupervisorResponse = reason;
+                request.RespondedDate = DateTime.Now;
+
+                await _context.SaveChangesAsync();
+                await AddNotificationAsync(request.StudentId, "Meeting", "Reschedule Rejected", $"Your meeting reschedule request was rejected. Reason: {reason}");
+                TempData["Success"] = "Reschedule request rejected.";
+            }
+            else if (status == "CounterProposed")
+            {
+                if (request.MeetingBooking == null || request.MeetingBooking.Status != "Approved")
+                {
+                    TempData["Error"] = "Cannot propose reschedule: the original meeting is no longer in Approved status.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+
+                if (!proposedDate.HasValue || string.IsNullOrEmpty(proposedTime))
+                {
+                    TempData["Error"] = "Please select both a date and time to propose.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+
+                var meetingDur = await _weeklyMeetingSchedulingService.GetMeetingDurationMinutesAsync();
+                if (!meetingDur.HasValue)
+                {
+                    TempData["Error"] = "Counter proposal cannot proceed: Supervisor Meeting Duration has not been configured by the Admin.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+
+                if (!CommonExtensions.TryParseMeetingTime(proposedTime, out var startTimeSpan))
+                {
+                    TempData["Error"] = "The proposed time is invalid.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+
+                // Reject no-op reschedule requests where proposed date and time are identical to current booking
+                if (request.MeetingBooking != null && CommonExtensions.TryParseMeetingTime(request.MeetingBooking.MeetingTime, out var currentBookingTime))
+                {
+                    if (proposedDate.Value.Date == request.MeetingBooking.MeetingDate.Date && currentBookingTime == startTimeSpan)
+                    {
+                        TempData["Error"] = "The proposed date and time are the same as your current meeting. Please select a different date or time.";
+                        return RedirectToAction(nameof(ManageMeetings));
+                    }
+                }
+
+                string normalizedProposedTime = startTimeSpan.ToString(@"hh\:mm");
+                var startDateTime = proposedDate.Value.Date.Add(startTimeSpan);
+                var endDateTime = startDateTime.AddMinutes(meetingDur.Value);
+
+                var conflictReason = await _weeklyMeetingSchedulingService.ValidateMeetingConflictAsync(
+                    user.Id,
+                    startDateTime,
+                    endDateTime,
+                    excludeMeetingId: request.MeetingBookingId,
+                    sessionId: request.MeetingBooking?.AcademicSessionId);
+
+                if (conflictReason != null)
+                {
+                    TempData["Error"] = $"Cannot propose this slot: {conflictReason}";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+
+                request.Status = "CounterProposed";
+                request.ProposedDate = proposedDate.Value;
+                request.ProposedTime = normalizedProposedTime;
+                request.SupervisorResponse = reason;
+                request.RespondedDate = DateTime.Now;
+
+                await _context.SaveChangesAsync();
+                await AddNotificationAsync(request.StudentId, "Meeting", "Counter Proposal", $"Your supervisor proposed a new meeting date: {proposedDate.Value:dd MMM yyyy} at {normalizedProposedTime}.");
+                TempData["Success"] = "New date proposed to student.";
+            }
+
+            return RedirectToAction(nameof(ManageMeetings));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ProposeMeetingReschedule(int meetingId, DateTime proposedDate, string proposedTime, string reason)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var meeting = await _context.MeetingBookings
+                .Include(m => m.Student)
+                .FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
+
+            if (meeting == null)
+            {
+                TempData["Error"] = "Meeting not found or you are not authorized.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            if (meeting.Status != "Approved" && meeting.Status != "Pending")
+            {
+                TempData["Error"] = $"Cannot propose reschedule: meeting status is '{meeting.Status}'. Proposals are only allowed for active meetings.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
+            {
+                TempData["Error"] = "A valid reason (minimum 5 characters) is required when proposing a new meeting time.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            if (proposedDate.Date < DateTime.Today)
+            {
+                TempData["Error"] = "Proposed date cannot be in the past.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            var meetingDur = await _weeklyMeetingSchedulingService.GetMeetingDurationMinutesAsync();
+            if (!meetingDur.HasValue)
+            {
+                TempData["Error"] = "Cannot propose reschedule: Supervisor Meeting Duration has not been configured by the Admin.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            if (!CommonExtensions.TryParseMeetingTime(proposedTime, out var startTimeSpan))
+            {
+                TempData["Error"] = "The proposed time is invalid. Please select a valid time slot.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            // Reject no-op reschedule requests where proposed date and time are identical to current booking
+            if (CommonExtensions.TryParseMeetingTime(meeting.MeetingTime, out var currentBookingTime))
+            {
+                if (proposedDate.Date == meeting.MeetingDate.Date && currentBookingTime == startTimeSpan)
+                {
+                    TempData["Error"] = "The proposed date and time are the same as your current meeting. Please select a different date or time.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+            }
+
+            // Standardize proposedTime to 24-hour HH:mm string format for storage
+            string normalizedProposedTime = startTimeSpan.ToString(@"hh\:mm");
+
+            var startDateTime = proposedDate.Date.Add(startTimeSpan);
+            var endDateTime = startDateTime.AddMinutes(meetingDur.Value);
+
+            // Validate one meeting per week policy (excluding this meeting)
+            int diff = (7 + (proposedDate.DayOfWeek - DayOfWeek.Monday)) % 7;
+            var startOfProposedWeek = proposedDate.Date.AddDays(-1 * diff);
+            var endOfProposedWeek = startOfProposedWeek.AddDays(7);
+
+            var otherMeetingInProposedWeek = await _context.MeetingBookings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.StudentId == meeting.StudentId &&
+                                          m.Id != meeting.Id &&
+                                          m.MeetingDate >= startOfProposedWeek &&
+                                          m.MeetingDate < endOfProposedWeek &&
+                                          m.Status != "Rejected" && m.Status != "Cancelled" && m.Status != "Expired" && m.Status != "Postponed");
+
+            if (otherMeetingInProposedWeek != null)
+            {
+                TempData["Error"] = $"Cannot propose {proposedDate:dd MMM yyyy}: The student already has another meeting (Booking #{otherMeetingInProposedWeek.Id} on {otherMeetingInProposedWeek.MeetingDate:dd MMM yyyy}) scheduled for that week. FYP policy allows only one meeting per week.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            // Validate academic session
+            var studentSessionName = await _context.FYPProjects
+                .Where(p => p.StudentId == meeting.StudentId)
+                .OrderByDescending(p => p.CreatedDate)
+                .Select(p => p.AcademicSession)
+                .FirstOrDefaultAsync();
+            var session = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == studentSessionName)
+                          ?? await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Id == meeting.AcademicSessionId);
+
+            if (session != null && session.StartDate.HasValue && proposedDate.Date < session.StartDate.Value.Date)
+            {
+                TempData["Error"] = $"The proposed date cannot be before the academic session start date ({session.StartDate.Value:dd MMM yyyy}).";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            // Conflict check (teaching timetable, overrides, other meetings, defenses, vivas, working hours)
+            var conflictReason = await _weeklyMeetingSchedulingService.ValidateMeetingConflictAsync(
+                user.Id,
+                startDateTime,
+                endDateTime,
+                excludeMeetingId: meeting.Id,
+                sessionId: session?.Id ?? meeting.AcademicSessionId);
+
+            if (conflictReason != null)
+            {
+                TempData["Error"] = $"Cannot propose this slot: {conflictReason}";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var existingRequest = await _context.MeetingRescheduleRequests
+                    .FirstOrDefaultAsync(r => r.MeetingBookingId == meeting.Id && (r.Status == "Pending" || r.Status == "CounterProposed"));
+
+                if (existingRequest != null)
+                {
+                    existingRequest.ProposedDate = proposedDate.Date;
+                    existingRequest.ProposedTime = normalizedProposedTime;
+                    existingRequest.Reason = reason.Trim();
+                    existingRequest.SupervisorResponse = reason.Trim();
+                    existingRequest.Status = "CounterProposed";
+                    existingRequest.RespondedDate = DateTime.Now;
+                }
+                else
+                {
+                    var newRequest = new MeetingRescheduleRequest
+                    {
+                        MeetingBookingId = meeting.Id,
+                        StudentId = meeting.StudentId,
+                        SupervisorId = user.Id,
+                        OriginalDate = meeting.MeetingDate,
+                        OriginalTime = meeting.MeetingTime,
+                        ProposedDate = proposedDate.Date,
+                        ProposedTime = normalizedProposedTime,
+                        Reason = reason.Trim(),
+                        SupervisorResponse = reason.Trim(),
+                        Status = "CounterProposed",
+                        CreatedDate = DateTime.Now,
+                        RespondedDate = DateTime.Now
+                    };
+                    _context.MeetingRescheduleRequests.Add(newRequest);
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+
+            await AddNotificationAsync(meeting.StudentId, "Meeting", "Reschedule Proposal",
+                $"Your supervisor proposed a new meeting date: {proposedDate:dd MMM yyyy} at {proposedTime}. Reason: {reason.Trim()}");
+
+            TempData["Success"] = $"Reschedule proposal sent to {meeting.Student?.FullName ?? "the student"}. Awaiting student decision.";
+            return RedirectToAction(nameof(ManageMeetings));
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetSupervisorAvailableSlots(int meetingId, string date)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return Json(new { slots = new List<string>(), message = "Unauthorized" });
+
+            if (!DateTime.TryParse(date, out var parsedDate))
+                return Json(new { slots = new List<string>(), message = "Invalid date" });
+
+            if (parsedDate.Date < DateTime.Today)
+                return Json(new { slots = new List<string>(), message = "Selected date is in the past." });
+
+            var meeting = await _context.MeetingBookings.FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
+            if (meeting == null)
+                return Json(new { slots = new List<string>(), message = "Meeting not found." });
+
+            var meetingDur = await _weeklyMeetingSchedulingService.GetMeetingDurationMinutesAsync();
+            if (!meetingDur.HasValue)
+                return Json(new { slots = new List<string>(), message = "Supervisor meeting duration not configured in Admin Settings." });
+
+            // Validate one meeting per week
+            int diff = (7 + (parsedDate.DayOfWeek - DayOfWeek.Monday)) % 7;
+            var startOfWeek = parsedDate.Date.AddDays(-1 * diff);
+            var endOfWeek = startOfWeek.AddDays(7);
+
+            var otherMeetingThisWeek = await _context.MeetingBookings
+                .FirstOrDefaultAsync(m => m.StudentId == meeting.StudentId &&
+                                          m.Id != meeting.Id &&
+                                          m.MeetingDate >= startOfWeek &&
+                                          m.MeetingDate < endOfWeek &&
+                                          m.Status != "Rejected" && m.Status != "Cancelled" && m.Status != "Expired" && m.Status != "Postponed");
+            if (otherMeetingThisWeek != null)
+            {
+                return Json(new { slots = new List<string>(), message = $"Student already has another meeting on {otherMeetingThisWeek.MeetingDate:dd MMM yyyy} (Booking #{otherMeetingThisWeek.Id}) this week." });
+            }
+
+            var startSetting = await _context.FYPSettings.FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursStart");
+            var endSetting = await _context.FYPSettings.FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursEnd");
+            if (startSetting == null || !TimeSpan.TryParse(startSetting.Value, out var workStart) ||
+                endSetting == null || !TimeSpan.TryParse(endSetting.Value, out var workEnd))
+            {
+                return Json(new { slots = new List<string>(), message = "Lecturer working hours not configured." });
+            }
+
+            var availableSlots = new List<string>();
+            var displaySlots = new List<string>();
+            for (var time = workStart; time.Add(TimeSpan.FromMinutes(meetingDur.Value)) <= workEnd; time = time.Add(TimeSpan.FromMinutes(30)))
+            {
+                var startDt = parsedDate.Date.Add(time);
+                var endDt = startDt.AddMinutes(meetingDur.Value);
+
+                var conflict = await _weeklyMeetingSchedulingService.ValidateMeetingConflictAsync(
+                    user.Id,
+                    startDt,
+                    endDt,
+                    excludeMeetingId: meeting.Id,
+                    sessionId: meeting.AcademicSessionId);
+
+                if (conflict == null)
+                {
+                    availableSlots.Add(time.ToString(@"hh\:mm"));
+                    displaySlots.Add(DateTime.Today.Add(time).ToString("h:mm tt"));
+                }
+            }
+
+            return Json(new { slots = availableSlots, displaySlots = displaySlots });
         }
 
         // Generates the immutable signed PDF BEFORE committing the Signed status.
@@ -2469,20 +2826,60 @@ namespace FYPTracker.Controllers
                 .ToListAsync();
 
             var events = meetings.Select(m => {
-                string startTimeStr = m.MeetingTime ?? "09:00 AM";
                 DateTime startDt;
-                if (!DateTime.TryParse($"{m.MeetingDate:yyyy-MM-dd} {startTimeStr}", out startDt))
-                    startDt = m.MeetingDate;
+                if (m.StartDateTime.HasValue)
+                {
+                    startDt = m.StartDateTime.Value;
+                }
+                else if (CommonExtensions.TryParseMeetingTime(m.MeetingTime, out var ts))
+                {
+                    startDt = m.MeetingDate.Date.Add(ts);
+                }
+                else
+                {
+                    startDt = m.MeetingDate.Date.AddHours(9);
+                }
 
-                string color = m.Status == "Approved" ? "#10b981" : (m.Status == "Pending" ? "#f59e0b" : "#ef4444");
+                DateTime endDt = m.EndDateTime.HasValue ? m.EndDateTime.Value : startDt.AddMinutes(30);
+                if (endDt <= startDt)
+                {
+                    endDt = startDt.AddMinutes(30);
+                }
+
+                string color = m.Status == "Approved" ? "#10b981" : "#f59e0b";
+                string studentName = m.Student?.FullName ?? "Student";
+                string title = $"Meeting: {studentName}";
+
+                string displayTime = !string.IsNullOrEmpty(m.MeetingTime) ? m.MeetingTime : startDt.ToString("hh:mm tt");
+                if (CommonExtensions.TryParseMeetingTime(m.MeetingTime, out var dTs))
+                {
+                    displayTime = DateTime.Today.Add(dTs).ToString("h:mm tt");
+                }
 
                 return new {
-                    id = m.Id,
-                    title = $"Meeting: {m.Student?.FullName ?? "Student"}",
-                    start = startDt.ToString("yyyy-MM-ddTHH:mm:00"),
-                    description = $"Status: {m.Status}\nLocation: {m.Location ?? "TBA"}\nReason: {m.Reason}",
+                    id = m.Id.ToString(),
+                    title = title,
+                    start = startDt.ToString("yyyy-MM-ddTHH:mm:ss"),
+                    end = endDt.ToString("yyyy-MM-ddTHH:mm:ss"),
+                    allDay = false,
                     color = color,
-                    url = Url.Action("ManageMeetings", "Supervisor")
+                    textColor = "#ffffff",
+                    extendedProps = new {
+                        meetingId = m.Id,
+                        status = m.Status,
+                        location = m.Location ?? "TBA",
+                        meetingLink = m.MeetingLink,
+                        reason = m.Reason ?? "None",
+                        supervisorNote = m.SupervisorNote ?? "None",
+                        meetingDate = m.MeetingDate.ToString("yyyy-MM-dd"),
+                        meetingDateFormatted = m.MeetingDate.ToString("dd MMM yyyy"),
+                        meetingTime = displayTime,
+                        timeRange = $"{startDt:h:mm tt} - {endDt:h:mm tt}",
+                        studentName = studentName,
+                        proposedDate = m.ProposedNewDate?.ToString("yyyy-MM-dd") ?? "",
+                        stage = m.Stage ?? 1,
+                        weekNumber = m.WeekNumber ?? 0
+                    }
                 };
             }).ToList();
 
@@ -2829,155 +3226,12 @@ namespace FYPTracker.Controllers
 
         // --- Timetable Management ---
         [HttpGet]
-        public async Task<IActionResult> ManageTimetable()
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "User");
-
-            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true);
-            var entries = new List<SupervisorTimetableEntry>();
-            if (activeSession == null)
-            {
-                TempData["Error"] = "No active academic session found. You cannot upload a timetable without an active session.";
-                ViewBag.ActiveSessionName = "None";
-            }
-            else
-            {
-                entries = await _context.SupervisorTimetableEntries
-                    .Where(t => t.SupervisorId == user.Id && t.AcademicSessionId == activeSession.Id)
-                    .ToListAsync();
-                ViewBag.ActiveSessionName = activeSession.Name;
-            }
-
-            return View(entries);
-        }
+        public IActionResult ManageTimetable(string? sessionFilter = null) => RedirectToAction("ManageTimetable", "Timetable", new { sessionFilter });
 
         [HttpPost]
-        public async Task<IActionResult> PreviewTimetable(IFormFile timetableFile)
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "User");
-
-            if (timetableFile == null || timetableFile.Length == 0)
-            {
-                TempData["Error"] = "Please upload a valid CSV file.";
-                return RedirectToAction(nameof(ManageTimetable));
-            }
-
-            var entries = new List<SupervisorTimetableEntry>();
-            using (var reader = new StreamReader(timetableFile.OpenReadStream()))
-            {
-                // skip header
-                if (!reader.EndOfStream) await reader.ReadLineAsync();
-
-                while (!reader.EndOfStream)
-                {
-                    var line = await reader.ReadLineAsync();
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-                    
-                    var values = line.Split(',');
-                    if (values.Length >= 3)
-                    {
-                        string NormalizeDay(string d)
-                        {
-                            if (int.TryParse(d, out int dayInt) && dayInt >= 1 && dayInt <= 7)
-                            {
-                                return ((DayOfWeek)(dayInt % 7)).ToString();
-                            }
-                            return d;
-                        }
-
-                        var entry = new SupervisorTimetableEntry
-                        {
-                            DayOfWeek = NormalizeDay(values[0].Trim()),
-                            Details = values.Length > 3 ? values[3].Trim() : ""
-                        };
-                        
-                        TimeSpan? ParseTime(string val)
-                        {
-                            val = val.Trim();
-                            if (string.IsNullOrEmpty(val)) return null;
-
-                            if (int.TryParse(val, out int hour) && hour >= 0 && hour <= 23)
-                            {
-                                return TimeSpan.FromHours(hour);
-                            }
-
-                            val = val.Replace(".", ":");
-
-                            if (DateTime.TryParse(val, out var dt))
-                            {
-                                return dt.TimeOfDay;
-                            }
-
-                            if (TimeSpan.TryParse(val, out var ts))
-                            {
-                                if (ts.Days > 0 && ts.Hours == 0 && ts.Minutes == 0) ts = TimeSpan.FromHours(ts.Days);
-                                if (ts >= TimeSpan.Zero && ts < TimeSpan.FromHours(24))
-                                    return ts;
-                            }
-                            
-                            return null;
-                        }
-
-                        var parsedStart = ParseTime(values[1]);
-                        var parsedEnd = ParseTime(values[2]);
-                        
-                        if (parsedStart.HasValue && parsedEnd.HasValue)
-                        {
-                            entry.StartTime = parsedStart.Value;
-                            entry.EndTime = parsedEnd.Value;
-                            entries.Add(entry);
-                        }
-                    }
-                }
-            }
-
-            // Save to temp storage for preview
-            TempData["TimetablePreview"] = System.Text.Json.JsonSerializer.Serialize(entries);
-            return View("PreviewTimetable", entries);
-        }
+        public IActionResult PreviewTimetable(IFormFile timetableFile, string? sessionFilter) => RedirectToAction("ManageTimetable", "Timetable", new { sessionFilter });
 
         [HttpPost]
-        public async Task<IActionResult> SaveTimetable()
-        {
-            var user = await GetCurrentUserAsync();
-            if (user == null) return RedirectToAction("Login", "User");
-
-            var activeSession = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.IsCurrent == true);
-            if (activeSession == null) 
-            {
-                TempData["Error"] = "No active academic session found. Cannot save timetable.";
-                return RedirectToAction(nameof(ManageTimetable));
-            }
-
-            var previewJson = TempData["TimetablePreview"] as string;
-            if (string.IsNullOrEmpty(previewJson))
-            {
-                TempData["Error"] = "Session expired. Please upload again.";
-                return RedirectToAction(nameof(ManageTimetable));
-            }
-
-            var parsedEntries = System.Text.Json.JsonSerializer.Deserialize<List<SupervisorTimetableEntry>>(previewJson);
-            if (parsedEntries != null && parsedEntries.Any())
-            {
-                // Delete old ones
-                var oldEntries = await _context.SupervisorTimetableEntries
-                    .Where(t => t.SupervisorId == user.Id && t.AcademicSessionId == activeSession.Id)
-                    .ToListAsync();
-                _context.SupervisorTimetableEntries.RemoveRange(oldEntries);
-
-                foreach (var entry in parsedEntries)
-                {
-                    entry.SupervisorId = user.Id;
-                    entry.AcademicSessionId = activeSession.Id;
-                    _context.SupervisorTimetableEntries.Add(entry);
-                }
-                await _context.SaveChangesAsync();
-                TempData["Success"] = "Timetable successfully updated.";
-            }
-            
-            return RedirectToAction(nameof(ManageTimetable));
-        }
+        public IActionResult SaveTimetable() => RedirectToAction("ManageTimetable", "Timetable");
     }
 }
