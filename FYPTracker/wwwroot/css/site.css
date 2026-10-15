@@ -74,7 +74,7 @@ textarea.form-control {
 }
 
 /* Responsive profile */
-@media (max-width: 1199.98px) {
+@media (max-width: 575.98px) {
     #kt_header .topbar-profile-info,
     #kt_header .topbar-profile-arrow {
         display: none !important;

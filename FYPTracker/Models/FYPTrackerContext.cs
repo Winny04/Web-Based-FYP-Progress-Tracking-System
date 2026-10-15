@@ -51,6 +51,7 @@ namespace FYPTracker.Models
         // ── IAF Defense Module ─────────────────────────────────────
         public virtual DbSet<IAFDefenseBooking>  IAFDefenseBookings { get; set; } = null!;
         public virtual DbSet<IAFDefenseHistory>  IAFDefenseHistories { get; set; } = null!;
+        public virtual DbSet<IAFAlternativeTimeRequest> IAFAlternativeTimeRequests { get; set; } = null!;
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -392,6 +393,80 @@ namespace FYPTracker.Models
 
                 entity.HasIndex(e => e.Timestamp)
                       .HasDatabaseName("IX_IAFDefenseHistory_Timestamp");
+            });
+
+            // ── IAF Alternative Time Request ──────────────────────────
+            modelBuilder.Entity<IAFAlternativeTimeRequest>(entity =>
+            {
+                entity.ToTable("IAFAlternativeTimeRequest");
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.RowVersion).IsRowVersion();
+
+                // Delete behaviors: Restrict cascading deletes
+                entity.HasOne(e => e.Milestone)
+                      .WithMany()
+                      .HasForeignKey(e => e.MilestoneId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.AcademicSession)
+                      .WithMany()
+                      .HasForeignKey(e => e.AcademicSessionId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.RequestedLecturer)
+                      .WithMany()
+                      .HasForeignKey(e => e.RequestedLecturerId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.RequestedByAdmin)
+                      .WithMany()
+                      .HasForeignKey(e => e.RequestedByAdminId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.FinalizedByAdmin)
+                      .WithMany()
+                      .HasForeignKey(e => e.FinalizedByAdminId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                // Filtered Unique Index: Only ONE active (Pending or Suggested) request per milestone attempt
+                entity.HasIndex(e => new { e.MilestoneId, e.AttemptNumber })
+                      .HasFilter("[Status] IN ('Pending', 'Suggested')")
+                      .IsUnique()
+                      .HasDatabaseName("UQ_IAFAlternativeTimeRequest_ActiveMilestoneAttempt");
+
+                // Lookup indexes for lecturer inbox and admin monitoring
+                entity.HasIndex(e => new { e.RequestedLecturerId, e.Status })
+                      .HasDatabaseName("IX_IAFAlternativeTimeRequest_LecturerStatus");
+
+                entity.HasIndex(e => new { e.MilestoneId, e.AttemptNumber, e.Status })
+                      .HasDatabaseName("IX_IAFAlternativeTimeRequest_MilestoneAttemptStatus");
+            });
+
+            // MeetingRescheduleRequest: Fix SQL Server error 1785 (multiple cascade paths)
+            modelBuilder.Entity<MeetingRescheduleRequest>(entity =>
+            {
+                entity.ToTable("MeetingRescheduleRequest");
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.MeetingBooking)
+                      .WithMany()
+                      .HasForeignKey(e => e.MeetingBookingId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Student)
+                      .WithMany()
+                      .HasForeignKey(e => e.StudentId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasOne(e => e.Supervisor)
+                      .WithMany()
+                      .HasForeignKey(e => e.SupervisorId)
+                      .OnDelete(DeleteBehavior.NoAction);
+
+                entity.HasIndex(e => e.MeetingBookingId);
+                entity.HasIndex(e => e.StudentId);
+                entity.HasIndex(e => e.SupervisorId);
             });
 
             OnModelCreatingPartial(modelBuilder);

@@ -843,6 +843,102 @@ namespace FYPTracker.Migrations
                     b.ToTable("FYPSubmissionFile", (string)null);
                 });
 
+            modelBuilder.Entity("FYPTracker.Models.IAFAlternativeTimeRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AcademicSessionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("AdminNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("AttemptNumber")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("FinalizedAt")
+                        .HasColumnType("datetime");
+
+                    b.Property<int?>("FinalizedByAdminId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LecturerNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("MilestoneId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RequestedByAdminId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RequestedLecturerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RequestedLecturerRole")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("datetime");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime?>("SuggestedDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("SuggestedDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<TimeSpan?>("SuggestedEndTime")
+                        .HasColumnType("time");
+
+                    b.Property<TimeSpan?>("SuggestedStartTime")
+                        .HasColumnType("time");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcademicSessionId");
+
+                    b.HasIndex("FinalizedByAdminId");
+
+                    b.HasIndex("RequestedByAdminId");
+
+                    b.HasIndex("MilestoneId", "AttemptNumber")
+                        .IsUnique()
+                        .HasDatabaseName("UQ_IAFAlternativeTimeRequest_ActiveMilestoneAttempt")
+                        .HasFilter("[Status] IN ('Pending', 'Suggested')");
+
+                    b.HasIndex("RequestedLecturerId", "Status")
+                        .HasDatabaseName("IX_IAFAlternativeTimeRequest_LecturerStatus");
+
+                    b.HasIndex("MilestoneId", "AttemptNumber", "Status")
+                        .HasDatabaseName("IX_IAFAlternativeTimeRequest_MilestoneAttemptStatus");
+
+                    b.ToTable("IAFAlternativeTimeRequest", (string)null);
+                });
+
             modelBuilder.Entity("FYPTracker.Models.IAFDefenseBooking", b =>
                 {
                     b.Property<int>("Id")
@@ -1716,6 +1812,48 @@ namespace FYPTracker.Migrations
                     b.Navigation("Milestone");
 
                     b.Navigation("Uploader");
+                });
+
+            modelBuilder.Entity("FYPTracker.Models.IAFAlternativeTimeRequest", b =>
+                {
+                    b.HasOne("FYPTracker.Models.AcademicSession", "AcademicSession")
+                        .WithMany()
+                        .HasForeignKey("AcademicSessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "FinalizedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("FinalizedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FYPTracker.Models.FYPMilestone", "Milestone")
+                        .WithMany()
+                        .HasForeignKey("MilestoneId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "RequestedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("RequestedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FYPTracker.Models.ApplicationUser", "RequestedLecturer")
+                        .WithMany()
+                        .HasForeignKey("RequestedLecturerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AcademicSession");
+
+                    b.Navigation("FinalizedByAdmin");
+
+                    b.Navigation("Milestone");
+
+                    b.Navigation("RequestedByAdmin");
+
+                    b.Navigation("RequestedLecturer");
                 });
 
             modelBuilder.Entity("FYPTracker.Models.IAFDefenseBooking", b =>

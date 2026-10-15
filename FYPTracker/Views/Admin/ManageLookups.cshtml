@@ -128,15 +128,15 @@
                                 Set as Current Session
                             </label>
                         </div>
-                        <h6 class="mt-4 mb-2 text-dark fw-bold">Meeting Requirements</h6>
+                        <h6 class="mt-4 mb-2 text-dark fw-bold">Meeting Requirements (Min: 10, Max: 14)</h6>
                         <div class="row">
                             <div class="col-md-6 fv-row mb-3">
                                 <label class="fs-6 fw-bold form-label text-muted text-uppercase small mb-2">Stage 1 Required Meetings</label>
-                                <input type="number" min="0" max="52" class="form-control form-control-solid rounded-3" id="lookupReq1" placeholder="e.g. 14" />
+                                <input type="number" min="10" max="14" class="form-control form-control-solid rounded-3" id="lookupReq1" placeholder="e.g. 10 (10–14)" />
                             </div>
                             <div class="col-md-6 fv-row mb-3">
                                 <label class="fs-6 fw-bold form-label text-muted text-uppercase small mb-2">Stage 2 Required Meetings</label>
-                                <input type="number" min="0" max="52" class="form-control form-control-solid rounded-3" id="lookupReq2" placeholder="e.g. 12" />
+                                <input type="number" min="10" max="14" class="form-control form-control-solid rounded-3" id="lookupReq2" placeholder="e.g. 10 (10–14)" />
                             </div>
                         </div>
                     </div>
@@ -181,6 +181,14 @@
                     data.requiredMeetingsStage2 = $('#lookupReq2').val();
                     if (!data.startDate || !data.endDate) {
                         Swal.fire("Error", "Start Date and End Date are required for Academic Session.", "error");
+                        return;
+                    }
+                    if (data.requiredMeetingsStage1 && (parseInt(data.requiredMeetingsStage1) < 10 || parseInt(data.requiredMeetingsStage1) > 14)) {
+                        Swal.fire("Error", "Stage 1 Required Meetings must be between 10 and 14.", "error");
+                        return;
+                    }
+                    if (data.requiredMeetingsStage2 && (parseInt(data.requiredMeetingsStage2) < 10 || parseInt(data.requiredMeetingsStage2) > 14)) {
+                        Swal.fire("Error", "Stage 2 Required Meetings must be between 10 and 14.", "error");
                         return;
                     }
                 }

@@ -42,105 +42,168 @@
 
         <!-- Evaluation Form (Right Side) -->
         <div class="col-lg-6 bg-white overflow-auto" style="height: calc(100vh - 180px);">
-            <div class="p-5">
+            <div class="p-4 p-xl-5">
                 <form asp-controller="@postController" asp-action="@postAction" method="post" id="marksheetForm">
+                    @Html.AntiForgeryToken()
                     <input type="hidden" name="milestoneId" value="@Model.Id" />
                     <!-- We'll store the JSON data here -->
                     <input type="hidden" name="marksheetData" id="marksheetData" value="@existingMarks" />
 
-                    <!-- Technical Depth -->
-                    <div class="mb-5">
-                        <div class="d-flex justify-content-between mb-2">
-                            <label class="fw-bold fs-5 text-dark">Technical Depth & Complexity</label>
-                            <span class="badge bg-dark fs-6" id="valTech">0/100</span>
+                    <div class="d-flex align-items-center justify-content-between mb-4 pb-2 border-bottom">
+                        <div>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill fs-8 fw-bold text-uppercase">
+                                <i class="fas fa-layer-group me-1"></i> Stage 1 Rubric
+                            </span>
                         </div>
-                        <p class="text-muted small mb-3">Evaluates the complexity of the solution, analytical rigor, and depth of technical discussion.</p>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreTech" oninput="updateScore('Tech')">
-                            <span class="badge bg-secondary ms-3" id="weightTech">Weight: 0/4</span>
+                        <div class="text-muted small">
+                            Role: <span class="fw-bold text-dark">@ViewBag.Role</span>
                         </div>
                     </div>
 
-                    <!-- Literature Review -->
-                    <div class="mb-5">
-                        <div class="d-flex justify-content-between mb-2">
-                            <label class="fw-bold fs-5 text-dark">Literature Review & Research</label>
-                            <span class="badge bg-dark fs-6" id="valLit">0/100</span>
-                        </div>
-                        <p class="text-muted small mb-3">Evaluates the comprehensive use of sources, critical analysis of existing work, and synthesis of ideas.</p>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreLit" oninput="updateScore('Lit')">
-                            <span class="badge bg-secondary ms-3" id="weightLit">Weight: 0/4</span>
-                        </div>
-                    </div>
-
-                    <!-- Methodology -->
-                    <div class="mb-5">
-                        <div class="d-flex justify-content-between mb-2">
-                            <label class="fw-bold fs-5 text-dark">Methodology & Approach</label>
-                            <span class="badge bg-dark fs-6" id="valMeth">0/100</span>
-                        </div>
-                        <p class="text-muted small mb-3">Evaluates the systematic approach, experimental design, and justification of methods used.</p>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreMeth" oninput="updateScore('Meth')">
-                            <span class="badge bg-secondary ms-3" id="weightMeth">Weight: 0/4</span>
+                    <!-- Technical Depth Card -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">1. Technical Depth & Complexity</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valTech">0/100</span>
+                            </div>
+                            <p class="text-muted small mb-3">Evaluates the complexity of the solution, analytical rigor, and depth of technical discussion.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreTech" oninput="updateScore('Tech')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightTech">Weight: 0/4</span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Presentation -->
-                    <div class="mb-5">
-                        <div class="d-flex justify-content-between mb-2">
-                            <label class="fw-bold fs-5 text-dark">Presentation & Formatting</label>
-                            <span class="badge bg-dark fs-6" id="valPres">0/100</span>
+                    <!-- Literature Review Card -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">2. Literature Review & Research</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valLit">0/100</span>
+                            </div>
+                            <p class="text-muted small mb-3">Evaluates the comprehensive use of sources, critical analysis of existing work, and synthesis of ideas.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreLit" oninput="updateScore('Lit')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightLit">Weight: 0/4</span>
+                            </div>
                         </div>
-                        <p class="text-muted small mb-3">Evaluates clarity, grammar, structural flow, citations, and overall academic formatting.</p>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scorePres" oninput="updateScore('Pres')">
-                            <span class="badge bg-secondary ms-3" id="weightPres">Weight: 0/4</span>
+                    </div>
+
+                    <!-- Methodology Card -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">3. Methodology & Approach</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valMeth">0/100</span>
+                            </div>
+                            <p class="text-muted small mb-3">Evaluates the systematic approach, experimental design, and justification of methods used.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreMeth" oninput="updateScore('Meth')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightMeth">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Presentation Card -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">4. Presentation & Formatting</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valPres">0/100</span>
+                            </div>
+                            <p class="text-muted small mb-3">Evaluates clarity, grammar, structural flow, citations, and overall academic formatting.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scorePres" oninput="updateScore('Pres')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightPres">Weight: 0/4</span>
+                            </div>
                         </div>
                     </div>
 
                     @if (ViewBag.Role == "Supervisor")
                     {
-                        <!-- Supervisor only: Process & Attitude -->
-                        <div class="mb-5 p-4 rounded-3" style="background: rgba(139, 92, 246, 0.05); border: 1px solid rgba(139, 92, 246, 0.2);">
-                            <div class="d-flex justify-content-between mb-2">
-                                <label class="fw-bold fs-5 text-primary"><i class="fas fa-user-graduate me-2"></i>Process & Attitude (Supervisor Only)</label>
-                                <span class="badge bg-primary fs-6" id="valAttitude">0/100</span>
-                            </div>
-                            <p class="text-muted small mb-3">Evaluates the student's independence, consistency in meetings, and response to feedback throughout the semester.</p>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <input type="range" class="form-range custom-range custom-range-primary w-75" min="0" max="4" step="1" value="0" id="scoreAttitude" oninput="updateScore('Attitude')">
-                                <span class="badge bg-secondary ms-3" id="weightAttitude">Weight: 0/4</span>
+                        <!-- Supervisor only: Process & Attitude Card -->
+                        <div class="card border-primary border-opacity-25 shadow-sm rounded-3 mb-4 criterion-card" style="background: rgba(139, 92, 246, 0.03);">
+                            <div class="card-body p-4">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="fw-bold fs-6 text-primary mb-0"><i class="fas fa-user-graduate me-2"></i>5. Process & Attitude (Supervisor Only)</label>
+                                    <span class="badge bg-primary fs-7 px-3 py-2 rounded-pill" id="valAttitude">0/100</span>
+                                </div>
+                                <p class="text-muted small mb-3">Evaluates the student's independence, consistency in meetings, and response to feedback throughout the semester.</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <input type="range" class="form-range custom-range custom-range-primary w-75" min="0" max="4" step="1" value="0" id="scoreAttitude" oninput="updateScore('Attitude')">
+                                    <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightAttitude">Weight: 0/4</span>
+                                </div>
                             </div>
                         </div>
                     }
 
-                    <div class="mb-5">
-                        <label class="fw-bold fs-5 text-dark mb-2">Qualitative Feedback</label>
-                        <textarea class="form-control bg-light" id="feedbackText" rows="6" placeholder="Provide detailed feedback, strengths, and areas for improvement..."></textarea>
+                    <!-- Qualitative Feedback Card -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4">
+                        <div class="card-body p-4">
+                            <label class="fw-bold fs-6 text-dark mb-2"><i class="fas fa-comment-alt text-primary me-2"></i>Overall Qualitative Feedback</label>
+                            <p class="text-muted small mb-2">Provide detailed observations, strengths, and areas requiring remediation.</p>
+                            <textarea class="form-control bg-light" id="feedbackText" rows="5" placeholder="Provide detailed feedback, strengths, and areas for improvement..."></textarea>
+                        </div>
                     </div>
 
                     @if (ViewBag.Role == "Examiner")
                     {
-                        <div class="mb-5 p-4 rounded-3" style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2);">
-                            <label class="fw-bold fs-5 text-danger mb-2"><i class="fas fa-gavel me-2"></i>Stage 1 Result</label>
-                            <p class="text-muted small mb-3">Please determine if the student passes Stage 1 and is allowed to proceed to Stage 2.</p>
-                            <select class="form-select border-danger" name="stage1Grade" id="stage1Grade" required>
-                                <option value="" disabled selected>-- Select Result --</option>
-                                <option value="Pass" selected="@(Model.Project?.Stage1Grade == "Pass")">Pass - Proceed to Stage 2</option>
-                                <option value="Fail" selected="@(Model.Project?.Stage1Grade == "Fail")">Fail - Must Retake Stage 1</option>
-                            </select>
+                        <!-- Stage 1 Pass / Fail Decision Card -->
+                        <div class="card border-danger border-opacity-25 shadow-sm rounded-3 mb-4" style="background: rgba(239, 68, 68, 0.03);">
+                            <div class="card-body p-4">
+                                <label class="fw-bold fs-6 text-danger mb-2"><i class="fas fa-gavel me-2"></i>Stage 1 Result Decision</label>
+                                <p class="text-muted small mb-3">Please determine the Stage 1 outcome. If remediation is required, Stage 2 may continue concurrently.</p>
+                                <select class="form-select border-danger" name="stage1Grade" id="stage1Grade" required>
+                                    <option value="" disabled selected>-- Select Result --</option>
+                                    <option value="Pass" selected="@(Model.Project?.Stage1Grade == "Pass")">Pass - Stage 1 Completed</option>
+                                    <option value="Fail" selected="@(Model.Project?.Stage1Grade == "Fail")">Fail - Stage 1 Remediation Required (Stage 2 may continue concurrently)</option>
+                                </select>
+                            </div>
                         </div>
                     }
 
-                    <div class="d-flex justify-content-between align-items-center mt-5 pt-3 border-top">
+                    <!-- Sticky / Border Bottom Submission Footer -->
+                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
                         <div class="fs-4 fw-bold text-dark">
                             Total Score: <span id="totalScore" class="text-primary">0</span><span class="text-muted fs-5">/100</span>
                         </div>
-                        <button type="button" class="btn btn-primary btn-lg px-5 rounded-pill shadow-sm d-flex align-items-center" onclick="submitMarksheet()">
+                        <button type="button" class="btn btn-primary btn-lg px-5 rounded-pill shadow-sm d-flex align-items-center" onclick="confirmSubmission()">
                             <i class="fas fa-paper-plane me-2"></i> Submit Final Marks
                         </button>
+                    </div>
+
+                    <!-- Confirmation Modal -->
+                    <div class="modal fade" id="submitConfirmModal" tabindex="-1" aria-labelledby="submitConfirmModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content border-0 shadow">
+                                <div class="modal-header bg-light">
+                                    <h5 class="modal-title fw-bold text-dark" id="submitConfirmModalLabel"><i class="fas fa-check-circle text-primary me-2"></i>Confirm Final Submission</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body p-4">
+                                    <p class="mb-3 text-dark">Are you sure you want to submit your final marks for <strong class="text-primary">@Model.Project?.Student?.FullName</strong>?</p>
+                                    <div class="p-3 bg-light rounded-3 border mb-3">
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted small">Calculated Raw Total:</span>
+                                            <span class="fw-bold text-dark" id="modalConfirmTotal">0/100</span>
+                                        </div>
+                                        @if (ViewBag.Role == "Examiner")
+                                        {
+                                            <div class="d-flex justify-content-between">
+                                                <span class="text-muted small">Selected Result:</span>
+                                                <span class="fw-bold text-dark" id="modalConfirmResult">-</span>
+                                            </div>
+                                        }
+                                    </div>
+                                    <p class="text-muted small mb-0"><i class="fas fa-info-circle me-1"></i>Once submitted, your evaluation will be saved and ready for joint grading calculation.</p>
+                                </div>
+                                <div class="modal-footer bg-light">
+                                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" class="btn btn-primary rounded-pill px-4" id="modalConfirmSubmitBtn" onclick="executeSubmit()">Confirm & Submit</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -164,6 +227,12 @@
     }
     .custom-range-primary::-webkit-slider-thumb {
         background: #8b5cf6;
+    }
+    .criterion-card {
+        transition: box-shadow 0.2s ease-in-out;
+    }
+    .criterion-card:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08) !important;
     }
 </style>
 
@@ -221,12 +290,12 @@
             let roundedTotal = Math.round(total);
             document.getElementById('totalScore').innerText = roundedTotal;
             
-            // Validation: Examiner cannot select Pass if score < 50
+            // Validation: Examiner cannot select Pass if score < 40
             let stage1GradeSelect = document.getElementById('stage1Grade');
             if (stage1GradeSelect) {
                 let passOption = stage1GradeSelect.querySelector('option[value="Pass"]');
                 if (passOption) {
-                    if (roundedTotal < 50) {
+                    if (roundedTotal < 40) {
                         passOption.disabled = true;
                         if (stage1GradeSelect.value === 'Pass') {
                             stage1GradeSelect.value = ''; 
@@ -238,10 +307,32 @@
             }
         }
 
-        function submitMarksheet() {
+        function confirmSubmission() {
             let form = document.getElementById('marksheetForm');
             if (!form.reportValidity()) {
-                return; // Prevent submission if required fields (like Pass/Fail select) are missing
+                return; // Prevent modal if required fields (like Pass/Fail select) are missing
+            }
+
+            let totalText = document.getElementById('totalScore').innerText;
+            document.getElementById('modalConfirmTotal').innerText = totalText + "/100";
+
+            let stage1GradeSelect = document.getElementById('stage1Grade');
+            if (stage1GradeSelect) {
+                let resText = stage1GradeSelect.options[stage1GradeSelect.selectedIndex]?.text || '-';
+                document.getElementById('modalConfirmResult').innerText = resText;
+            }
+
+            let modalEl = document.getElementById('submitConfirmModal');
+            let modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        function executeSubmit() {
+            let form = document.getElementById('marksheetForm');
+            let confirmBtn = document.getElementById('modalConfirmSubmitBtn');
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Submitting...';
             }
 
             let data = {

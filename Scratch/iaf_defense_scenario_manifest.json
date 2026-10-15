@@ -1,0 +1,174 @@
+{
+  "Timestamp": "2026-10-15T22:11:35+08:00",
+  "TargetDatabase": "Boon\\SQLEXPRESS / FYPTracker_Development",
+  "BackupFile": "C:\\Program Files\\Microsoft SQL Server\\MSSQL16.SQLEXPRESS\\MSSQL\\Backup\\FYPTracker_Development_PreIAFDefense_20261015_220630.bak",
+  "Description": "Manifest of modified and created/deleted records for the 4 synthetic IAF Defense testing scenarios.",
+  "Scenarios": [
+    {
+      "ScenarioNumber": 1,
+      "Description": "IAF referred to defense, awaiting scheduling",
+      "ProjectId": 13,
+      "StudentUsername": "p26010011",
+      "StudentName": "Student Dummy 11",
+      "Supervisor": "Ts. Catherine Wong",
+      "MilestoneId": 61,
+      "MilestoneTitle": "FYP 1: Initial Assessment Form (IAF)",
+      "OriginalState": {
+        "MilestoneStatus": "AdminApproved",
+        "DefenseDate": null,
+        "DefenseTime": null,
+        "DefenseVenue": null,
+        "Remarks": "[Attempt 1: Approved - Defense passed]",
+        "BookingId": 2,
+        "BookingStatus": "Completed",
+        "AcademicOutcome": "AdminApproved",
+        "HistoryId": 3
+      },
+      "UpdatedState": {
+        "MilestoneStatus": "DefenseRequired",
+        "DefenseDate": null,
+        "DefenseTime": null,
+        "DefenseVenue": null,
+        "Remarks": "Form: Initial Project Allocation Form (IAF). Details: Initial Project Allocation Form (IAF). JSON: {\"CurrentAttempt\":1,\"Attempts\":[{\"AttemptNumber\":1,\"FormData\":{...},\"Status\":\"DefenseRequired\",\"PanelComments\":\"Scope and methodology require oral defense verification.\"}]}",
+        "BookingId": null,
+        "HistoryId": null
+      },
+      "Operations": [
+        "DELETE FROM IAFDefenseHistory WHERE MilestoneId = 61 (HistoryId: 3)",
+        "DELETE FROM IAFDefenseBooking WHERE MilestoneId = 61 (BookingId: 2)",
+        "UPDATE FYPMilestone SET Status = 'DefenseRequired', DefenseDate = NULL, DefenseTime = NULL, DefenseVenue = NULL, Remarks = <JSON payload with Status 'DefenseRequired'> WHERE Id = 61"
+      ]
+    },
+    {
+      "ScenarioNumber": 2,
+      "Description": "IAF defense successfully scheduled, awaiting outcome",
+      "ProjectId": 14,
+      "StudentUsername": "p26010012",
+      "StudentName": "Student Dummy 12",
+      "Supervisor": "Ts. Catherine Wong",
+      "IndependentExaminer": "Dr. Haris bin Omar",
+      "MilestoneId": 65,
+      "MilestoneTitle": "FYP 1: Initial Assessment Form (IAF)",
+      "OriginalState": {
+        "MilestoneStatus": "AdminApproved",
+        "DefenseDate": null,
+        "DefenseTime": null,
+        "DefenseVenue": null,
+        "Remarks": "[Attempt 1: Approved - Defense passed]",
+        "BookingId": 3,
+        "BookingStatus": "Completed",
+        "AcademicOutcome": "AdminApproved",
+        "DefenseDate_Booking": "2026-09-30",
+        "Venue_Booking": "Meeting Room B-2",
+        "HistoryId": 4,
+        "ActionType_History": "OutcomeRecorded"
+      },
+      "UpdatedState": {
+        "MilestoneStatus": "DefenseScheduled",
+        "DefenseDate": "2026-10-22",
+        "DefenseTime": "10:00 AM",
+        "DefenseVenue": "Room B-201",
+        "Remarks": "Form: Initial Project Allocation Form (IAF). Details: Initial Project Allocation Form (IAF). JSON: {\"CurrentAttempt\":1,\"Attempts\":[{\"AttemptNumber\":1,\"FormData\":{...},\"Status\":\"DefenseScheduled\",\"PanelComments\":\"Defense session scheduled in Room B-201.\"}]}",
+        "BookingId": 3,
+        "BookingStatus": "Scheduled",
+        "AcademicOutcome": "Pending",
+        "OutcomeComments": null,
+        "DefenseDate_Booking": "2026-10-22",
+        "StartTime_Booking": "10:00:00",
+        "EndTime_Booking": "10:30:00",
+        "Venue_Booking": "Room B-201",
+        "HistoryId": 4,
+        "ActionType_History": "InitialScheduled",
+        "BookingStatus_History": "Scheduled",
+        "AcademicOutcome_History": "Pending"
+      },
+      "Operations": [
+        "UPDATE IAFDefenseBooking SET BookingStatus = 'Scheduled', AcademicOutcome = 'Pending', DefenseDate = '2026-10-22', StartTime = '10:00', EndTime = '10:30', Venue = 'Room B-201' WHERE Id = 3",
+        "UPDATE IAFDefenseHistory SET ActionType = 'InitialScheduled', BookingStatus = 'Scheduled', AcademicOutcome = 'Pending', DefenseDate = '2026-10-22', StartTime = '10:00', EndTime = '10:30', Venue = 'Room B-201' WHERE Id = 4",
+        "UPDATE FYPMilestone SET Status = 'DefenseScheduled', DefenseDate = '2026-10-22', DefenseTime = '10:00 AM', DefenseVenue = 'Room B-201', Remarks = <JSON payload with Status 'DefenseScheduled'> WHERE Id = 65"
+      ]
+    },
+    {
+      "ScenarioNumber": 3,
+      "Description": "IAF defense completed with FAIL outcome (Change of Topic Required)",
+      "ProjectId": 21,
+      "StudentUsername": "p26010019",
+      "StudentName": "Student Dummy 19",
+      "Supervisor": "Dr. Daniel Raj",
+      "IndependentExaminer": "Ts. Irene Lee",
+      "MilestoneId": 93,
+      "MilestoneTitle": "FYP 1: Initial Assessment Form (IAF)",
+      "OriginalState": {
+        "MilestoneStatus": "AdminApproved",
+        "DefenseDate": null,
+        "DefenseTime": null,
+        "DefenseVenue": null,
+        "Remarks": "[Attempt 1: Approved - Defense passed]",
+        "BookingId": 10,
+        "BookingStatus": "Completed",
+        "AcademicOutcome": "ChangeOfTopicRequired",
+        "DefenseDate_Booking": "2026-09-30",
+        "Venue_Booking": "Meeting Room B-2",
+        "HistoryId": 11,
+        "ActionType_History": "OutcomeRecorded"
+      },
+      "UpdatedState": {
+        "MilestoneStatus": "ChangeOfTopicRequired",
+        "DefenseDate": "2026-09-30",
+        "DefenseTime": "10:00 AM",
+        "DefenseVenue": "Meeting Room B-2",
+        "Remarks": "Form: Initial Project Allocation Form (IAF). Details: Initial Project Allocation Form (IAF). JSON: {\"CurrentAttempt\":1,\"Attempts\":[{\"AttemptNumber\":1,\"FormData\":{...},\"Status\":\"ChangeOfTopicRequired\",\"PanelComments\":\"Defense Failed. Scope insufficient. Please submit a new Initial Allocation Form with a change of topic.\"}]}",
+        "BookingId": 10,
+        "BookingStatus": "Completed",
+        "AcademicOutcome": "ChangeOfTopicRequired",
+        "DefenseDate_Booking": "2026-09-30",
+        "Venue_Booking": "Meeting Room B-2",
+        "HistoryId": 11
+      },
+      "Operations": [
+        "UPDATE FYPMilestone SET Status = 'ChangeOfTopicRequired', DefenseDate = '2026-09-30', DefenseTime = '10:00 AM', DefenseVenue = 'Meeting Room B-2', Remarks = <JSON payload with Status 'ChangeOfTopicRequired'> WHERE Id = 93"
+      ]
+    },
+    {
+      "ScenarioNumber": 4,
+      "Description": "IAF defense completed with PASS outcome (Admin Approved)",
+      "ProjectId": 15,
+      "StudentUsername": "p26010013",
+      "StudentName": "Student Dummy 13",
+      "Supervisor": "Ts. Catherine Wong",
+      "IndependentExaminer": "Dr. Haris bin Omar",
+      "MilestoneId": 69,
+      "MilestoneTitle": "FYP 1: Initial Assessment Form (IAF)",
+      "OriginalState": {
+        "MilestoneStatus": "AdminApproved",
+        "DefenseDate": null,
+        "DefenseTime": null,
+        "DefenseVenue": null,
+        "Remarks": "[Attempt 1: Approved - Defense passed]",
+        "BookingId": 4,
+        "BookingStatus": "Completed",
+        "AcademicOutcome": "AdminApproved",
+        "DefenseDate_Booking": "2026-09-30",
+        "Venue_Booking": "Meeting Room B-2",
+        "HistoryId": 5,
+        "ActionType_History": "OutcomeRecorded"
+      },
+      "UpdatedState": {
+        "MilestoneStatus": "AdminApproved",
+        "DefenseDate": "2026-09-30",
+        "DefenseTime": "10:00 AM",
+        "DefenseVenue": "Meeting Room B-2",
+        "Remarks": "Form: Initial Project Allocation Form (IAF). Details: Initial Project Allocation Form (IAF). JSON: {\"CurrentAttempt\":1,\"Attempts\":[{\"AttemptNumber\":1,\"FormData\":{...},\"Status\":\"AdminApproved\",\"PanelComments\":\"Passed Defense Session. Title accepted.\"}]}",
+        "BookingId": 4,
+        "BookingStatus": "Completed",
+        "AcademicOutcome": "AdminApproved",
+        "DefenseDate_Booking": "2026-09-30",
+        "Venue_Booking": "Meeting Room B-2",
+        "HistoryId": 5
+      },
+      "Operations": [
+        "UPDATE FYPMilestone SET Status = 'AdminApproved', DefenseDate = '2026-09-30', DefenseTime = '10:00 AM', DefenseVenue = 'Meeting Room B-2', Remarks = <JSON payload with Status 'AdminApproved'> WHERE Id = 69"
+      ]
+    }
+  ]
+}

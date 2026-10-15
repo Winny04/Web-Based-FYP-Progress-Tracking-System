@@ -7,6 +7,8 @@
     var assignedSupervisor    = ViewBag.AssignedSupervisor as ApplicationUser;
     var meetings              = ViewBag.Meetings as List<MeetingBooking> ?? new();
     var supervisorHasAvailability = (bool)(ViewBag.SupervisorHasAvailability ?? false);
+    int activeStage           = (int)(ViewBag.ActiveStage ?? 1);
+    bool stage1Passed         = (bool)(ViewBag.Stage1Passed ?? false);
 }
 
 @{
@@ -595,6 +597,386 @@
         @if(!meetings.Any()) {
             <p class="text-muted">No meetings booked yet.</p>
         }
+        else if (activeStage == 2)
+        {
+            var stage2Meetings = meetings.Where(m => m.Stage == 2).OrderByDescending(m => m.MeetingDate).ThenByDescending(m => m.MeetingTime).ToList();
+            var stage1Meetings = meetings.Where(m => m.Stage == 1).OrderByDescending(m => m.MeetingDate).ThenByDescending(m => m.MeetingTime).ToList();
+
+            <div class="mb-4">
+                <ul class="nav nav-pills mb-3" id="stageTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active fw-bold px-3 py-2 rounded-pill me-2" id="stage2-pill-tab" data-bs-toggle="pill" data-bs-target="#stage2-pill" type="button" role="tab">
+                            <i class="fas fa-play-circle me-1 text-primary"></i> Stage 2 Meetings (Active)
+                            <span class="badge bg-primary text-white ms-2">@stage2Meetings.Count</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link fw-bold px-3 py-2 rounded-pill" id="stage1-pill-tab" data-bs-toggle="pill" data-bs-target="#stage1-pill" type="button" role="tab">
+                            <i class="fas fa-history me-1 text-secondary"></i> Stage 1 History (Read-Only)
+                            <span class="badge bg-secondary text-white ms-2">@stage1Meetings.Count</span>
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="stageTabsContent">
+                    <!-- Stage 2 Tab Pane -->
+                    <div class="tab-pane fade show active" id="stage2-pill" role="tabpanel">
+                        <div class="alert alert-primary border-0 rounded-3 p-3 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2" style="background-color: #eff6ff;">
+                            <div>
+                                <h6 class="fw-bold text-primary mb-1"><i class="fas fa-check-circle me-1"></i>Stage 2 is Active</h6>
+                                <p class="mb-0 text-muted small">Stage 1 has been passed. Stage 2 meeting numbering starts at Week 1. Policy requirement: Min 10, Max 14 completed meetings.</p>
+                            </div>
+                            <span class="badge bg-primary px-3 py-2 fs-7">Active Stage: Stage 2</span>
+                        </div>
+
+                        @if (!stage2Meetings.Any())
+                        {
+                            <div class="alert alert-light border text-center py-4 text-muted rounded-3">
+                                <i class="fas fa-calendar-plus text-primary fs-3 d-block mb-2"></i>
+                                <strong>No Stage 2 meetings scheduled yet.</strong>
+                                <p class="small text-muted mb-3">Click the "Schedule Meeting" button above to book your first Stage 2 meeting (Week 1).</p>
+                                @if (assignedSupervisor != null && supervisorHasAvailability)
+                                {
+                                    <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#scheduleMeetingModal">
+                                        <i class="fas fa-plus-circle me-1"></i> Book Stage 2 Meeting
+                                    </button>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="table-responsive mb-4">
+                                <table class="table align-middle table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th class="ps-3" style="width: 120px;">Stage & Week</th>
+                                            <th>Date</th>
+                                            <th>Day</th>
+                                            <th>Time</th>
+                                            <th>Reason</th>
+                                            <th>Status</th>
+                                            <th class="text-end pe-3">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var m in stage2Meetings)
+                                        {
+                                            var badgeCls = m.Status switch
+                                            {
+                                                "Approved" => "badge-approved",
+                                                "Rejected" => "badge-rejected",
+                                                "Postponed" => "badge-postponed",
+                                                _ => "badge-pending"
+                                            };
+
+                                            string displayTime = m.MeetingTime;
+                                            try {
+                                                if(TimeSpan.TryParse(m.MeetingTime, out var ts)) {
+                                                    displayTime = DateTime.Today.Add(ts).ToString("h:mm tt");
+                                                }
+                                            } catch {}
+
+                                            <tr id="meetingRow_@m.Id">
+                                                <td class="ps-3">
+                                                    <span class="badge bg-primary">Stage @m.Stage</span><br/>
+                                                    @if(m.WeekNumber > 0) {
+                                                        <span class="badge bg-secondary text-white mt-1">Week @m.WeekNumber</span>
+                                                    } else {
+                                                        <span class="badge bg-light text-muted mt-1 border">Unlogged</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <div>@m.MeetingDate.ToString("dd/MM/yyyy")</div>
+                                                    @if (conflictMeetingIds.Contains(m.Id))
+                                                    {
+                                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 mt-1" style="font-size: 0.7rem;">
+                                                            <i class="fas fa-exclamation-triangle me-1"></i>Conflict
+                                                        </span>
+                                                    }
+                                                </td>
+                                                <td>@m.MeetingDay</td>
+                                                <td>@displayTime</td>
+                                                <td>@m.Reason</td>
+                                                <td>
+                                                    <span class="status-badge @badgeCls">@m.Status</span>
+                                                    @if (conflictMeetingIds.Contains(m.Id))
+                                                    {
+                                                        <div class="text-danger small mt-1" style="font-size: 0.7rem;">
+                                                            <i class="fas fa-calendar-times me-1"></i>Overlaps Busy Date
+                                                        </div>
+                                                    }
+                                                </td>
+                                                <td class="text-end pe-3">
+                                                    @{
+                                                        var pendingReq = ((IEnumerable<FYPTracker.Models.MeetingRescheduleRequest>)ViewBag.PendingReschedules)?.FirstOrDefault(r => r.MeetingBookingId == m.Id);
+                                                    }
+                                                    @if (pendingReq != null)
+                                                    {
+                                                        if (pendingReq.Status == "CounterProposed")
+                                                        {
+                                                            <div class="d-inline-flex flex-column align-items-end me-1">
+                                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 mb-1 fw-bold" style="font-size: 0.75rem;">
+                                                                    <i class="fas fa-calendar-check me-1"></i>Proposed: @pendingReq.ProposedDate.ToString("dd MMM yyyy") at @pendingReq.ProposedTime
+                                                                </span>
+                                                                @if (!string.IsNullOrWhiteSpace(pendingReq.SupervisorResponse ?? pendingReq.Reason))
+                                                                {
+                                                                    <span class="text-muted small fst-italic mb-1" style="max-width: 220px; font-size: 0.72rem; text-align: right;">
+                                                                        "@(pendingReq.SupervisorResponse ?? pendingReq.Reason)"
+                                                                    </span>
+                                                                }
+                                                                <div class="d-flex gap-1">
+                                                                    <form asp-action="AcceptRescheduleProposal" method="post" class="d-inline">
+                                                                        @Html.AntiForgeryToken()
+                                                                        <input type="hidden" name="requestId" value="@pendingReq.Id" />
+                                                                        <button type="submit" class="btn btn-sm btn-success fw-bold px-2 py-1" style="font-size: 0.78rem;">
+                                                                            <i class="fas fa-check me-1"></i>Accept
+                                                                        </button>
+                                                                    </form>
+                                                                    <form asp-action="DeclineRescheduleProposal" method="post" class="d-inline">
+                                                                        @Html.AntiForgeryToken()
+                                                                        <input type="hidden" name="requestId" value="@pendingReq.Id" />
+                                                                        <button type="submit" class="btn btn-sm btn-outline-danger fw-bold px-2 py-1" style="font-size: 0.78rem;">
+                                                                            <i class="fas fa-times me-1"></i>Reject
+                                                                        </button>
+                                                                    </form>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-warning text-dark me-1">Reschedule Pending</span>
+                                                            <form asp-action="CancelRescheduleRequest" method="post" class="d-inline">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="requestId" value="@pendingReq.Id" />
+                                                                <button type="submit" class="btn btn-sm btn-outline-danger fw-semibold border-0" title="Cancel Reschedule Request">
+                                                                    Cancel Request
+                                                                </button>
+                                                            </form>
+                                                        }
+                                                    }
+                                                    else if (m.Status == "Pending")
+                                                    {
+                                                        <span class="badge bg-light text-muted border me-1"><i class="fas fa-hourglass-half me-1"></i>Awaiting Approval</span>
+                                                        <form asp-action="CancelMeeting" method="post" class="d-inline" id="cancelForm_@m.Id">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="meetingId" value="@m.Id" />
+                                                            <button type="button" class="btn btn-sm btn-outline-danger border-0 fw-semibold" onclick="confirmCancel(@m.Id)">Cancel</button>
+                                                        </form>
+                                                    }
+                                                    else if (m.Status == "Approved")
+                                                    {
+                                                        bool isEligibleForReschedule = m.MeetingDate.Date >= DateTime.Today && (m.MeetingLog == null || m.MeetingLog.LogStatus != "Signed");
+                                                        if (isEligibleForReschedule)
+                                                        {
+                                                            <button type="button" class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1" onclick="openRescheduleModal(@m.Id, '@m.MeetingDate.ToString("yyyy-MM-dd")', '@displayTime', '@m.MeetingTime')">
+                                                                <i class="fas fa-calendar-alt me-1"></i>Request Reschedule
+                                                            </button>
+                                                        }
+
+                                                        if (m.MeetingLog == null || m.MeetingLog.LogStatus == "Draft")
+                                                        {
+                                                            if (m.MeetingDate.Date <= DateTime.Today)
+                                                            {
+                                                                var nextApprovedMeeting = meetings
+                                                                    .Where(n =>
+                                                                        n.StudentId == m.StudentId &&
+                                                                        n.SupervisorId == m.SupervisorId &&
+                                                                        n.Stage == m.Stage &&
+                                                                        n.AcademicSessionId == m.AcademicSessionId &&
+                                                                        n.Status == "Approved" &&
+                                                                        n.MeetingDate.Date > m.MeetingDate.Date)
+                                                                    .OrderBy(n => n.MeetingDate)
+                                                                    .ThenBy(n => n.MeetingTime)
+                                                                    .FirstOrDefault();
+
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1"
+                                                                        data-id="@m.Id"
+                                                                        data-stage="@m.Stage"
+                                                                        data-student="@(currentUser?.FullName ?? "")"
+                                                                        data-supervisor="@(m.Supervisor?.FullName ?? "")"
+                                                                        data-meeting-date="@m.MeetingDate.ToString("yyyy-MM-dd")"
+                                                                        data-next-date="@(nextApprovedMeeting?.MeetingDate.ToString("yyyy-MM-dd") ?? "")"
+                                                                        data-topics="@(m.MeetingLog?.KeyTopicsDiscussed ?? "")"
+                                                                        data-completed="@(m.MeetingLog?.CompletedActionsAndNotes ?? "")"
+                                                                        data-action="@(m.MeetingLog?.ActionPointsForNextMeeting ?? "")"
+                                                                        onclick="openStudentLogModal(this)">
+
+                                                                    <i class="fas fa-edit"></i>
+                                                                    @(m.MeetingLog == null ? "Record Logbook" : "Edit Logbook")
+                                                                </button>
+                                                            }
+                                                            else
+                                                            {
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-outline-secondary border-0 fw-semibold me-1"
+                                                                        disabled
+                                                                        title="Available on @m.MeetingDate.ToString("dd MMM yyyy")">
+                                                                    <i class="fas fa-clock"></i>
+                                                                    Available on @m.MeetingDate.ToString("dd MMM yyyy")
+                                                                </button>
+                                                            }
+                                                        }
+                                                        else if (m.MeetingLog.LogStatus == "Signed")
+                                                        {
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-success border-0 fw-semibold me-1"
+                                                                    onclick="viewFinalLog(@m.MeetingLog.Id)">
+                                                                <i class="fas fa-file-contract"></i>
+                                                                View Log
+                                                            </button>
+                                                        }
+                                                    }
+                                                    else if (m.Status == "Postponed")
+                                                    {
+                                                        <form asp-action="AcceptPostponedMeeting" method="post" class="d-inline" id="acceptForm_@m.Id">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="meetingId" value="@m.Id" />
+                                                            <button type="submit" class="btn btn-sm btn-outline-success border-0 fw-semibold me-1">Accept</button>
+                                                        </form>
+                                                        <form asp-action="CancelMeeting" method="post" class="d-inline" id="cancelForm_@m.Id">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="meetingId" value="@m.Id" />
+                                                            <button type="button" class="btn btn-sm btn-outline-danger border-0 fw-semibold" onclick="confirmCancel(@m.Id)">Cancel</button>
+                                                        </form>
+                                                    }
+
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary border-0 fw-semibold" 
+                                                            data-status="@m.Status" 
+                                                            data-note="@(m.SupervisorNote ?? "None")"
+                                                            data-date="@m.MeetingDate.ToString("dd MMM yyyy")"
+                                                            data-proposed-date="@(m.ProposedNewDate?.ToString("dd MMM yyyy") ?? "")"
+                                                            data-proposed-iso="@(m.ProposedNewDate?.ToString("yyyy-MM-dd") ?? "")"
+                                                            data-location="@m.Location"
+                                                            data-meetinglink="@m.MeetingLink"
+                                                            onclick="viewMeetingDetails(this)">
+                                                        Details
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Stage 1 History Tab Pane (Read-Only) -->
+                    <div class="tab-pane fade" id="stage1-pill" role="tabpanel">
+                        <div class="alert alert-secondary border-0 rounded-3 p-3 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2" style="background-color: #f8fafc;">
+                            <div>
+                                <h6 class="fw-bold text-dark mb-1"><i class="fas fa-lock me-1 text-secondary"></i>Stage 1 Meeting History (Read-Only)</h6>
+                                <p class="mb-0 text-muted small">Stage 1 meetings, completed logbooks, supervisor feedback and signatures are preserved as read-only academic history.</p>
+                            </div>
+                            <span class="badge bg-secondary px-3 py-2 fs-7">Preserved History</span>
+                        </div>
+
+                        <div class="table-responsive mb-4">
+                            <table class="table align-middle table-hover">
+                                <thead>
+                                    <tr>
+                                        <th class="ps-3" style="width: 120px;">Stage & Week</th>
+                                        <th>Date</th>
+                                        <th>Day</th>
+                                        <th>Time</th>
+                                        <th>Reason</th>
+                                        <th>Status</th>
+                                        <th class="text-end pe-3">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var m in stage1Meetings)
+                                    {
+                                        var badgeCls = m.Status switch
+                                        {
+                                            "Approved" => "badge-approved",
+                                            "Rejected" => "badge-rejected",
+                                            "Postponed" => "badge-postponed",
+                                            _ => "badge-pending"
+                                        };
+
+                                        string displayTime = m.MeetingTime;
+                                        try {
+                                            if(TimeSpan.TryParse(m.MeetingTime, out var ts)) {
+                                                displayTime = DateTime.Today.Add(ts).ToString("h:mm tt");
+                                            }
+                                        } catch {}
+
+                                        <tr id="meetingRow_@m.Id">
+                                            <td class="ps-3">
+                                                <span class="badge bg-info">Stage 1</span><br/>
+                                                @if(m.WeekNumber > 0) {
+                                                    <span class="badge bg-secondary text-white mt-1">Week @m.WeekNumber</span>
+                                                } else {
+                                                    <span class="badge bg-light text-muted mt-1 border">Unlogged</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div>@m.MeetingDate.ToString("dd/MM/yyyy")</div>
+                                                @if (conflictMeetingIds.Contains(m.Id))
+                                                {
+                                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 mt-1" style="font-size: 0.7rem;">
+                                                        <i class="fas fa-exclamation-triangle me-1"></i>Conflict
+                                                    </span>
+                                                }
+                                            </td>
+                                            <td>@m.MeetingDay</td>
+                                            <td>@displayTime</td>
+                                            <td>@m.Reason</td>
+                                            <td>
+                                                <span class="status-badge @badgeCls">@m.Status</span>
+                                            </td>
+                                            <td class="text-end pe-3">
+                                                @if (m.MeetingLog != null && m.MeetingLog.LogStatus == "Signed")
+                                                {
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-outline-success border-0 fw-semibold me-1"
+                                                            onclick="viewFinalLog(@m.MeetingLog.Id)">
+                                                        <i class="fas fa-file-contract"></i>
+                                                        View Log
+                                                    </button>
+                                                }
+                                                else if (m.MeetingLog != null && m.MeetingLog.LogStatus == "Draft")
+                                                {
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-outline-primary border-0 fw-semibold me-1"
+                                                            data-id="@m.Id"
+                                                            data-stage="@m.Stage"
+                                                            data-student="@(currentUser?.FullName ?? "")"
+                                                            data-supervisor="@(m.Supervisor?.FullName ?? "")"
+                                                            data-meeting-date="@m.MeetingDate.ToString("yyyy-MM-dd")"
+                                                            data-next-date=""
+                                                            data-topics="@(m.MeetingLog?.KeyTopicsDiscussed ?? "")"
+                                                            data-completed="@(m.MeetingLog?.CompletedActionsAndNotes ?? "")"
+                                                            data-action="@(m.MeetingLog?.ActionPointsForNextMeeting ?? "")"
+                                                            onclick="openStudentLogModal(this)">
+                                                        <i class="fas fa-eye"></i> View Draft
+                                                    </button>
+                                                }
+
+                                                <button type="button" class="btn btn-sm btn-outline-secondary border-0 fw-semibold" 
+                                                        data-status="@m.Status" 
+                                                        data-note="@(m.SupervisorNote ?? "None")"
+                                                        data-date="@m.MeetingDate.ToString("dd MMM yyyy")"
+                                                        data-proposed-date="@(m.ProposedNewDate?.ToString("dd MMM yyyy") ?? "")"
+                                                        data-proposed-iso="@(m.ProposedNewDate?.ToString("yyyy-MM-dd") ?? "")"
+                                                        data-location="@m.Location"
+                                                        data-meetinglink="@m.MeetingLink"
+                                                        onclick="viewMeetingDetails(this)">
+                                                    Details
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
         @foreach (var stageGroup in meetings.GroupBy(m => m.Stage).OrderBy(g => g.Key))
         {
         <h6 class="fw-bold text-primary mt-2 mb-3">Stage @stageGroup.Key Meetings</h6>
@@ -814,6 +1196,7 @@
             </table>
         </div>
         }
+        }
     </div>
     </div> <!-- End List View -->
     
@@ -847,9 +1230,15 @@
                 <form asp-action="SubmitMeetingBooking" method="post" id="bookingForm" onsubmit="return confirmBookingSubmission(event)">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="supervisorId" value="@assignedSupervisor.Id" />
+                    <input type="hidden" name="stage" value="@activeStage" />
                     
                     <div class="modal-header border-0 pb-0">
-                        <h5 class="fw-bold text-dark"><i class="fas fa-plus-circle text-danger me-2"></i>Schedule Meeting</h5>
+                        <div>
+                            <h5 class="fw-bold text-dark mb-1"><i class="fas fa-plus-circle text-danger me-2"></i>Schedule Meeting</h5>
+                            <span class="badge @(activeStage == 2 ? "bg-primary" : "bg-info") fs-7">
+                                Booking for Stage @activeStage @(activeStage == 2 && stage1Passed ? "(Stage 1 Passed - Active)" : "")
+                            </span>
+                        </div>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     
@@ -1148,7 +1537,7 @@
         if (submitBtn) submitBtn.disabled = true;
 
         try {
-            const resp = await fetch(`/Student/GetAvailableSlots?supervisorId=${supervisorId}&date=${dateVal}`);
+            const resp = await fetch(`/Student/GetAvailableSlots?supervisorId=${supervisorId}&date=${dateVal}&stage=@activeStage`);
             const data = await resp.json();
             
             container.innerHTML = '';

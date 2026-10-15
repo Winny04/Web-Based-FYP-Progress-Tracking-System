@@ -129,7 +129,20 @@ namespace FYPTracker.Utils
                             "References" => !string.IsNullOrWhiteSpace(Fv("references")) ? Fv("references") : Fv("References"),
                             "SupervisorName" => isSigned ? displayedSupervisorName : (!string.IsNullOrWhiteSpace(Fv("agreedSupervisor")) ? Fv("agreedSupervisor") : (!string.IsNullOrWhiteSpace(Fv("Agreed Supervisor Name")) ? Fv("Agreed Supervisor Name") : "")),
                             "CommentFeedback" => attempt.SupervisorFeedback ?? "",
-                            "Objectives" => $"{(!string.IsNullOrWhiteSpace(Fv("obj1")) ? Fv("obj1") : milestone.Project?.Objective1)}\n{(!string.IsNullOrWhiteSpace(Fv("obj2")) ? Fv("obj2") : milestone.Project?.Objective2)}\n{(!string.IsNullOrWhiteSpace(Fv("obj3")) ? Fv("obj3") : milestone.Project?.Objective3)}",
+                            "Objectives" => string.Join("\n", new[] {
+                                (!string.IsNullOrWhiteSpace(Fv("obj1")) ? Fv("obj1") : milestone.Project?.Objective1),
+                                (!string.IsNullOrWhiteSpace(Fv("obj2")) ? Fv("obj2") : milestone.Project?.Objective2),
+                                (!string.IsNullOrWhiteSpace(Fv("obj3")) ? Fv("obj3") : milestone.Project?.Objective3)
+                            }.Select((rawObj, idx) => {
+                                if (string.IsNullOrWhiteSpace(rawObj)) return "";
+                                int num = idx + 1;
+                                string cleaned = System.Text.RegularExpressions.Regex.Replace(
+                                    rawObj,
+                                    $@"^\s*({num}\.\s*)?(To\s+)+",
+                                    "",
+                                    System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+                                return string.IsNullOrWhiteSpace(cleaned) ? "" : $"{num}. To {cleaned}";
+                            }).Where(s => !string.IsNullOrEmpty(s))),
                             _ => Fv(field.Key)
                         };
 

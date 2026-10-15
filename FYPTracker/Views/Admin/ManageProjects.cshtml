@@ -262,7 +262,7 @@
                                                     </a>
                                                 </li>
                                             }
-                                            else
+                                             else
                                             {
                                                 <li>
                                                     <a class="dropdown-item fw-bold text-success py-2 px-4 btn-open-viva-modal" href="#" 
@@ -274,6 +274,66 @@
                                                        data-viva-venue="@project.VivaVenue">
                                                         <i class="fas fa-calendar-alt text-success me-2 w-15px"></i> @(project.VivaDate.HasValue ? "Update Viva Date" : "Set Viva Date")
                                                     </a>
+                                                </li>
+                                            }
+
+                                            <li><hr class="dropdown-divider opacity-25"></li>
+                                            @if (project.Status != "Completed")
+                                            {
+                                                var stage2List = project.Milestones?
+                                                    .Where(m => m.Stage == 2 || m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
+                                                    .ToList() ?? new List<FYPMilestone>();
+                                                bool hasStage2Milestones = stage2List.Any();
+                                                bool allStage2Approved = hasStage2Milestones && stage2List.All(m => m.Status == "Approved" || m.Status == "Completed");
+                                                bool vivaConcluded = project.VivaDate.HasValue && project.VivaDate.Value <= DateTime.Now;
+                                                bool hasExaminerMarking = !string.IsNullOrWhiteSpace(project.ExaminerMarksheetPath) || !string.IsNullOrWhiteSpace(project.Stage2ExaminerMarksheetData);
+                                                
+                                                bool isEligibleToComplete = project.Stage1Grade == "Pass" 
+                                                    && vivaConcluded 
+                                                    && !string.IsNullOrWhiteSpace(project.FinalGrade)
+                                                    && hasExaminerMarking
+                                                    && allStage2Approved;
+
+                                                string ineligibleReason = "";
+                                                if (project.Stage1Grade != "Pass") ineligibleReason = "Stage 1 Pass required";
+                                                else if (!project.VivaDate.HasValue) ineligibleReason = "Final Viva must be scheduled";
+                                                else if (project.VivaDate.Value > DateTime.Now) ineligibleReason = "Final Viva has not yet been conducted";
+                                                else if (!hasExaminerMarking) ineligibleReason = "Examiner marksheet assessment required";
+                                                else if (string.IsNullOrWhiteSpace(project.FinalGrade)) ineligibleReason = "Final Grade required";
+                                                else if (!hasStage2Milestones) ineligibleReason = "Stage 2 milestones must be initialized";
+                                                else if (!allStage2Approved) ineligibleReason = "All Stage 2 milestones must be Approved/Completed";
+
+                                                if (isEligibleToComplete)
+                                                {
+                                                    <li>
+                                                        <form asp-action="CompleteProject" asp-controller="Admin" method="post" class="m-0">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="projectId" value="@project.Id" />
+                                                            <button type="submit" class="dropdown-item fw-bold text-primary py-2 px-4" onclick="return confirm('Mark this project as Completed? This finalizes the FYP cycle.')">
+                                                                <i class="fas fa-check-double text-primary me-2 w-15px"></i> Mark as Completed
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                }
+                                                else
+                                                {
+                                                    <li>
+                                                        <span class="dropdown-item fw-bold text-muted py-2 px-4" title="Completion Locked: @ineligibleReason" style="cursor: not-allowed; opacity: 0.65;">
+                                                            <i class="fas fa-lock text-muted me-2 w-15px"></i> Mark as Completed
+                                                        </span>
+                                                    </li>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <li>
+                                                    <form asp-action="ReopenProject" asp-controller="Admin" method="post" class="m-0">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="projectId" value="@project.Id" />
+                                                        <button type="submit" class="dropdown-item fw-bold text-warning py-2 px-4" onclick="return confirm('Re-open this completed project back to Active?')">
+                                                            <i class="fas fa-undo text-warning me-2 w-15px"></i> Reopen to Active
+                                                        </button>
+                                                    </form>
                                                 </li>
                                             }
                                         }

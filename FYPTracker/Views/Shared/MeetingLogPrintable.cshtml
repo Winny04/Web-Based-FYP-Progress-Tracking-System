@@ -157,8 +157,10 @@
                 switch(field.Key)
                 {
                     case "Supervisor": contentHtml = supervisor?.FullName ?? "Unknown"; break;
-                    case "Student": contentHtml = $"{student?.FullName ?? "Unknown"} ({student?.EmployeeId ?? ""})"; break;
+                    case "Student": contentHtml = $"{student?.FullName ?? "Unknown"} ({student?.CoventryId ?? student?.EmployeeId ?? ""})"; break;
                     case "MeetingDate": contentHtml = meeting?.MeetingDate.ToString("dd MMM yyyy") ?? ""; break;
+                    case "Week":
+                    case "WeekNumber": contentHtml = meeting?.WeekNumber.HasValue == true && meeting.WeekNumber.Value > 0 ? $"Week {meeting.WeekNumber.Value}" : "TBD"; break;
                     case "TopicsDiscussed": contentHtml = Model.KeyTopicsDiscussed ?? ""; break;
                     case "ActionPoints": contentHtml = Model.ActionPointsForNextMeeting ?? ""; break;
                     case "ActionsCompleted": contentHtml = Model.CompletedActionsAndNotes ?? ""; break;

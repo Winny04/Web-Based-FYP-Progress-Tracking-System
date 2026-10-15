@@ -60,7 +60,7 @@ namespace FYPTracker.Services.Meetings
                 .FirstOrDefaultAsync();
 
             if (!finalDueDate.HasValue)
-                return null;
+                return session.EndDate.Value.Date;
 
             // All meetings must be scheduled at least 7 days before final due date
             var cutoff = finalDueDate.Value.Date.AddDays(-7);

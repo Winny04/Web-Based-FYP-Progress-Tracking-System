@@ -79,9 +79,8 @@
             <p class="mb-0 text-white-50 fs-6">View upcoming, scheduled, completed, and cancelled defenses.</p>
         </div>
         <div class="d-flex gap-3 align-items-center">
-            <span class="badge bg-warning text-dark px-3 py-2 rounded-pill fw-bold">UI Preview</span>
             <form id="sessionForm" method="get" action="@Url.Action("ManageDefenses", "Admin")">
-                <select name="sessionFilter" class="form-select border-0 bg-white bg-opacity-10 text-white fw-bold shadow-none" style="width: 200px;" onchange="document.getElementById('sessionForm').submit();">
+                <select name="sessionFilter" class="form-select bg-white text-dark fw-bold border-0 shadow-sm" style="width: 220px;" onchange="document.getElementById('sessionForm').submit();">
                     @if (ViewBag.AcademicSessions != null)
                     {
                         foreach (var sessionObj in ViewBag.AcademicSessions)
@@ -104,6 +103,50 @@
             </form>
         </div>
     </div>
+
+    @if (TempData["Warning"] != null)
+    {
+        <div class="alert alert-warning border-0 bg-warning bg-opacity-15 text-dark p-3 rounded-4 mb-4 d-flex align-items-center shadow-sm">
+            <i class="fas fa-exclamation-triangle fs-3 text-warning me-3"></i>
+            <div>
+                <strong class="d-block mb-1">Booking Confirmed with Notification Warnings:</strong>
+                <span>@TempData["Warning"]</span>
+            </div>
+        </div>
+    }
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 bg-success bg-opacity-10 text-dark p-3 rounded-4 mb-4 d-flex align-items-center shadow-sm">
+            <i class="fas fa-check-circle fs-3 text-success me-3"></i>
+            <div>
+                <strong class="d-block mb-1">Success:</strong>
+                <span>@TempData["Success"]</span>
+            </div>
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-dark p-3 rounded-4 mb-4 d-flex align-items-center shadow-sm">
+            <i class="fas fa-times-circle fs-3 text-danger me-3"></i>
+            <div>
+                <strong class="d-block mb-1">Error:</strong>
+                <span>@TempData["Error"]</span>
+            </div>
+        </div>
+    }
+
+    @if (ViewBag.IsDefenseSchemaAvailable == false)
+    {
+        <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-dark p-3 rounded-4 mb-4 d-flex align-items-center shadow-sm">
+            <i class="fas fa-exclamation-triangle fs-3 text-warning me-3"></i>
+            <div>
+                <strong class="d-block mb-1">Database Schema Notice:</strong>
+                <span>The IAF Defense Booking schema (migration <code>20261011194333_AddIAFDefenseBookingAndAudit</code>) is pending on this database. Defense scheduling actions are disabled until the migration is executed.</span>
+            </div>
+        </div>
+    }
 
     <div class="premium-card p-4">
         <!-- Filters & Search -->
@@ -144,21 +187,29 @@
                     }
                     @foreach (var item in upcoming)
                     {
+                        var bookingsDict = ViewBag.DefenseBookings as Dictionary<int, FYPTracker.Models.IAFDefenseBooking>;
+                        var booking = (bookingsDict != null && bookingsDict.ContainsKey(item.Id)) ? bookingsDict[item.Id] : null;
+                        var defenseExaminerName = booking?.Examiner?.FullName;
+                        var projectExaminerName = item.Project?.AssignedExaminers?.FirstOrDefault()?.Examiner?.FullName;
+                        var isRescheduled = booking?.BookingStatus == "Rescheduled";
+
                         <div class="col-xl-4 col-lg-6">
                             <div class="defense-card p-4 h-100 d-flex flex-column">
                                 <div class="d-flex justify-content-between align-items-start mb-3">
                                     <div>
                                         <span class="badge @(item.Status == "DefenseScheduled" ? "bg-primary" : "bg-warning text-dark") bg-opacity-10 mb-2 border">@item.Status</span>
+                                        @if (isRescheduled)
+                                        {
+                                            <span class="badge bg-info text-dark bg-opacity-25 mb-2 border border-info ms-1">Rescheduled (Attempt @booking!.AttemptNumber)</span>
+                                        }
                                         <h5 class="fw-bold mb-1">@(item.Project?.Student?.FullName ?? "Unknown")</h5>
                                         <p class="text-muted small mb-0">Project: @(item.Project?.Title ?? "No Title")</p>
                                     </div>
                                     <div class="dropdown">
                                         <button class="btn btn-sm btn-light rounded-circle" type="button" data-bs-toggle="dropdown"><i class="fas fa-ellipsis-v"></i></button>
                                         <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
-                                            <li><a class="dropdown-item fw-bold text-primary" href="#"><i class="fas fa-eye me-2"></i>View Details</a></li>
+                                            <li><a class="dropdown-item fw-bold text-primary" href="javascript:void(0)" onclick="openDefenseDetailsModal(@item.Id)"><i class="fas fa-eye me-2"></i>View Details</a></li>
                                             <li><a class="dropdown-item fw-bold" href="@Url.Action("SmartScheduleDefense", "Admin", new { milestoneId = item.Id })"><i class="fas fa-calendar-alt me-2 text-warning"></i>Schedule / Reschedule</a></li>
-                                            <li><hr class="dropdown-divider"></li>
-                                            <li><a class="dropdown-item fw-bold text-danger" href="#"><i class="fas fa-times me-2"></i>Cancel (Pending Backend)</a></li>
                                         </ul>
                                     </div>
                                 </div>
@@ -166,9 +217,18 @@
                                 @if (item.Status == "DefenseScheduled")
                                 {
                                     <div class="bg-light rounded-3 p-3 mb-3 flex-grow-1">
-                                        <div class="mb-2"><i class="far fa-calendar text-primary me-2 fw-bold"></i> @(item.DefenseDate?.ToString("dd MMM yyyy") ?? "N/A")</div>
-                                        <div class="mb-2"><i class="far fa-clock text-primary me-2 fw-bold"></i> @(item.DefenseTime ?? "N/A")</div>
-                                        <div><i class="fas fa-map-marker-alt text-primary me-2 fw-bold"></i> @(item.DefenseVenue ?? "N/A")</div>
+                                        <div class="mb-2">
+                                            <i class="far fa-calendar text-primary me-2 fw-bold"></i> 
+                                            @(booking != null ? booking.DefenseDate.ToString("dd MMM yyyy") : (item.DefenseDate?.ToString("dd MMM yyyy") ?? "N/A"))
+                                        </div>
+                                        <div class="mb-2">
+                                            <i class="far fa-clock text-primary me-2 fw-bold"></i> 
+                                            @(booking != null ? $"{new DateTime(booking.StartTime.Ticks):hh:mm tt} - {new DateTime(booking.EndTime.Ticks):hh:mm tt}" : (item.DefenseTime ?? "N/A"))
+                                        </div>
+                                        <div>
+                                            <i class="fas fa-map-marker-alt text-primary me-2 fw-bold"></i> 
+                                            @(booking != null ? booking.Venue : (item.DefenseVenue ?? "N/A"))
+                                        </div>
                                     </div>
                                 }
                                 else
@@ -186,10 +246,18 @@
                                     <div class="d-flex align-items-center">
                                         <div class="status-indicator bg-success me-2"></div>
                                         <span class="text-muted fw-bold w-25">Examiner:</span> 
-                                        @{
-                                            var examiner = item.Project?.AssignedExaminers?.FirstOrDefault()?.Examiner?.FullName ?? "Unassigned";
+                                        @if (!string.IsNullOrEmpty(defenseExaminerName))
+                                        {
+                                            <span class="fw-semibold text-dark">@defenseExaminerName <span class="badge bg-success bg-opacity-10 text-success ms-1 small">Defense</span></span>
                                         }
-                                        @examiner
+                                        else if (!string.IsNullOrEmpty(projectExaminerName))
+                                        {
+                                            <span class="text-muted">Pending Assignment <span class="text-muted small fst-italic ms-1">(Project Examiner: @projectExaminerName)</span></span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted fst-italic">Pending Assignment</span>
+                                        }
                                     </div>
                                 </div>
                             </div>
@@ -221,7 +289,7 @@
                                     <div class="dropdown">
                                         <button class="btn btn-sm btn-light rounded-circle" type="button" data-bs-toggle="dropdown"><i class="fas fa-ellipsis-v"></i></button>
                                         <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
-                                            <li><a class="dropdown-item fw-bold text-primary" href="#"><i class="fas fa-eye me-2"></i>View Details</a></li>
+                                            <li><a class="dropdown-item fw-bold text-primary" href="javascript:void(0)" onclick="openDefenseDetailsModal(@item.Id)"><i class="fas fa-eye me-2"></i>View Details</a></li>
                                         </ul>
                                     </div>
                                 </div>
@@ -252,3 +320,222 @@
         </div>
     </div>
 </div>
+
+<!-- DEFENSE DETAILS MODALS (READ-ONLY) -->
+@foreach (var item in Model)
+{
+    var bookingsDict = ViewBag.DefenseBookings as Dictionary<int, FYPTracker.Models.IAFDefenseBooking>;
+    var booking = (bookingsDict != null && bookingsDict.ContainsKey(item.Id)) ? bookingsDict[item.Id] : null;
+
+    int attemptNumber = 1;
+    if (!string.IsNullOrEmpty(item.Remarks) && item.Remarks.Contains("JSON: "))
+    {
+        try
+        {
+            var json = item.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+            var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(json);
+            attemptNumber = history.CurrentAttempt;
+        }
+        catch { }
+    }
+
+    var studentName = item.Project?.Student?.FullName ?? "Unknown Student";
+    var studentId = item.Project?.Student?.CoventryId ?? item.Project?.Student?.EmployeeId ?? "N/A";
+    var projectTitle = item.Project?.Title ?? "N/A";
+    var academicSession = item.Project?.AcademicSession ?? currentSession;
+    var supervisorName = item.Project?.Supervisor?.FullName ?? "Unassigned";
+
+    var defenseExaminerName = booking?.Examiner?.FullName;
+    var projectExaminerName = item.Project?.AssignedExaminers?.FirstOrDefault()?.Examiner?.FullName;
+    var examinerName = defenseExaminerName 
+        ?? (!string.IsNullOrEmpty(projectExaminerName) ? $"Pending (Project Examiner: {projectExaminerName})" : "Pending Assignment");
+
+    var isScheduled = (booking != null && booking.BookingStatus != "Cancelled") || item.Status == "DefenseScheduled" || item.DefenseDate != null;
+
+    DateTime? defenseDate = booking != null ? booking.DefenseDate : item.DefenseDate;
+    string defenseTime = booking != null 
+        ? $"{new DateTime(booking.StartTime.Ticks):hh:mm tt} - {new DateTime(booking.EndTime.Ticks):hh:mm tt}" 
+        : (!string.IsNullOrEmpty(item.DefenseTime) ? item.DefenseTime : "N/A");
+    string defenseVenue = booking != null ? booking.Venue : (!string.IsNullOrEmpty(item.DefenseVenue) ? item.DefenseVenue : "N/A");
+    string bookingStatus = booking != null ? booking.BookingStatus : (item.Status == "DefenseScheduled" ? "Scheduled" : "Pending");
+
+    string academicOutcome = booking != null && !string.IsNullOrEmpty(booking.AcademicOutcome) 
+        ? booking.AcademicOutcome 
+        : (item.Status == "AdminApproved" ? "Passed (Approved)" : (item.Status == "ChangeOfTopicRequired" ? "Failed (Change of Topic)" : "Pending Outcome"));
+
+    var outcomeBadge = academicOutcome switch {
+        "AdminApproved" or "Passed" or "Passed (Approved)" => "bg-success text-white",
+        "ChangeOfTopicRequired" or "Failed" or "Failed (Change of Topic)" => "bg-danger text-white",
+        _ => "bg-warning text-dark"
+    };
+
+    var statusBadge = item.Status switch {
+        "AdminApproved" => "bg-success text-white",
+        "DefenseScheduled" => "bg-primary text-white",
+        "DefenseRequired" => "bg-danger text-white",
+        "ChangeOfTopicRequired" => "bg-danger text-white",
+        _ => "bg-secondary text-white"
+    };
+
+    <div class="modal fade" id="defenseDetailsModal_@(item.Id)" tabindex="-1" aria-labelledby="defenseDetailsModalLabel_@(item.Id)" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="modal-header bg-dark text-white py-3 px-4 d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fas fa-gavel text-info fs-4"></i>
+                        <h5 class="modal-title fw-bold text-white mb-0" id="defenseDetailsModalLabel_@(item.Id)">
+                            IAF Defense Details
+                        </h5>
+                        <span class="badge @statusBadge px-2 py-1 ms-2">@item.Status</span>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" data-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <!-- Project & Academic Record -->
+                    <div class="card border-0 shadow-sm rounded-3 mb-3 bg-white p-3">
+                        <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">
+                            <i class="fas fa-graduation-cap me-2"></i>Academic Record
+                        </h6>
+                        <div class="row g-3 small">
+                            <div class="col-md-6">
+                                <span class="text-muted d-block">Student Name</span>
+                                <span class="fw-bold text-dark fs-6">@studentName</span>
+                                <span class="text-muted ms-1">(@studentId)</span>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted d-block">Academic Session</span>
+                                <span class="fw-semibold text-dark">@academicSession</span>
+                            </div>
+                            <div class="col-12">
+                                <span class="text-muted d-block">Project Title</span>
+                                <span class="fw-semibold text-dark">@projectTitle</span>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted d-block">Current IAF Attempt</span>
+                                <span class="badge bg-light-primary text-primary border border-primary border-opacity-25 px-2 py-1 fw-bold">
+                                    Attempt @attemptNumber
+                                </span>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted d-block">Supervisor</span>
+                                <span class="fw-semibold text-dark">@supervisorName</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Defense Appointment Information -->
+                    <div class="card border-0 shadow-sm rounded-3 bg-white p-3">
+                        <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">
+                            <i class="fas fa-calendar-check me-2"></i>Defense Booking Information
+                        </h6>
+
+                        @if (isScheduled && defenseDate.HasValue)
+                        {
+                            <div class="row g-3 small">
+                                <div class="col-md-6">
+                                    <span class="text-muted d-block">Independent Examiner</span>
+                                    <span class="fw-bold text-dark">
+                                        <i class="fas fa-user-check text-success me-1"></i>@examinerName
+                                    </span>
+                                </div>
+                                <div class="col-md-6">
+                                    <span class="text-muted d-block">Booking Status</span>
+                                    <span class="badge bg-light-info text-info border border-info border-opacity-25 fw-bold px-2 py-1">
+                                        @bookingStatus
+                                    </span>
+                                </div>
+                                <div class="col-md-6">
+                                    <span class="text-muted d-block">Defense Date</span>
+                                    <span class="fw-bold text-dark">
+                                        <i class="far fa-calendar-alt text-primary me-1"></i>@defenseDate.Value.ToString("dd MMM yyyy (dddd)")
+                                    </span>
+                                </div>
+                                <div class="col-md-6">
+                                    <span class="text-muted d-block">Scheduled Time</span>
+                                    <span class="fw-bold text-dark">
+                                        <i class="far fa-clock text-primary me-1"></i>@defenseTime
+                                    </span>
+                                </div>
+                                <div class="col-12">
+                                    <span class="text-muted d-block">Venue / Meeting Link</span>
+                                    <span class="fw-bold text-dark">
+                                        <i class="fas fa-map-marker-alt text-danger me-1"></i>@defenseVenue
+                                    </span>
+                                </div>
+                                <div class="col-md-6">
+                                    <span class="text-muted d-block">Academic Evaluation Outcome</span>
+                                    <span class="badge @outcomeBadge px-3 py-1 mt-1 fw-bold">@academicOutcome</span>
+                                </div>
+                                @if (booking != null && !string.IsNullOrWhiteSpace(booking.OutcomeComments))
+                                {
+                                    <div class="col-12">
+                                        <span class="text-muted d-block">Outcome Comments</span>
+                                        <div class="p-2 bg-light rounded text-dark small mt-1">@booking.OutcomeComments</div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-dark rounded-3 p-3 mb-0">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="fas fa-exclamation-circle text-warning fs-4 me-2"></i>
+                                    <strong class="fs-6">Defense Required — Not Yet Scheduled</strong>
+                                </div>
+                                <p class="small text-muted mb-3">
+                                    This student's IAF was rejected with a mandatory defense requirement. An independent examiner session has not yet been scheduled or booked.
+                                </p>
+                                <div class="row g-2 small pt-2 border-top border-warning border-opacity-25">
+                                    <div class="col-md-6">
+                                        <span class="text-muted">Assigned Examiner:</span>
+                                        <span class="fw-semibold ms-1">@examinerName</span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <span class="text-muted">Defense Date/Time:</span>
+                                        <span class="text-muted fst-italic ms-1">Pending scheduling</span>
+                                    </div>
+                                    <div class="col-12">
+                                        <span class="text-muted">Venue:</span>
+                                        <span class="text-muted fst-italic ms-1">Not assigned</span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4 d-flex justify-content-between">
+                    <div>
+                        @if (item.Status == "DefenseRequired" || item.Status == "DefenseScheduled")
+                        {
+                            <a href="@Url.Action("SmartScheduleDefense", "Admin", new { milestoneId = item.Id })" class="btn btn-sm btn-outline-warning fw-bold">
+                                <i class="fas fa-calendar-alt me-1"></i>Open Smart Schedule
+                            </a>
+                        }
+                    </div>
+                    <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<script>
+    function openDefenseDetailsModal(milestoneId) {
+        var modalId = 'defenseDetailsModal_' + milestoneId;
+        var modalEl = document.getElementById(modalId);
+        if (!modalEl) {
+            console.warn('Defense details modal not found for milestone ' + milestoneId);
+            return;
+        }
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        } else if (typeof $ !== 'undefined' && $.fn.modal) {
+            $('#' + modalId).modal('show');
+        } else {
+            modalEl.classList.add('show');
+            modalEl.style.display = 'block';
+        }
+    }
+</script>

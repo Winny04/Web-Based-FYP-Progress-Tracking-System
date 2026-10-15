@@ -435,11 +435,11 @@
                                 <tbody id="inviteesList">
                                     <tr class="invitee-row">
                                         <td>
-                                            <input type="text" name="inviteNames[]" class="form-control form-control-solid form-control-sm fs-8" placeholder="Full Name (Optional)">
+                                            <input type="text" name="inviteNames" class="form-control form-control-solid form-control-sm fs-8" placeholder="Full Name (Optional)">
                                         </td>
                                         <td>
                                             <input type="text" class="form-control form-control-solid form-control-sm fs-8 username-input" placeholder="Username *" required>
-                                            <input type="hidden" name="inviteEmails[]" class="full-email-hidden">
+                                            <input type="hidden" name="inviteEmails" class="full-email-hidden">
                                         </td>
                                         <td class="text-center">
                                             <span class="badge badge-light-secondary status-badge w-100 fs-8">Ready</span>
@@ -596,14 +596,18 @@
 
         @if (TempData["Info"] != null)
         {
-            <text>
-            Swal.fire({
-                title: 'Info',
-                text: '@Html.Raw(TempData["Info"].ToString().Replace("'", "\\'"))',
-                icon: 'info',
-                confirmButtonColor: '#3b82f6'
-            });
-            </text>
+            var infoMsg = TempData["Info"]?.ToString() ?? "";
+            if (!infoMsg.Contains("confirmed supervisor", StringComparison.OrdinalIgnoreCase))
+            {
+                <text>
+                Swal.fire({
+                    title: 'Info',
+                    text: '@Html.Raw(infoMsg.Replace("'", "\\'"))',
+                    icon: 'info',
+                    confirmButtonColor: '#3b82f6'
+                });
+                </text>
+            }
         }
 
         // Dynamically populate Academic Session dropdown from DB
@@ -811,6 +815,12 @@
             $("#mytable").DataTable(
                 {
                     dom: 'Brtip',
+                    language: {
+                        info: "Showing _START_ to _END_ of _TOTAL_ users",
+                        infoEmpty: "No matching users found.",
+                        emptyTable: "No users found in the system.",
+                        zeroRecords: "No matching users found."
+                    },
                     buttons: [
                         { extend: 'csv', className: 'btn btn-sm btn-primary', text: '<i class="fas fa-file-csv"></i> Export CSV' },
                         { extend: 'excel', className: 'btn btn-sm btn-success', text: '<i class="fas fa-file-excel"></i> Export Excel' }
@@ -1636,11 +1646,11 @@
             let rowHtml = `
                 <tr class="invitee-row">
                     <td>
-                        <input type="text" name="inviteNames[]" class="form-control form-control-solid form-control-sm fs-8" placeholder="Full Name (Optional)">
+                        <input type="text" name="inviteNames" class="form-control form-control-solid form-control-sm fs-8" placeholder="Full Name (Optional)">
                     </td>
                     <td>
                         <input type="text" class="form-control form-control-solid form-control-sm fs-8 username-input" placeholder="Username *" required>
-                        <input type="hidden" name="inviteEmails[]" class="full-email-hidden">
+                        <input type="hidden" name="inviteEmails" class="full-email-hidden">
                     </td>
                     <td class="text-center">
                         <span class="badge badge-light-secondary status-badge w-100 fs-8">Ready</span>

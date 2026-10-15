@@ -154,11 +154,6 @@
                     <span class="menu-title text-nowrap">My Availability</span>
                 </a>
             </div>
-            <div class="menu-item @(pageTitle == "Reports & Analytics" ? "here show" : "")">
-                <a class="menu-link py-3 px-4 @(pageTitle == "Reports & Analytics" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/Reporting">
-                    <span class="menu-title text-nowrap">Reporting</span>
-                </a>
-            </div>
             <div class="menu-item @(pageTitle == "Messages" ? "here show" : "")">
                 <a class="menu-link py-3 px-4 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" asp-controller="Chat" asp-action="Index">
                     <span class="menu-title text-nowrap d-flex align-items-center">
@@ -174,7 +169,6 @@
             bool isDashboard = currentPath == "/Admin" || currentPath == "/Admin/" || currentPath.StartsWith("/Admin/Index", StringComparison.OrdinalIgnoreCase);
             bool isUsers = currentPath.StartsWith("/Admin/ManageUsers", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/EditUser", StringComparison.OrdinalIgnoreCase);
             bool isProjects = currentPath.StartsWith("/Admin/ManageProjects", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/ProjectDetails", StringComparison.OrdinalIgnoreCase);
-            bool isReporting = currentPath.StartsWith("/Admin/Reporting", StringComparison.OrdinalIgnoreCase);
             bool isSettings = currentPath.StartsWith("/Admin/Settings", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/ApprovedIafList", StringComparison.OrdinalIgnoreCase);
             bool isLookups = currentPath.StartsWith("/Admin/ManageLookups", StringComparison.OrdinalIgnoreCase);
             bool isFormTemplates = currentPath.StartsWith("/Admin/FormTemplateSettings", StringComparison.OrdinalIgnoreCase);
@@ -232,17 +226,7 @@
                 </a>
             </div>
 
-            <!-- 4. Reporting -->
-            <div class="menu-item @(isReporting ? "here show" : "")">
-                <a class="menu-link py-3 px-4 @(isReporting ? "active border-bottom border-3 border-primary" : "")" href="/Admin/Reporting">
-                    <span class="menu-title text-nowrap d-flex align-items-center">
-                        <i class="fas fa-chart-line me-2 fs-6 text-muted"></i>
-                        Reporting
-                    </span>
-                </a>
-            </div>
-
-            <!-- 5. Configuration (Dropdown) -->
+            <!-- 4. Configuration (Dropdown) -->
             <div data-kt-menu-trigger="{default: 'click', lg: 'hover'}" data-kt-menu-placement="bottom-start" class="menu-item menu-lg-down-accordion me-lg-1 @(isConfigGroup ? "here show" : "")">
                 <span class="menu-link py-3 px-4 @(isConfigGroup ? "active border-bottom border-3 border-primary" : "")">
                     <span class="menu-title text-nowrap d-flex align-items-center">

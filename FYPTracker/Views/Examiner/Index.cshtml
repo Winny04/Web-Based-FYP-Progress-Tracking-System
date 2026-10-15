@@ -1,7 +1,127 @@
 @model IEnumerable<FYPTracker.Models.FYPProject>
 @{
     ViewData["Title"] = "Examiner Dashboard";
+    var scheduledDefenses = ViewBag.ScheduledDefenses as List<FYPTracker.Models.IAFDefenseBooking> ?? new();
+    string currentSession = ViewBag.CurrentSession as string ?? "All";
+    var academicSessions = ViewBag.AcademicSessions as List<FYPTracker.Models.AcademicSession> ?? new();
 }
+
+<div class="d-flex justify-content-between align-items-center mb-5 flex-wrap gap-3">
+    <div>
+        <h2 class="fw-bolder text-dark mb-1">Examiner Dashboard</h2>
+        <span class="text-muted fw-bold fs-7">Manage your assigned project assessments and scheduled defense sessions.</span>
+    </div>
+    <form id="sessionFilterForm" method="get" action="@Url.Action("Index", "Examiner")" class="d-flex align-items-center gap-2">
+        <label class="text-muted fw-bold small mb-0 text-nowrap"><i class="fas fa-calendar-alt text-primary me-1"></i>Session:</label>
+        <select name="sessionFilter" class="form-select form-select-sm form-select-solid bg-white fw-bold border shadow-sm" style="min-width: 220px;" onchange="document.getElementById('sessionFilterForm').submit();">
+            <option value="All" selected="@(currentSession == "All")">All Academic Sessions</option>
+            @foreach (var s in academicSessions)
+            {
+                <option value="@s.Name" selected="@(currentSession == s.Name)">@s.Name</option>
+            }
+        </select>
+    </form>
+</div>
+
+<!-- Scheduled IAF Defenses Section -->
+<div class="card mb-5 mb-xl-8 border-0 shadow-sm" style="border-left: 5px solid #2563eb !important;">
+    <div class="card-header border-0 pt-5 pb-2 d-flex justify-content-between align-items-center">
+        <h3 class="card-title align-items-start flex-column">
+            <span class="card-label fw-bolder fs-3 mb-1 text-dark">
+                <i class="fas fa-calendar-check text-primary me-2"></i>Scheduled IAF Defenses
+                @if (scheduledDefenses.Any())
+                {
+                    <span class="badge bg-primary text-white ms-2 fs-8 rounded-pill">@scheduledDefenses.Count Active</span>
+                }
+            </span>
+            <span class="text-muted mt-1 fw-bold fs-7">IAF Defense sessions where you are assigned as the Independent Examiner.</span>
+        </h3>
+    </div>
+    <div class="card-body py-3">
+        @if (!scheduledDefenses.Any())
+        {
+            <div class="text-center p-5 bg-light rounded-4">
+                <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 50px; height: 50px;">
+                    <i class="fas fa-calendar-times fs-3"></i>
+                </div>
+                <h6 class="fw-bold text-dark mb-1">No Scheduled IAF Defenses</h6>
+                <p class="text-muted small mx-auto mb-0" style="max-width: 480px;">
+                    You have no upcoming or pending IAF defense sessions scheduled in this academic session.
+                </p>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
+                    <thead>
+                        <tr class="fw-bolder text-muted bg-light">
+                            <th class="ps-4 min-w-180px rounded-start">Student</th>
+                            <th class="min-w-220px">Project Title</th>
+                            <th class="min-w-140px">Date & Time</th>
+                            <th class="min-w-160px">Venue / Meeting Link</th>
+                            <th class="min-w-100px text-end pe-4 rounded-end">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var def in scheduledDefenses)
+                        {
+                            var student = def.Milestone?.Project?.Student;
+                            var project = def.Milestone?.Project;
+                            var isRescheduled = def.BookingStatus == "Rescheduled";
+                            var startStr = new DateTime(def.StartTime.Ticks).ToString("hh:mm tt");
+                            var endStr = new DateTime(def.EndTime.Ticks).ToString("hh:mm tt");
+
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="d-flex align-items-center">
+                                        <div class="symbol symbol-circle symbol-35px me-3 bg-light-primary text-primary fw-bolder d-flex align-items-center justify-content-center" style="width:35px;height:35px;border-radius:50%;">
+                                            @(student?.FullName?.Substring(0, 1) ?? "S")
+                                        </div>
+                                        <div class="d-flex flex-column">
+                                            <span class="text-dark fw-bolder fs-6">@(student?.FullName ?? "Unknown")</span>
+                                            <span class="text-muted fw-bold fs-8">@(student?.CoventryId ?? student?.EmployeeId ?? "N/A")</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="text-dark fw-bold d-block fs-6">@(project?.Title ?? def.Milestone?.Title ?? "N/A")</span>
+                                    <span class="text-muted fs-8">Supervisor: @(project?.Supervisor?.FullName ?? "Unassigned")</span>
+                                </td>
+                                <td>
+                                    <div class="text-dark fw-bold fs-7">
+                                        <i class="far fa-calendar-alt text-primary me-1"></i>@def.DefenseDate.ToString("dd MMM yyyy")
+                                    </div>
+                                    <div class="text-muted fs-8">
+                                        <i class="far fa-clock text-primary me-1"></i>@startStr - @endStr (@def.DurationMinutes mins)
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="text-dark fw-bold fs-7">
+                                        <i class="fas fa-map-marker-alt text-danger me-1"></i>
+                                        @if (!string.IsNullOrEmpty(def.Venue) && def.Venue.Contains("http"))
+                                        {
+                                            <a href="@def.Venue" target="_blank" class="text-primary text-decoration-underline">Join Online Defense</a>
+                                        }
+                                        else
+                                        {
+                                            @def.Venue
+                                        }
+                                    </div>
+                                </td>
+                                <td class="text-end pe-4">
+                                    <span class="badge @(isRescheduled ? "bg-info text-dark" : "bg-primary text-white") px-3 py-2 rounded-pill fw-bold fs-8">
+                                        @(isRescheduled ? $"Rescheduled (Att. {def.AttemptNumber})" : def.BookingStatus)
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
 
 <div class="card mb-5 mb-xl-8">
     <div class="card-header border-0 pt-5 d-flex justify-content-between align-items-center">
@@ -27,7 +147,7 @@
                 <a class="nav-link active text-primary" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, '')">All Assigned Projects</a>
             </li>
             <li class="nav-item">
-                <a class="nav-link text-muted" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, 'Pending Assessment')">Pending Assessment Assessment</a>
+                <a class="nav-link text-muted" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, 'Pending Assessment')">Pending Assessment</a>
             </li>
             <li class="nav-item">
                 <a class="nav-link text-muted" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, 'Graded')">Completed Assessments</a>
@@ -42,7 +162,7 @@
                         <th class="min-w-150px">Student</th>
                         <th class="min-w-125px">Stage 1 Assessment</th>
                         <th class="min-w-125px">Stage 2 Assessment</th>
-                        <th class="min-w-100px text-end rounded-end">Actionss</th>
+                        <th class="min-w-100px text-end rounded-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -68,7 +188,7 @@
                                 </td>
                                 <td>
                                     <span class="text-dark fw-bolder d-block mb-1 fs-6">@project.Student?.FullName</span>
-                                    <span class="text-muted fw-bold text-muted d-block fs-7">@project.Student?.EmployeeId</span>
+                                    <span class="text-muted fw-bold text-muted d-block fs-7">@(project.Student?.CoventryId ?? project.Student?.EmployeeId ?? "N/A")</span>
                                 </td>
                                 <td>
                                     @if(hasStage1Graded) {
@@ -101,6 +221,36 @@
                     }
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- IAF Defense Alternative Time Requests (Phase B3.4 UI Foundation - Reusable Component) -->
+<div class="card mb-5 mb-xl-8">
+    <div class="card-header border-0 pt-5 d-flex justify-content-between align-items-center">
+        <h3 class="card-title align-items-start flex-column">
+            <span class="card-label fw-bolder fs-4 mb-1">
+                <i class="fas fa-clock text-warning me-2"></i>IAF Defense Alternative Time Requests
+            </span>
+            <span class="text-muted mt-1 fw-bold fs-7">Administrative requests to propose an alternative defense time when no mutual slots exist.</span>
+        </h3>
+        <span class="badge bg-secondary text-white px-3 py-2 rounded-pill fw-bold fs-8">
+            <i class="fas fa-lock me-1"></i> Standby Mode
+        </span>
+    </div>
+    <div class="card-body py-4">
+        <!-- Standby Alert: Preserves safety until database migration and backend endpoints are authorized -->
+        <div class="text-center p-5 bg-light rounded-4">
+            <div class="bg-warning bg-opacity-10 text-warning rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 54px; height: 54px;">
+                <i class="fas fa-calendar-alt fs-3"></i>
+            </div>
+            <h6 class="fw-bold text-dark mb-1">Alternative Time Proposal Inbox</h6>
+            <p class="text-muted small mx-auto mb-3" style="max-width: 500px;">
+                No pending alternative time requests require your proposal at this time. Incoming requests from the administrator will appear here for you to propose a date and time.
+            </p>
+            <div class="badge bg-light text-muted border px-3 py-2 rounded-pill">
+                <i class="fas fa-shield-alt text-success me-1"></i> Authoritative Availability Engine Active
+            </div>
         </div>
     </div>
 </div>

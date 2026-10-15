@@ -717,7 +717,7 @@ namespace FYPTracker.Controllers
         [Authorize]
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ForceChangePassword(string newPassword, string confirmPassword, string fullName, string phone, string programme, string academicSession, string title, int? departmentId, List<string> selectedProgrammes, List<string> selectedSpecializations)
+        public async Task<IActionResult> ForceChangePassword(string newPassword, string confirmPassword, string fullName, string? phone = null, string? programme = null, string? academicSession = null, string? title = null, int? departmentId = null, List<string>? selectedProgrammes = null, List<string>? selectedSpecializations = null)
         {
             var user = await _context.ApplicationUsers
                 .Include(u => u.UserRoles).ThenInclude(r => r.Role)

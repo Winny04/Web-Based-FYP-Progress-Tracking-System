@@ -16,9 +16,9 @@
     {
         return System.Text.RegularExpressions.Regex.Replace(
             value ?? "",
-            $@"^\s*{number}\.\s*To\s*",
+            $@"^\s*({number}\.\s*)?(To\s+)+",
             "",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
     }
     
     foreach(var field in fields)

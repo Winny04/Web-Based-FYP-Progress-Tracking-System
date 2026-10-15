@@ -12,6 +12,34 @@
     
     // Overall completion check
     bool isStage2Completed = stage2Milestones.All(m => m.Status == "Submitted" || m.Status == "Approved" || m.Status == "Completed");
+
+    double? supStage2Score = FYPTracker.Utils.GradingHelper.CalculateStage2Score(Model.Stage2SupervisorMarksheetData, "Supervisor");
+    double? exStage2Score = FYPTracker.Utils.GradingHelper.CalculateStage2Score(Model.Stage2ExaminerMarksheetData, "Examiner");
+    double? jointStage2Score = FYPTracker.Utils.GradingHelper.CalculateJointFinalPercentage(supStage2Score, exStage2Score);
+    bool isBothGraded = supStage2Score.HasValue && exStage2Score.HasValue;
+    bool isReleased = isBothGraded && !string.IsNullOrEmpty(Model.FinalGrade);
+
+    string supervisorFeedback = "";
+    if (!string.IsNullOrEmpty(Model.Stage2SupervisorMarksheetData))
+    {
+        try
+        {
+            using var supDoc = System.Text.Json.JsonDocument.Parse(Model.Stage2SupervisorMarksheetData);
+            if (supDoc.RootElement.TryGetProperty("Feedback", out var fb)) supervisorFeedback = fb.GetString() ?? "";
+        }
+        catch { }
+    }
+
+    string examinerFeedback = Model.ExaminerComments ?? "";
+    if (string.IsNullOrEmpty(examinerFeedback) && !string.IsNullOrEmpty(Model.Stage2ExaminerMarksheetData))
+    {
+        try
+        {
+            using var exDoc = System.Text.Json.JsonDocument.Parse(Model.Stage2ExaminerMarksheetData);
+            if (exDoc.RootElement.TryGetProperty("Feedback", out var fb)) examinerFeedback = fb.GetString() ?? "";
+        }
+        catch { }
+    }
 }
 
 <div class="container-xxl py-4">
@@ -38,25 +66,118 @@
             </div>
         </div>
         
-        @if (!string.IsNullOrEmpty(Model.FinalGrade))
+        @if (isReleased)
         {
-            <div class="card border-0 shadow-sm rounded-3 mb-4 border-start border-4 border-primary">
+            <div class="card border-0 shadow-sm rounded-3 mb-4 border-start border-4 border-success">
                 <div class="card-body p-4">
-                    <h5 class="text-primary fw-bold mb-3"><i class="fas fa-award me-2"></i>Final Results</h5>
-                    <div class="row g-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="text-success fw-bold mb-0"><i class="fas fa-award me-2"></i>Stage 2 Final Results</h5>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fw-bold">
+                            <i class="fas fa-check-double me-1"></i> Official Result Released
+                        </span>
+                    </div>
+
+                    <div class="row g-3 mb-4">
                         <div class="col-md-3">
                             <div class="p-3 bg-light rounded-3 text-center border h-100 d-flex flex-column justify-content-center">
                                 <span class="d-block text-muted fs-8 text-uppercase fw-bold mb-1">Final Grade</span>
-                                <span class="fs-1 fw-bolder text-primary">@Model.FinalGrade</span>
+                                <span class="fs-2 fw-bolder text-success">@Model.FinalGrade</span>
                             </div>
                         </div>
-                        <div class="col-md-9">
-                            <div class="p-3 bg-light rounded-3 border h-100">
-                                <span class="d-block text-muted fs-8 text-uppercase fw-bold mb-1">Examiner Comments</span>
-                                <p class="mb-0 fs-7 text-dark">@(string.IsNullOrEmpty(Model.ExaminerComments) ? "No comments provided." : Model.ExaminerComments)</p>
+                        <div class="col-md-3">
+                            <div class="p-3 bg-light rounded-3 text-center border h-100 d-flex flex-column justify-content-center">
+                                <span class="d-block text-muted fs-8 text-uppercase fw-bold mb-1">Joint Final Score</span>
+                                <span class="fs-2 fw-bolder text-primary">@(jointStage2Score.HasValue ? jointStage2Score.Value.ToString("F2") + "%" : "N/A")</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3 bg-light rounded-3 text-center border h-100 d-flex flex-column justify-content-center">
+                                <span class="d-block text-muted fs-8 text-uppercase fw-bold mb-1">Supervisor Score</span>
+                                <span class="fs-4 fw-bolder text-dark">@(supStage2Score.HasValue ? supStage2Score.Value.ToString("F2") + "%" : "N/A")</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3 bg-light rounded-3 text-center border h-100 d-flex flex-column justify-content-center">
+                                <span class="d-block text-muted fs-8 text-uppercase fw-bold mb-1">Examiner Score</span>
+                                <span class="fs-4 fw-bolder text-dark">@(exStage2Score.HasValue ? exStage2Score.Value.ToString("F2") + "%" : "N/A")</span>
                             </div>
                         </div>
                     </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="p-3 bg-light rounded-3 border h-100">
+                                <span class="d-block text-muted fs-8 text-uppercase fw-bold mb-2"><i class="fas fa-user-tie me-1 text-primary"></i> Supervisor Feedback</span>
+                                <p class="mb-0 fs-7 text-dark">@(string.IsNullOrWhiteSpace(supervisorFeedback) ? "No written feedback recorded." : supervisorFeedback)</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-3 bg-light rounded-3 border h-100">
+                                <span class="d-block text-muted fs-8 text-uppercase fw-bold mb-2"><i class="fas fa-chalkboard-teacher me-1 text-primary"></i> Examiner Feedback</span>
+                                <p class="mb-0 fs-7 text-dark">@(string.IsNullOrWhiteSpace(examinerFeedback) ? "No written feedback recorded." : examinerFeedback)</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="card border-0 shadow-sm rounded-3 mb-4 border-start border-4 border-warning">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold text-dark mb-0"><i class="fas fa-hourglass-half text-warning me-2"></i>Stage 2 Final Assessment in Progress</h6>
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 rounded-pill fw-bold">
+                            <i class="fas fa-clock me-1"></i> Under Evaluation
+                        </span>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <div class="p-3 bg-light rounded-3 border d-flex align-items-center justify-content-between">
+                                <div>
+                                    <span class="text-muted small fw-bold d-block text-uppercase">Supervisor Assessment</span>
+                                    <span class="fw-bold fs-7 @(supStage2Score.HasValue ? "text-success" : "text-warning")">
+                                        @(supStage2Score.HasValue ? "Completed" : "Pending Supervisor Evaluation")
+                                    </span>
+                                </div>
+                                <div>
+                                    @if (supStage2Score.HasValue)
+                                    {
+                                        <i class="fas fa-check-circle fs-3 text-success"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="fas fa-hourglass-start fs-3 text-warning"></i>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="p-3 bg-light rounded-3 border d-flex align-items-center justify-content-between">
+                                <div>
+                                    <span class="text-muted small fw-bold d-block text-uppercase">Examiner Assessment</span>
+                                    <span class="fw-bold fs-7 @(exStage2Score.HasValue ? "text-success" : "text-warning")">
+                                        @(exStage2Score.HasValue ? "Completed" : "Pending Examiner Evaluation")
+                                    </span>
+                                </div>
+                                <div>
+                                    @if (exStage2Score.HasValue)
+                                    {
+                                        <i class="fas fa-check-circle fs-3 text-success"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="fas fa-hourglass-start fs-3 text-warning"></i>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="text-muted small mb-0">
+                        <i class="fas fa-info-circle me-1 text-primary"></i> In accordance with university academic policy, provisional marks and qualitative remarks remain confidential while evaluation is in progress. Your final grade and combined score will be officially released here immediately once both assessments are completed and the joint calculation is finalized.
+                    </p>
                 </div>
             </div>
         }
@@ -100,20 +221,47 @@
                             </div>
                             <div class="ms-3 ps-4 @(isLast ? "" : "border-start border-2 " + (isDone ? "border-success" : (isRejected ? "border-danger" : (isUnderReview ? "border-warning" : "border-light"))))">
                                 <form asp-action="SubmitStage2Milestone" asp-controller="Student" enctype="multipart/form-data" method="post" class="pb-2">
+                                    @Html.AntiForgeryToken()
                                     <input type="hidden" name="stepTitle" value="@step.Title" />
                                     <div class="mb-0">
                                         <label class="form-label text-muted fs-8 fw-bold">@labelText</label>
                                         @{ var latestFile = step.SubmissionFiles?.Where(f => f.UploadedBy == Model.StudentId).OrderByDescending(f => f.UploadedDate).FirstOrDefault(); }
                                         
+                                        @if (step.Title.Contains("Meeting") && !isDone)
+                                        {
+                                            <div class="mb-3 p-3 bg-light rounded-3 border">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <h6 class="fw-bold mb-1 fs-8"><i class="fas fa-calendar-check text-primary me-2"></i>Signed Supervisor Meeting Record</h6>
+                                                        <small class="text-muted fs-9">You can download your official signed meeting logbook from the Book Meeting page.</small>
+                                                    </div>
+                                                    <a href="@Url.Action("BookMeeting", "Student")" class="btn btn-sm btn-outline-primary fs-8">
+                                                        <i class="fas fa-external-link-alt me-1"></i> Go to Meetings
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        }
+
                                         @if(isDone) {
                                             <div class="alert alert-light border shadow-sm p-3 mb-0 d-flex justify-content-between align-items-center rounded-3">
-                                                <span class="fs-7 fw-bold text-dark"><i class="fas fa-file-pdf text-danger me-2"></i> Document Submitted</span>
+                                                <div class="d-flex align-items-center text-truncate me-2">
+                                                    <i class="fas fa-file-pdf text-danger fs-3 me-3"></i>
+                                                    <div class="text-truncate">
+                                                        <span class="fs-7 fw-bold text-dark d-block text-truncate">@(latestFile?.FileName ?? "Document Submitted")</span>
+                                                        <small class="text-muted">Submitted on @(step.SubmittedDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</small>
+                                                    </div>
+                                                </div>
                                                 @if(latestFile != null && !string.IsNullOrEmpty(latestFile.FilePath)) {
-                                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = latestFile.Id })" target="_blank" class="btn btn-sm btn-outline-secondary fw-bold px-3 py-1 fs-8">View File</a>
+                                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = latestFile.Id })" target="_blank" class="btn btn-sm btn-outline-primary fw-bold px-3 py-1 fs-8">
+                                                        <i class="fas fa-eye me-1"></i> View File
+                                                    </a>
                                                 }
                                             </div>
                                             @if(step.Status == "Approved" || step.Status == "Completed") {
-                                                <div class="text-success mt-2 fs-8 fw-bold"><i class="fas fa-check-circle me-1"></i> Approved</div>
+                                                <div class="text-success mt-2 fs-8 fw-bold"><i class="fas fa-check-circle me-1"></i> Approved by Supervisor</div>
+                                            }
+                                            else if(step.Status == "Submitted") {
+                                                <div class="text-warning mt-2 fs-8 fw-bold"><i class="fas fa-clock me-1"></i> Submitted — Pending Supervisor Review</div>
                                             }
 
                                             @if (step.SubmissionFiles != null && step.SubmissionFiles.Any(f => f.UploadedBy != Model.StudentId))

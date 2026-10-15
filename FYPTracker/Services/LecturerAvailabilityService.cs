@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using FYPTracker.Models;
+using FYPTracker.Services.Defense;
 
 namespace FYPTracker.Services
 {
@@ -20,6 +22,15 @@ namespace FYPTracker.Services
             DateTime targetDate,
             int durationMinutes,
             int academicSessionId);
+
+        Task<bool> IsSlotAvailableAsync(
+            int lecturerId,
+            DateTime targetDate,
+            TimeSpan startTime,
+            TimeSpan endTime,
+            int academicSessionId,
+            int? excludeBookingId = null,
+            int? excludeMilestoneId = null);
     }
 
     public class TimeSpanRange
@@ -46,33 +57,35 @@ namespace FYPTracker.Services
             if (lecturerIds == null || !lecturerIds.Any())
                 return new List<TimeSpanRange>();
 
-            var allLecturersSlots = new List<List<TimeSpanRange>>();
+            var distinctIds = lecturerIds.Distinct().ToList();
 
-            foreach (var id in lecturerIds)
+            // 1. Get continuous free availability intervals for the first lecturer
+            var mutualIntervals = await GetLecturerContinuousFreeIntervalsAsync(
+                distinctIds.First(),
+                targetDate,
+                academicSessionId);
+
+            if (!mutualIntervals.Any())
+                return new List<TimeSpanRange>();
+
+            // 2. Intersect continuous free intervals with subsequent lecturers
+            foreach (var id in distinctIds.Skip(1))
             {
-                var slots = await GetAvailableSlotsAsync(
+                var nextIntervals = await GetLecturerContinuousFreeIntervalsAsync(
                     id,
                     targetDate,
-                    durationMinutes,
                     academicSessionId);
 
-                allLecturersSlots.Add(slots);
+                mutualIntervals = IntersectContinuousIntervals(mutualIntervals, nextIntervals);
+                if (!mutualIntervals.Any())
+                    return new List<TimeSpanRange>();
             }
 
-            var mutualSlots = allLecturersSlots.First();
-
-            foreach (var slots in allLecturersSlots.Skip(1))
-            {
-                mutualSlots = IntersectSlots(
-                    mutualSlots,
-                    slots,
-                    durationMinutes);
-            }
-
-            return mutualSlots;
+            // 3. Slice the resulting mutual continuous intervals into discrete slots
+            return SliceIntoDiscreteSlots(mutualIntervals, durationMinutes);
         }
 
-        private List<TimeSpanRange> IntersectSlots(List<TimeSpanRange> list1, List<TimeSpanRange> list2, int minDuration)
+        private List<TimeSpanRange> IntersectContinuousIntervals(List<TimeSpanRange> list1, List<TimeSpanRange> list2)
         {
             var result = new List<TimeSpanRange>();
             foreach (var s1 in list1)
@@ -82,16 +95,78 @@ namespace FYPTracker.Services
                     var start = s1.StartTime > s2.StartTime ? s1.StartTime : s2.StartTime;
                     var end = s1.EndTime < s2.EndTime ? s1.EndTime : s2.EndTime;
 
-                    if ((end - start).TotalMinutes >= minDuration)
+                    if (end > start)
                     {
                         result.Add(new TimeSpanRange { StartTime = start, EndTime = end });
                     }
                 }
             }
-            return result;
+            return MergeContiguousOrOverlappingIntervals(result);
         }
 
         public async Task<List<TimeSpanRange>> GetAvailableSlotsAsync(int lecturerId, DateTime targetDate, int durationMinutes, int academicSessionId)
+        {
+            var continuousIntervals = await GetLecturerContinuousFreeIntervalsAsync(
+                lecturerId,
+                targetDate,
+                academicSessionId);
+
+            return SliceIntoDiscreteSlots(continuousIntervals, durationMinutes);
+        }
+
+        public async Task<bool> IsSlotAvailableAsync(
+            int lecturerId,
+            DateTime targetDate,
+            TimeSpan startTime,
+            TimeSpan endTime,
+            int academicSessionId,
+            int? excludeBookingId = null,
+            int? excludeMilestoneId = null)
+        {
+            // 1. Validate inputs
+            if (lecturerId <= 0 || academicSessionId <= 0)
+                return false;
+
+            // 2. Reject invalid or zero-length time intervals
+            if (startTime >= endTime)
+                return false;
+
+            // 3. Reject intervals crossing the calendar-day boundary
+            if (startTime < TimeSpan.Zero || endTime > TimeSpan.FromHours(24))
+                return false;
+
+            // 4. Retrieve continuous free intervals via B1 engine (with exact booking / milestone self-exclusion support)
+            var continuousIntervals = await GetLecturerContinuousFreeIntervalsAsync(
+                lecturerId,
+                targetDate,
+                academicSessionId,
+                excludeBookingId: excludeBookingId,
+                excludeMilestoneId: excludeMilestoneId);
+
+            // 5. Check if requested interval is fully contained within continuous free intervals
+            return IsIntervalFullyContained(continuousIntervals, startTime, endTime);
+        }
+
+        public static bool IsIntervalFullyContained(
+            List<TimeSpanRange>? continuousIntervals,
+            TimeSpan startTime,
+            TimeSpan endTime)
+        {
+            if (continuousIntervals == null || !continuousIntervals.Any())
+                return false;
+
+            if (startTime >= endTime || startTime < TimeSpan.Zero || endTime > TimeSpan.FromHours(24))
+                return false;
+
+            return continuousIntervals.Any(range => range.StartTime <= startTime && range.EndTime >= endTime);
+        }
+
+        private async Task<List<TimeSpanRange>> GetLecturerContinuousFreeIntervalsAsync(
+            int lecturerId,
+            DateTime targetDate,
+            int academicSessionId,
+            int? excludeBookingId = null,
+            int? excludeMilestoneId = null)
         {
             // 1. Resolve Lecturer
             var lecturer = await _context.ApplicationUsers
@@ -103,26 +178,10 @@ namespace FYPTracker.Services
             if (academicSessionId <= 0)
                 return new List<TimeSpanRange>();
 
-            // SAFETY: Do not assume a lecturer is available
-            // when no teaching timetable has been configured
-            // for the selected academic session.
-            bool hasTimetable = await _context.SupervisorTimetableEntries
-                .AsNoTracking()
-                .AnyAsync(t =>
-                    t.SupervisorId == lecturerId &&
-                    t.AcademicSessionId == academicSessionId);
-
-            if (!hasTimetable)
-            {
-                // No timetable configured for this session.
-                // Return no bookable slots instead of assuming availability.
-                return new List<TimeSpanRange>();
-            }
-
             // 2. Resolve Working Hours from FYPSettings
             // Require valid LecturerWorkingHoursStart and LecturerWorkingHoursEnd values in FYPSetting.
             // Automatic 09:00 - 17:00 fallback is removed per strict academic policy.
-            // If missing or invalid, return zero bookable slots.
+            // If missing or invalid, return zero bookable slots (fail-closed).
             var startSetting = await _context.FYPSettings
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursStart");
@@ -130,53 +189,126 @@ namespace FYPTracker.Services
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursEnd");
 
-            if (startSetting == null || string.IsNullOrWhiteSpace(startSetting.Value) ||
-                !TimeSpan.TryParse(startSetting.Value, out TimeSpan workStart) ||
-                endSetting == null || string.IsNullOrWhiteSpace(endSetting.Value) ||
-                !TimeSpan.TryParse(endSetting.Value, out TimeSpan workEnd) ||
-                workStart >= workEnd)
+            if (!TryParseWorkingHours(startSetting?.Value, endSetting?.Value, out TimeSpan workStart, out TimeSpan workEnd))
             {
-                // Missing, unconfigured or invalid working hours window: zero bookable slots
                 return new List<TimeSpanRange>();
             }
 
-            string dayOfWeek = targetDate.ToString("dddd");
+            // Invariant DayOfWeek name (e.g. "Monday", "Tuesday")
+            string dayOfWeek = targetDate.DayOfWeek.ToString();
 
-            // Base Free Time based on configured working hours
-            var freeSlots = new List<TimeSpanRange> 
-            { 
-                new TimeSpanRange { StartTime = workStart, EndTime = workEnd } 
-            };
+            // 3. Hybrid Fail-Closed Availability Ingestion
+            // Free slots start at ZERO. We do NOT assume working hours are free time.
+            var rawConfirmedPositive = new List<TimeSpanRange>();
 
-            // 3. Weekly Availability blocks (WeeklyDefault can restrict or define allowed windows)
-            var weeklyAvailability = await _context.SupervisorAvailabilities
+            // A. Confirmed Recurring Weekly Availability (WeeklyDefault, IsAvailable == true)
+            var weeklyPositive = await _context.SupervisorAvailabilities
                 .AsNoTracking()
-                .Where(a => a.SupervisorId == lecturerId && a.ScheduleType == "WeeklyDefault" && a.DayOfWeek == dayOfWeek)
+                .Where(a => a.SupervisorId == lecturerId &&
+                            a.ScheduleType == "WeeklyDefault" &&
+                            a.DayOfWeek == dayOfWeek &&
+                            a.IsAvailable)
                 .ToListAsync();
 
-            if (weeklyAvailability.Any())
+            foreach (var w in weeklyPositive)
             {
-                var availableRanges = new List<TimeSpanRange>();
-                foreach (var w in weeklyAvailability.Where(w => w.IsAvailable))
+                if (w.EndTime > w.StartTime)
                 {
-                    // Clamp to work hours
+                    // Clamp to configured working hours
                     var s = w.StartTime < workStart ? workStart : w.StartTime;
                     var e = w.EndTime > workEnd ? workEnd : w.EndTime;
                     if (e > s)
                     {
-                        availableRanges.Add(new TimeSpanRange { StartTime = s, EndTime = e });
+                        rawConfirmedPositive.Add(new TimeSpanRange { StartTime = s, EndTime = e });
                     }
-                }
-                if (availableRanges.Any())
-                {
-                    freeSlots = availableRanges;
                 }
             }
 
-            // 4. Exclude Teaching Commitments (Strict: newStart < existingEnd && newEnd > existingStart)
+            // B. Confirmed Positive DateOverride (one-off available window on specific date)
+            var datePositive = await _context.SupervisorAvailabilities
+                .AsNoTracking()
+                .Where(a => a.SupervisorId == lecturerId &&
+                            a.ScheduleType == "DateOverride" &&
+                            a.SpecificDate == targetDate.Date &&
+                            a.IsAvailable)
+                .ToListAsync();
+
+            foreach (var d in datePositive)
+            {
+                if (d.EndTime > d.StartTime)
+                {
+                    // Clamp to configured working hours
+                    var s = d.StartTime < workStart ? workStart : d.StartTime;
+                    var e = d.EndTime > workEnd ? workEnd : d.EndTime;
+                    if (e > s)
+                    {
+                        rawConfirmedPositive.Add(new TimeSpanRange { StartTime = s, EndTime = e });
+                    }
+                }
+            }
+
+            // FAIL-CLOSED GATE:
+            // If there is no confirmed weekly availability and no confirmed positive date override,
+            // the lecturer has zero available time on this day.
+            if (!rawConfirmedPositive.Any())
+            {
+                return new List<TimeSpanRange>();
+            }
+
+            // Merge overlapping, duplicate, or adjacent positive intervals
+            var freeSlots = MergeContiguousOrOverlappingIntervals(rawConfirmedPositive);
+
+            // 4. Subtract Negative Availability Overrides (Strict Precedence)
+            // A. Negative WeeklyDefault (recurring unavailable blocks, e.g. 13:00 - 14:00)
+            var weeklyNegative = await _context.SupervisorAvailabilities
+                .AsNoTracking()
+                .Where(a => a.SupervisorId == lecturerId &&
+                            a.ScheduleType == "WeeklyDefault" &&
+                            a.DayOfWeek == dayOfWeek &&
+                            !a.IsAvailable)
+                .ToListAsync();
+
+            foreach (var wn in weeklyNegative)
+            {
+                if (wn.EndTime > wn.StartTime)
+                {
+                    freeSlots = RemoveOverlap(freeSlots, wn.StartTime, wn.EndTime);
+                }
+            }
+
+            // B. Negative DateOverride (date-specific unavailable, busy, or full-day leave)
+            var dateNegative = await _context.SupervisorAvailabilities
+                .AsNoTracking()
+                .Where(a => a.SupervisorId == lecturerId &&
+                            a.ScheduleType == "DateOverride" &&
+                            a.SpecificDate == targetDate.Date &&
+                            !a.IsAvailable)
+                .ToListAsync();
+
+            foreach (var dn in dateNegative)
+            {
+                // Full-day block convention: 00:00 to 00:00 or StartTime >= EndTime blocks entire working window
+                TimeSpan bStart = (dn.StartTime == TimeSpan.Zero && dn.EndTime == TimeSpan.Zero) || (dn.StartTime >= dn.EndTime)
+                    ? workStart
+                    : dn.StartTime;
+                TimeSpan bEnd = (dn.StartTime == TimeSpan.Zero && dn.EndTime == TimeSpan.Zero) || (dn.StartTime >= dn.EndTime)
+                    ? workEnd
+                    : dn.EndTime;
+
+                freeSlots = RemoveOverlap(freeSlots, bStart, bEnd);
+            }
+
+            if (!freeSlots.Any())
+            {
+                return new List<TimeSpanRange>();
+            }
+
+            // 5. Exclude Teaching Commitments (Strict: newStart < existingEnd && newEnd > existingStart)
             var teaching = await _context.SupervisorTimetableEntries
                 .AsNoTracking()
-                .Where(t => t.SupervisorId == lecturerId && t.AcademicSessionId == academicSessionId && t.DayOfWeek == dayOfWeek)
+                .Where(t => t.SupervisorId == lecturerId &&
+                            t.AcademicSessionId == academicSessionId &&
+                            t.DayOfWeek == dayOfWeek)
                 .ToListAsync();
 
             foreach (var t in teaching)
@@ -187,17 +319,19 @@ namespace FYPTracker.Services
                 }
             }
 
-            // 5. Exclude Student Meetings (Approved or Pending)
-            // Priority 1: Valid stored StartDateTime and EndDateTime.
-            // Priority 2: Verified explicit booking duration when available.
-            // Priority 3: Conservative handling when historical duration cannot be established.
-            // (Do not treat current MeetingDurationMinutes as proof of historical duration.)
+            if (!freeSlots.Any())
+            {
+                return new List<TimeSpanRange>();
+            }
+
+            // 6. Exclude Student Meetings (Approved or Pending)
             var meetings = await _context.MeetingBookings
                 .AsNoTracking()
-                .Where(m => m.SupervisorId == lecturerId && m.MeetingDate == targetDate.Date && 
+                .Where(m => m.SupervisorId == lecturerId &&
+                            m.MeetingDate == targetDate.Date &&
                             (m.Status == "Approved" || m.Status == "Pending"))
                 .ToListAsync();
-            
+
             foreach (var m in meetings)
             {
                 TimeSpan mStart;
@@ -218,8 +352,7 @@ namespace FYPTracker.Services
                     freeSlots = RemoveOverlap(freeSlots, mStart, mEnd);
                 }
                 // Priority 3: Historical meeting with legacy MeetingTime string but unverified duration
-                // Do not treat current MeetingDurationMinutes as proof of historical duration.
-                // Apply conservative conflict protection (60 minutes) so 45-min defense slots never overlap.
+                // Conservative conflict protection (60 minutes) so slots never overlap.
                 else if (!string.IsNullOrWhiteSpace(m.MeetingTime) &&
                          (TimeSpan.TryParse(m.MeetingTime, out TimeSpan parsedTime) || 
                           (DateTime.TryParse(m.MeetingTime, out DateTime parsedMmt) && (parsedTime = parsedMmt.TimeOfDay) == parsedTime)))
@@ -239,16 +372,119 @@ namespace FYPTracker.Services
                 }
             }
 
-            // 6. Exclude Existing IAF Defenses (Scheduled or DefenseRequired with dates)
-            var defenses = await _context.FYPMilestones
+            if (!freeSlots.Any())
+            {
+                return new List<TimeSpanRange>();
+            }
+
+            // 7. Exclude Existing IAF Defenses (Scheduled or DefenseRequired with dates)
+            bool isIafTablePresent = false;
+            if (_context.Database.IsRelational())
+            {
+                try
+                {
+                    var conn = _context.Database.GetDbConnection();
+                    if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+                    using var cmd = conn.CreateCommand();
+                    
+                    var currentTx = _context.Database.CurrentTransaction;
+                    if (currentTx != null)
+                    {
+                        cmd.Transaction = currentTx.GetDbTransaction();
+                    }
+
+                    cmd.CommandText = "SELECT COUNT(1) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'IAFDefenseBooking';";
+                    var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                    isIafTablePresent = count > 0;
+                }
+                catch
+                {
+                    // Fail closed: do not silently assume zero conflicts if database query fails.
+                    return new List<TimeSpanRange>();
+                }
+            }
+            else
+            {
+                isIafTablePresent = true;
+            }
+
+            if (isIafTablePresent)
+            {
+                var iafBookings = await _context.IAFDefenseBookings
+                    .AsNoTracking()
+                    .Where(b => b.DefenseDate == targetDate.Date &&
+                                (b.BookingStatus == "Scheduled" || b.BookingStatus == "Rescheduled") &&
+                                (b.ExaminerId == lecturerId || (b.IsSupervisorRequired && b.OriginalSupervisorId == lecturerId)))
+                    .ToListAsync();
+
+                foreach (var b in iafBookings)
+                {
+                    // Exclude ONLY the verified active booking being rescheduled
+                    if (excludeBookingId.HasValue && excludeBookingId.Value > 0)
+                    {
+                        if (b.Id == excludeBookingId.Value)
+                        {
+                            continue;
+                        }
+                    }
+                    else if (excludeMilestoneId.HasValue && excludeMilestoneId.Value > 0)
+                    {
+                        if (b.MilestoneId == excludeMilestoneId.Value)
+                        {
+                            continue;
+                        }
+                    }
+
+                    freeSlots = RemoveOverlap(freeSlots, b.StartTime, b.EndTime);
+                }
+            }
+
+            // Fallback for legacy defense sessions recorded on FYPMilestone
+            var legacyDefenses = await _context.FYPMilestones
                 .AsNoTracking()
-                .Include(m => m.Project).ThenInclude(p => p.AssignedExaminers)
+                .Include(m => m.Project!).ThenInclude(p => p.AssignedExaminers)
                 .Where(m => m.DefenseDate == targetDate.Date && 
                             (m.Status == "DefenseScheduled" || m.Status == "DefenseRequired"))
                 .ToListAsync();
 
-            foreach (var d in defenses)
+            IAFDefenseBooking? excludedBooking = null;
+            if (excludeBookingId.HasValue && excludeBookingId.Value > 0)
             {
+                try
+                {
+                    excludedBooking = await _context.IAFDefenseBookings
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(b => b.Id == excludeBookingId.Value);
+                }
+                catch
+                {
+                    // Fail closed if database query encounters errors
+                }
+            }
+
+            foreach (var d in legacyDefenses)
+            {
+                // A legacy record is suppressed ONLY if safely established that it represents
+                // the exact same verified active booking and attempt being rescheduled.
+                bool shouldSuppress = false;
+                if (excludedBooking != null)
+                {
+                    shouldSuppress = ShouldSuppressLegacyDefense(
+                        d.Id,
+                        d.DefenseDate,
+                        d.DefenseTime,
+                        d.Remarks,
+                        excludedBooking.MilestoneId,
+                        excludedBooking.AttemptNumber,
+                        excludedBooking.DefenseDate,
+                        excludedBooking.StartTime);
+                }
+
+                if (shouldSuppress)
+                {
+                    continue;
+                }
+
                 bool isParticipant = (d.Project?.SupervisorId == lecturerId) || 
                                      (d.Project?.AssignedExaminers != null && d.Project.AssignedExaminers.Any(ae => ae.ExaminerId == lecturerId));
 
@@ -257,14 +493,23 @@ namespace FYPTracker.Services
                     if (DateTime.TryParse(d.DefenseTime, out DateTime ddt))
                     {
                         TimeSpan dt = ddt.TimeOfDay;
-                        freeSlots = RemoveOverlap(freeSlots, dt, dt.Add(TimeSpan.FromMinutes(durationMinutes)));
+                        freeSlots = RemoveOverlap(freeSlots, dt, dt.Add(TimeSpan.FromMinutes(45)));
+                    }
+                    else
+                    {
+                        // Defense time unparseable or uncertain: fail closed conservatively across working hours
+                        freeSlots = RemoveOverlap(freeSlots, workStart, workEnd);
+                        break;
                     }
                 }
             }
 
-            // 7. Exclude Final Viva Presentations if VivaDate is set for this lecturer
-            // Do not assume every Viva takes 60 minutes. Use authoritative duration and participant info.
-            // If unavailable, handle conservatively across working hours.
+            if (!freeSlots.Any())
+            {
+                return new List<TimeSpanRange>();
+            }
+
+            // 8. Exclude Final Viva Presentations if VivaDate is set for this lecturer
             var vivaDurationSetting = await _context.FYPSettings
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Key == "VivaDurationMinutes");
@@ -293,38 +538,56 @@ namespace FYPTracker.Services
                     }
                     else
                     {
-                        // Viva duration is unconfigured / unavailable. Do not invent 60 minutes.
-                        // Conservatively block to avoid unsafe double-booking.
+                        // Viva duration is unconfigured / unavailable. Conservatively block working hours.
                         freeSlots = RemoveOverlap(freeSlots, workStart, workEnd);
                         break;
                     }
                 }
             }
 
-            // 8. Date Overrides (Must NEVER override confirmed Teaching, Meeting, Defense or Viva conflicts)
-            // An unavailable override blocks the specified time.
-            var dateOverrides = await _context.SupervisorAvailabilities
-                .AsNoTracking()
-                .Where(a => a.SupervisorId == lecturerId && a.ScheduleType == "DateOverride" && a.SpecificDate == targetDate.Date)
-                .ToListAsync();
-            
-            if (dateOverrides.Any())
+            return freeSlots;
+        }
+
+        private static List<TimeSpanRange> MergeContiguousOrOverlappingIntervals(List<TimeSpanRange> intervals)
+        {
+            if (intervals == null || !intervals.Any())
+                return new List<TimeSpanRange>();
+
+            var sorted = intervals.OrderBy(i => i.StartTime).ThenBy(i => i.EndTime).ToList();
+            var merged = new List<TimeSpanRange>();
+
+            var current = new TimeSpanRange { StartTime = sorted[0].StartTime, EndTime = sorted[0].EndTime };
+
+            for (int i = 1; i < sorted.Count; i++)
             {
-                var blockedOverrides = dateOverrides.Where(o => !o.IsAvailable).ToList();
-                foreach (var block in blockedOverrides)
+                var next = sorted[i];
+
+                if (next.StartTime <= current.EndTime)
                 {
-                    // Block the override window (or entire working window if 00:00 to 00:00 or full day)
-                    TimeSpan bStart = block.StartTime == TimeSpan.Zero && block.EndTime == TimeSpan.Zero ? workStart : block.StartTime;
-                    TimeSpan bEnd = block.StartTime == TimeSpan.Zero && block.EndTime == TimeSpan.Zero ? workEnd : block.EndTime;
-                    freeSlots = RemoveOverlap(freeSlots, bStart, bEnd);
+                    // Overlapping or adjacent interval: extend current EndTime if greater
+                    if (next.EndTime > current.EndTime)
+                    {
+                        current.EndTime = next.EndTime;
+                    }
+                }
+                else
+                {
+                    merged.Add(current);
+                    current = new TimeSpanRange { StartTime = next.StartTime, EndTime = next.EndTime };
                 }
             }
 
-            // 9. Slicing into Discrete Defense Time Slots
-            // Do not present one large free interval (e.g. 09:00 - 17:00) as one huge defense appointment.
-            // Generate discrete slots with the exact configured durationMinutes.
+            merged.Add(current);
+            return merged;
+        }
+
+        private static List<TimeSpanRange> SliceIntoDiscreteSlots(List<TimeSpanRange> freeIntervals, int durationMinutes)
+        {
             var discreteSlots = new List<TimeSpanRange>();
-            foreach (var freeRange in freeSlots)
+            if (freeIntervals == null || !freeIntervals.Any() || durationMinutes <= 0)
+                return discreteSlots;
+
+            foreach (var freeRange in freeIntervals)
             {
                 var currentSlotStart = freeRange.StartTime;
                 while (currentSlotStart.Add(TimeSpan.FromMinutes(durationMinutes)) <= freeRange.EndTime)
@@ -335,7 +598,6 @@ namespace FYPTracker.Services
                         EndTime = currentSlotStart.Add(TimeSpan.FromMinutes(durationMinutes))
                     });
 
-                    // Advance by durationMinutes
                     currentSlotStart = currentSlotStart.Add(TimeSpan.FromMinutes(durationMinutes));
                 }
             }
@@ -343,13 +605,104 @@ namespace FYPTracker.Services
             return discreteSlots;
         }
 
-        private List<TimeSpanRange> RemoveOverlap(List<TimeSpanRange> slots, TimeSpan blockStart, TimeSpan blockEnd)
+        public static bool TryParseWorkingHours(string? startValue, string? endValue, out TimeSpan workStart, out TimeSpan workEnd)
+        {
+            workStart = TimeSpan.Zero;
+            workEnd = TimeSpan.Zero;
+            if (string.IsNullOrWhiteSpace(startValue) || !TimeSpan.TryParse(startValue, out workStart) ||
+                string.IsNullOrWhiteSpace(endValue) || !TimeSpan.TryParse(endValue, out workEnd) ||
+                workStart >= workEnd)
+            {
+                return false;
+            }
+            return true;
+        }
+
+        public static bool ShouldSuppressLegacyDefense(
+            int legacyMilestoneId,
+            DateTime? legacyDefenseDate,
+            string? legacyDefenseTime,
+            string? legacyRemarks,
+            int? excludedBookingMilestoneId,
+            int? excludedBookingAttemptNumber,
+            DateTime? excludedBookingDate,
+            TimeSpan? excludedBookingStartTime)
+        {
+            if (!excludedBookingMilestoneId.HasValue ||
+                !excludedBookingAttemptNumber.HasValue ||
+                !excludedBookingDate.HasValue ||
+                !excludedBookingStartTime.HasValue)
+            {
+                return false;
+            }
+
+            if (legacyMilestoneId != excludedBookingMilestoneId.Value)
+            {
+                return false;
+            }
+
+            if (legacyDefenseDate != excludedBookingDate.Value)
+            {
+                return false;
+            }
+
+            var attemptResult = IAFDefenseBookingService.ResolveAuthoritativeAttemptNumber(legacyRemarks);
+            if (!attemptResult.Success || attemptResult.AttemptNumber != excludedBookingAttemptNumber.Value)
+            {
+                return false;
+            }
+
+            if (!DateTime.TryParse(legacyDefenseTime, out DateTime ddt) ||
+                ddt.TimeOfDay != excludedBookingStartTime.Value)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        public static List<TimeSpanRange> ApplyDefenseConflicts(
+            List<TimeSpanRange> freeSlots,
+            IEnumerable<(int BookingId, int MilestoneId, int AttemptNumber, TimeSpan StartTime, TimeSpan EndTime)> bookings,
+            int? excludeBookingId)
+        {
+            var result = freeSlots;
+            foreach (var b in bookings)
+            {
+                if (excludeBookingId.HasValue && excludeBookingId.Value > 0 && b.BookingId == excludeBookingId.Value)
+                {
+                    continue;
+                }
+                result = RemoveOverlapStatic(result, b.StartTime, b.EndTime);
+            }
+            return result;
+        }
+
+        public static List<TimeSpanRange> ApplyDefenseConflicts(
+            List<TimeSpanRange> freeSlots,
+            IEnumerable<(int MilestoneId, TimeSpan StartTime, TimeSpan EndTime)> bookings,
+            int? excludeMilestoneId)
+        {
+            var result = freeSlots;
+            foreach (var b in bookings)
+            {
+                if (excludeMilestoneId.HasValue && excludeMilestoneId.Value > 0 && b.MilestoneId == excludeMilestoneId.Value)
+                {
+                    continue;
+                }
+                result = RemoveOverlapStatic(result, b.StartTime, b.EndTime);
+            }
+            return result;
+        }
+
+        public static List<TimeSpanRange> RemoveOverlapStatic(List<TimeSpanRange> slots, TimeSpan blockStart, TimeSpan blockEnd)
         {
             var result = new List<TimeSpanRange>();
+            if (slots == null || !slots.Any())
+                return result;
+
             foreach (var slot in slots)
             {
-                // Strict overlap check: newStart < existingEnd && newEnd > existingStart
-                // No overlap if: blockStart >= slot.EndTime || blockEnd <= slot.StartTime
                 if (blockEnd <= slot.StartTime || blockStart >= slot.EndTime)
                 {
                     result.Add(slot);
@@ -367,6 +720,11 @@ namespace FYPTracker.Services
                 }
             }
             return result;
+        }
+
+        private List<TimeSpanRange> RemoveOverlap(List<TimeSpanRange> slots, TimeSpan blockStart, TimeSpan blockEnd)
+        {
+            return RemoveOverlapStatic(slots, blockStart, blockEnd);
         }
     }
 }

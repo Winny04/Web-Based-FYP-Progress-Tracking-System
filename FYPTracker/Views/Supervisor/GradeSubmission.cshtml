@@ -614,6 +614,43 @@
 
     </style>
 
+    @{
+        bool isStage2StepMilestone = !string.IsNullOrEmpty(Model.Title) && Model.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase);
+        bool hasStage2SupSubmitted = Model.Project != null && !string.IsNullOrEmpty(Model.Project.Stage2SupervisorMarksheetData);
+    }
+
+    @if (isStage2StepMilestone)
+    {
+        <div class="card border-0 shadow-sm rounded-3 mb-4 border-start border-4 @(hasStage2SupSubmitted ? "border-success" : "border-primary") bg-white">
+            <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; background: #e0f2fe; color: #0284c7;">
+                        <i class="fas fa-graduation-cap fs-4"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-dark mb-1">Stage 2 Final Evaluation Marksheet</h5>
+                        <p class="text-muted small mb-0">
+                            Milestone approvals confirm document completion. The official Stage 2 final assessment is graded using the 7-criterion rubric marksheet.
+                            @if (hasStage2SupSubmitted)
+                            {
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill ms-1">Marksheet Submitted</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill ms-1">Final Marksheet Pending</span>
+                            }
+                        </p>
+                    </div>
+                </div>
+                <div>
+                    <a href="@Url.Action("GradeMarksheetStage2", "Supervisor", new { id = Model.Project?.Id ?? Model.FYPProjectId })" class="btn @(hasStage2SupSubmitted ? "btn-outline-primary" : "btn-primary") px-4 py-2 fw-bold shadow-sm">
+                        <i class="fas @(hasStage2SupSubmitted ? "fa-eye" : "fa-clipboard-check") me-2"></i> @(hasStage2SupSubmitted ? "View / Update Stage 2 Final Assessment" : "Grade Stage 2 Final Marksheet")
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (Model.Status == "DefenseScheduled")
     {
         <div class="alert alert-danger mb-4 rounded-3 shadow-sm d-flex justify-content-between align-items-center" style="border: 2px solid #f1416c;">
@@ -683,11 +720,9 @@
                     }
                     @if (!string.IsNullOrEmpty(parsedJson) && !isProposalOrProgress)
                     {
-                        <div class="mb-4">
-                            <h6 class="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
-                                <i class="fas fa-history text-primary"></i>
-                                Form Details & History
-                            </h6>
+                        bool isIafMilestone = !string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase));
+
+                        <div>
                             @{
                                 try {
                                     var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parsedJson);
@@ -698,50 +733,140 @@
                                         </div>
                                     }
                                     
-                                    foreach (var attempt in history.Attempts.OrderByDescending(a => a.AttemptNumber)) {
-                                        var snapshotFile = Model.SubmissionFiles?.FirstOrDefault(f => f.AttemptNumber == attempt.AttemptNumber && f.FileName.StartsWith("Signed IAF"));
-                                        var fd = attempt.FormData ?? new Dictionary<string, string>();
-                                        var isSigned = !string.IsNullOrEmpty(attempt.SupervisorSignature);
-                                        var attStatus = string.IsNullOrEmpty(attempt.Status) ? "Pending" : attempt.Status;
+                                    var signedAttempts = history.Attempts.Where(a => !string.IsNullOrEmpty(a.SupervisorSignature)).OrderByDescending(a => a.AttemptNumber).ToList();
+                                    var latestSignedAttempt = signedAttempts.FirstOrDefault();
+                                    if (isIafMilestone && latestSignedAttempt != null)
+                                    {
+                                        var snapshotFile = Model.SubmissionFiles?.FirstOrDefault(f => f.AttemptNumber == latestSignedAttempt.AttemptNumber && f.FileName.StartsWith("Signed IAF", StringComparison.OrdinalIgnoreCase));
+                                        var attStatus = string.IsNullOrEmpty(latestSignedAttempt.Status) ? (Model.Status ?? "Pending") : latestSignedAttempt.Status;
                                         var statusBadge = attStatus switch {
-                                            "Approved" or "AdminApproved" or "SupervisorSigned" => "badge-light-success",
-                                            "Rejected" or "PanelRevisionRequired" or "ChangeOfTopicRequired" or "ReturnedForEdits" => "badge-light-danger",
+                                            "Approved" or "AdminApproved" => "badge-light-success",
+                                            "PendingPanelReview" => "badge-light-warning text-dark",
+                                            "SupervisorSigned" => "badge-light-info text-primary",
+                                            "Rejected" or "PanelRevisionRequired" or "ChangeOfTopicRequired" => "badge-light-danger",
                                             "Draft" => "badge-light-secondary",
                                             _ => "badge-light-warning"
                                         };
 
-                                        <div class="iaf-attempt-card" id="iafAttemptCard@(attempt.AttemptNumber)">
-                                            <div>
-                                                <p class="iaf-attempt-title">Attempt @attempt.AttemptNumber @(attempt.AttemptNumber == history.CurrentAttempt ? "(Latest)" : "")</p>
-                                                <div class="iaf-attempt-meta mt-1">
-                                                    <span class="badge @statusBadge">@attStatus</span>
-                                                    @if (isSigned) {
-                                                        <span class="badge badge-light-success"><i class="fas fa-signature me-1 text-success"></i>Supervisor Signed</span>
-                                                    } else {
-                                                        <span class="badge badge-light-secondary"><i class="fas fa-hourglass-half me-1"></i>Not Signed</span>
-                                                    }
-                                                    <span class="text-muted"><i class="far fa-calendar me-1"></i>Reviewed: @(attempt.SupervisorReviewedAt?.ToString("dd MMM yyyy, hh:mm tt") ?? "—")</span>
-                                                </div>
+                                        <div class="mb-4" id="supervisorSignedIafSection">
+                                            <div class="d-flex align-items-center justify-content-between mb-3">
+                                                <h6 class="fw-bold text-success mb-0 d-flex align-items-center gap-2">
+                                                    <i class="fas fa-file-signature text-success"></i>
+                                                    Signed IAF Documents
+                                                </h6>
+                                                <span class="badge bg-light-success text-success border border-success border-opacity-25 rounded-pill px-3 py-1 fw-bold">
+                                                    <i class="fas fa-check-circle me-1"></i>Supervisor Signed
+                                                </span>
                                             </div>
-                                            <div class="d-flex gap-2">
-                                               
-                                            <a href="@Url.Action("ViewDigitalForm", "Supervisor",
-                                                new { milestoneId = Model.Id, attemptNumber = attempt.AttemptNumber })"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="btn btn-sm btn-light-primary"
-                                            id="btnViewIaf@(attempt.AttemptNumber)">
-
-                                                <i class="fas fa-external-link-alt me-1"></i>
-                                                View Form
-                                            </a>
-
-                                                @if (snapshotFile != null) {
-                                                    <a class="btn btn-sm btn-light" id="btnDownloadIaf@(attempt.AttemptNumber)" href="@Url.Action("DownloadFile", "Supervisor", new { fileId = snapshotFile.Id })"><i class="fas fa-download me-1"></i>Download PDF</a>
-                                                }
+                                            <div class="d-flex flex-column gap-3">
+                                                <div class="card border border-success border-opacity-25 shadow-sm rounded-3 p-3 bg-white" id="signedIafDocCard@(latestSignedAttempt.AttemptNumber)">
+                                                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                                                        <div>
+                                                            <div class="d-flex align-items-center gap-2">
+                                                                <i class="fas fa-file-pdf text-danger fs-4"></i>
+                                                                <span class="fw-bold text-dark fs-6">Signed IAF — Attempt @latestSignedAttempt.AttemptNumber</span>
+                                                                @if (latestSignedAttempt.AttemptNumber == history.CurrentAttempt)
+                                                                {
+                                                                    <span class="badge bg-primary text-white rounded-pill px-2">Latest</span>
+                                                                }
+                                                            </div>
+                                                            <div class="d-flex flex-wrap gap-2 align-items-center mt-2 small">
+                                                                <span class="badge badge-light-success border">
+                                                                    <i class="fas fa-signature me-1 text-success"></i>Supervisor Signed
+                                                                </span>
+                                                                <span class="badge @statusBadge border">
+                                                                    Academic Status: @attStatus
+                                                                </span>
+                                                                @if (latestSignedAttempt.SupervisorReviewedAt.HasValue)
+                                                                {
+                                                                    <span class="text-muted">
+                                                                        <i class="far fa-calendar-check me-1 text-primary"></i>Reviewed: @latestSignedAttempt.SupervisorReviewedAt.Value.ToString("dd MMM yyyy, hh:mm tt")
+                                                                    </span>
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                        <div class="d-flex gap-2">
+                                                            <a href="@Url.Action("ViewDigitalForm", "Supervisor", new { milestoneId = Model.Id, attemptNumber = latestSignedAttempt.AttemptNumber })"
+                                                               target="_blank"
+                                                               rel="noopener noreferrer"
+                                                               class="btn btn-sm btn-outline-primary fw-semibold px-3"
+                                                               id="btnViewSignedIaf@(latestSignedAttempt.AttemptNumber)">
+                                                                <i class="fas fa-eye me-1"></i>View IAF
+                                                            </a>
+                                                            @if (snapshotFile != null) {
+                                                                <a class="btn btn-sm btn-success fw-semibold px-3 shadow-sm text-white" 
+                                                                   id="btnDownloadSignedIaf@(latestSignedAttempt.AttemptNumber)" 
+                                                                   href="@Url.Action("DownloadFile", "Supervisor", new { fileId = snapshotFile.Id })">
+                                                                    <i class="fas fa-file-download me-1"></i>Download PDF
+                                                                </a>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     }
+
+                                    <div class="mb-4" id="supervisorAttemptHistorySection">
+                                        <h6 class="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                                            <i class="fas fa-history text-primary"></i>
+                                            @(isIafMilestone ? "IAF Attempt History" : "Form Details & History")
+                                        </h6>
+                                        @foreach (var attempt in history.Attempts.OrderByDescending(a => a.AttemptNumber)) {
+                                            var snapshotFile = Model.SubmissionFiles?.FirstOrDefault(f => f.AttemptNumber == attempt.AttemptNumber && f.FileName.StartsWith("Signed IAF", StringComparison.OrdinalIgnoreCase));
+                                            var fd = attempt.FormData ?? new Dictionary<string, string>();
+                                            var isSigned = !string.IsNullOrEmpty(attempt.SupervisorSignature);
+                                            var attStatus = string.IsNullOrEmpty(attempt.Status) ? (Model.Status ?? "Pending") : attempt.Status;
+                                            var statusBadge = attStatus switch {
+                                                "Approved" or "AdminApproved" or "SupervisorSigned" or "PendingPanelReview" => "badge-light-success",
+                                                "Rejected" or "PanelRevisionRequired" or "ChangeOfTopicRequired" or "ReturnedForEdits" => "badge-light-danger",
+                                                "Draft" => "badge-light-secondary",
+                                                _ => "badge-light-warning"
+                                            };
+                                            var isDisplayedInSignedSection = (isIafMilestone && latestSignedAttempt != null && attempt.AttemptNumber == latestSignedAttempt.AttemptNumber);
+
+                                            <div class="iaf-attempt-card" id="iafAttemptCard@(attempt.AttemptNumber)">
+                                                <div>
+                                                    <p class="iaf-attempt-title">
+                                                        Attempt @attempt.AttemptNumber 
+                                                        @(attempt.AttemptNumber == history.CurrentAttempt ? "(Latest)" : "")
+                                                    </p>
+                                                    <div class="iaf-attempt-meta mt-1">
+                                                        <span class="badge @statusBadge">@attStatus</span>
+                                                        @if (isSigned) {
+                                                            <span class="badge badge-light-success"><i class="fas fa-signature me-1 text-success"></i>Supervisor Signed</span>
+                                                        } else {
+                                                            <span class="badge badge-light-secondary"><i class="fas fa-hourglass-half me-1"></i>Not Signed</span>
+                                                        }
+                                                        <span class="text-muted"><i class="far fa-calendar me-1"></i>Reviewed: @(attempt.SupervisorReviewedAt?.ToString("dd MMM yyyy, hh:mm tt") ?? "—")</span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    @if (isDisplayedInSignedSection) {
+                                                        <span class="badge bg-light text-muted border px-3 py-2 d-inline-flex align-items-center" title="Access the latest signed IAF document above">
+                                                            <i class="fas fa-arrow-up me-1 text-primary"></i>Available above
+                                                        </span>
+                                                    } else {
+                                                        <div class="d-flex gap-2">
+                                                            <a href="@Url.Action("ViewDigitalForm", "Supervisor",
+                                                                new { milestoneId = Model.Id, attemptNumber = attempt.AttemptNumber })"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            class="btn btn-sm btn-light-primary"
+                                                            id="btnViewIaf@(attempt.AttemptNumber)">
+                                                                <i class="fas fa-eye me-1"></i>
+                                                                View IAF
+                                                            </a>
+
+                                                            @if (snapshotFile != null) {
+                                                                <a class="btn btn-sm btn-light" id="btnDownloadIaf@(attempt.AttemptNumber)" href="@Url.Action("DownloadFile", "Supervisor", new { fileId = snapshotFile.Id })"><i class="fas fa-download me-1"></i>Download PDF</a>
+                                                            }
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
                                 } catch (Exception ex) {
                                     <div class="alert alert-danger font-monospace">
                                         <strong>Error parsing JSON:</strong> @ex.Message<br/><br/>
@@ -765,9 +890,9 @@
                         </div>
                     }
                     
-                    @if (Model.SubmissionFiles != null && Model.SubmissionFiles.Any(f => f.UploadedBy == Model.Project?.StudentId))
+                    @if (Model.SubmissionFiles != null && Model.SubmissionFiles.Any(f => f.UploadedBy == Model.Project?.StudentId && !f.IsDeleted))
                     {
-                        var primaryFile = Model.SubmissionFiles.Where(f => f.UploadedBy == Model.Project?.StudentId).OrderByDescending(f => f.AttemptNumber).FirstOrDefault();
+                        var primaryFile = Model.SubmissionFiles.Where(f => f.UploadedBy == Model.Project?.StudentId && !f.IsDeleted).OrderByDescending(f => f.AttemptNumber).FirstOrDefault();
                         if (primaryFile != null)
                         {
                             <div class="bg-light rounded-4 border border-secondary border-opacity-25 shadow-sm p-2 mb-4" style="height: 900px;">
@@ -777,10 +902,10 @@
                         }
                     }
 
-                    @if (Model.SubmissionFiles != null && Model.SubmissionFiles.Any())
+                    @if (Model.SubmissionFiles != null && Model.SubmissionFiles.Any(f => !f.IsDeleted))
                     {
-                        var studentFiles = Model.SubmissionFiles.Where(f => f.UploadedBy == Model.Project?.StudentId).OrderByDescending(f => f.AttemptNumber).ToList();
-                        var supervisorFiles = Model.SubmissionFiles.Where(f => f.UploadedBy != Model.Project?.StudentId).ToList();
+                        var studentFiles = Model.SubmissionFiles.Where(f => f.UploadedBy == Model.Project?.StudentId && !f.IsDeleted).OrderByDescending(f => f.AttemptNumber).ToList();
+                        var supervisorFiles = Model.SubmissionFiles.Where(f => f.UploadedBy != Model.Project?.StudentId && !f.FileName.StartsWith("Signed IAF", StringComparison.OrdinalIgnoreCase) && !f.IsDeleted).ToList();
 
                         if (studentFiles.Any())
                         {
@@ -823,7 +948,7 @@
                         if (supervisorFiles.Any())
                         {
                             <div class="mb-0">
-                                <h6 class="text-muted text-uppercase fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;">Graded / Feedback Files</h6>
+                                <h6 class="text-muted text-uppercase fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;">Feedback Attachments / Graded Files</h6>
                                 <div class="d-flex flex-column gap-2">
                                     @foreach (var file in supervisorFiles)
                                     {
@@ -921,7 +1046,7 @@
                         @{
                             // Lock the form if the milestone has already been graded
                             bool isLocked = Model.Status == "Approved" || Model.Status == "Rejected" || Model.Status == "SupervisorSigned" || Model.Status == "ReturnedForEdits" || Model.Status == "PendingPanelReview" || Model.Status == "DefenseRequired" || Model.Status == "DefenseScheduled" || Model.Status == "AdminApproved" || Model.Status == "Completed";
-                            bool isMarksheetStage = !string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
+                            bool isMarksheetStage = !string.IsNullOrEmpty(Model.Title) && Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase);
                         }
                         
                         @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)))
@@ -1009,15 +1134,15 @@
                             }
                             else
                             {
-                                <label class="form-label fw-bold text-dark"><i class="fas fa-file-upload text-danger me-2"></i>Upload Feedback File / Graded Marksheet</label>
+                                <label class="form-label fw-bold text-dark"><i class="fas fa-file-upload text-danger me-2"></i>Upload Feedback File (Optional)</label>
                             }
-                            @if (Model.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase))
+                            @if (Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase))
                             {
                                 <div class="mb-3 p-3 bg-light rounded border">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <div>
-                                            <h6 class="fw-bold mb-1"><i class="fas fa-file-excel text-success me-2"></i>Excel Marksheet Template</h6>
-                                            <small class="text-muted">Download this template, fill in your marks, and upload it back here as the Graded Marksheet below.</small>
+                                            <h6 class="fw-bold mb-1"><i class="fas fa-file-excel text-success me-2"></i>Stage 1 Marksheet Template (Reference Only)</h6>
+                                            <small class="text-muted">Official evaluation is completed via the <strong>Stage 1 Online Rubric</strong>. Download this template for reference if needed.</small>
                                         </div>
                                         <a href="@Url.Action("DownloadMarksheet", "Supervisor", new { projectId = Model.Project.Id })" class="btn btn-sm btn-outline-success">
                                             <i class="fas fa-download me-1"></i> Download
@@ -1026,22 +1151,8 @@
                                 </div>
                             }
 
-                            @if (isMarksheetStage)
-                            {
-                                <input type="file" id="gradedFile" name="gradedFile" accept=".xls,.xlsx" class="form-control form-control-solid form-control-lg" @(isLocked ? "disabled" : "") />
-                                <div class="invalid-feedback">You must upload the completed Excel marksheet to approve or reject this milestone.</div>
-                                <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Upload a marked/feedback version of the student's submission or your completed Excel marksheet (PDF, Word, or Excel).</div>
-                            }
-                            else if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)))
-                            {
-                                <input type="file" id="gradedFile" name="gradedFile" accept=".pdf,.doc,.docx,.xls,.xlsx" class="form-control form-control-solid form-control-lg" @(isLocked ? "disabled" : "") />
-                                <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Optional: Upload a signed or annotated document (PDF, Word, or Excel).</div>
-                            }
-                            else
-                            {
-                                <input type="file" id="gradedFile" name="gradedFile" accept=".pdf,.doc,.docx,.xls,.xlsx" class="form-control form-control-solid form-control-lg" @(isLocked ? "disabled" : "") />
-                                <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Upload a marked/feedback version of the student's submission (PDF, Word, or Excel).</div>
-                            }
+                            <input type="file" id="gradedFile" name="gradedFile" accept=".pdf,.doc,.docx,.xls,.xlsx" class="form-control form-control-solid form-control-lg" @(isLocked ? "disabled" : "") />
+                            <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Optional: Upload marked/annotated feedback version of the student's submission (PDF, Word, or Excel). Official marks are evaluated via the online rubric.</div>
                         </div>
 
                         @if (isLocked)
@@ -1258,22 +1369,7 @@
                 validateTurnitin();
             }
 
-            // Dynamic required attribute for graded marksheet file
-            const gradedFileInput = document.getElementById('gradedFile');
-            const statusSelectElem = document.querySelector('select[name="status"]');
-            
-            if (gradedFileInput && statusSelectElem && @((!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase))).ToString().ToLower())) {
-                function updateGradedFileRequirement() {
-                    if (statusSelectElem.value === 'Approved' || statusSelectElem.value === 'Rejected') {
-                        gradedFileInput.setAttribute('required', 'required');
-                    } else {
-                        gradedFileInput.removeAttribute('required');
-                    }
-                }
-                
-                statusSelectElem.addEventListener('change', updateGradedFileRequirement);
-                updateGradedFileRequirement();
-            }
+            // Optional feedback file requirement handling
         });
         // Signature Handling
         let sigCanvas, sigCtx, drawing = false;

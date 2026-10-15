@@ -5,9 +5,36 @@
     var currentUser = ViewBag.CurrentUser as ApplicationUser;
     var milestones  = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
     var iafMilestone = milestones.FirstOrDefault(m => (m.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) && !m.Title.Contains("Industrial", StringComparison.OrdinalIgnoreCase));
-    bool isIafApproved = iafMilestone != null && iafMilestone.Status == "Approved";
+    bool isIafApproved = iafMilestone != null && (iafMilestone.Status == "AdminApproved" || iafMilestone.Status == "Approved");
     int iafMilestoneId = iafMilestone?.Id ?? 0;
-    bool isIafLocked = iafMilestone != null && (iafMilestone.Status == "PendingSupervisorReview" || iafMilestone.Status == "SupervisorSigned" || iafMilestone.Status == "PendingPanelReview" || iafMilestone.Status == "AdminApproved");
+    bool isAttempt2Failed = false;
+    string attempt2Feedback = "";
+    if (iafMilestone != null && iafMilestone.Status == "ChangeOfTopicRequired" && !string.IsNullOrEmpty(iafMilestone.Remarks) && iafMilestone.Remarks.Contains("JSON: "))
+    {
+        try {
+            var h = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(iafMilestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1]);
+            if (h.CurrentAttempt >= 2)
+            {
+                isAttempt2Failed = true;
+                var a2 = h.Attempts.FirstOrDefault(a => a.AttemptNumber == h.CurrentAttempt);
+                if (a2 != null && !string.IsNullOrEmpty(a2.PanelComments))
+                {
+                    attempt2Feedback = a2.PanelComments;
+                }
+            }
+        } catch {}
+    }
+
+    bool isIafLocked = isAttempt2Failed || (iafMilestone != null && (
+        iafMilestone.Status == "PendingSupervisorReview" ||
+        iafMilestone.Status == "SupervisorSigned" ||
+        iafMilestone.Status == "PendingPanelReview" ||
+        iafMilestone.Status == "AdminApproved" ||
+        iafMilestone.Status == "DefenseRequired" ||
+        iafMilestone.Status == "DefenseScheduled" ||
+        iafMilestone.Status == "Completed" ||
+        (iafMilestone.Status != "Draft" && iafMilestone.Status != "Pending" && iafMilestone.Status != "ReturnedForEdits" && iafMilestone.Status != "PanelRevisionRequired" && iafMilestone.Status != "ChangeOfTopicRequired" && !string.IsNullOrEmpty(iafMilestone.Status))
+    ));
 
     var proposalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
     bool isProposalApproved = proposalMilestone != null && proposalMilestone.Status == "Approved";
@@ -29,7 +56,23 @@
                             <h4 class="fw-bold text-dark mb-2"><i class="fas fa-clipboard-list text-orange me-2"></i>1. Initial Project Allocation Form (IAF)</h4>
                             <p class="text-danger fw-bold mb-4"><i class="far fa-clock me-1"></i> Please complete and submit this form before @ViewBag.IAFDeadline.</p>
                             
-                            @if (isIafLocked)
+                            @if (isAttempt2Failed)
+                            {
+                                <div class="alert alert-danger d-flex align-items-center mt-3 border-danger mb-4 shadow-sm">
+                                    <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
+                                    <div>
+                                        <h5 class="fw-bold text-dark mb-1">Defense Failed (Attempt 2)</h5>
+                                        <p class="mb-0 text-danger fw-bold">Maximum 2 IAF attempts reached. Please contact Admin regarding the FYP repeat process.</p>
+                                        @if (!string.IsNullOrEmpty(attempt2Feedback))
+                                        {
+                                            <div class="mt-2 p-2 bg-white rounded border border-danger">
+                                                <strong>Feedback:</strong> @attempt2Feedback
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            else if (isIafLocked)
                             {
                                 <div class="alert alert-info d-flex align-items-center mt-3 border-info mb-4">
                                     <i class="fas fa-lock fs-2 me-3 text-info"></i>
@@ -122,9 +165,17 @@
                                     
                                     <div class="mb-3">
                                         @{
-                                            var cleanObj1 = Model.Objective1?.StartsWith("1. To ", StringComparison.OrdinalIgnoreCase) == true ? Model.Objective1.Substring(6).TrimStart() : Model.Objective1;
-                                            var cleanObj2 = Model.Objective2?.StartsWith("2. To ", StringComparison.OrdinalIgnoreCase) == true ? Model.Objective2.Substring(6).TrimStart() : Model.Objective2;
-                                            var cleanObj3 = Model.Objective3?.StartsWith("3. To ", StringComparison.OrdinalIgnoreCase) == true ? Model.Objective3.Substring(6).TrimStart() : Model.Objective3;
+                                            string CleanDisplayObj(string? val, int num) =>
+                                                string.IsNullOrWhiteSpace(val) ? "" :
+                                                System.Text.RegularExpressions.Regex.Replace(
+                                                    val,
+                                                    $@"^\s*({num}\.\s*)?(To\s+)+",
+                                                    "",
+                                                    System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+
+                                            var cleanObj1 = CleanDisplayObj(Model.Objective1, 1);
+                                            var cleanObj2 = CleanDisplayObj(Model.Objective2, 2);
+                                            var cleanObj3 = CleanDisplayObj(Model.Objective3, 3);
                                         }
                                         <div class="input-group mb-2">
                                             <span class="input-group-text bg-light fw-bold text-muted">1. To</span>
@@ -313,12 +364,13 @@
                                                 <p class="mb-0 text-dark"><strong>Feedback:</strong> @propMilestone.SupervisorFeedback</p>
                                             }
 
+                                            @* Supervisor Feedback / Graded Files *@
                                             @if (propMilestone?.SubmissionFiles != null && propMilestone.SubmissionFiles.Any(f => f.UploadedBy != Model.StudentId))
                                             {
                                                 var gFiles = propMilestone.SubmissionFiles.Where(f => f.UploadedBy != Model.StudentId).ToList();
                                                 <hr class="my-3 border-info opacity-25">
-                                                <h6 class="fw-bold text-primary mb-2"><i class="fas fa-file-pdf me-2"></i>Graded / Feedback Files</h6>
-                                                <div class="d-flex flex-column gap-2">
+                                                <h6 class="fw-bold text-primary mb-2"><i class="fas fa-file-pdf me-2"></i>Supervisor Graded / Feedback Files</h6>
+                                                <div class="d-flex flex-column gap-2 mb-3">
                                                     @foreach (var file in gFiles)
                                                     {
                                                         <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" target="_blank" class="btn btn-outline-primary text-start d-flex align-items-center rounded-3 p-2 text-decoration-none bg-white border-primary border-opacity-25 shadow-sm">
@@ -327,6 +379,30 @@
                                                             <i class="fas fa-external-link-alt text-primary ms-3"></i>
                                                         </a>
                                                     }
+                                                </div>
+                                            }
+
+                                            @* Examiner Feedback / Marksheet *@
+                                            <hr class="my-3 border-info opacity-25">
+                                            <h6 class="fw-bold text-success mb-2"><i class="fas fa-file-excel me-2"></i>Examiner Feedback / Marksheet</h6>
+                                            @if (!string.IsNullOrWhiteSpace(Model.Stage1ExaminerMarksheetPath))
+                                            {
+                                                <div class="d-flex flex-column gap-2">
+                                                    <a href="@Url.Action("DownloadStage1ExaminerMarksheet", "Student", new { projectId = Model.Id })" target="_blank" class="btn btn-outline-success text-start d-flex align-items-center rounded-3 p-2 text-decoration-none bg-white border-success border-opacity-25 shadow-sm">
+                                                        <i class="fas fa-file-excel text-success me-3"></i>
+                                                        <div class="d-flex flex-column flex-grow-1 text-truncate">
+                                                            <span class="text-dark fw-bold text-truncate">Stage 1 Examiner Marksheet</span>
+                                                            <small class="text-muted">Completed evaluation marksheet from assigned examiner</small>
+                                                        </div>
+                                                        <i class="fas fa-download text-success ms-3"></i>
+                                                    </a>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="p-2 bg-light rounded text-muted small d-flex align-items-center">
+                                                    <i class="fas fa-clock text-warning me-2"></i>
+                                                    <span>Examiner evaluation is currently <strong>Pending / Not Released</strong>.</span>
                                                 </div>
                                             }
                                         </div>

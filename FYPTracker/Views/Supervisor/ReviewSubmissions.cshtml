@@ -307,6 +307,47 @@
                                                     </tr>
                                                 }
                                                 
+                                                @{
+                                                    var s1FinalMilestone = s1.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
+                                                    bool isS1Approved = s1FinalMilestone != null && (s1FinalMilestone.Status == "Approved" || s1FinalMilestone.Status == "Completed");
+                                                    bool isS1SupGraded = !string.IsNullOrEmpty(s1FinalMilestone?.SupervisorMarksheetData);
+                                                    if (isS1Approved)
+                                                    {
+                                                        <tr class="table-light border-top border-2 border-primary">
+                                                            <td class="ps-4 py-3">
+                                                                <div class="d-flex align-items-center">
+                                                                    <i class="fas fa-file-signature text-primary fs-5 me-2"></i>
+                                                                    <div>
+                                                                        <span class="text-dark fw-bolder d-block fs-6">Stage 1 Proposal Assessment Rubric</span>
+                                                                        <small class="text-muted">Official 6-criterion proposal rubric evaluation</small>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td><span class="text-muted fw-bold d-block fs-7">—</span></td>
+                                                            <td><span class="text-dark fw-bold d-block fs-7">—</span></td>
+                                                            <td class="text-center">
+                                                                @if (isS1SupGraded)
+                                                                {
+                                                                    <span class="badge badge-light-success text-success border-success fw-bolder px-3 py-2">
+                                                                        <i class="fas fa-check-circle me-1"></i>Graded
+                                                                    </span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="badge badge-light-warning text-warning border-warning fw-bolder px-3 py-2">
+                                                                        <i class="fas fa-hourglass-start me-1"></i>Pending Marksheet
+                                                                    </span>
+                                                                }
+                                                            </td>
+                                                            <td class="text-end pe-4">
+                                                                <a href="@Url.Action("GradeMarksheetStage1", "Supervisor", new { id = proj.Id })" class="btn btn-sm @(isS1SupGraded ? "btn-outline-primary" : "btn-primary") fw-bold px-3">
+                                                                    <i class="fas @(isS1SupGraded ? "fa-eye" : "fa-clipboard-check") me-1"></i> @(isS1SupGraded ? "View / Update Stage 1 Assessment" : "Grade Stage 1 Rubric")
+                                                                </a>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                }
+                                                
                                                 <!-- Stage 2 -->
                                                 <tr class="bg-white border-top"><td colspan="5" class="ps-4 py-2 border-bottom-0"><span class="badge bg-success fw-bold"><i class="fas fa-flag-checkered me-1"></i>Stage 2 Milestones</span></td></tr>
                                                 @if (proj.Stage1Grade != "Pass")
@@ -365,6 +406,48 @@
                                                                 }
                                                             </td>
                                                         </tr>
+                                                    }
+
+                                                    {
+                                                        var stage2MilestonesList = s2.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
+                                                        bool isStage2Eligible = stage2MilestonesList.Any() && stage2MilestonesList.All(m => m.Status == "Approved" || m.Status == "Completed");
+                                                        bool isStage2SupDone = !string.IsNullOrEmpty(proj.Stage2SupervisorMarksheetData);
+                                                    
+                                                        if (isStage2Eligible)
+                                                        {
+                                                        <tr class="table-light border-top border-2 border-primary">
+                                                            <td class="ps-4 py-3">
+                                                                <div class="d-flex align-items-center">
+                                                                    <i class="fas fa-graduation-cap text-primary fs-5 me-2"></i>
+                                                                    <div>
+                                                                        <span class="text-dark fw-bolder d-block fs-6">Stage 2 Final Assessment Marksheet</span>
+                                                                        <small class="text-muted">Official 7-criterion joint rubric evaluation</small>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td><span class="text-muted fw-bold d-block fs-7">—</span></td>
+                                                            <td><span class="text-dark fw-bold d-block fs-7">—</span></td>
+                                                            <td class="text-center">
+                                                                @if (isStage2SupDone)
+                                                                {
+                                                                    <span class="badge badge-light-success text-success border-success fw-bolder px-3 py-2">
+                                                                        <i class="fas fa-check-circle me-1"></i>Submitted
+                                                                    </span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="badge badge-light-warning text-warning border-warning fw-bolder px-3 py-2">
+                                                                        <i class="fas fa-hourglass-start me-1"></i>Pending Marksheet
+                                                                    </span>
+                                                                }
+                                                            </td>
+                                                            <td class="text-end pe-4">
+                                                                <a href="@Url.Action("GradeMarksheetStage2", "Supervisor", new { id = proj.Id })" class="btn btn-sm @(isStage2SupDone ? "btn-outline-success" : "btn-success") fw-bold px-3">
+                                                                    <i class="fas @(isStage2SupDone ? "fa-eye" : "fa-clipboard-check") me-1"></i> @(isStage2SupDone ? "View / Update Stage 2 Final Assessment" : "Grade Stage 2 Final Marksheet")
+                                                                </a>
+                                                            </td>
+                                                        </tr>
+                                                    }
                                                     }
                                                 }
                                             </tbody>

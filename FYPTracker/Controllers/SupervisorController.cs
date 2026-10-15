@@ -220,6 +220,13 @@ namespace FYPTracker.Controllers
             return View(requests);
         }
 
+        [HttpGet]
+        public IActionResult RespondRequest()
+        {
+            TempData["info"] = "Please select a student supervision request from the list to respond.";
+            return RedirectToAction(nameof(StudentRequests));
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RespondRequest(int requestId, string status, string? responseNote)
@@ -1126,6 +1133,106 @@ namespace FYPTracker.Controllers
         }
 
         [HttpGet]
+        public async Task<IActionResult> GradeMarksheetStage1(int id)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+            if (!user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("AccessDenied", "Home");
+            ViewBag.CurrentUser = user;
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Milestones)
+                .ThenInclude(m => m.SubmissionFiles)
+                .FirstOrDefaultAsync(p => p.Id == id && p.SupervisorId == user.Id);
+                
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found or unauthorized.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var stage1Milestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase));
+            if (stage1Milestone == null || (stage1Milestone.Status != "Approved" && stage1Milestone.Status != "Completed"))
+            {
+                TempData["Error"] = "You must review and approve the Stage 1 Final Submission milestone before grading the proposal rubric.";
+                return RedirectToAction(nameof(ProjectDetails), new { id = id });
+            }
+
+            return View(project);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> GradeMarksheetStage1(int projectId, string marksheetData, bool isDraft = false)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+            if (!user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("AccessDenied", "Home");
+
+            var project = await _context.FYPProjects
+                .Include(p => p.Milestones)
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user.Id);
+                
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found or unauthorized.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var stage1Milestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase));
+            if (stage1Milestone == null)
+            {
+                TempData["Error"] = "Stage 1 Proposal milestone not found.";
+                return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+            }
+
+            if (!isDraft)
+            {
+                if (!FYPTracker.Utils.GradingHelper.ValidateStage1RubricMarks(marksheetData, out string? valErr))
+                {
+                    TempData["Error"] = $"Validation error: {valErr}";
+                    return RedirectToAction(nameof(GradeMarksheetStage1), new { id = projectId });
+                }
+            }
+
+            stage1Milestone.SupervisorMarksheetData = marksheetData;
+
+            // Only calculate joint score if this submission is finalized and Examiner has also finalized
+            bool exFinalized = !string.IsNullOrEmpty(stage1Milestone.ExaminerMarksheetData) && !FYPTracker.Utils.GradingHelper.IsMarksheetDraft(stage1Milestone.ExaminerMarksheetData);
+            
+            if (!isDraft && exFinalized)
+            {
+                // Only calculate if not already finalized to prevent recalculating historical/manually approved scores
+                if (project.Id != 1 || !project.Stage1TotalScore.HasValue)
+                {
+                    try
+                    {
+                        double supScore = FYPTracker.Utils.GradingHelper.CalculateStage1Score(marksheetData, "Supervisor");
+                        double exScore = FYPTracker.Utils.GradingHelper.CalculateStage1Score(stage1Milestone.ExaminerMarksheetData!, "Examiner");
+
+                        double? jointScore = FYPTracker.Utils.GradingHelper.CalculateJointFinalPercentage(supScore, exScore);
+                        if (jointScore.HasValue)
+                        {
+                            project.Stage1TotalScore = jointScore.Value;
+                            project.Stage1Grade = jointScore.Value >= 40.0 ? "Pass" : "Fail";
+                            stage1Milestone.Status = "Completed";
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = isDraft 
+                ? "Stage 1 evaluation draft saved successfully." 
+                : "Stage 1 evaluation marks submitted successfully!";
+
+            return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+        }
+
+        [HttpGet]
         public async Task<IActionResult> GradeMarksheetStage2(int id)
         {
             var user = await GetCurrentUserAsync();
@@ -1181,15 +1288,24 @@ namespace FYPTracker.Controllers
             {
                 try
                 {
-                    double supTotal = FYPTracker.Utils.GradingHelper.CalculateStage2Score(marksheetData);
-                    double exTotal = FYPTracker.Utils.GradingHelper.CalculateStage2Score(project.Stage2ExaminerMarksheetData);
+                    double? supTotal = FYPTracker.Utils.GradingHelper.CalculateStage2Score(marksheetData, "Supervisor");
+                    double? exTotal = FYPTracker.Utils.GradingHelper.CalculateStage2Score(project.Stage2ExaminerMarksheetData, "Examiner");
 
-                    // Using the stakeholder formula: examiner component = 70%; supervisor component = 80%; combined value = 150%, then divide by 100% (1.5) to obtain the total mark.
-                    // Wait, audit says "(SupervisorScore + ExaminerScore) / 2"
-                    double finalScore = (exTotal + supTotal) / 2.0;
-                    
-                    project.FinalGrade = GetGradeLabel(finalScore);
-                    TempData["Success"] = $"Stage 2 grading complete! Final joint score calculated as {finalScore:F1}%.";
+                    if (supTotal.HasValue && exTotal.HasValue)
+                    {
+                        // Stage 2 Unified Formula: (0.8 * SupervisorPercentage + 0.7 * ExaminerPercentage) / 1.5
+                        double? jointPercentage = FYPTracker.Utils.GradingHelper.CalculateJointFinalPercentage(supTotal.Value, exTotal.Value);
+                        if (jointPercentage.HasValue)
+                        {
+                            double finalScore = jointPercentage.Value;
+                            project.FinalGrade = FYPTracker.Utils.GradingHelper.DetermineFinalGradeBand(finalScore);
+                            TempData["Success"] = $"Stage 2 grading complete! Final joint score calculated as {finalScore:F2}%.";
+                        }
+                    }
+                    else
+                    {
+                        TempData["Warning"] = "Stage 2 marks submitted. Historical grading format requires review before joint score can be calculated.";
+                    }
                 }
                 catch (Exception)
                 {
@@ -1314,7 +1430,7 @@ namespace FYPTracker.Controllers
                 if (milestone.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase))
                 {
                     if (status == "Approved") {
-                        status = "SupervisorSigned";
+                        status = "PendingPanelReview";
                     } else if (status == "Rejected") {
                         status = "ReturnedForEdits";
                     }
@@ -1330,6 +1446,18 @@ namespace FYPTracker.Controllers
 
                 if (isIafSubmission)
                 {
+                    if (status == "PendingPanelReview")
+                    {
+                        if (string.IsNullOrWhiteSpace(supervisorSignature))
+                        {
+                            return BadRequest(new { message = "Supervisor signature is required to acknowledge and sign the IAF." });
+                        }
+                        if (string.IsNullOrWhiteSpace(remarks))
+                        {
+                            return BadRequest(new { message = "Feedback / Remarks are required to sign the IAF." });
+                        }
+                    }
+
                     string raw = milestone.Remarks ?? "";
                     int index = raw.IndexOf("JSON: ", StringComparison.Ordinal);
 
@@ -1346,7 +1474,7 @@ namespace FYPTracker.Controllers
                         !string.IsNullOrWhiteSpace(
                             attempt?.SupervisorSignature);
 
-                    if (alreadySigned)
+                    if (alreadySigned && status == "PendingPanelReview")
                     {
                         return Conflict(
                             "This IAF has already been signed and cannot be signed again.");
@@ -1375,16 +1503,16 @@ namespace FYPTracker.Controllers
                                 currentAttempt.Status = status;
                                 currentAttempt.SupervisorReviewedAt = DateTime.Now;
                                 
-                                if (status == "SupervisorSigned" &&
+                                if (status == "PendingPanelReview" &&
                                     !string.IsNullOrWhiteSpace(supervisorSignature))
                                 {
                                     currentAttempt.SupervisorSignature = supervisorSignature;
+                                    currentAttempt.SubmittedAt = DateTime.Now;
 
                                     currentAttempt.FormData ??=
                                         new Dictionary<string, string>();
 
-                                    // Preserve the actual signer's identity
-                                    // in this specific IAF attempt.
+                                    // Preserve the actual signer's identity in this specific IAF attempt.
                                     currentAttempt.FormData["__iafSignedByName"] =
                                         user!.FullName?.Trim() ?? "";
 
@@ -1395,7 +1523,7 @@ namespace FYPTracker.Controllers
                                         user!.FullName?.Trim() ?? "";
                                 }
                                 
-                                if (status == "SupervisorSigned")
+                                if (status == "PendingPanelReview")
                                 {
                                     // Generate Immutable PDF Snapshot
                                     try
@@ -1588,14 +1716,17 @@ namespace FYPTracker.Controllers
 
                             if (supScore > 0)
                             {
-                                if (hasExScore)
+                                if (hasExScore && exScore > 0)
                                 {
-                                    milestone.Project.Stage1TotalScore = (supScore + exScore) / 2.0;
-                                    milestone.Project.Stage1Grade = milestone.Project.Stage1TotalScore >= 40.0 ? "Pass" : "Fail";
-                                }
-                                else 
-                                {
-                                    milestone.Project.Stage1TotalScore = supScore;
+                                    if (milestone.Project.Id != 1 || !milestone.Project.Stage1TotalScore.HasValue)
+                                    {
+                                        double? joint = FYPTracker.Utils.GradingHelper.CalculateJointFinalPercentage(supScore, exScore);
+                                        if (joint.HasValue)
+                                        {
+                                            milestone.Project.Stage1TotalScore = joint.Value;
+                                            milestone.Project.Stage1Grade = joint.Value >= 40.0 ? "Pass" : "Fail";
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1609,56 +1740,134 @@ namespace FYPTracker.Controllers
 
                 await _context.SaveChangesAsync();
                 
-                // --- Email Notification ---
-                if (milestone.Project.Student != null && !string.IsNullOrEmpty(milestone.Project.Student.Email))
+                // --- Notifications & Emails ---
+                bool isSignedIaf = isIafSubmission && status == "PendingPanelReview";
+
+                if (isSignedIaf)
                 {
-                    string subject = $"Milestone Reviewed: {milestone.Title}";
-                    string message = $"<p>Dear {milestone.Project.Student.FullName},</p><p>Your milestone '<strong>{milestone.Title}</strong>' for project '<strong>{milestone.Project.Title}</strong>' has been reviewed by your supervisor <strong>{milestone.Project.Supervisor?.FullName}</strong> and marked as <strong>{status}</strong>.</p>";
-                    if (!string.IsNullOrEmpty(remarks))
+                    // 1. Email to Student
+                    if (milestone.Project.Student != null && !string.IsNullOrEmpty(milestone.Project.Student.Email))
                     {
-                        message += $"<p><strong>Supervisor Feedback:</strong> {remarks}</p>";
-                    }
-                    message += "<p>Please log in to the FYP Tracking System to view any graded files or Turnitin scores.</p>";
-                    var request = HttpContext.Request;
-                    string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
-                    string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
-                    
-                    try { _emailService.Send(milestone.Project.Student.Email, subject, body); } catch {}
-                }
-
-                // --- SignalR Real-Time Notification ---
-                string actionStr = status == "Approved" ? "graded" : "reviewed";
-                var reviewPayload = new { Type = "ReviewMilestone", MilestoneId = milestone.Id, Title = milestone.Title, Status = status, Message = $"Your milestone '{milestone.Title}' was {actionStr}." };
-                await _hubContext.Clients.Group($"User_{milestone.Project.StudentId}").SendAsync("ReceiveMilestoneUpdate", reviewPayload);
-
-                if (status == "Approved") {
-                    await AddNotificationAsync(milestone.Project.StudentId, "SubmissionFeedback", $"{milestone.Title} Approved", remarks ?? "No remarks provided.");
-                    await LogActivityAsync(milestone.Project.StudentId, "MilestoneApproved", $"{milestone.Title} Approved");
-
-                    // ── Seed Final Evaluation Steps when Final/Thesis milestone is approved ──
-                    bool isFinalMilestone = milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) 
-                                        || milestone.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase);
-                    bool stepsAlreadyExist = await _context.FYPMilestones
-                        .AnyAsync(m => m.FYPProjectId == milestone.FYPProjectId && m.Title.StartsWith("Step"));
-
-                    if (isFinalMilestone && !stepsAlreadyExist)
-                    {
-                        var stepMilestones = new List<FYPMilestone>
+                        string stuEmail = milestone.Project.Student.Email;
+                        string subject = "Your IAF Has Been Signed and Submitted for Admin Review";
+                        var request = HttpContext.Request;
+                        string portalUrl = $"{request.Scheme}://{request.Host}/Student/Forms";
+                        
+                        string message = $@"
+<p>Dear {milestone.Project.Student.FullName},</p>
+<p>Your Initial Project Allocation Form (IAF) has been reviewed and signed by your Supervisor <strong>{user?.FullName ?? milestone.Project.Supervisor?.FullName}</strong>.</p>
+<p>Your signed IAF has been automatically submitted to the Administration for final review.</p>
+<p><strong>No further submission action is required from you at this stage.</strong></p>
+<p>You can log in to the FYP Tracking System to view or download your signed IAF.</p>
+<p><strong>Current Status:</strong> <span style='color: #0d6efd; font-weight: bold;'>Pending Panel Review</span></p>";
+                        if (!string.IsNullOrEmpty(remarks))
                         {
-                            new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 1: Turnitin", Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 2: DPP report full", Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 3: Marksheet Submission", Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 4: Record of Supervisor Meeting Form Submission", Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 5: Presentation Slides Submission", Status = "Pending" }
-                        };
-                        _context.FYPMilestones.AddRange(stepMilestones);
-                        await _context.SaveChangesAsync();
+                            message += $"<p><strong>Supervisor Feedback:</strong> {remarks}</p>";
+                        }
+
+                        string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "View Signed IAF", portalUrl);
+                        try 
+                        { 
+                            _emailService.Send(stuEmail, subject, body); 
+                        } 
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[EmailService] Failed to send IAF auto-submission email: {ex.Message}");
+                        }
                     }
-                } 
-                else if (status == "Rejected") {
-                    milestone.RejectionCount++;
-                    await AddNotificationAsync(milestone.Project.StudentId, "RevisionRequest", $"{milestone.Title} Rejected", remarks ?? "No remarks provided.");
-                    await LogActivityAsync(milestone.Project.StudentId, "FeedbackReceived", $"Revision needed for {milestone.Title}");
+
+                    // 2. In-App Notification to Student
+                    await AddNotificationAsync(
+                        milestone.Project.StudentId, 
+                        "SubmissionFeedback", 
+                        "IAF Signed and Submitted", 
+                        "Your IAF has been signed by your Supervisor and automatically forwarded to Admin for review.");
+                    await LogActivityAsync(milestone.Project.StudentId, "MilestoneApproved", $"{milestone.Title} Signed & Auto-Submitted");
+
+                    // 3. In-App Notification to Admin(s)
+                    try
+                    {
+                        var adminUsers = await _context.ApplicationUsers
+                            .Where(u => u.UserRoles.Any(ur => ur.Role.Name == "Admin"))
+                            .ToListAsync();
+
+                        foreach (var admin in adminUsers)
+                        {
+                            await AddNotificationAsync(
+                                admin.Id,
+                                "IAFReview",
+                                "IAF Awaiting Admin Review",
+                                $"A new supervisor-signed IAF for student {milestone.Project.Student?.FullName ?? "Unknown"} ({milestone.Project.Title}) is awaiting Admin Review.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SupervisorController] Admin notification failed: {ex.Message}");
+                    }
+
+                    // 4. SignalR Real-Time Notification to Student
+                    var iafPayload = new { 
+                        Type = "ReviewMilestone", 
+                        MilestoneId = milestone.Id, 
+                        Title = milestone.Title, 
+                        Status = "PendingPanelReview", 
+                        Message = "Your IAF was signed and automatically submitted for Admin review." 
+                    };
+                    await _hubContext.Clients.Group($"User_{milestone.Project.StudentId}").SendAsync("ReceiveMilestoneUpdate", iafPayload);
+                }
+                else
+                {
+                    // Generic Milestone Email
+                    if (milestone.Project.Student != null && !string.IsNullOrEmpty(milestone.Project.Student.Email))
+                    {
+                        string subject = $"Milestone Reviewed: {milestone.Title}";
+                        string message = $"<p>Dear {milestone.Project.Student.FullName},</p><p>Your milestone '<strong>{milestone.Title}</strong>' for project '<strong>{milestone.Project.Title}</strong>' has been reviewed by your supervisor <strong>{milestone.Project.Supervisor?.FullName}</strong> and marked as <strong>{status}</strong>.</p>";
+                        if (!string.IsNullOrEmpty(remarks))
+                        {
+                            message += $"<p><strong>Supervisor Feedback:</strong> {remarks}</p>";
+                        }
+                        message += "<p>Please log in to the FYP Tracking System to view any graded files or Turnitin scores.</p>";
+                        var request = HttpContext.Request;
+                        string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                        string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
+                        
+                        try { _emailService.Send(milestone.Project.Student.Email, subject, body); } catch {}
+                    }
+
+                    // SignalR Real-Time Notification
+                    string actionStr = status == "Approved" ? "graded" : "reviewed";
+                    var reviewPayload = new { Type = "ReviewMilestone", MilestoneId = milestone.Id, Title = milestone.Title, Status = status, Message = $"Your milestone '{milestone.Title}' was {actionStr}." };
+                    await _hubContext.Clients.Group($"User_{milestone.Project.StudentId}").SendAsync("ReceiveMilestoneUpdate", reviewPayload);
+
+                    if (status == "Approved") {
+                        await AddNotificationAsync(milestone.Project.StudentId, "SubmissionFeedback", $"{milestone.Title} Approved", remarks ?? "No remarks provided.");
+                        await LogActivityAsync(milestone.Project.StudentId, "MilestoneApproved", $"{milestone.Title} Approved");
+
+                        // ── Seed Final Evaluation Steps when Final/Thesis milestone is approved ──
+                        bool isFinalMilestone = milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) 
+                                            || milestone.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase);
+                        bool stepsAlreadyExist = await _context.FYPMilestones
+                            .AnyAsync(m => m.FYPProjectId == milestone.FYPProjectId && m.Title.StartsWith("Step"));
+
+                        if (isFinalMilestone && !stepsAlreadyExist)
+                        {
+                            var stepMilestones = new List<FYPMilestone>
+                            {
+                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 1: Turnitin", Status = "Pending" },
+                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 2: DPP report full", Status = "Pending" },
+                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 3: Marksheet Submission", Status = "Pending" },
+                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 4: Record of Supervisor Meeting Form Submission", Status = "Pending" },
+                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 5: Presentation Slides Submission", Status = "Pending" }
+                            };
+                            _context.FYPMilestones.AddRange(stepMilestones);
+                            await _context.SaveChangesAsync();
+                        }
+                    } 
+                    else if (status == "Rejected" || status == "ReturnedForEdits") {
+                        milestone.RejectionCount++;
+                        await AddNotificationAsync(milestone.Project.StudentId, "RevisionRequest", $"{milestone.Title} Returned for Edits", remarks ?? "No remarks provided.");
+                        await LogActivityAsync(milestone.Project.StudentId, "FeedbackReceived", $"Revision needed for {milestone.Title}");
+                    }
                 }
 
                 TempData["Success"] = "Review saved.";
@@ -3053,8 +3262,14 @@ namespace FYPTracker.Controllers
                     double supTotal = FYPTracker.Utils.GradingHelper.CalculateStage1Score(marksheetData, "Supervisor");
                     double exTotal = FYPTracker.Utils.GradingHelper.CalculateStage1Score(milestone.ExaminerMarksheetData, "Examiner");
 
-                    milestone.Project.Stage1TotalScore = ((supTotal + exTotal) / 150.0) * 100.0;
-                    milestone.Project.Stage1Grade = milestone.Project.Stage1TotalScore >= 40.0 ? "Pass" : "Fail";
+                    // Stage 1 Unified Formula:
+                    // (0.8 * SupervisorPercentage + 0.7 * ExaminerPercentage) / 1.5
+                    double? jointPercentage = FYPTracker.Utils.GradingHelper.CalculateJointFinalPercentage(supTotal, exTotal);
+                    if (jointPercentage.HasValue)
+                    {
+                        milestone.Project.Stage1TotalScore = jointPercentage.Value;
+                        milestone.Project.Stage1Grade = jointPercentage.Value >= 40.0 ? "Pass" : "Fail";
+                    }
                 }
                 catch { }
             }
@@ -3069,150 +3284,9 @@ namespace FYPTracker.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> UploadMarksheetStage1(int projectId, IFormFile marksheetFile, string idempotencyToken)
         {
-            if (string.IsNullOrEmpty(idempotencyToken) || TempData["IdempotencyToken"]?.ToString() != idempotencyToken)
-            {
-                TempData["Error"] = "Duplicate submission detected. Your request has already been processed.";
-                return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
-            }
-            TempData.Remove("IdempotencyToken");
-
-            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
-            if (user == null) return RedirectToAction("Login", "User");
-
-            var project = await _context.FYPProjects
-                .Include(p => p.Milestones)
-                .Include(p => p.Supervisor)
-                .FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user.Id);
-                
-            if (project == null)
-            {
-                TempData["Error"] = "Project not found or unauthorized.";
-                return RedirectToAction(nameof(MyProjects));
-            }
-
-            if (project.Stage1MarksheetUploadCount >= 5)
-            {
-                TempData["Error"] = "You have reached the maximum allowed number of Stage 1 marksheet uploads (5) for this project.";
-                return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
-            }
-
-            if (marksheetFile != null && marksheetFile.Length > 0)
-            {
-                var extension = Path.GetExtension(marksheetFile.FileName).ToLower();
-                if (extension != ".xls" && extension != ".xlsx")
-                {
-                    TempData["Error"] = "Only Excel files (.xls, .xlsx) are allowed.";
-                    return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
-                }
-
-                project.Stage1MarksheetUploadCount++;
-
-                string uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "marksheets");
-                if (!Directory.Exists(uploadsFolder))
-                {
-                    Directory.CreateDirectory(uploadsFolder);
-                }
-
-                string uniqueFileName = Guid.NewGuid().ToString() + "_Stage1_" + Path.GetFileName(marksheetFile.FileName);
-                string filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-                using (var fileStream = new FileStream(filePath, FileMode.Create))
-                {
-                    await marksheetFile.CopyToAsync(fileStream);
-                }
-
-                var proposalMilestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
-                
-                try
-                {
-                    using (var workbook = new ClosedXML.Excel.XLWorkbook(filePath))
-                    {
-                        var worksheet = workbook.Worksheets.FirstOrDefault();
-                        if (worksheet != null)
-                        {
-                            var cellValue = worksheet.Cell("J16").Value;
-                            if (cellValue != null && proposalMilestone != null)
-                            {
-                                string extractedScore = "";
-                                string stringValue = cellValue.ToString();
-                                if (double.TryParse(stringValue, out double numericScore)) extractedScore = numericScore.ToString();
-                                else if (stringValue.Contains("-") && double.TryParse(stringValue.Split('-').Last().Trim(), out double scoreFromText)) extractedScore = scoreFromText.ToString();
-                                else extractedScore = stringValue.Trim();
-                                
-                                if (!double.TryParse(extractedScore, out _))
-                                {
-                                    TempData["Error"] = "Invalid Marksheet: Could not extract a valid numeric score.";
-                                    System.IO.File.Delete(filePath);
-                                    project.Stage1MarksheetUploadCount--;
-                                    return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
-                                }
-                                
-                                var strengthsCell = worksheet.Cell("C19").Value;
-                                var improvementsCell = worksheet.Cell("C22").Value;
-                                var commentsCell = worksheet.Cell("C25").Value;
-                                
-                                var feedbackData = new {
-                                    Score = extractedScore,
-                                    Strengths = strengthsCell?.ToString().Trim() ?? "",
-                                    Improvements = improvementsCell?.ToString().Trim() ?? "",
-                                    Comments = commentsCell?.ToString().Trim() ?? "",
-                                    FilePath = "/uploads/marksheets/" + uniqueFileName
-                                };
-                                proposalMilestone.SupervisorMarksheetData = System.Text.Json.JsonSerializer.Serialize(feedbackData);
-                                
-                                double supScore = 0;
-                                if (!string.IsNullOrEmpty(proposalMilestone.SupervisorMarksheetData)) {
-                                    if (proposalMilestone.SupervisorMarksheetData.StartsWith("{")) {
-                                        using var doc = System.Text.Json.JsonDocument.Parse(proposalMilestone.SupervisorMarksheetData);
-                                        if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double e)) supScore = e;
-                                    } else {
-                                        double.TryParse(proposalMilestone.SupervisorMarksheetData, out supScore);
-                                    }
-                                }
-
-                                double exScore = 0;
-                                bool hasExScore = false;
-                                if (!string.IsNullOrEmpty(proposalMilestone.ExaminerMarksheetData)) {
-                                    if (proposalMilestone.ExaminerMarksheetData.StartsWith("{")) {
-                                        using var doc = System.Text.Json.JsonDocument.Parse(proposalMilestone.ExaminerMarksheetData);
-                                        if (doc.RootElement.TryGetProperty("Score", out var prop) && double.TryParse(prop.GetString(), out double s)) { exScore = s; hasExScore = true; }
-                                    } else {
-                                        hasExScore = double.TryParse(proposalMilestone.ExaminerMarksheetData, out exScore);
-                                    }
-                                }
-
-                                if (supScore > 0)
-                                {
-                                    if (hasExScore)
-                                    {
-                                        project.Stage1TotalScore = (supScore + exScore) / 2.0;
-                                        project.Stage1Grade = project.Stage1TotalScore >= 40.0 ? "Pass" : "Fail";
-                                    }
-                                    else
-                                    {
-                                        project.Stage1TotalScore = supScore;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    await _context.SaveChangesAsync();
-                    TempData["Success"] = "Stage 1 marksheet uploaded successfully" + (project.Stage1TotalScore.HasValue ? $" and score {project.Stage1TotalScore} recorded." : ".");
-                }
-                catch (Exception)
-                {
-                    TempData["Error"] = "Error processing the Excel file. Please ensure it is not corrupted and follows the template.";
-                    System.IO.File.Delete(filePath);
-                    project.Stage1MarksheetUploadCount--;
-                }
-            }
-            else
-            {
-                TempData["Error"] = "Please select a valid file to upload.";
-            }
-
-            return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+            // Legacy Stage 1 Excel upload endpoint is retired in favor of the official Stage 1 Online Rubric.
+            TempData["Error"] = "Excel marksheet upload is deprecated. Please evaluate the student using the official Stage 1 Online Rubric.";
+            return RedirectToAction(nameof(GradeMarksheetStage1), new { id = projectId });
         }
 
         private string GetGradeLabel(double score)

@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using FYPTracker.Common;
 using Microsoft.AspNetCore.SignalR;
 using FYPTracker.Hubs;
+using FYPTracker.Services.Defense;
 
 
 namespace FYPTracker.Controllers
@@ -25,17 +26,155 @@ namespace FYPTracker.Controllers
     [FYPTracker.Filters.AuthorizeUserType("Admin", "SuperAdmin")]
     public class AdminController : Controller
     {
+
         private readonly FYPTrackerContext _context;
         private readonly IEmailService _emailService;
         private readonly IHubContext<NotificationHub> _hubContext;
 
-        public AdminController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext)
+        // B3.9: Prepared dependency. Do not invoke while feature is disabled.
+        private readonly IIAFAlternativeTimeRequestService?
+            _alternativeTimeRequestService;
+
+        public AdminController(
+            FYPTrackerContext context,
+            IEmailService emailService,
+            IHubContext<NotificationHub> hubContext,
+            IIAFAlternativeTimeRequestService? alternativeTimeRequestService = null)
         {
             _context = context;
             _emailService = emailService;
             _hubContext = hubContext;
+            _alternativeTimeRequestService = alternativeTimeRequestService;
         }
-        
+
+        #region B3.7 - IAF Alternative Time Request
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public IActionResult CreateIAFAlternativeTimeRequest(
+            int milestoneId,
+            int examinerId,
+            string? adminNotes)
+        {
+            // B3.7: Endpoint foundation only.
+            // Request creation remains disabled until the database
+            // table, authorization, and workflow are approved.
+
+            // Do not call CreateRequestAsync.
+            // Do not execute SaveChanges or create a booking.
+            // Do not send notifications.
+
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                new
+                {
+                    success = false,
+                    code = "ALTERNATIVE_TIME_REQUEST_DISABLED",
+                    message = "IAF Alternative Time Request is not yet available."
+                });
+        }
+
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public IActionResult RejectIAFAlternativeTimeSuggestion(
+            int requestId,
+            string? reason)
+        {
+            // B3.7.4A: Disabled Admin Reject endpoint.
+            // No database access or Service calls are permitted.
+
+            if (requestId <= 0)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_REQUEST_ID",
+                    message = "A valid request ID is required."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(reason) ||
+                reason.Length > 1000)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_REJECTION_REASON",
+                    message = "A rejection reason is required and must not exceed 1000 characters."
+                });
+            }
+
+            // SECURITY: Feature remains disabled.
+            // Do not call RejectSuggestionAsync().
+            // Do not read or write the database.
+            // Do not send notifications.
+
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                new
+                {
+                    success = false,
+                    code = "ALTERNATIVE_TIME_REJECTION_DISABLED",
+                    message = "IAF Alternative Time Request rejection is not yet available."
+                });
+        }
+
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public IActionResult CancelIAFAlternativeTimeRequest(
+            int requestId,
+            string? reason)
+        {
+            // B3.7.4B: Disabled Admin Cancel Request endpoint.
+            // No database access or Service calls are permitted.
+
+            if (requestId <= 0)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_REQUEST_ID",
+                    message = "A valid request ID is required."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(reason) ||
+                reason.Length > 1000)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_CANCELLATION_REASON",
+                    message = "A cancellation reason is required and must not exceed 1000 characters."
+                });
+            }
+
+            // SECURITY: Cancellation remains disabled.
+            // Do not call CancelRequestAsync().
+            // Do not read or write the database.
+            // Do not create bookings or send notifications.
+
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                new
+                {
+                    success = false,
+                    code = "ALTERNATIVE_TIME_CANCELLATION_DISABLED",
+                    message = "IAF Alternative Time Request cancellation is not yet available."
+                });
+        }
+
+
+
+
+        #endregion
+
+
         private void RemoveImage(ApplicationUser model)
         {
             if (!string.IsNullOrEmpty(model.Image))
@@ -257,6 +396,7 @@ namespace FYPTracker.Controllers
 
             var projects = await _context.FYPProjects
                 .Include(p => p.Supervisor)
+                .Include(p => p.Milestones)
                 .Include(p => p.AssignedExaminers)
                     .ThenInclude(ae => ae.Examiner)
                 .ToListAsync();
@@ -434,6 +574,152 @@ namespace FYPTracker.Controllers
             
             return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
         }
+
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CompleteProject(int projectId)
+        {
+            int.TryParse(HttpContext.User.FindFirst("Id")?.Value, out int adminUserId);
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .Include(p => p.Milestones)
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            if (project.Status == "Completed")
+            {
+                TempData["Warning"] = "Project is already in Completed status.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Academic Guard 1: Stage 1 must be Evaluated and Passed
+            if (project.Stage1Grade != "Pass")
+            {
+                TempData["Error"] = $"Cannot complete project: Stage 1 has not been passed (current status: '{project.Stage1Grade ?? "Unassessed"}').";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Academic Guard 2: Final Viva must be scheduled and concluded (VivaDate must exist and be <= Now)
+            if (!project.VivaDate.HasValue)
+            {
+                TempData["Error"] = "Cannot complete project: Final Viva date has not been scheduled.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+            if (project.VivaDate.Value > DateTime.Now)
+            {
+                TempData["Error"] = $"Cannot complete project: Final Viva is scheduled for {project.VivaDate.Value:dd MMM yyyy, hh:mm tt} and has not yet been conducted.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Academic Guard 3: Final Grade and Examiner Marksheet Assessment must be recorded
+            if (string.IsNullOrWhiteSpace(project.FinalGrade))
+            {
+                TempData["Error"] = "Cannot complete project: Final Grade has not been recorded.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            bool hasExaminerAssessment = !string.IsNullOrWhiteSpace(project.ExaminerMarksheetPath) ||
+                                         !string.IsNullOrWhiteSpace(project.Stage2ExaminerMarksheetData);
+            if (!hasExaminerAssessment)
+            {
+                TempData["Error"] = "Cannot complete project: Examiner Viva marksheet assessment has not been submitted.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Academic Guard 4: Stage 2 milestones must exist and ALL must be Approved or Completed
+            var stage2Milestones = project.Milestones
+                .Where(m => m.Stage == 2 || m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (!stage2Milestones.Any())
+            {
+                TempData["Error"] = "Cannot complete project: Stage 2 milestones have not been initialized or approved.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            if (!stage2Milestones.All(m => m.Status == "Approved" || m.Status == "Completed"))
+            {
+                TempData["Error"] = "Cannot complete project: All Stage 2 milestones (Final Report, Turnitin, Presentation) must be Approved or Completed.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            string oldStatus = project.Status;
+            project.Status = "Completed";
+
+            _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
+            {
+                ProjectId = project.Id,
+                OldStatus = oldStatus,
+                NewStatus = "Completed",
+                ChangedById = adminUserId > 0 ? adminUserId : null,
+                Remarks = "Project marked as Completed by Administrator after verifying Stage 1 Pass, Stage 2 completion, Final Viva, and Final Grade."
+            });
+
+            // In-app notification to Student
+            if (project.StudentId > 0)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = project.StudentId,
+                    Type = "ProjectCompleted",
+                    Title = "FYP Project Completed",
+                    Message = $"Congratulations! Your FYP project '{project.Title}' has been finalized and marked as Completed.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = $"Project '{project.Title}' has been verified and marked as Completed.";
+            return RedirectToAction(nameof(ManageProjects));
+        }
+
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ReopenProject(int projectId)
+        {
+            int.TryParse(HttpContext.User.FindFirst("Id")?.Value, out int adminUserId);
+            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            if (project.Status != "Completed")
+            {
+                TempData["Error"] = $"Cannot reopen project: Project is in '{project.Status}' status, not Completed.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            string oldStatus = project.Status;
+            project.Status = "Approved";
+
+            _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
+            {
+                ProjectId = project.Id,
+                OldStatus = oldStatus,
+                NewStatus = "Approved",
+                ChangedById = adminUserId > 0 ? adminUserId : null,
+                Remarks = "Project re-opened to Active by Administrator."
+            });
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = $"Project '{project.Title}' has been re-opened to Active status.";
+            return RedirectToAction(nameof(ManageProjects));
+        }
+
 
         [HttpPost]
         [Authorize]
@@ -2925,10 +3211,72 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 .Include(m => m.Project)
                     .ThenInclude(p => p.AssignedExaminers)
                         .ThenInclude(e => e.Examiner)
+                .Include(m => m.SubmissionFiles)
                 .Where(m => (m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation")) && (m.Status == "PendingPanelReview" || m.Status == "AdminApproved" || m.Status == "DefenseScheduled" || m.Status == "DefenseRequired" || m.Status == "PanelRevisionRequired" || m.Status == "ChangeOfTopicRequired"))
                 .ToListAsync();
 
             return View(approvedList);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ViewDigitalForm(int milestoneId, int attemptNumber)
+        {
+            var user = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+
+            if (user == null) return RedirectToAction("Login", "User");
+            if (attemptNumber < 1) return NotFound();
+
+            var milestone = await _context.FYPMilestones
+                .AsNoTracking()
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Supervisor)
+                .Include(m => m.SubmissionFiles)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestone == null) return NotFound();
+
+            string raw = milestone.Remarks ?? "";
+            int jsonIndex = raw.IndexOf("JSON: ", StringComparison.Ordinal);
+            string parsedJson = jsonIndex >= 0 ? raw.Substring(jsonIndex + "JSON: ".Length) : raw;
+            var history = IafAttemptHistory.ParseOrMigrate(parsedJson);
+
+            if (!history.Attempts.Any(a => a.AttemptNumber == attemptNumber))
+                return NotFound();
+
+            ViewData["AttemptNumber"] = attemptNumber;
+            ViewBag.CurrentUser = user;
+
+            return View("~/Views/Supervisor/ViewDigitalForm.cshtml", milestone);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DownloadFile(int fileId)
+        {
+            var user = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var file = await _context.FYPSubmissionFiles.FindAsync(fileId);
+            if (file == null || string.IsNullOrEmpty(file.FilePath)) return NotFound();
+
+            var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (string.IsNullOrEmpty(ext)) ext = System.IO.Path.GetExtension(file.FilePath).ToLowerInvariant();
+
+            string mimeType = "application/octet-stream";
+            if (ext == ".pdf") mimeType = "application/pdf";
+            else if (ext == ".docx") mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            else if (ext == ".doc") mimeType = "application/msword";
+            else if (ext == ".png") mimeType = "image/png";
+            else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+
+            var physicalPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", file.FilePath.TrimStart('/', '\\'));
+            if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+
+            Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{file.FileName}{(string.IsNullOrEmpty(System.IO.Path.GetExtension(file.FileName)) ? ext : "")}\"");
+            return PhysicalFile(physicalPath, mimeType);
         }
 
         [HttpPost]
@@ -2971,18 +3319,19 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AdminRejectIaf(int milestoneId, string? panelComments)
+        public async Task<IActionResult> AdminRejectIaf(int milestoneId, string? panelComments, bool requireDefense = false)
         {
             var milestone = await _context.FYPMilestones.Include(m => m.Project).ThenInclude(p => p.Student).FirstOrDefaultAsync(m => m.Id == milestoneId);
             if (milestone != null)
             {
                 if (milestone.Status != "PendingPanelReview")
                 {
-                    TempData["Error"] = "Only IAFs in PendingPanelReview status can be rejected/returned for revision by the panel.";
+                    TempData["Error"] = "Only IAFs in PendingPanelReview status can be rejected by the panel.";
                     return RedirectToAction(nameof(ApprovedIafList));
                 }
 
-                milestone.Status = "PanelRevisionRequired";
+                string newStatus = requireDefense ? "DefenseRequired" : "PanelRevisionRequired";
+                milestone.Status = newStatus;
 
                 if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
                 {
@@ -2994,7 +3343,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                         var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
                         if (currentAttempt != null)
                         {
-                            currentAttempt.Status = "PanelRevisionRequired";
+                            currentAttempt.Status = newStatus;
                             currentAttempt.PanelComments = panelComments;
                             milestone.Remarks = $"{formInfo} JSON: {System.Text.Json.JsonSerializer.Serialize(history)}";
                         }
@@ -3002,24 +3351,65 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     catch {}
                 }
 
-                _context.FYPNotifications.Add(new FYPNotification
+                if (requireDefense)
                 {
-                    RecipientId = milestone.Project.StudentId,
-                    Type = "RevisionRequest",
-                    Title = "IAF Revision Required",
-                    Message = "The panel has requested revisions for your Initial Allocation Form. Please review the comments and resubmit.",
-                    IsRead = false,
-                    CreatedDate = DateTime.Now
-                });
+                    _context.FYPNotifications.Add(new FYPNotification
+                    {
+                        RecipientId = milestone.Project.StudentId,
+                        Type = "DefenseRequired",
+                        Title = "IAF Defense Required",
+                        Message = "The review panel has rejected your Initial Project Allocation Form and mandated a defense session. Administration will schedule your defense.",
+                        IsRead = false,
+                        CreatedDate = DateTime.Now
+                    });
+                    TempData["Success"] = "IAF rejected. Defense session is now required and milestone is ready for scheduling.";
+                }
+                else
+                {
+                    _context.FYPNotifications.Add(new FYPNotification
+                    {
+                        RecipientId = milestone.Project.StudentId,
+                        Type = "RevisionRequest",
+                        Title = "IAF Revision Required",
+                        Message = "The panel has requested revisions for your Initial Allocation Form. Please review the comments and resubmit.",
+                        IsRead = false,
+                        CreatedDate = DateTime.Now
+                    });
+                    TempData["Success"] = "IAF rejected. Revisions have been requested from the student.";
+                }
 
                 await _context.SaveChangesAsync();
-                TempData["Success"] = "IAF rejected. Revision is now required.";
             }
             return RedirectToAction(nameof(ApprovedIafList));
         }
 
-        [HttpGet]
-        
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AdminRejectIafForDefense(int milestoneId, string? panelComments)
+        {
+            return await AdminRejectIaf(milestoneId, panelComments, requireDefense: true);
+        }
+
+        private async Task<bool> IsIAFDefenseTableAvailableAsync()
+        {
+            try
+            {
+                var conn = _context.Database.GetDbConnection();
+                if (conn.State != System.Data.ConnectionState.Open)
+                {
+                    await conn.OpenAsync();
+                }
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT COUNT(1) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'IAFDefenseBooking';";
+                var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                return count > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         [HttpGet]
         public async Task<IActionResult> ManageDefenses(string sessionFilter = null)
         {
@@ -3055,6 +3445,27 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                             ((m.Status == "AdminApproved" || m.Status == "ChangeOfTopicRequired") && m.DefenseDate != null && m.Remarks != null && m.Remarks.Contains("JSON: ")))
                 .ToListAsync();
 
+            bool isTableAvailable = await IsIAFDefenseTableAvailableAsync();
+            ViewBag.IsDefenseSchemaAvailable = isTableAvailable;
+            var defenseBookings = new Dictionary<int, IAFDefenseBooking>();
+
+            if (isTableAvailable && defenseMilestones.Any())
+            {
+                var milestoneIds = defenseMilestones.Select(m => m.Id).ToList();
+                var bookings = await _context.IAFDefenseBookings
+                    .AsNoTracking()
+                    .Include(b => b.Examiner)
+                    .Include(b => b.OriginalSupervisor)
+                    .Where(b => milestoneIds.Contains(b.MilestoneId))
+                    .ToListAsync();
+
+                foreach (var b in bookings.OrderBy(x => x.AttemptNumber))
+                {
+                    defenseBookings[b.MilestoneId] = b;
+                }
+            }
+
+            ViewBag.DefenseBookings = defenseBookings;
             return View(defenseMilestones);
         }
 
@@ -3098,6 +3509,19 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             int examinerId,
             DateTime defenseDate)
         {
+            // 0. Verify IAF Defense Booking schema is available in target database
+            if (!await IsIAFDefenseTableAvailableAsync())
+            {
+                return Json(new
+                {
+                    success = false,
+                    code = "SchemaNotMigrated",
+                    configurationRequired = true,
+                    message = "The IAF Defense Booking schema (migration 20261011194333_AddIAFDefenseBookingAndAudit) has not been applied to this database. Defense slots cannot be queried until migration is executed.",
+                    slots = Array.Empty<object>()
+                });
+            }
+
             // 1. Validate IAF milestone and project
             var milestone = await _context.FYPMilestones
                 .Include(m => m.Project)
@@ -3362,7 +3786,9 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             });
         }
 
-        public async Task<IActionResult> SmartScheduleDefense(int milestoneId)
+        public async Task<IActionResult> SmartScheduleDefense(
+            [FromServices] FYPTracker.Services.Defense.IIAFDefenseBookingService defenseBookingService,
+            int milestoneId)
         {
             var milestone = await _context.FYPMilestones
                 .Include(m => m.Project)
@@ -3392,267 +3818,637 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             bool.TryParse(supervisorSetting?.Value, out bool supervisorRequired);
             ViewBag.SupervisorRequired = supervisorRequired;
 
+            // Load existing booking if schema is available
+            if (await IsIAFDefenseTableAvailableAsync())
+            {
+                ViewBag.ExistingBooking = await defenseBookingService.GetActiveBookingAsync(milestoneId);
+            }
+
             return View(milestone);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AdminScheduleDefense([FromServices] FYPTracker.Services.ILecturerAvailabilityService availabilityService, int milestoneId, int examinerId, DateTime defenseDate, TimeSpan defenseTime, string venue)
+        public async Task<IActionResult> AdminScheduleDefense(
+            [FromServices] FYPTracker.Services.Defense.IIAFDefenseBookingService defenseBookingService,
+            [FromServices] Microsoft.Extensions.Hosting.IHostEnvironment hostEnv,
+            [FromServices] Microsoft.Extensions.Configuration.IConfiguration config,
+            int milestoneId,
+            int examinerId,
+            DateTime defenseDate,
+            TimeSpan defenseTime,
+            string venue)
         {
-        // TEMPORARY SAFETY BLOCK
-        // Disable Defense scheduling until database integrity
-        // and booking validation are completed.
-        TempData["Error"] =
-            "IAF Defense scheduling is temporarily disabled " +
-            "until examiner assignment and booking validation are completed.";
-
-        return RedirectToAction(nameof(ManageDefenses));
-
-        // Existing code below - keep it for now.
-            var milestone = await _context.FYPMilestones
-                .Include(m => m.Project)
-                    .ThenInclude(p => p.Student)
-                .Include(m => m.Project)
-                    .ThenInclude(p => p.Supervisor)
-                .Include(m => m.Project)
-                    .ThenInclude(p => p.AssignedExaminers)
-                        .ThenInclude(e => e.Examiner)
-                .FirstOrDefaultAsync(m => m.Id == milestoneId);
-
-            if (milestone == null) return NotFound();
-
-            // Validate Examiner Role, Status, and Independence
-            var examiner = await _context.ApplicationUsers
-                .FirstOrDefaultAsync(u => u.Id == examinerId && u.UserRoles.Any(r => r.Role.Name == "Examiner") && !u.IsResign);
-
-            if (examiner == null)
+            // Enforce Administrative Role Authorization
+            if (!User.IsInRole("Admin") && !User.IsInRole("SuperAdmin"))
             {
-                TempData["Error"] = "Selected Examiner is invalid, inactive, or does not possess the required Examiner role.";
-                return RedirectToAction(nameof(SmartScheduleDefense), new { milestoneId });
-            }
-
-            if (milestone.Project != null && milestone.Project.SupervisorId == examiner.Id)
-            {
-                TempData["Error"] = "A supervisor cannot serve as the independent examiner for their own student's defense.";
-                return RedirectToAction(nameof(SmartScheduleDefense), new { milestoneId });
-            }
-
-            // Missing POST Availability Revalidation (A2)
-            var supervisorId = milestone.Project?.SupervisorId ?? 0;
-            var lecturers = new List<int> { examinerId }; if (supervisorId > 0) lecturers.Add(supervisorId);
-            int? postAcademicSessionId = await ResolveDefenseAcademicSessionIdAsync(milestone);
-
-            if (!postAcademicSessionId.HasValue)
-            {
-                TempData["Error"] = "Invalid Academic Session.";
-
+                TempData["Error"] = "Unauthorized: Administrative privileges are required to schedule an IAF Defense session.";
                 return RedirectToAction(nameof(ManageDefenses));
             }
 
-            var slots = await availabilityService.GetMutualAvailableSlotsAsync(
-                lecturers,
-                defenseDate.Date,
-                45,
-                postAcademicSessionId.Value);
-    
-            var isValidSlot = slots.Any(s => s.StartTime <= defenseTime && s.EndTime >= defenseTime.Add(TimeSpan.FromMinutes(45)));
-            
-            if (!isValidSlot)
+            // Condition 5, 6 & 7: Re-read actual milestone record from database and validate project, attempt, and status
+            var milestoneCheck = await _context.FYPMilestones
+                .Include(m => m.Project).ThenInclude(p => p.Student)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestoneCheck == null || milestoneCheck.Project == null || milestoneCheck.Project.Student == null)
             {
-                TempData["Error"] = "The selected time slot is no longer available.";
+                TempData["Error"] = $"SAFETY ABORT: Milestone #{milestoneId} does not exist or has no associated project/student.";
+                return RedirectToAction(nameof(ManageDefenses));
+            }
+
+            if (milestoneCheck.Status != "DefenseRequired" && milestoneCheck.Status != "DefenseScheduled")
+            {
+                TempData["Error"] = $"SAFETY ABORT: Milestone status is '{milestoneCheck.Status}'. Expected 'DefenseRequired' or 'DefenseScheduled'.";
+                return RedirectToAction(nameof(ManageDefenses));
+            }
+
+            // Validate IAF Attempt from authoritative remarks history (supports Attempt 1 and Attempt 2)
+            string checkRemarksJson = "";
+            if (!string.IsNullOrEmpty(milestoneCheck.Remarks) && milestoneCheck.Remarks.Contains("JSON: "))
+            {
+                checkRemarksJson = milestoneCheck.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+            }
+            var attemptHistory = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(checkRemarksJson);
+            if (attemptHistory.CurrentAttempt < 1 || attemptHistory.CurrentAttempt > 2)
+            {
+                TempData["Error"] = $"SAFETY ABORT: Current IAF attempt is {attemptHistory.CurrentAttempt}. Defense is only valid for Attempt 1 or Attempt 2.";
+                return RedirectToAction(nameof(ManageDefenses));
+            }
+
+            // Ensure IAF Defense schema exists
+            if (!await IsIAFDefenseTableAvailableAsync())
+            {
+                TempData["Error"] = "SAFETY ABORT: The IAF Defense Booking schema (IAFDefenseBooking) is not available in target database.";
+                return RedirectToAction(nameof(ManageDefenses));
+            }
+
+            var userName = User.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(userName))
+            {
+                TempData["Error"] = "Unable to determine authenticated user identity.";
                 return RedirectToAction(nameof(SmartScheduleDefense), new { milestoneId });
             }
 
-            if (milestone.Status == "DefenseRequired" || milestone.Status == "DefenseScheduled")
+            var currentUser = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.UserName == userName || u.Email == userName);
+
+            if (currentUser == null)
             {
-                var formattedDate = defenseDate.ToString("dd MMM yyyy");
-                var formattedTime = new DateTime(defenseTime.Ticks).ToString("hh:mm tt");
-                
-                milestone.Status = "DefenseScheduled";
-                milestone.DefenseDate = defenseDate;
-                milestone.DefenseTime = formattedTime;
-                milestone.DefenseVenue = venue;
-                
-                // Assign or Update Examiner
-                // BLOCKED: Do not overwrite FYPProjectExaminer assignments. 
-                // A new FYPDefenseSchedule migration is required to store independent Defense Examiners safely.
-                if (milestone.Project != null)
+                TempData["Error"] = "Authenticated user account could not be found in the database.";
+                return RedirectToAction(nameof(SmartScheduleDefense), new { milestoneId });
+            }
+
+            int currentUserId = currentUser.Id;
+
+            var result = await defenseBookingService.ScheduleOrRescheduleDefenseAsync(
+                milestoneId,
+                examinerId,
+                defenseDate,
+                defenseTime,
+                venue,
+                currentUserId);
+
+            if (!result.Success)
+            {
+                TempData["Error"] = $"Failed to schedule defense: {result.ErrorMessage}";
+                return RedirectToAction(nameof(SmartScheduleDefense), new { milestoneId });
+            }
+
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project).ThenInclude(p => p.Student)
+                .Include(m => m.Project).ThenInclude(p => p.Supervisor)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            var examiner = await _context.ApplicationUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == examinerId);
+
+            var student = milestone?.Project?.Student;
+            var supervisor = milestone?.Project?.Supervisor;
+            var projectTitle = milestone?.Project?.Title ?? "N/A";
+            var projectSession = milestone?.Project?.AcademicSession;
+
+            var formattedDate = defenseDate.ToString("dd MMM yyyy (dddd)");
+            var formattedStartTime = new DateTime(defenseTime.Ticks).ToString("hh:mm tt");
+            int durationMinutes = result.Booking?.DurationMinutes ?? 45;
+            var formattedEndTime = new DateTime(defenseTime.Add(TimeSpan.FromMinutes(durationMinutes)).Ticks).ToString("hh:mm tt");
+
+            // ── Multi-party Notification Pipeline ───────────────────────────
+            // 1. Check supervisor notification policy
+            bool isSupervisorRequired = result.Booking?.IsSupervisorRequired ?? false;
+
+            var inAppNotifications = new List<FYPNotification>();
+            FYPNotification? studentNotification = null;
+            FYPNotification? examinerNotification = null;
+            FYPNotification? supervisorNotification = null;
+
+            if (student != null)
+            {
+                studentNotification = new FYPNotification
                 {
-                    // var existingAssignment = milestone.Project.AssignedExaminers.FirstOrDefault();
-                    // ...
-                }
-                if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
-                {
-                    var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
-                    var formInfo = parts[0].Trim();
-                    try
-                    {
-                        var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parts[1]);
-                        var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
-                        if (currentAttempt != null)
-                        {
-                            currentAttempt.Status = "DefenseScheduled";
-                            milestone.Remarks = $"{formInfo} JSON: {System.Text.Json.JsonSerializer.Serialize(history)}";
-                        }
-                    }
-                    catch {}
-                }
-                
-                var notificationMessage = $"Your IAF requires a defense session.\nDate: {formattedDate}\nTime: {formattedTime}\nVenue: {venue}";
-                _context.FYPNotifications.Add(new FYPNotification
-                {
-                    RecipientId = milestone.Project.StudentId,
-                    Type = "RevisionRequest",
+                    RecipientId = student.Id,
+                    Type = "IAFDefenseScheduled",
                     Title = "IAF Defense Scheduled",
-                    Message = notificationMessage,
+                    Message = $"Your Initial Project Allocation Form (IAF) requires a mandatory Defense Session.\nProject: {projectTitle}\nDate: {formattedDate}\nTime: {formattedStartTime} - {formattedEndTime}\nVenue: {venue}\nExaminer: {examiner?.FullName ?? "Assigned Independent Examiner"}",
                     IsRead = false,
                     CreatedDate = DateTime.Now
-                });
-
-                await _context.SaveChangesAsync();
-                
-                var student = milestone.Project?.Student;
-                var supervisor = milestone.Project?.Supervisor;
-
-                string subject = "FYP IAF Defense Scheduled";
-                string message = $@"<p>An Initial Allocation Form (IAF) defense session has been scheduled.</p>
-                    <ul>
-                        <li><strong>Student:</strong> {student?.FullName ?? "Unknown"}</li>
-                        <li><strong>Date:</strong> {formattedDate}</li>
-                        <li><strong>Time:</strong> {formattedTime}</li>
-                        <li><strong>Venue/Link:</strong> {venue}</li>
-                    </ul>
-                    <p>Please ensure your attendance.</p>";
-                var request = HttpContext.Request;
-                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
-                string htmlBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
-
-                if (student != null && !string.IsNullOrEmpty(student.Email))
-                {
-                    try { _emailService.Send(student.Email, subject, htmlBody); } catch { }
-                }
-
-                if (supervisor != null && !string.IsNullOrEmpty(supervisor.Email))
-                {
-                    try { _emailService.Send(supervisor.Email, subject, htmlBody); } catch { }
-                    _context.FYPNotifications.Add(new FYPNotification
-                    {
-                        RecipientId = supervisor.Id,
-                        Type = "Meeting",
-                        Title = "Student Defense Scheduled",
-                        Message = $"Defense for {student?.FullName} is scheduled on {formattedDate} at {formattedTime}.",
-                        IsRead = false,
-                        CreatedDate = DateTime.Now
-                    });
-                }
-
-                if (examiner != null && !string.IsNullOrEmpty(examiner.Email))
-                {
-                    try { _emailService.Send(examiner.Email, subject, htmlBody); } catch { }
-                    _context.FYPNotifications.Add(new FYPNotification
-                    {
-                        RecipientId = examiner.Id,
-                        Type = "Meeting",
-                        Title = "Examiner Duty: IAF Defense",
-                        Message = $"Defense for {student?.FullName} is scheduled on {formattedDate} at {formattedTime}.",
-                        IsRead = false,
-                        CreatedDate = DateTime.Now
-                    });
-                }
-
-                TempData["Success"] = "Successfully scheduled defense and sent invitations to the student, supervisor, and examiner.";
+                };
+                inAppNotifications.Add(studentNotification);
             }
+
+            if (examiner != null)
+            {
+                examinerNotification = new FYPNotification
+                {
+                    RecipientId = examiner.Id,
+                    Type = "IAFDefenseAssignment",
+                    Title = "Assigned as Independent Examiner for IAF Defense",
+                    Message = $"You have been assigned as the Independent Examiner for an IAF Defense session.\nStudent: {student?.FullName ?? "Student"} ({student?.CoventryId ?? student?.EmployeeId ?? "N/A"})\nProject: {projectTitle}\nDate: {formattedDate}\nTime: {formattedStartTime} - {formattedEndTime}\nVenue: {venue}",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                };
+                inAppNotifications.Add(examinerNotification);
+            }
+
+            // Only notify supervisor if supervisor attendance/notification is required by policy
+            if (isSupervisorRequired && supervisor != null)
+            {
+                supervisorNotification = new FYPNotification
+                {
+                    RecipientId = supervisor.Id,
+                    Type = "IAFDefenseScheduled",
+                    Title = "Student IAF Defense Session Scheduled",
+                    Message = $"Your student {student?.FullName ?? "Student"}'s IAF Defense session has been scheduled.\nDate: {formattedDate}\nTime: {formattedStartTime} - {formattedEndTime}\nVenue: {venue}\nExaminer: {examiner?.FullName ?? "N/A"}",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                };
+                inAppNotifications.Add(supervisorNotification);
+            }
+
+            // 2. Persist in-app notifications BEFORE external Email or SignalR dispatch
+            bool inAppPersisted = false;
+
+            if (inAppNotifications.Count > 0)
+            {
+                try
+                {
+                    _context.FYPNotifications.AddRange(inAppNotifications);
+                    await _context.SaveChangesAsync();
+                    inAppPersisted = true;
+                }
+                catch (Exception ex)
+                {
+                    inAppPersisted = false;
+                    Console.WriteLine($"[AdminScheduleDefense] ❌ Failed persisting in-app notifications: {ex}");
+                }
+            }
+            else
+            {
+                inAppPersisted = true;
+            }
+
+            // If in-app notification persistence fails, do not proceed with external Email or SignalR dispatch
+            if (!inAppPersisted)
+            {
+                TempData["Warning"] = "Defense session was successfully booked and saved in the database. However, in-app notification records could not be saved, and external notifications were withheld to prevent unrecorded dispatches.";
+                return RedirectToAction(nameof(ManageDefenses), new { sessionFilter = projectSession });
+            }
+
+            // 3. SignalR Real-Time Dispatch (only after in-app notifications were safely persisted)
+            if (studentNotification != null)
+            {
+                try
+                {
+                    await _hubContext.Clients.User(studentNotification.RecipientId.ToString())
+                        .SendAsync("ReceiveNotification", studentNotification.Title, studentNotification.Message);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[AdminScheduleDefense] ⚠ SignalR real-time dispatch to student ({studentNotification.RecipientId}) failed: {ex.Message}");
+                }
+            }
+
+            if (examinerNotification != null)
+            {
+                try
+                {
+                    await _hubContext.Clients.User(examinerNotification.RecipientId.ToString())
+                        .SendAsync("ReceiveNotification", examinerNotification.Title, examinerNotification.Message);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[AdminScheduleDefense] ⚠ SignalR real-time dispatch to examiner ({examinerNotification.RecipientId}) failed: {ex.Message}");
+                }
+            }
+
+            if (supervisorNotification != null)
+            {
+                try
+                {
+                    await _hubContext.Clients.User(supervisorNotification.RecipientId.ToString())
+                        .SendAsync("ReceiveNotification", supervisorNotification.Title, supervisorNotification.Message);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[AdminScheduleDefense] ⚠ SignalR real-time dispatch to supervisor ({supervisorNotification.RecipientId}) failed: {ex.Message}");
+                }
+            }
+
+            // 4. Email Dispatch with safe tracking and exception suppression
+            var emailSuccesses = new List<string>();
+            var emailFailures = new List<string>();
+            var missingEmails = new List<string>();
+
+            // Student Email
+            if (student != null)
+            {
+                if (!string.IsNullOrWhiteSpace(student.Email))
+                {
+                    try
+                    {
+                        string emailHtml = $@"
+                            <h3>IAF Defense Session Scheduled</h3>
+                            <p>Dear {student.FullName},</p>
+                            <p>A mandatory Initial Project Allocation Form (IAF) Defense Session has been scheduled for your project.</p>
+                            <table style='border-collapse:collapse; width:100%; max-width:500px;'>
+                                <tr><td style='padding:6px; font-weight:bold;'>Project Title:</td><td style='padding:6px;'>{projectTitle}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Date:</td><td style='padding:6px;'>{formattedDate}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Time:</td><td style='padding:6px;'>{formattedStartTime} - {formattedEndTime}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Venue:</td><td style='padding:6px;'>{venue}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Independent Examiner:</td><td style='padding:6px;'>{examiner?.FullName ?? "N/A"}</td></tr>
+                            </table>
+                            <p style='margin-top:15px;'>Please ensure you attend the defense session promptly.</p>
+                            <p>Regards,<br/>FYP Committee</p>";
+
+                        _emailService.Send(student.Email!, "FYP Notice: IAF Defense Session Scheduled", emailHtml);
+                        emailSuccesses.Add("Student");
+                    }
+                    catch (Exception ex)
+                    {
+                        emailFailures.Add("Student");
+                        Console.WriteLine($"[AdminScheduleDefense] ❌ Failed sending student email: {ex}");
+                    }
+                }
+                else
+                {
+                    missingEmails.Add("Student (missing email address)");
+                }
+            }
+
+            // Examiner Email
+            if (examiner != null)
+            {
+                if (!string.IsNullOrWhiteSpace(examiner.Email))
+                {
+                    try
+                    {
+                        string emailHtml = $@"
+                            <h3>IAF Defense Examiner Assignment</h3>
+                            <p>Dear {examiner.FullName},</p>
+                            <p>You have been assigned as the Independent Examiner for an Initial Project Allocation Form (IAF) Defense Session.</p>
+                            <table style='border-collapse:collapse; width:100%; max-width:500px;'>
+                                <tr><td style='padding:6px; font-weight:bold;'>Student Name:</td><td style='padding:6px;'>{student?.FullName ?? "N/A"} ({student?.CoventryId ?? student?.EmployeeId ?? "N/A"})</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Project Title:</td><td style='padding:6px;'>{projectTitle}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Date:</td><td style='padding:6px;'>{formattedDate}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Time:</td><td style='padding:6px;'>{formattedStartTime} - {formattedEndTime}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Venue:</td><td style='padding:6px;'>{venue}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Original Supervisor:</td><td style='padding:6px;'>{supervisor?.FullName ?? "N/A"}</td></tr>
+                            </table>
+                            <p style='margin-top:15px;'>Please log in to FYP Tracker to review the student's submission before the session.</p>
+                            <p>Regards,<br/>FYP Committee</p>";
+
+                        _emailService.Send(examiner.Email!, "FYP Notice: IAF Defense Examiner Assignment", emailHtml);
+                        emailSuccesses.Add("Examiner");
+                    }
+                    catch (Exception ex)
+                    {
+                        emailFailures.Add("Examiner");
+                        Console.WriteLine($"[AdminScheduleDefense] ❌ Failed sending examiner email: {ex}");
+                    }
+                }
+                else
+                {
+                    missingEmails.Add("Examiner (missing email address)");
+                }
+            }
+
+            // Supervisor Email (only if attendance/notification is required by policy)
+            if (isSupervisorRequired && supervisor != null)
+            {
+                if (!string.IsNullOrWhiteSpace(supervisor.Email))
+                {
+                    try
+                    {
+                        string emailHtml = $@"
+                            <h3>Student IAF Defense Scheduled</h3>
+                            <p>Dear {supervisor.FullName},</p>
+                            <p>An IAF Defense session has been scheduled for your student.</p>
+                            <table style='border-collapse:collapse; width:100%; max-width:500px;'>
+                                <tr><td style='padding:6px; font-weight:bold;'>Student Name:</td><td style='padding:6px;'>{student?.FullName ?? "N/A"}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Project Title:</td><td style='padding:6px;'>{projectTitle}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Date:</td><td style='padding:6px;'>{formattedDate}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Time:</td><td style='padding:6px;'>{formattedStartTime} - {formattedEndTime}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Venue:</td><td style='padding:6px;'>{venue}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Independent Examiner:</td><td style='padding:6px;'>{examiner?.FullName ?? "N/A"}</td></tr>
+                            </table>
+                            <p>Regards,<br/>FYP Committee</p>";
+
+                        _emailService.Send(supervisor.Email!, "FYP Notice: Student IAF Defense Scheduled", emailHtml);
+                        emailSuccesses.Add("Supervisor");
+                    }
+                    catch (Exception ex)
+                    {
+                        emailFailures.Add("Supervisor");
+                        Console.WriteLine($"[AdminScheduleDefense] ❌ Failed sending supervisor email: {ex}");
+                    }
+                }
+                else
+                {
+                    missingEmails.Add("Supervisor (missing email address)");
+                }
+            }
+
+            // 5. Report delivery results accurately to Admin UI
+            bool hasPartialNotificationFailure = emailFailures.Count > 0 || missingEmails.Count > 0;
+
+            if (hasPartialNotificationFailure)
+            {
+                var issues = new List<string>();
+                if (emailFailures.Count > 0) issues.Add($"Email delivery could not be completed for: {string.Join(", ", emailFailures)}");
+                if (missingEmails.Count > 0) issues.Add($"Email skipped due to missing address for: {string.Join(", ", missingEmails)}");
+
+                TempData["Warning"] = $"Defense session was successfully booked and saved in the database. However, notification delivery was only partial: {string.Join("; ", issues)}.";
+            }
+            else
+            {
+                TempData["Success"] = "Successfully scheduled defense session. All in-app notifications and participant emails were sent successfully.";
+            }
+
+            return RedirectToAction(nameof(ManageDefenses), new { sessionFilter = projectSession });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AdminPassDefense(
+            [FromServices] FYPTracker.Services.Defense.IIAFDefenseBookingService defenseBookingService,
+            [FromServices] Microsoft.AspNetCore.Hosting.IWebHostEnvironment hostEnv,
+            [FromServices] Microsoft.Extensions.Configuration.IConfiguration config,
+            int milestoneId)
+        {
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestone == null)
+            {
+                TempData["Error"] = "Milestone not found.";
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            if (milestone.Status != "DefenseScheduled")
+            {
+                TempData["Error"] = $"Cannot record defense pass: milestone is in '{milestone.Status}' status (expected 'DefenseScheduled').";
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            var userName = User.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(userName))
+            {
+                TempData["Error"] = "Unable to determine authenticated user identity.";
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            var adminUser = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.UserName == userName || u.Email == userName);
+
+            if (adminUser == null)
+            {
+                TempData["Error"] = "Authenticated user account could not be found in the database.";
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            int currentUserId = adminUser.Id;
+
+            bool isTableAvailable = await IsIAFDefenseTableAvailableAsync();
+            if (!isTableAvailable)
+            {
+                TempData["Error"] = "Cannot record defense pass: The IAF Defense Booking schema (migration 20261011194333_AddIAFDefenseBookingAndAudit) has not been applied to this database. Academic outcomes cannot be modified without an authoritative booking and immutable audit record.";
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            // Check if Early Outcome Testing is enabled and applies to this target record
+            bool isEarlyOutcomeTestOverride = false;
+            bool isEarlyTestingApproved = config.GetValue<bool>("IAFDefense:EarlyOutcomeTestingApproved", false);
+            if (isEarlyTestingApproved)
+            {
+                // Strict server-side verification: Development environment only
+                if (!hostEnv.IsDevelopment())
+                {
+                    TempData["Error"] = "SAFETY ABORT: Early defense outcome test override is strictly forbidden in non-Development environments.";
+                    return RedirectToAction(nameof(ApprovedIafList));
+                }
+
+                // Strict database and server identity check directly on SQL connection
+                var conn = _context.Database.GetDbConnection();
+                if (conn.State != System.Data.ConnectionState.Open)
+                {
+                    await conn.OpenAsync();
+                }
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT @@SERVERNAME AS ServerName, DB_NAME() AS DatabaseName;";
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    if (await reader.ReadAsync())
+                    {
+                        string currentDb = reader["DatabaseName"]?.ToString() ?? string.Empty;
+                        string currentServer = reader["ServerName"]?.ToString() ?? string.Empty;
+
+                        if (!string.Equals(currentDb, "FYPTracker_Development", StringComparison.OrdinalIgnoreCase))
+                        {
+                            TempData["Error"] = $"SAFETY ABORT: Early outcome test override is strictly restricted to 'FYPTracker_Development'. Current connection is '{currentDb}'.";
+                            return RedirectToAction(nameof(ApprovedIafList));
+                        }
+
+                        if (!currentServer.Contains("Boon\\SQLEXPRESS", StringComparison.OrdinalIgnoreCase) &&
+                            !currentServer.Contains("SQLEXPRESS", StringComparison.OrdinalIgnoreCase))
+                        {
+                            TempData["Error"] = $"SAFETY ABORT: Early outcome test override is restricted to SQL Server 'Boon\\SQLEXPRESS'. Current server is '{currentServer}'.";
+                            return RedirectToAction(nameof(ApprovedIafList));
+                        }
+                    }
+                }
+
+                // Target restriction: Student p22014691 and Milestone 1 ONLY
+                var studentUsername = milestone.Project?.Student?.UserName;
+                if (milestoneId == 1 && string.Equals(studentUsername, "p22014691", StringComparison.OrdinalIgnoreCase))
+                {
+                    isEarlyOutcomeTestOverride = true;
+                }
+            }
+
+            string outcomeComments = isEarlyOutcomeTestOverride
+                ? "Controlled Development early-outcome test — defense not actually conducted."
+                : "Passed Defense Session. Title accepted.";
+
+            var outcomeResult = await defenseBookingService.RecordDefenseOutcomeAsync(
+                milestoneId,
+                "AdminApproved",
+                outcomeComments,
+                currentUserId,
+                isEarlyOutcomeTestOverride);
+
+            if (!outcomeResult.Success)
+            {
+                TempData["Error"] = outcomeResult.ErrorMessage;
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            _context.FYPNotifications.Add(new FYPNotification
+            {
+                RecipientId = milestone.Project.StudentId,
+                Type = "MilestoneCompleted",
+                Title = "IAF Defense Passed",
+                Message = "Congratulations! Your IAF defense was successful and your title is accepted. You may now proceed to the next stage.",
+                IsRead = false,
+                CreatedDate = DateTime.Now
+            });
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = isEarlyOutcomeTestOverride
+                ? "Successfully recorded defense pass (Development early-outcome test). Project title accepted."
+                : "Successfully recorded defense pass. Project title accepted.";
             return RedirectToAction(nameof(ApprovedIafList));
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AdminPassDefense(int milestoneId)
+        public async Task<IActionResult> AdminFailDefense(
+            [FromServices] FYPTracker.Services.Defense.IIAFDefenseBookingService defenseBookingService,
+            [FromServices] Microsoft.AspNetCore.Hosting.IWebHostEnvironment hostEnv,
+            [FromServices] Microsoft.Extensions.Configuration.IConfiguration config,
+            int milestoneId)
         {
-            var milestone = await _context.FYPMilestones.Include(m => m.Project).ThenInclude(p => p.Student).FirstOrDefaultAsync(m => m.Id == milestoneId);
-            if (milestone != null)
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestone == null)
             {
-                milestone.Status = "AdminApproved";
-                
-                if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
+                TempData["Error"] = "Milestone not found.";
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            if (milestone.Status != "DefenseScheduled")
+            {
+                TempData["Error"] = $"Cannot record defense failure: milestone is in '{milestone.Status}' status (expected 'DefenseScheduled').";
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            var userName = User.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(userName))
+            {
+                TempData["Error"] = "Unable to determine authenticated user identity.";
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            var adminUser = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.UserName == userName || u.Email == userName);
+
+            if (adminUser == null)
+            {
+                TempData["Error"] = "Authenticated user account could not be found in the database.";
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            int currentUserId = adminUser.Id;
+
+            bool isTableAvailable = await IsIAFDefenseTableAvailableAsync();
+            if (!isTableAvailable)
+            {
+                TempData["Error"] = "Cannot record defense failure: The IAF Defense Booking schema (migration 20261011194333_AddIAFDefenseBookingAndAudit) has not been applied to this database. Academic outcomes cannot be modified without an authoritative booking and immutable audit record.";
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            // Check if Early Outcome Testing is enabled and applies to this target record
+            bool isEarlyOutcomeTestOverride = false;
+            bool isEarlyTestingApproved = config.GetValue<bool>("IAFDefense:EarlyOutcomeTestingApproved", false);
+            if (isEarlyTestingApproved)
+            {
+                if (!hostEnv.IsDevelopment())
                 {
-                    var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
-                    var formInfo = parts[0].Trim();
-                    try
-                    {
-                        var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parts[1]);
-                        var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
-                        if (currentAttempt != null)
-                        {
-                            currentAttempt.Status = "AdminApproved";
-                            currentAttempt.PanelComments = "Passed Defense Session. Title accepted.";
-                            milestone.Remarks = $"{formInfo} JSON: {System.Text.Json.JsonSerializer.Serialize(history)}";
-                        }
-                    }
-                    catch {}
+                    TempData["Error"] = "SAFETY ABORT: Early defense outcome test override is strictly forbidden in non-Development environments.";
+                    return RedirectToAction(nameof(ApprovedIafList));
                 }
 
-                _context.FYPNotifications.Add(new FYPNotification
+                var conn = _context.Database.GetDbConnection();
+                if (conn.State != System.Data.ConnectionState.Open)
                 {
-                    RecipientId = milestone.Project.StudentId,
-                    Type = "MilestoneCompleted",
-                    Title = "IAF Defense Passed",
-                    Message = "Congratulations! Your IAF defense was successful and your title is accepted. You may now proceed to the next stage.",
-                    IsRead = false,
-                    CreatedDate = DateTime.Now
-                });
-
-                await _context.SaveChangesAsync();
-                TempData["Success"] = "Successfully recorded defense pass. Project title accepted.";
-            }
-            return RedirectToAction(nameof(ApprovedIafList));
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AdminFailDefense(int milestoneId)
-        {
-            var milestone = await _context.FYPMilestones.Include(m => m.Project).ThenInclude(p => p.Student).FirstOrDefaultAsync(m => m.Id == milestoneId);
-            if (milestone != null)
-            {
-                milestone.Status = "ChangeOfTopicRequired";
-                
-                if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
+                    await conn.OpenAsync();
+                }
+                using (var cmd = conn.CreateCommand())
                 {
-                    var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
-                    var formInfo = parts[0].Trim();
-                    try
+                    cmd.CommandText = "SELECT @@SERVERNAME AS ServerName, DB_NAME() AS DatabaseName;";
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    if (await reader.ReadAsync())
                     {
-                        var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parts[1]);
-                        var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
-                        if (currentAttempt != null)
+                        string currentDb = reader["DatabaseName"]?.ToString() ?? string.Empty;
+                        string currentServer = reader["ServerName"]?.ToString() ?? string.Empty;
+
+                        if (!string.Equals(currentDb, "FYPTracker_Development", StringComparison.OrdinalIgnoreCase))
                         {
-                            currentAttempt.Status = "ChangeOfTopicRequired";
-                            currentAttempt.PanelComments = "Defense Failed. Please submit a new Initial Allocation Form with a change of topic.";
-                            milestone.Remarks = $"{formInfo} JSON: {System.Text.Json.JsonSerializer.Serialize(history)}";
+                            TempData["Error"] = $"SAFETY ABORT: Early outcome test override is strictly restricted to 'FYPTracker_Development'. Current connection is '{currentDb}'.";
+                            return RedirectToAction(nameof(ApprovedIafList));
+                        }
+
+                        if (!currentServer.Contains("Boon\\SQLEXPRESS", StringComparison.OrdinalIgnoreCase) &&
+                            !currentServer.Contains("SQLEXPRESS", StringComparison.OrdinalIgnoreCase))
+                        {
+                            TempData["Error"] = $"SAFETY ABORT: Early outcome test override is restricted to SQL Server 'Boon\\SQLEXPRESS'. Current server is '{currentServer}'.";
+                            return RedirectToAction(nameof(ApprovedIafList));
                         }
                     }
-                    catch {}
                 }
-                
-                // BLOCKED: Do not clear DefenseDate, Time, Venue to preserve history.
-                // milestone.DefenseDate = null;
-                // milestone.DefenseTime = null;
-                // milestone.DefenseVenue = null;
-                
-                _context.FYPNotifications.Add(new FYPNotification
-                {
-                    RecipientId = milestone.Project.StudentId,
-                    Type = "RevisionRequest",
-                    Title = "IAF Defense Failed",
-                    Message = "Your IAF defense was unsuccessful. You are required to submit a new Initial Allocation Form with a change of topic.",
-                    IsRead = false,
-                    CreatedDate = DateTime.Now
-                });
 
-                await _context.SaveChangesAsync();
-                TempData["Success"] = "Successfully recorded defense failure. The student must now submit a new IAF topic.";
+                var studentUsername = milestone.Project?.Student?.UserName;
+                if (milestoneId == 1 && string.Equals(studentUsername, "p22014691", StringComparison.OrdinalIgnoreCase))
+                {
+                    isEarlyOutcomeTestOverride = true;
+                }
             }
+
+            string outcomeComments = isEarlyOutcomeTestOverride
+                ? "Controlled Development early-outcome test — defense not actually conducted."
+                : "Defense Failed. Please submit a new Initial Allocation Form with a change of topic.";
+
+            var outcomeResult = await defenseBookingService.RecordDefenseOutcomeAsync(
+                milestoneId,
+                "ChangeOfTopicRequired",
+                outcomeComments,
+                currentUserId,
+                isEarlyOutcomeTestOverride);
+
+            if (!outcomeResult.Success)
+            {
+                TempData["Error"] = outcomeResult.ErrorMessage;
+                return RedirectToAction(nameof(ApprovedIafList));
+            }
+
+            _context.FYPNotifications.Add(new FYPNotification
+            {
+                RecipientId = milestone.Project.StudentId,
+                Type = "RevisionRequest",
+                Title = "IAF Defense Failed",
+                Message = "Your IAF defense was unsuccessful. You are required to submit a new Initial Allocation Form with a change of topic.",
+                IsRead = false,
+                CreatedDate = DateTime.Now
+            });
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = "Successfully recorded defense failure. The student must now submit a new IAF topic.";
             return RedirectToAction(nameof(ApprovedIafList));
         }
 
@@ -4300,6 +5096,12 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     if (startDate.HasValue && endDate.HasValue && endDate <= startDate) return Json(new { status = false, msg = "End Date must be after Start Date." });
                     if (_context.AcademicSessions.Any(x => x.Name.ToLower() == name.ToLower())) return Json(new { status = false, msg = "Exists!" });
                     
+                    if (requiredMeetingsStage1.HasValue && (requiredMeetingsStage1.Value < 10 || requiredMeetingsStage1.Value > 14))
+                        return Json(new { status = false, msg = "Stage 1 Required Meetings must be between 10 and 14." });
+
+                    if (requiredMeetingsStage2.HasValue && (requiredMeetingsStage2.Value < 10 || requiredMeetingsStage2.Value > 14))
+                        return Json(new { status = false, msg = "Stage 2 Required Meetings must be between 10 and 14." });
+
                     if (isCurrent)
                     {
                         var currents = _context.AcademicSessions.Where(s => s.IsCurrent == true).ToList();
@@ -4343,6 +5145,13 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 else if (type == "AcademicSession")
                 {
                     if (startDate.HasValue && endDate.HasValue && endDate <= startDate) return Json(new { status = false, msg = "End Date must be after Start Date." });
+
+                    if (requiredMeetingsStage1.HasValue && (requiredMeetingsStage1.Value < 10 || requiredMeetingsStage1.Value > 14))
+                        return Json(new { status = false, msg = "Stage 1 Required Meetings must be between 10 and 14." });
+
+                    if (requiredMeetingsStage2.HasValue && (requiredMeetingsStage2.Value < 10 || requiredMeetingsStage2.Value > 14))
+                        return Json(new { status = false, msg = "Stage 2 Required Meetings must be between 10 and 14." });
+
                     var entity = _context.AcademicSessions.Find(id);
                     if (entity != null) 
                     { 

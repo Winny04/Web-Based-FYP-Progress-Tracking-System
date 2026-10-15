@@ -582,19 +582,16 @@
             padding-right: 8px !important;
         }
 
-
         #kt_header_menu .menu-title {
             font-size: 14px !important;
         }
 
-
         .topbar-profile-info {
-            max-width: 120px;
+            max-width: 130px;
         }
 
-
         .topbar-profile-name {
-            max-width: 120px;
+            max-width: 130px;
         }
 
     }
@@ -602,36 +599,66 @@
 
 
     /* ==========================================================
-       SMALLER DESKTOP
-       Hide Name + Role first.
-       Keep profile avatar visible.
+       SMALLER DESKTOP / LAPTOPS
+       Slightly compact spacing but KEEP name visible
        ========================================================== */
 
     @@media (max-width: 1500px) {
 
-        .topbar-profile-info {
-            display: none !important;
+        .topbar-profile-trigger {
+            padding: 4px 8px;
         }
 
+        .topbar-profile-info {
+            display: flex !important;
+            max-width: 110px;
+        }
+
+        .topbar-profile-name {
+            max-width: 110px;
+            font-size: 12px;
+        }
+
+        .topbar-profile-role {
+            font-size: 10px;
+        }
 
         .topbar-profile-arrow {
-            display: none !important;
+            display: inline-block !important;
         }
-
-
-        .topbar-profile-trigger {
-            padding: 4px;
-        }
-
 
         #kt_header_menu .menu-link {
             padding-left: 6px !important;
             padding-right: 6px !important;
         }
 
-
         #kt_header_menu .menu-title {
             font-size: 13px !important;
+        }
+
+    }
+
+
+
+    /* ==========================================================
+       COMPACT DESKTOP & TABLETS (Down to 768px)
+       Keep profile name visible next to avatar
+       ========================================================== */
+
+    @@media (max-width: 1200px) {
+
+        .topbar-profile-info {
+            display: flex !important;
+            max-width: 100px;
+        }
+
+        .topbar-profile-name {
+            max-width: 100px;
+            font-size: 12px;
+        }
+
+        .topbar-profile-role {
+            display: none !important; /* Hide role on tight screens to save space while keeping name visible */
         }
 
     }

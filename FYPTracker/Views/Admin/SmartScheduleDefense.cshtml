@@ -1,6 +1,6 @@
 @model FYPTracker.Models.FYPMilestone
 @{
-    ViewData["Title"] = "Smart IAF Defense Scheduling (Preview)";
+    ViewData["Title"] = "Smart IAF Defense Scheduling";
     Layout = "~/Views/Shared/_Layout.cshtml";
 
     var student = Model.Project?.Student;
@@ -84,7 +84,6 @@
                 <h2 class="fw-bolder mb-2 text-white"><i class="fas fa-calendar-alt text-info me-2"></i>Smart IAF Defense Scheduling</h2>
                 <p class="mb-0 text-white-50 fs-6">Find mutual availability between the Student, Original Supervisor, and Independent Examiner.</p>
             </div>
-            <span class="badge bg-warning text-dark px-3 py-2 rounded-pill fw-bold border border-warning border-opacity-50">UI Preview</span>
         </div>
     </div>
 
@@ -142,6 +141,28 @@
                 
                 <div id="statusAlertContainer"></div>
 
+                @if (ViewBag.ExistingBooking != null)
+                {
+                    var eb = ViewBag.ExistingBooking as FYPTracker.Models.IAFDefenseBooking;
+                    if (eb != null)
+                    {
+                        <div class="alert alert-info border-0 bg-info bg-opacity-10 text-dark p-3 rounded-4 mb-4">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-history text-info me-2 fs-5"></i>
+                                <strong class="text-primary">Current Active Defense Booking (Attempt @eb.AttemptNumber)</strong>
+                                <span class="badge bg-primary ms-auto">@eb.BookingStatus</span>
+                            </div>
+                            <div class="small text-muted mt-2">
+                                <span><strong>Date:</strong> @eb.DefenseDate.ToString("dd MMM yyyy")</span> &bull; 
+                                <span><strong>Time:</strong> @(new DateTime(eb.StartTime.Ticks).ToString("hh:mm tt")) - @(new DateTime(eb.EndTime.Ticks).ToString("hh:mm tt"))</span> &bull; 
+                                <span><strong>Venue:</strong> @eb.Venue</span> &bull; 
+                                <span><strong>Examiner:</strong> @(eb.Examiner?.FullName ?? "N/A")</span>
+                            </div>
+                            <div class="small text-info mt-1"><i class="fas fa-info-circle me-1"></i> Submitting new details below will atomically reschedule this defense session and record an audit history.</div>
+                        </div>
+                    }
+                }
+
                 <form id="scheduleForm" method="post" action="/Admin/AdminScheduleDefense">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="milestoneId" value="@Model.Id" id="milestoneId" />
@@ -193,6 +214,57 @@
             </div>
         </div>
     </div>
+
+    <!-- Request Alternative Time Modal (Phase B3.4 UI Foundation - Disabled until Backend Activation) -->
+    <div class="modal fade" id="requestAltTimeModal" tabindex="-1" aria-labelledby="requestAltTimeModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4">
+                <div class="modal-header bg-dark text-white rounded-top-4 py-3">
+                    <h5 class="modal-title fw-bold" id="requestAltTimeModalLabel">
+                        <i class="fas fa-clock text-warning me-2"></i>Request Alternative Time
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-dark p-3 rounded-3 mb-3">
+                        <i class="fas fa-info-circle me-1 text-warning"></i>
+                        <span>The selected Examiner has zero available slots on the selected date. You can request the Examiner to propose an alternative defense time.</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted small">Target Examiner</label>
+                        <input type="text" id="modalExaminerName" class="form-control bg-light border-0 fw-semibold" readonly value="--" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted small">Student & Project</label>
+                        <input type="text" class="form-control bg-light border-0" readonly value="@student?.FullName (@student?.EmployeeId) — @Model.Project?.Title" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted small">Target Date</label>
+                        <input type="text" id="modalTargetDate" class="form-control bg-light border-0" readonly value="--" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">Administrative Notes (Optional)</label>
+                        <textarea id="modalAdminNotes" class="form-control bg-light border-0" rows="3" placeholder="Explain scheduling constraints or preferred time windows..."></textarea>
+                    </div>
+
+                    <div class="p-3 bg-light rounded-3 text-secondary small">
+                        <i class="fas fa-shield-alt text-info me-1"></i>
+                        <strong>Database Persistence Safeguard:</strong> Request creation endpoint is disabled pending database table migration approval (Phase B3.5).
+                    </div>
+                </div>
+                <div class="modal-footer border-0 p-4 pt-0">
+                    <button type="button" class="btn btn-light fw-bold rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+                    <button type="button" id="btnSubmitAltTimeRequest" class="btn btn-warning fw-bold rounded-pill px-4 disabled" disabled title="Feature disabled pending database authorization">
+                        <i class="fas fa-paper-plane me-2"></i>Send Request (Disabled)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 @section Scripts {
@@ -234,6 +306,12 @@
                 .then(data => {
                     if (currentReq !== activeRequestId) return; // Ignore stale AJAX response
 
+                    // Defensive check: verify response object exists
+                    if (!data) {
+                        slotsContainer.innerHTML = '<div class="col-12"><small class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Invalid availability response from server.</small></div>';
+                        return;
+                    }
+
                     // Update dynamic policy badges if returned
                     if (data.durationMinutes) {
                         durationBadge.textContent = `Duration: ${data.durationMinutes} Mins`;
@@ -242,6 +320,7 @@
                         supervisorPolicyBadge.textContent = `Supervisor: ${data.supervisorRequired ? "Required" : "Optional"}`;
                     }
 
+                    // Explicit configuration error state: Do NOT show Alternative Time request
                     if (data.configurationRequired) {
                         statusAlertContainer.innerHTML = `
                             <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-dark p-3 rounded-4 mb-4 d-flex align-items-center">
@@ -255,10 +334,12 @@
                         return;
                     }
 
-                    if (data.success && data.slots && data.slots.length > 0) {
+                    const hasSlotsArray = Array.isArray(data.slots);
+
+                    if (data.success && hasSlotsArray && data.slots.length > 0) {
                         let html = '';
                         data.slots.forEach(s => {
-                            html += `<div class="col-md-3 col-6"><div class="time-slot" data-time="${s.startTime}">${s.display}</div></div>`;
+                            html += `<div class="col-md-3 col-6"><div class="time-slot" data-time="${escapeHtml(s.startTime)}">${escapeHtml(s.display)}</div></div>`;
                         });
                         slotsContainer.innerHTML = html;
 
@@ -271,25 +352,52 @@
                                 checkSubmit();
                             });
                         });
-                    } else {
-                        const reasonMsg = data.message || "No mutual free time slots found for the selected participants on this date.";
-                        const isBlocked = data.code === "TimetableNotConfigured" || data.code === "DateOverrideBlocked" || data.code === "TeachingConflict";
-                        const iconClass = isBlocked ? "fa-calendar-times" : "fa-info-circle";
+                    } else if (
+                        data.success === false &&
+                        data.code === "ConflictOrUnavailable" &&
+                        hasSlotsArray &&
+                        data.slots.length === 0 &&
+                        data.configurationRequired !== true
+                    ) {
+                        // Authoritative availability calculation ran and confirmed genuine zero mutual free slots
+                        const reasonMsg = escapeHtml(data.message || "No mutual free time slots found for the selected participants on this date.");
+                        const iconClass = "fa-info-circle";
                         
                         slotsContainer.innerHTML = `
                             <div class="col-12">
-                                <div class="p-3 text-center bg-light rounded-4 text-secondary">
-                                    <i class="fas ${iconClass} fs-4 mb-2 d-block text-warning"></i>
+                                <div class="p-4 text-center bg-light rounded-4 text-secondary">
+                                    <i class="fas ${iconClass} fs-3 mb-2 d-block text-warning"></i>
                                     <span class="fw-bold d-block text-dark mb-1">No Free Slots Available</span>
-                                    <small class="text-muted">${reasonMsg}</small>
+                                    <small class="text-muted d-block mb-3">${reasonMsg}</small>
+                                    <button type="button" class="btn btn-outline-warning btn-sm fw-bold px-3 py-2 rounded-pill shadow-sm" data-bs-toggle="modal" data-bs-target="#requestAltTimeModal" onclick="prepareAltTimeModal()">
+                                        <i class="fas fa-clock me-1"></i> Request Alternative Time
+                                    </button>
+                                </div>
+                            </div>`;
+                    } else {
+                        // Validation failure, unhandled permission, configuration requirement, or missing slots payload
+                        const errorMsg = escapeHtml(data.message || "Unable to determine lecturer availability.");
+                        slotsContainer.innerHTML = `
+                            <div class="col-12">
+                                <div class="p-3 text-center bg-light rounded-4 text-secondary">
+                                    <i class="fas fa-exclamation-triangle fs-4 mb-2 d-block text-danger"></i>
+                                    <span class="fw-bold d-block text-dark mb-1">Availability Check Incomplete</span>
+                                    <small class="text-danger">${errorMsg}</small>
                                 </div>
                             </div>`;
                     }
                 })
                 .catch(e => {
                     if (currentReq !== activeRequestId) return;
+                    // Network or server execution error: strictly error display, NOT zero-slots alternative time prompt
                     slotsContainer.innerHTML = '<div class="col-12"><small class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Failed to fetch availability from server.</small></div>';
                 });
+        }
+
+        function prepareAltTimeModal() {
+            const selectedOpt = examinerSelect.options[examinerSelect.selectedIndex];
+            document.getElementById('modalExaminerName').value = selectedOpt ? selectedOpt.text : '--';
+            document.getElementById('modalTargetDate').value = dateInput.value || '--';
         }
 
         function checkSubmit() {
@@ -298,6 +406,16 @@
             } else {
                 submitBtn.classList.add('disabled');
             }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
 
         examinerSelect.addEventListener('change', fetchSlots);

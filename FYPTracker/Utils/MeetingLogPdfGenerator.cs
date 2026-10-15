@@ -90,8 +90,10 @@ namespace FYPTracker.Utils
                 switch(field.Key)
                 {
                     case "Supervisor": contentHtml = WebUtility.HtmlEncode(supervisor?.FullName ?? "Unknown"); break;
-                    case "Student": contentHtml = $"{WebUtility.HtmlEncode(student?.FullName ?? "Unknown")} ({WebUtility.HtmlEncode(student?.EmployeeId ?? "")})"; break;
+                    case "Student": contentHtml = $"{WebUtility.HtmlEncode(student?.FullName ?? "Unknown")} ({WebUtility.HtmlEncode(student?.CoventryId ?? student?.EmployeeId ?? "")})"; break;
                     case "MeetingDate": contentHtml = meeting.MeetingDate.ToString("dd MMM yyyy"); break;
+                    case "Week":
+                    case "WeekNumber": contentHtml = meeting.WeekNumber.HasValue && meeting.WeekNumber > 0 ? $"Week {meeting.WeekNumber.Value}" : "TBD"; break;
                     case "TopicsDiscussed": contentHtml = WebUtility.HtmlEncode(log.KeyTopicsDiscussed ?? ""); break;
                     case "ActionPoints": contentHtml = WebUtility.HtmlEncode(log.ActionPointsForNextMeeting ?? ""); break;
                     case "ActionsCompleted": contentHtml = WebUtility.HtmlEncode(log.CompletedActionsAndNotes ?? ""); break;
@@ -318,8 +320,10 @@ namespace FYPTracker.Utils
             string value = field.Key switch
             {
                 "Supervisor" => meeting.Supervisor?.FullName ?? "Unknown",
-                "Student" => $"{meeting.Student?.FullName ?? "Unknown"} ({meeting.Student?.EmployeeId ?? ""})",
+                "Student" => $"{meeting.Student?.FullName ?? "Unknown"} ({meeting.Student?.CoventryId ?? meeting.Student?.EmployeeId ?? ""})",
                 "MeetingDate" => meeting.MeetingDate.ToString("dd MMM yyyy"),
+                "Week" => meeting.WeekNumber.HasValue && meeting.WeekNumber > 0 ? $"Week {meeting.WeekNumber.Value}" : "TBD",
+                "WeekNumber" => meeting.WeekNumber.HasValue && meeting.WeekNumber > 0 ? $"Week {meeting.WeekNumber.Value}" : "TBD",
                 "TopicsDiscussed" => log.KeyTopicsDiscussed ?? "",
                 "ActionPoints" => log.ActionPointsForNextMeeting ?? "",
                 "ActionsCompleted" => log.CompletedActionsAndNotes ?? "",

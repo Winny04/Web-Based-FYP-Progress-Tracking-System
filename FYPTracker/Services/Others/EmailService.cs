@@ -19,37 +19,71 @@ namespace FYPTracker.Services.Others
         }
 
         /// <summary>
-        /// Returns true if development redirect is active.
-        /// Logs a clear error and returns false if DevRedirectEmail is configured
-        /// but invalid/empty, preventing accidental sends to real addresses.
+        /// Validates that in Development environment, a valid DevRedirectEmail is configured.
+        /// Throws InvalidOperationException (fails closed) if running in Development and the redirect email is missing or invalid.
+        /// Returns null if not running in Development (Production environment).
         /// </summary>
-        private bool TryGetDevRedirect(out string redirectTo)
+        private string? GetValidatedDevRedirectEmail()
         {
-            redirectTo = null!;
-
             if (!_env.IsDevelopment())
-                return false;
-
-            if (string.IsNullOrWhiteSpace(smtpSettings.DevRedirectEmail))
-                return false; // Not configured → send normally (Production-like behavior)
-
-            var candidate = smtpSettings.DevRedirectEmail.Trim();
-            if (!candidate.Contains('@') || candidate.Length < 5)
             {
-                // Invalid redirect email — fail loudly in development rather than
-                // accidentally sending to a real institutional address
-                Console.WriteLine($"[EmailService] ⚠ DEV REDIRECT BLOCKED: DevRedirectEmail \"{candidate}\" is invalid. Email will NOT be sent.");
-                redirectTo = null!;
-                return false;
+                return null;
             }
 
-            redirectTo = candidate;
-            return true;
+            var configured = smtpSettings.DevRedirectEmail?.Trim();
+
+            if (string.IsNullOrWhiteSpace(configured) || !configured.Contains('@') || configured.Length < 5)
+            {
+                Console.WriteLine("[EmailService] ⚠ EMAIL SAFETY BLOCK: Development email redirect is missing or invalid in configuration (SmtpSettings:DevRedirectEmail). Email delivery has been blocked to prevent sending to real addresses.");
+                throw new InvalidOperationException(
+                    "EMAIL SAFETY BLOCK: Development email redirect is missing or invalid in configuration (SmtpSettings:DevRedirectEmail). " +
+                    "Email delivery has been blocked to prevent sending to real addresses. Please configure a valid test recipient email.");
+            }
+
+            return configured;
+        }
+
+        /// <summary>
+        /// Masks an email address for safe display in logs and development subjects (e.g., "j***e@domain.com").
+        /// </summary>
+        private static string MaskEmail(string? email)
+        {
+            if (string.IsNullOrWhiteSpace(email)) return "N/A";
+            email = email.Trim();
+            int atIndex = email.IndexOf('@');
+            if (atIndex <= 0 || atIndex == email.Length - 1)
+            {
+                return email.Length <= 3 ? "***" : $"{email[0]}***{email[^1]}";
+            }
+
+            string user = email.Substring(0, atIndex);
+            string domain = email.Substring(atIndex); // includes '@'
+
+            if (user.Length <= 2)
+            {
+                return $"{user[0]}***{domain}";
+            }
+
+            return $"{user[0]}***{user[^1]}{domain}";
+        }
+
+        /// <summary>
+        /// Masks multiple comma/semicolon-separated email addresses.
+        /// </summary>
+        private static string MaskEmailList(string? emails)
+        {
+            if (string.IsNullOrWhiteSpace(emails)) return "N/A";
+            var parts = emails.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            return string.Join("; ", parts.Select(p => MaskEmail(p.Trim())));
         }
 
         public void Send(string to, string subject, string html, string? filePath = null, string? from = null, string? cc = null)
         {
-            if (smtpSettings.Offline) return;
+            if (smtpSettings.Offline)
+            {
+                Console.WriteLine($"[EmailService] ⏸ Offline mode active (SmtpSettings:Offline = true). Email delivery to \"{(_env.IsDevelopment() ? MaskEmailList(to) : to)}\" skipped.");
+                throw new InvalidOperationException("Email delivery skipped: SMTP service is configured in Offline mode (SmtpSettings:Offline = true).");
+            }
 
             try
             {
@@ -59,29 +93,43 @@ namespace FYPTracker.Services.Others
 
                 var multiPart = new Multipart("mixed");
 
-                // ── Development redirect ──────────────────────────────────
+                // ── Development Email Safety & Redirection ───────────────────
                 string actualRecipient;
-                if (TryGetDevRedirect(out var devEmail))
+
+                if (_env.IsDevelopment())
                 {
-                    actualRecipient = devEmail;
-                    email.To.Add(MailboxAddress.Parse(devEmail));
+                    // Fail-closed check: throws InvalidOperationException if DevRedirectEmail is missing or invalid
+                    var devRedirectEmail = GetValidatedDevRedirectEmail()!;
 
-                    // Prefix subject so the developer knows who the real target was
-                    subject = $"[DEV → {to}] {subject}";
+                    actualRecipient = devRedirectEmail;
 
-                    // Log safe info (no tokens/passwords)
-                    Console.WriteLine($"[EmailService] 📧 DEV REDIRECT: Original=\"{to}\", Redirected=\"{devEmail}\", Subject=\"{subject}\"");
+                    // Exclusively send to the authorized test mailbox
+                    email.To.Add(MailboxAddress.Parse(devRedirectEmail));
+
+                    // Do NOT add CC or BCC recipients to email headers in development.
+                    // Annotate subject with MASKED original intended recipient(s) for test traceability
+                    string maskedTo = MaskEmailList(to);
+                    string maskedDetails = string.IsNullOrWhiteSpace(cc) ? maskedTo : $"{maskedTo} (CC: {MaskEmailList(cc)})";
+                    subject = $"[DEV → {maskedDetails}] {subject}";
+
+                    Console.WriteLine($"[EmailService] 📧 DEV REDIRECT: Original=\"{maskedDetails}\", Redirected=\"{devRedirectEmail}\"");
                 }
                 else
                 {
+                    // Preserve existing production email behaviour
                     actualRecipient = to;
+
                     foreach (var addr in to.Split(';', StringSplitOptions.RemoveEmptyEntries))
+                    {
                         email.To.Add(MailboxAddress.Parse(addr.Trim()));
+                    }
 
                     if (!string.IsNullOrEmpty(cc))
+                    {
                         email.Cc.Add(MailboxAddress.Parse(cc.Trim()));
+                    }
                 }
-                // ── End redirect ──────────────────────────────────────────
+                // ── End Development Email Safety ─────────────────────────────
 
                 email.Subject = subject;
                 var bodyPart = new TextPart(TextFormat.Html) { Text = html };
@@ -101,11 +149,9 @@ namespace FYPTracker.Services.Others
 
                 email.Body = multiPart;
 
-                // send email
+                // send email (using standard platform certificate validation)
                 using (var smtp = new SmtpSubscribeSingleton())
                 {
-                    smtp.ServerCertificateValidationCallback = (s, c, h, e) => true;
-                    //smtp.CheckCertificateRevocation = false;
                     smtp.Connect(smtpSettings.SmtpHost, smtpSettings.SmtpPort, SecureSocketOptions.SslOnConnect);
                     smtp.Authenticate(smtpSettings.SmtpUser, smtpSettings.SmtpPass);
                     smtp.Send(email);
@@ -118,14 +164,21 @@ namespace FYPTracker.Services.Others
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[EmailService] ❌ Email sending failed to \"{to}\": {ex.Message}");
+                string safeTarget = _env.IsDevelopment() ? MaskEmailList(to) : to;
+                Console.WriteLine($"[EmailService] ❌ Email sending failed to \"{safeTarget}\": {ex.Message}");
+                throw;
             }
         }
 
         public async Task Send(List<string> to, string subject, string html, string? filePath = null, string? from = null)
         {
             // create message
-            if (smtpSettings.Offline) return;
+            if (smtpSettings.Offline)
+            {
+                string safeTarget = _env.IsDevelopment() ? string.Join("; ", to.Select(MaskEmail)) : string.Join("; ", to);
+                Console.WriteLine($"[EmailService] ⏸ Offline mode active (SmtpSettings:Offline = true). Email delivery to \"{safeTarget}\" skipped.");
+                throw new InvalidOperationException("Email delivery skipped: SMTP service is configured in Offline mode (SmtpSettings:Offline = true).");
+            }
 
             try
             {
@@ -133,28 +186,35 @@ namespace FYPTracker.Services.Others
 
                 email.From.Add(MailboxAddress.Parse(from ?? smtpSettings.EmailFrom));
 
-                // ── Development redirect ──────────────────────────────────
+                // ── Development Email Safety & Redirection ───────────────────
                 string actualRecipient;
-                string originalRecipients = string.Join("; ", to);
+                string maskedRecipients = string.Join("; ", to.Select(MaskEmail));
 
-                if (TryGetDevRedirect(out var devEmail))
+                if (_env.IsDevelopment())
                 {
-                    actualRecipient = devEmail;
-                    email.To.Add(MailboxAddress.Parse(devEmail));
+                    // Fail-closed check: throws InvalidOperationException if DevRedirectEmail is missing or invalid
+                    var devRedirectEmail = GetValidatedDevRedirectEmail()!;
 
-                    subject = $"[DEV → {originalRecipients}] {subject}";
+                    actualRecipient = devRedirectEmail;
 
-                    Console.WriteLine($"[EmailService] 📧 DEV REDIRECT: Original=\"{originalRecipients}\", Redirected=\"{devEmail}\", Subject=\"{subject}\"");
+                    // Exclusively send to the authorized test mailbox
+                    email.To.Add(MailboxAddress.Parse(devRedirectEmail));
+
+                    // Annotate subject with MASKED original intended recipient(s) for test traceability
+                    subject = $"[DEV → {maskedRecipients}] {subject}";
+
+                    Console.WriteLine($"[EmailService] 📧 DEV REDIRECT: Original=\"{maskedRecipients}\", Redirected=\"{devRedirectEmail}\", Subject=\"{subject}\"");
                 }
                 else
                 {
-                    actualRecipient = originalRecipients;
+                    // Preserve existing production email behaviour
+                    actualRecipient = string.Join("; ", to);
                     foreach (var address in to)
                     {
                         email.To.Add(MailboxAddress.Parse(address));
                     }
                 }
-                // ── End redirect ──────────────────────────────────────────
+                // ── End Development Email Safety ─────────────────────────────
 
                 var multiPart = new Multipart("mixed");
 
@@ -175,13 +235,11 @@ namespace FYPTracker.Services.Others
 
                 email.Body = multiPart;
 
-                // send email
+                // send email (using standard platform certificate validation)
                 using (var smtp = new SmtpClient())
                 {
                     try
                     {
-                        smtp.ServerCertificateValidationCallback = (s, c, h, e) => true;
-                        //smtp.CheckCertificateRevocation = false;
                         await smtp.ConnectAsync(smtpSettings.SmtpHost, smtpSettings.SmtpPort, SecureSocketOptions.SslOnConnect);
                         await smtp.AuthenticateAsync(smtpSettings.SmtpUser, smtpSettings.SmtpPass);
                         await smtp.SendAsync(email);
@@ -191,14 +249,13 @@ namespace FYPTracker.Services.Others
                     catch (SmtpCommandException ex)
                     {
                         Console.WriteLine("[EmailService] ❌ SMTP error: {0} (StatusCode: {1})", ex.Message, ex.StatusCode);
-                        return;
+                        throw;
                     }
                     catch (SmtpProtocolException ex)
                     {
                         Console.WriteLine("[EmailService] ❌ Protocol error: {0}", ex.Message);
-                        return;
+                        throw;
                     }
-                   
                 }
 
                 if (_env.IsDevelopment())
@@ -206,7 +263,9 @@ namespace FYPTracker.Services.Others
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[EmailService] ❌ Email sending failed: {ex.Message}");
+                string safeTarget = _env.IsDevelopment() ? string.Join("; ", to.Select(MaskEmail)) : string.Join("; ", to);
+                Console.WriteLine($"[EmailService] ❌ Email sending failed to \"{safeTarget}\": {ex.Message}");
+                throw;
             }
         }
     }
