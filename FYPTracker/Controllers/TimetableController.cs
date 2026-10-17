@@ -202,6 +202,134 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SaveAbsence(
+            DateTime startDate,
+            DateTime? endDate,
+            bool isFullDay,
+            TimeSpan? startTime,
+            TimeSpan? endTime,
+            string? sessionFilter = null)
+        {
+            var user = await GetCurrentUserAsync();
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var today = DateTime.Today;
+            if (startDate.Date < today)
+            {
+                TempData["Error"] = "Cannot record absence for past dates.";
+                return RedirectToAction(nameof(ManageAvailability), new { sessionFilter });
+            }
+
+            var finalEndDate = endDate.HasValue ? endDate.Value.Date : startDate.Date;
+            if (finalEndDate < startDate.Date)
+            {
+                TempData["Error"] = "End date cannot be earlier than start date.";
+                return RedirectToAction(nameof(ManageAvailability), new { sessionFilter });
+            }
+
+            TimeSpan sTime;
+            TimeSpan eTime;
+
+            if (isFullDay)
+            {
+                sTime = TimeSpan.Zero;
+                eTime = TimeSpan.FromHours(23).Add(TimeSpan.FromMinutes(59));
+            }
+            else
+            {
+                if (!startTime.HasValue || !endTime.HasValue)
+                {
+                    TempData["Error"] = "Please provide both start and end time for partial-day absences.";
+                    return RedirectToAction(nameof(ManageAvailability), new { sessionFilter });
+                }
+
+                if (startTime.Value >= endTime.Value)
+                {
+                    TempData["Error"] = "Start time must be earlier than end time.";
+                    return RedirectToAction(nameof(ManageAvailability), new { sessionFilter });
+                }
+
+                sTime = startTime.Value;
+                eTime = endTime.Value;
+            }
+
+            // Generate daily range
+            var days = new List<DateTime>();
+            for (var dt = startDate.Date; dt <= finalEndDate; dt = dt.AddDays(1))
+            {
+                days.Add(dt);
+            }
+
+            // Check for duplicate / overlapping DateOverride records on the same dates
+            foreach (var date in days)
+            {
+                bool exists = await _context.SupervisorAvailabilities
+                    .AnyAsync(a => a.SupervisorId == user.Id &&
+                                   a.ScheduleType == "DateOverride" &&
+                                   a.SpecificDate.HasValue &&
+                                   a.SpecificDate.Value.Date == date &&
+                                   ((sTime >= a.StartTime && sTime < a.EndTime) ||
+                                    (eTime > a.StartTime && eTime <= a.EndTime) ||
+                                    (sTime <= a.StartTime && eTime >= a.EndTime)));
+
+                if (exists)
+                {
+                    TempData["Error"] = $"You already have an overlapping schedule or absence record for {date:dd MMM yyyy}.";
+                    return RedirectToAction(nameof(ManageAvailability), new { sessionFilter });
+                }
+            }
+
+            var newEntries = new List<SupervisorAvailability>();
+            foreach (var date in days)
+            {
+                newEntries.Add(new SupervisorAvailability
+                {
+                    SupervisorId = user.Id,
+                    ScheduleType = "DateOverride",
+                    DayOfWeek = null,
+                    SpecificDate = date,
+                    StartTime = sTime,
+                    EndTime = eTime,
+                    IsAvailable = false
+                });
+            }
+
+            _context.SupervisorAvailabilities.AddRange(newEntries);
+            await _context.SaveChangesAsync();
+
+            // Detect conflicts with any existing meetings across the recorded absence range
+            var allConflicts = new List<FYPTracker.Models.OverrideMeetingConflictDto>();
+            foreach (var entry in newEntries)
+            {
+                var conflicts = await _weeklyMeetingSchedulingService.DetectOverrideMeetingConflictsAsync(
+                    user.Id,
+                    entry.SpecificDate!.Value,
+                    entry.StartTime,
+                    entry.EndTime,
+                    entry.IsAvailable,
+                    entry.Id);
+
+                allConflicts.AddRange(conflicts);
+            }
+
+            var distinctConflicts = allConflicts
+                .GroupBy(c => c.MeetingId)
+                .Select(g => g.First())
+                .ToList();
+
+            if (distinctConflicts.Any())
+            {
+                TempData["Success"] = "Absence recorded successfully!";
+                TempData["Warning"] = $"Warning: This absence period conflicts with {distinctConflicts.Count} existing meeting(s) (IDs: {string.Join(", ", distinctConflicts.Select(c => "#" + c.MeetingId))}). Please review them in Manage Meetings.";
+                return RedirectToAction(nameof(ManageAvailability), new { sessionFilter });
+            }
+
+            TempData["Success"] = "Absence period recorded successfully!";
+            return RedirectToAction(nameof(ManageAvailability), new { sessionFilter });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAvailability(int id, string? sessionFilter = null)
         {
             var user = await GetCurrentUserAsync();
@@ -269,6 +397,21 @@ namespace FYPTracker.Controllers
                 .ToListAsync();
 
             return View("~/Views/Supervisor/ManageTimetable.cshtml", entries);
+        }
+
+        [HttpGet]
+        public IActionResult DownloadTemplate()
+        {
+            var csv = new System.Text.StringBuilder();
+            csv.AppendLine("DayOfWeek,StartTime,EndTime,Details");
+            csv.AppendLine("Monday,09:00,11:00,Lecture 1");
+            csv.AppendLine("Tuesday,14:00,16:00,Lab Session");
+            csv.AppendLine("Wednesday,10:00,12:00,Tutorial");
+            csv.AppendLine("Thursday,13:00,15:00,Lecture 2");
+            csv.AppendLine("Friday,09:00,11:00,Consultation");
+
+            byte[] buffer = System.Text.Encoding.UTF8.GetBytes(csv.ToString());
+            return File(buffer, "text/csv", "TeachingTimetable_Template.csv");
         }
 
         [HttpPost]

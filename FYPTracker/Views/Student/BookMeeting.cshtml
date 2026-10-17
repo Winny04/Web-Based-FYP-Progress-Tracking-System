@@ -1,6 +1,8 @@
 @using FYPTracker.Models
 @using System.Text.Json
 @inject FYPTracker.Services.Forms.MeetingLogTemplateService MeetingLogTemplateService
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment WebHostEnv
+@inject Microsoft.Extensions.Configuration.IConfiguration AppConfig
 @{
     ViewData["Title"] = "Book Meeting";
     var currentUser           = ViewBag.CurrentUser as ApplicationUser;
@@ -9,6 +11,7 @@
     var supervisorHasAvailability = (bool)(ViewBag.SupervisorHasAvailability ?? false);
     int activeStage           = (int)(ViewBag.ActiveStage ?? 1);
     bool stage1Passed         = (bool)(ViewBag.Stage1Passed ?? false);
+    bool isFlexibleTesting    = FYPTracker.Helpers.TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(WebHostEnv, AppConfig);
 }
 
 @{
@@ -1265,9 +1268,9 @@
                                     session.EndDate is DateTime end &&
                                     cutoff.HasValue)
                                 {
-                                    minDate = start.Date > DateTime.Today
-                                        ? start.Date
-                                        : DateTime.Today;
+                                    minDate = isFlexibleTesting 
+                                        ? start.Date 
+                                        : (start.Date > DateTime.Today ? start.Date : DateTime.Today);
 
                                     maxDate = cutoff.Value.Date < end.Date
                                         ? cutoff.Value.Date
@@ -1445,7 +1448,9 @@
                                 rSession.EndDate is DateTime rEnd &&
                                 rCutoff.HasValue)
                             {
-                                rMinDate = rStart.Date > DateTime.Today ? rStart.Date : DateTime.Today;
+                                rMinDate = isFlexibleTesting
+                                    ? rStart.Date
+                                    : (rStart.Date > DateTime.Today ? rStart.Date : DateTime.Today);
                                 rMaxDate = rCutoff.Value.Date < rEnd.Date ? rCutoff.Value.Date : rEnd.Date;
                                 rNoValidDates = rMinDate > rMaxDate;
                             }

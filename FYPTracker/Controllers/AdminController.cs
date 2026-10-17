@@ -2506,21 +2506,55 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
             ViewBag.CurrentUser = user;
 
-            // Fetch distinct academic sessions
-            var distinctSessions = await _context.FYPProjects
-                .Where(p => !string.IsNullOrEmpty(p.AcademicSession))
-                .Select(p => p.AcademicSession)
-                .Distinct()
-                .OrderByDescending(s => s)
-                .ToListAsync();
+            // Determine if running in Testing with FYPTracker_Test
+            var hostEnv = HttpContext.RequestServices.GetService(typeof(Microsoft.AspNetCore.Hosting.IWebHostEnvironment)) as Microsoft.AspNetCore.Hosting.IWebHostEnvironment;
+            var config = HttpContext.RequestServices.GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration)) as Microsoft.Extensions.Configuration.IConfiguration;
+            bool isTestingWithTestDb = FYPTracker.Helpers.TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(hostEnv, config);
+
+            List<string> distinctSessions;
+
+            if (isTestingWithTestDb)
+            {
+                // In Testing on FYPTracker_Test, populate sessions directly from master AcademicSessions
+                var activeSessions = await _context.AcademicSessions
+                    .AsNoTracking()
+                    .Where(s => s.IsActive)
+                    .OrderByDescending(s => s.IsCurrent == true)
+                    .ThenByDescending(s => s.StartDate)
+                    .ThenBy(s => s.Name)
+                    .ToListAsync();
+
+                distinctSessions = activeSessions
+                    .Where(s => !string.IsNullOrEmpty(s.Name))
+                    .Select(s => s.Name!)
+                    .Distinct()
+                    .ToList();
+
+                if (string.IsNullOrEmpty(sessionFilter))
+                {
+                    // Prefer session marked IsCurrent = true; otherwise first active session
+                    var preferredSession = activeSessions.FirstOrDefault(s => s.IsCurrent == true)?.Name
+                                        ?? distinctSessions.FirstOrDefault();
+                    sessionFilter = preferredSession ?? string.Empty;
+                }
+            }
+            else
+            {
+                // Development / Production: Preserve existing behavior
+                distinctSessions = await _context.FYPProjects
+                    .Where(p => !string.IsNullOrEmpty(p.AcademicSession))
+                    .Select(p => p.AcademicSession)
+                    .Distinct()
+                    .OrderByDescending(s => s)
+                    .ToListAsync();
+
+                if (string.IsNullOrEmpty(sessionFilter))
+                {
+                    sessionFilter = distinctSessions.FirstOrDefault() ?? "2024/2025";
+                }
+            }
 
             ViewBag.DistinctSessions = distinctSessions;
-
-            if (string.IsNullOrEmpty(sessionFilter))
-            {
-                sessionFilter = distinctSessions.FirstOrDefault() ?? "2024/2025";
-            }
-            
             ViewBag.CurrentSessionFilter = sessionFilter;
             
             var currentSessionObj = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == sessionFilter);

@@ -20,14 +20,16 @@ namespace FYPTracker.Controllers
         private readonly IEmailService _emailService;
         private readonly IHubContext<NotificationHub> _hubContext;
         private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _env;
+        private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;
         private readonly FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService _weeklyMeetingSchedulingService;
 
-        public SupervisorController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext, Microsoft.AspNetCore.Hosting.IWebHostEnvironment env, FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService weeklyMeetingSchedulingService)
+        public SupervisorController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext, Microsoft.AspNetCore.Hosting.IWebHostEnvironment env, Microsoft.Extensions.Configuration.IConfiguration configuration, FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService weeklyMeetingSchedulingService)
         {
             _context = context;
             _emailService = emailService;
             _hubContext = hubContext;
             _env = env;
+            _configuration = configuration;
             _weeklyMeetingSchedulingService = weeklyMeetingSchedulingService;
         }
 
@@ -1905,19 +1907,23 @@ namespace FYPTracker.Controllers
 
             var activeSession = await GetAndSetSessionFilterAsync(user.Id, sessionFilter);
 
-            // Auto-Expire Stale Pending Meetings
-            var staleMeetings = await _context.MeetingBookings
-                .Where(m => m.SupervisorId == user.Id && m.Status == "Pending" && m.MeetingDate < DateTime.Today)
-                .ToListAsync();
-
-            if (staleMeetings.Any())
+            // Auto-Expire Stale Pending Meetings (disabled in Testing on FYPTracker_Test to allow testing historical meeting workflow)
+            bool isFlexibleTesting = FYPTracker.Helpers.TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(_env, _configuration);
+            if (!isFlexibleTesting)
             {
-                foreach (var stale in staleMeetings)
+                var staleMeetings = await _context.MeetingBookings
+                    .Where(m => m.SupervisorId == user.Id && m.Status == "Pending" && m.MeetingDate < DateTime.Today)
+                    .ToListAsync();
+
+                if (staleMeetings.Any())
                 {
-                    stale.Status = "Expired";
-                    stale.SupervisorNote = "This meeting request has expired because the date has passed without a response.";
+                    foreach (var stale in staleMeetings)
+                    {
+                        stale.Status = "Expired";
+                        stale.SupervisorNote = "This meeting request has expired because the date has passed without a response.";
+                    }
+                    await _context.SaveChangesAsync();
                 }
-                await _context.SaveChangesAsync();
             }
 
             var meetings = await _context.MeetingBookings
@@ -3301,6 +3307,9 @@ namespace FYPTracker.Controllers
         // --- Timetable Management ---
         [HttpGet]
         public IActionResult ManageTimetable(string? sessionFilter = null) => RedirectToAction("ManageTimetable", "Timetable", new { sessionFilter });
+
+        [HttpGet]
+        public IActionResult DownloadTemplate() => RedirectToAction("DownloadTemplate", "Timetable");
 
         [HttpPost]
         public IActionResult PreviewTimetable(IFormFile timetableFile, string? sessionFilter) => RedirectToAction("ManageTimetable", "Timetable", new { sessionFilter });

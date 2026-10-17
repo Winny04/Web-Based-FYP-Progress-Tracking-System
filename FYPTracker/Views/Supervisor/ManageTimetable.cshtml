@@ -58,10 +58,10 @@
         </div>
     }
 
-    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-4">
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
         <div>
             <h2 class="fw-bolder mb-1 text-white"><i class="fas fa-calendar-check text-info me-2"></i>Teaching Timetable</h2>
-            <p class="mb-0 text-white opacity-75 fs-6" style="max-width: 600px;">Upload your weekly teaching schedule to block out unavailable meeting times. This is applied as a weekly recurring block.</p>
+            <p class="mb-0 text-white opacity-75 fs-6" style="max-width: 600px;">Upload your weekly timetable to block teaching hours from student meetings.</p>
         </div>
         <div>
             @{
@@ -69,13 +69,14 @@
                 string selectedSession = ViewBag.CurrentSession as string ?? "";
             }
 
-            <form method="get" asp-action="ManageTimetable" class="bg-white bg-opacity-10 p-3 rounded-4 backdrop-blur">
-                <label class="text-white fw-bold mb-2 small text-uppercase letter-spacing-1">
-                    <i class="fas fa-filter me-1"></i> Academic Session
+            <form method="get" asp-action="ManageTimetable" class="d-flex align-items-center gap-2 bg-white bg-opacity-10 px-3 py-2 rounded-pill backdrop-blur" style="width: auto; max-width: 320px;">
+                <label for="sessionFilterSelect" class="text-white mb-0 fw-semibold text-nowrap" style="font-size: 0.9rem;">
+                    <i class="fas fa-filter text-info me-1"></i>Session:
                 </label>
-                <select name="sessionFilter"
-                    class="form-select border-0 shadow-none fw-semibold"
-                    style="color:#212529 !important; background-color:white !important; border-radius: 8px;"
+                <select id="sessionFilterSelect"
+                    name="sessionFilter"
+                    class="form-select form-select-sm border-0 shadow-none fw-semibold"
+                    style="color: #1e293b; background-color: #ffffff; border-radius: 20px; font-size: 0.85rem; width: 180px; min-width: 160px; cursor: pointer;"
                     onchange="this.form.submit()">
                     @foreach (var session in sessions)
                     {
@@ -112,6 +113,11 @@
                     
                     <form asp-action="PreviewTimetable" enctype="multipart/form-data" method="post" class="bg-light p-4 rounded-4">
                         <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSession" />
+                        <div class="mb-3">
+                            <a asp-controller="Timetable" asp-action="DownloadTemplate" class="btn btn-outline-primary btn-sm rounded-pill fw-bold w-100 py-2 shadow-sm d-flex align-items-center justify-content-center">
+                                <i class="fas fa-file-csv me-2"></i>Download CSV Template
+                            </a>
+                        </div>
                         <div class="mb-4">
                             <label class="form-label fw-bold text-dark small text-uppercase">Select File</label>
                             <input class="form-control bg-white border-0 shadow-sm" type="file" id="timetableFile" name="timetableFile" accept=".csv" required />

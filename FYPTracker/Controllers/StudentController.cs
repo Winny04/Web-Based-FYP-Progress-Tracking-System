@@ -16,6 +16,7 @@ namespace FYPTracker.Controllers
     {
         private readonly FYPTrackerContext _context;
         private readonly IWebHostEnvironment _env;
+        private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;
         private readonly IEmailService _emailService;
         private readonly IHubContext<NotificationHub> _hubContext;
         private readonly FYPTracker.Services.Meetings.IMeetingRequirementService _meetingRequirementService;
@@ -24,6 +25,7 @@ namespace FYPTracker.Controllers
         public StudentController(
             FYPTrackerContext context, 
             IWebHostEnvironment env, 
+            Microsoft.Extensions.Configuration.IConfiguration configuration,
             IEmailService emailService, 
             IHubContext<NotificationHub> hubContext,
             FYPTracker.Services.Meetings.IMeetingRequirementService meetingRequirementService,
@@ -31,6 +33,7 @@ namespace FYPTracker.Controllers
         {
             _context = context;
             _env     = env;
+            _configuration = configuration;
             _emailService = emailService;
             _hubContext = hubContext;
             _meetingRequirementService = meetingRequirementService;
@@ -1584,19 +1587,23 @@ namespace FYPTracker.Controllers
             ViewBag.ActiveSchedule = activeSchedule;
             ViewBag.FixedTime = null;
 
-            // Auto-Expire Stale Pending Meetings
-            var staleMeetings = await _context.MeetingBookings
-                .Where(m => m.StudentId == user.Id && m.Status == "Pending" && m.MeetingDate < DateTime.Today)
-                .ToListAsync();
-
-            if (staleMeetings.Any())
+            // Auto-Expire Stale Pending Meetings (disabled in Testing on FYPTracker_Test to allow testing historical meeting workflow)
+            bool isFlexibleTesting = FYPTracker.Helpers.TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(_env, _configuration);
+            if (!isFlexibleTesting)
             {
-                foreach (var stale in staleMeetings)
+                var staleMeetings = await _context.MeetingBookings
+                    .Where(m => m.StudentId == user.Id && m.Status == "Pending" && m.MeetingDate < DateTime.Today)
+                    .ToListAsync();
+
+                if (staleMeetings.Any())
                 {
-                    stale.Status = "Expired";
-                    stale.SupervisorNote = "This meeting request has expired because the date has passed without a response.";
+                    foreach (var stale in staleMeetings)
+                    {
+                        stale.Status = "Expired";
+                        stale.SupervisorNote = "This meeting request has expired because the date has passed without a response.";
+                    }
+                    await _context.SaveChangesAsync();
                 }
-                await _context.SaveChangesAsync();
             }
 
             var meetings = await _context.MeetingBookings
@@ -1637,8 +1644,9 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
-            // Date must be today or in the future
-            if (parsedDate.Date < DateTime.Today)
+            // Date must be today or in the future (In Testing with FYPTracker_Test, historical dates within the academic session are permitted)
+            bool isFlexibleTesting = FYPTracker.Helpers.TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(_env, _configuration);
+            if (!isFlexibleTesting && parsedDate.Date < DateTime.Today)
             {
                 TempData["Error"] = "Meeting date cannot be in the past.";
                 return RedirectToAction(nameof(BookMeeting));
@@ -1736,7 +1744,7 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
-            if (parsedDate.Date == DateTime.Now.Date && reqTime < DateTime.Now.TimeOfDay)
+            if (!isFlexibleTesting && parsedDate.Date == DateTime.Now.Date && reqTime < DateTime.Now.TimeOfDay)
             {
                 TempData["Error"] = "Cannot book a meeting in the past.";
                 return RedirectToAction(nameof(BookMeeting));
@@ -1925,10 +1933,11 @@ namespace FYPTracker.Controllers
             }
 
             var bookingCutoff = await GetMeetingBookingCutoffAsync(user.Id, currentStage);
+            bool isFlexibleTesting = FYPTracker.Helpers.TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(_env, _configuration);
 
             if (!bookingCutoff.HasValue ||
                 !activeSession.StartDate.HasValue ||
-                parsedDate.Date < DateTime.Today ||
+                (!isFlexibleTesting && parsedDate.Date < DateTime.Today) ||
                 parsedDate.Date < activeSession.StartDate.Value.Date ||
                 parsedDate.Date > bookingCutoff.Value.Date)
             {
@@ -2140,7 +2149,7 @@ namespace FYPTracker.Controllers
             {
                 var slotEnd = current.Add(TimeSpan.FromMinutes(meetingDur));
 
-                if (!(isToday && now.TimeOfDay > current))
+                if (isFlexibleTesting || !(isToday && now.TimeOfDay > current))
                 {
                     var (hasConflict, _) = await _weeklyMeetingSchedulingService.ValidateMeetingConflictAsync(
                         supervisorId, parsedDate.Date, current, slotEnd, activeSession.Id, validExcludeMeetingId);
