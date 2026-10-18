@@ -328,7 +328,8 @@ namespace FYPTracker.Controllers
             // Handle file upload
             if (file != null && file.Length > 0)
             {
-                var uploadDir = Path.Combine(_env.WebRootPath, "uploads", "submissions", user.Id.ToString());
+                var baseUploadDir = FYPTracker.Helpers.TestingStorageProvider.GetSubmissionsDirectory(_env.ContentRootPath, _env, _configuration);
+                var uploadDir = Path.Combine(baseUploadDir, user.Id.ToString());
                 if (!Directory.Exists(uploadDir)) Directory.CreateDirectory(uploadDir);
 
                 string fileName = $"{Guid.NewGuid()}_{Path.GetFileName(file.FileName)}";
@@ -339,11 +340,12 @@ namespace FYPTracker.Controllers
                     await file.CopyToAsync(stream);
                 }
 
+                string urlPrefix = FYPTracker.Helpers.TestingStorageProvider.GetSubmissionsUrlPrefix(_env, _configuration);
                 _context.FYPSubmissionFiles.Add(new FYPSubmissionFile
                 {
                     MilestoneId = milestone.Id,
                     FileName = file.FileName,
-                    FilePath = $"/uploads/submissions/{user.Id}/{fileName}",
+                    FilePath = $"{urlPrefix}{user.Id}/{fileName}",
                     UploadedDate = DateTime.Now
                 });
                 
@@ -977,8 +979,8 @@ namespace FYPTracker.Controllers
                     // Note: We intentionally do NOT delete old files to preserve version history
                 }
 
-                var uploadDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads/submissions");
-                Directory.CreateDirectory(uploadDir);
+                var uploadDir = FYPTracker.Helpers.TestingStorageProvider.GetSubmissionsDirectory(_env.ContentRootPath, _env, _configuration);
+                string urlPrefix = FYPTracker.Helpers.TestingStorageProvider.GetSubmissionsUrlPrefix(_env, _configuration);
 
                 foreach (var file in allFiles)
                 {
@@ -994,7 +996,7 @@ namespace FYPTracker.Controllers
                     {
                         MilestoneId = milestoneId,
                         FileName = file.FileName,
-                        FilePath = "/uploads/submissions/" + uniqueName,
+                        FilePath = $"{urlPrefix}{uniqueName}",
                         FileSize = file.Length,
                         AttemptNumber = newAttemptNumber,
                         RevisionNotes = revisionNotes,
@@ -2786,15 +2788,11 @@ namespace FYPTracker.Controllers
             string uuid = Guid.NewGuid().ToString().Substring(0, 8);
             string uniquePdfFileName = $"Draft_Log_{meeting.Id}_{uuid}.pdf";
             string uniqueJsonFileName = $"Draft_Template_{meeting.Id}_{uuid}.json";
-            string newRelativePdfPath = System.IO.Path.Combine("App_Data", "MeetingLogSnapshots", uniquePdfFileName).Replace("\\", "/");
+            string relativePrefix = FYPTracker.Helpers.TestingStorageProvider.GetMeetingLogRelativePrefix(_env, _configuration);
+            string newRelativePdfPath = $"{relativePrefix}{uniquePdfFileName}";
 
-            // 4. Safely write files to disk FIRST
-            string directoryPath = System.IO.Path.Combine(_env.ContentRootPath, "App_Data", "MeetingLogSnapshots");
-            if (!System.IO.Directory.Exists(directoryPath))
-            {
-                System.IO.Directory.CreateDirectory(directoryPath);
-            }
-
+            // 4. Safely write files to disk FIRST (isolated in Testing when using FYPTracker_Test)
+            string directoryPath = FYPTracker.Helpers.TestingStorageProvider.GetMeetingLogSnapshotsDirectory(_env.ContentRootPath, _env, _configuration);
             string absolutePdfPath = System.IO.Path.Combine(directoryPath, uniquePdfFileName);
             string absoluteJsonPath = System.IO.Path.Combine(directoryPath, uniqueJsonFileName);
 
@@ -2871,31 +2869,35 @@ namespace FYPTracker.Controllers
             string? savedPath = log.SignedPdfLogbookPath?
                 .Replace('\\', '/');
 
-            const string allowedPrefix =
-                "App_Data/MeetingLogSnapshots/";
-
-            if (!string.IsNullOrWhiteSpace(savedPath) &&
-                savedPath.StartsWith(
-                    allowedPrefix,
-                    StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(savedPath))
             {
-                string fileName = savedPath.Substring(
-                    allowedPrefix.Length);
+                string? relativeDir = null;
+                string? fileName = null;
 
-                // Prevent invalid paths and access to other files
-                if (!string.IsNullOrWhiteSpace(fileName) &&
+                const string testingPrefix = "App_Data/MeetingLogSnapshots/Testing/";
+                const string standardPrefix = "App_Data/MeetingLogSnapshots/";
+
+                if (savedPath.StartsWith(testingPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    relativeDir = "App_Data/MeetingLogSnapshots/Testing";
+                    fileName = savedPath.Substring(testingPrefix.Length);
+                }
+                else if (savedPath.StartsWith(standardPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    relativeDir = "App_Data/MeetingLogSnapshots";
+                    fileName = savedPath.Substring(standardPrefix.Length);
+                }
+
+                // Prevent invalid paths, directory traversal and access to other files
+                if (!string.IsNullOrWhiteSpace(relativeDir) &&
+                    !string.IsNullOrWhiteSpace(fileName) &&
                     fileName == Path.GetFileName(fileName) &&
-                    fileName.EndsWith(
-                        ".pdf",
-                        StringComparison.OrdinalIgnoreCase) &&
-                    fileName.StartsWith(
-                        $"Signed_Log_{log.MeetingBookingId}_",
-                        StringComparison.OrdinalIgnoreCase))
+                    fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) &&
+                    fileName.StartsWith($"Signed_Log_{log.MeetingBookingId}_", StringComparison.OrdinalIgnoreCase))
                 {
                     string physicalPath = Path.Combine(
                         _env.ContentRootPath,
-                        "App_Data",
-                        "MeetingLogSnapshots",
+                        relativeDir.Replace('/', Path.DirectorySeparatorChar),
                         fileName
                     );
 

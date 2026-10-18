@@ -1634,9 +1634,8 @@ namespace FYPTracker.Controllers
                     }
 
                     string uniqueFileName = Guid.NewGuid().ToString() + "_" + gradedFile.FileName;
-                    string folderPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", "uploads", "submissions");
-                    if (!System.IO.Directory.Exists(folderPath))
-                        System.IO.Directory.CreateDirectory(folderPath);
+                    string folderPath = FYPTracker.Helpers.TestingStorageProvider.GetSubmissionsDirectory(_env.ContentRootPath, _env, _configuration);
+                    string urlPrefix = FYPTracker.Helpers.TestingStorageProvider.GetSubmissionsUrlPrefix(_env, _configuration);
 
                     string filePath = System.IO.Path.Combine(folderPath, uniqueFileName);
                     using (var stream = new System.IO.FileStream(filePath, System.IO.FileMode.Create))
@@ -1648,7 +1647,7 @@ namespace FYPTracker.Controllers
                     {
                         MilestoneId = milestone.Id,
                         FileName = gradedFile.FileName,
-                        FilePath = $"/uploads/submissions/{uniqueFileName}",
+                        FilePath = $"{urlPrefix}{uniqueFileName}",
                         FileSize = gradedFile.Length,
                         UploadedBy = user.Id,
                         UploadedDate = DateTime.Now
@@ -2684,11 +2683,16 @@ namespace FYPTracker.Controllers
             try
             {
                 // If PDF generation fails, SaveChangesAsync() is never reached.
+                string? targetSubdir = FYPTracker.Helpers.TestingStorageProvider.IsTestingStorageActive(_env, _configuration)
+                    ? FYPTracker.Helpers.TestingStorageProvider.TestingLogSnapshotsSubdir
+                    : null;
+
                 signedPdfPath = FYPTracker.Utils.MeetingLogPdfGenerator.SavePdfSnapshot(
                     _env.ContentRootPath,
                     meeting,
                     frozenTemplate,
-                    isSigned: true);
+                    isSigned: true,
+                    subDirectory: targetSubdir);
 
                 if (string.IsNullOrWhiteSpace(signedPdfPath))
                     throw new InvalidOperationException("Signed PDF path was not returned.");
@@ -2788,19 +2792,34 @@ namespace FYPTracker.Controllers
 
             // The PDF lives outside wwwroot: never Redirect() to App_Data.
             string? stored = log.SignedPdfLogbookPath?.Replace('\\', '/');
-            const string allowedPrefix = "App_Data/MeetingLogSnapshots/";
 
-            if (!string.IsNullOrWhiteSpace(stored) &&
-                stored.StartsWith(allowedPrefix, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(stored))
             {
-                string name = stored.Substring(allowedPrefix.Length);
-                if (!string.IsNullOrWhiteSpace(name) &&
+                string? relativeDir = null;
+                string? name = null;
+
+                const string testingPrefix = "App_Data/MeetingLogSnapshots/Testing/";
+                const string standardPrefix = "App_Data/MeetingLogSnapshots/";
+
+                if (stored.StartsWith(testingPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    relativeDir = "App_Data/MeetingLogSnapshots/Testing";
+                    name = stored.Substring(testingPrefix.Length);
+                }
+                else if (stored.StartsWith(standardPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    relativeDir = "App_Data/MeetingLogSnapshots";
+                    name = stored.Substring(standardPrefix.Length);
+                }
+
+                if (!string.IsNullOrWhiteSpace(relativeDir) &&
+                    !string.IsNullOrWhiteSpace(name) &&
                     name == System.IO.Path.GetFileName(name) &&
                     name.StartsWith($"Signed_Log_{log.MeetingBookingId}_", StringComparison.OrdinalIgnoreCase) &&
                     name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
                 {
                     string physicalPath = System.IO.Path.Combine(
-                        _env.ContentRootPath, "App_Data", "MeetingLogSnapshots", name);
+                        _env.ContentRootPath, relativeDir.Replace('/', System.IO.Path.DirectorySeparatorChar), name);
                     if (System.IO.File.Exists(physicalPath))
                         return PhysicalFile(physicalPath, "application/pdf", enableRangeProcessing: true);
                 }

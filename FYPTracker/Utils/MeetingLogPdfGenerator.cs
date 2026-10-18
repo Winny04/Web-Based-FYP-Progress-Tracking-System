@@ -349,11 +349,15 @@ namespace FYPTracker.Utils
             string contentRootPath, 
             MeetingBooking meeting, 
             MeetingRecordTemplateVM templateSnapshot, 
-            bool isSigned)
+            bool isSigned,
+            string? subDirectory = null)
         {
             byte[] pdfBytes = GeneratePdfBytes(meeting, templateSnapshot, isSigned);
             
-            string directoryPath = Path.Combine(contentRootPath, "App_Data", "MeetingLogSnapshots");
+            string directoryPath = string.IsNullOrWhiteSpace(subDirectory)
+                ? Path.Combine(contentRootPath, "App_Data", "MeetingLogSnapshots")
+                : Path.Combine(contentRootPath, subDirectory.Replace('/', Path.DirectorySeparatorChar));
+
             if (!Directory.Exists(directoryPath))
             {
                 Directory.CreateDirectory(directoryPath);
@@ -372,7 +376,8 @@ namespace FYPTracker.Utils
                 File.WriteAllText(snapshotJsonPath, JsonSerializer.Serialize(templateSnapshot));
             }
 
-            return Path.Combine("App_Data", "MeetingLogSnapshots", uniqueFileName).Replace("\\", "/");
+            string relativePrefix = string.IsNullOrWhiteSpace(subDirectory) ? "App_Data/MeetingLogSnapshots" : subDirectory.TrimEnd('/');
+            return $"{relativePrefix}/{uniqueFileName}".Replace("\\", "/");
         }
 
         /// <summary>
@@ -385,16 +390,27 @@ namespace FYPTracker.Utils
 
             if (!string.IsNullOrEmpty(pdfLogbookPath) && pdfLogbookPath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
             {
-                // Derived from modern format: App_Data/MeetingLogSnapshots/Draft_Log_123_abc123.pdf -> Draft_Template_123_abc123.json
+                string dirPart = Path.GetDirectoryName(pdfLogbookPath) ?? "App_Data/MeetingLogSnapshots";
                 string fileName = Path.GetFileName(pdfLogbookPath);
                 if (fileName.StartsWith("Draft_Log_"))
                 {
                     string jsonFileName = fileName.Replace("Draft_Log_", "Draft_Template_").Replace(".pdf", ".json");
-                    snapshotJsonPath = Path.Combine(contentRootPath, "App_Data", "MeetingLogSnapshots", jsonFileName);
+                    snapshotJsonPath = Path.Combine(contentRootPath, dirPart.Replace('/', Path.DirectorySeparatorChar), jsonFileName);
                 }
             }
 
-            // Fallback to legacy snapshot naming
+            // Fallback 1: check inside the folder specified in pdfLogbookPath if not found above
+            if (snapshotJsonPath == null || !File.Exists(snapshotJsonPath))
+            {
+                if (!string.IsNullOrEmpty(pdfLogbookPath))
+                {
+                    string dirPart = Path.GetDirectoryName(pdfLogbookPath) ?? "App_Data/MeetingLogSnapshots";
+                    var candidate = Path.Combine(contentRootPath, dirPart.Replace('/', Path.DirectorySeparatorChar), $"Draft_Template_{meetingId}.json");
+                    if (File.Exists(candidate)) snapshotJsonPath = candidate;
+                }
+            }
+
+            // Fallback 2: legacy snapshot naming in default App_Data/MeetingLogSnapshots
             if (snapshotJsonPath == null || !File.Exists(snapshotJsonPath))
             {
                 snapshotJsonPath = Path.Combine(contentRootPath, "App_Data", "MeetingLogSnapshots", $"Draft_Template_{meetingId}.json");
