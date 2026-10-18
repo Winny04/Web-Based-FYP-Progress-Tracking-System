@@ -90,6 +90,17 @@ namespace FYPTracker.Services.BackgroundTasks
                 "[SupervisorRequestTimeoutService] Running timeout check. Configured timeout = {Days} day(s).",
                 timeoutDays);
 
+            var env = scope.ServiceProvider.GetService(typeof(Microsoft.AspNetCore.Hosting.IWebHostEnvironment)) as Microsoft.AspNetCore.Hosting.IWebHostEnvironment;
+            var config = scope.ServiceProvider.GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration)) as Microsoft.Extensions.Configuration.IConfiguration;
+            bool isFlexibleTesting = FYPTracker.Helpers.TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(env, config);
+
+            // In Testing on FYPTracker_Test, prevent automatic supervisor request expiry so manual test data workflow can be reviewed
+            if (isFlexibleTesting)
+            {
+                _logger.LogInformation("[SupervisorRequestTimeoutService] Testing environment active on FYPTracker_Test. Automatic auto-rejection bypassed to preserve manual test evaluation.");
+                return;
+            }
+
             var cutoff = DateTime.Now.AddDays(-timeoutDays);
 
             // ── Step 2: Find all Pending requests whose RequestedDate is older than the cutoff ──

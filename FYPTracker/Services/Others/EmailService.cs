@@ -1,4 +1,5 @@
 using FYPTracker.Configuration;
+using FYPTracker.Helpers;
 using FYPTracker.Services.Others.Interfaces;
 using MailKit.Net.Smtp;
 using MailKit.Security;
@@ -11,12 +12,16 @@ namespace FYPTracker.Services.Others
     {
         private readonly SmtpSettings smtpSettings;
         private readonly IWebHostEnvironment _env;
+        private readonly Microsoft.Extensions.Configuration.IConfiguration? _config;
 
-        public EmailService(SmtpSettings smtpSettings, IWebHostEnvironment env)
+        public EmailService(SmtpSettings smtpSettings, IWebHostEnvironment env, Microsoft.Extensions.Configuration.IConfiguration? config = null)
         {
             this.smtpSettings = smtpSettings;
             _env = env;
+            _config = config;
         }
+
+        private bool IsTestingOnFYPTrackerTest => TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(_env, _config);
 
         /// <summary>
         /// Validates that in Development environment, a valid DevRedirectEmail is configured.
@@ -81,6 +86,12 @@ namespace FYPTracker.Services.Others
         {
             if (smtpSettings.Offline)
             {
+                if (IsTestingOnFYPTrackerTest)
+                {
+                    Console.WriteLine($"[EmailService] [TESTING OFFLINE EMAIL SKIPPED] To=\"{MaskEmailList(to)}\", Subject=\"{subject}\" (Testing environment on FYPTracker_Test).");
+                    return;
+                }
+
                 Console.WriteLine($"[EmailService] ⏸ Offline mode active (SmtpSettings:Offline = true). Email delivery to \"{(_env.IsDevelopment() ? MaskEmailList(to) : to)}\" skipped.");
                 throw new InvalidOperationException("Email delivery skipped: SMTP service is configured in Offline mode (SmtpSettings:Offline = true).");
             }
@@ -175,6 +186,13 @@ namespace FYPTracker.Services.Others
             // create message
             if (smtpSettings.Offline)
             {
+                if (IsTestingOnFYPTrackerTest)
+                {
+                    string safeTestingRecipients = string.Join("; ", to.Select(MaskEmail));
+                    Console.WriteLine($"[EmailService] [TESTING OFFLINE EMAIL SKIPPED] To=\"{safeTestingRecipients}\", Subject=\"{subject}\" (Testing environment on FYPTracker_Test).");
+                    return;
+                }
+
                 string safeTarget = _env.IsDevelopment() ? string.Join("; ", to.Select(MaskEmail)) : string.Join("; ", to);
                 Console.WriteLine($"[EmailService] ⏸ Offline mode active (SmtpSettings:Offline = true). Email delivery to \"{safeTarget}\" skipped.");
                 throw new InvalidOperationException("Email delivery skipped: SMTP service is configured in Offline mode (SmtpSettings:Offline = true).");

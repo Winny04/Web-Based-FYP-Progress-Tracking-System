@@ -21,6 +21,7 @@ namespace FYPTracker.Controllers
         private readonly IHubContext<NotificationHub> _hubContext;
         private readonly FYPTracker.Services.Meetings.IMeetingRequirementService _meetingRequirementService;
         private readonly FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService _weeklyMeetingSchedulingService;
+        private readonly FYPTracker.Services.Time.ISystemClock _clock;
 
         public StudentController(
             FYPTrackerContext context, 
@@ -29,7 +30,8 @@ namespace FYPTracker.Controllers
             IEmailService emailService, 
             IHubContext<NotificationHub> hubContext,
             FYPTracker.Services.Meetings.IMeetingRequirementService meetingRequirementService,
-            FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService weeklyMeetingSchedulingService)
+            FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService weeklyMeetingSchedulingService,
+            FYPTracker.Services.Time.ISystemClock clock)
         {
             _context = context;
             _env     = env;
@@ -38,6 +40,7 @@ namespace FYPTracker.Controllers
             _hubContext = hubContext;
             _meetingRequirementService = meetingRequirementService;
             _weeklyMeetingSchedulingService = weeklyMeetingSchedulingService;
+            _clock = clock;
         }
 
         // ══════════════════════════════════════════════════════
@@ -1804,11 +1807,9 @@ namespace FYPTracker.Controllers
 
             // Calculate WeekNumber for this stage (starts at Week 1 independent of other stages)
             int calculatedWeekNumber = 1;
-            var maxExistingWeekInStage = await _context.MeetingBookings
+            var maxExistingWeekInStage = (await _context.MeetingBookings
                 .Where(m => m.StudentId == user.Id && m.Stage == currentStage && m.Status != "Rejected" && m.Status != "Cancelled")
-                .Select(m => m.WeekNumber ?? 0)
-                .DefaultIfEmpty(0)
-                .MaxAsync();
+                .MaxAsync(m => (int?)m.WeekNumber)) ?? 0;
 
             if (maxExistingWeekInStage > 0)
             {
@@ -2141,7 +2142,7 @@ namespace FYPTracker.Controllers
 
             var finalSlots = new List<string>();
             var displaySlots = new List<string>();
-            var now = DateTime.Now;
+            var now = _clock.Now;
             bool isToday = parsedDate.Date == now.Date;
 
             var current = allowedStart;
@@ -2686,7 +2687,7 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
-            if (meeting.MeetingDate.Date > DateTime.Today)
+            if (meeting.MeetingDate.Date > _clock.Today)
             {
                 TempData["Error"] = $"This logbook will be available on {meeting.MeetingDate:dd MMM yyyy}.";
                 return RedirectToAction(nameof(BookMeeting));

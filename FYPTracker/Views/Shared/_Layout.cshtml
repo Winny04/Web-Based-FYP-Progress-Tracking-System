@@ -1,4 +1,7 @@
 @using FYPTracker.Components
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment WebHostEnv
+@inject Microsoft.Extensions.Configuration.IConfiguration AppConfig
+@inject FYPTracker.Services.Time.ISystemClock SystemClock
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -398,6 +401,95 @@
 
             <!-- Sticky Header -->
             @await Component.InvokeAsync(typeof(MasterViewComponent))
+
+            @{
+                bool isTestingAllowed = FYPTracker.Helpers.TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(WebHostEnv, AppConfig);
+                bool isAdmin = User.IsInRole("Admin") || User.IsInRole("SuperAdmin");
+            }
+
+            @if (isTestingAllowed)
+            {
+                <div class="bg-dark text-white px-3 py-2 border-bottom border-warning d-flex align-items-center justify-content-between flex-wrap gap-2 shadow-sm" style="font-size: 0.85rem; z-index: 999;">
+                    <div class="d-flex align-items-center gap-2">
+                        @if (SystemClock.IsSimulated)
+                        {
+                            <span class="badge bg-warning text-dark fw-bold px-2 py-1"><i class="fas fa-history me-1"></i>SIMULATION MODE</span>
+                            <span class="text-warning fw-semibold">@SystemClock.Now.ToString("dd MMM yyyy, h:mm tt")</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary text-white fw-bold px-2 py-1"><i class="fas fa-clock me-1"></i>REAL SYSTEM TIME</span>
+                            <span class="text-light">@SystemClock.Now.ToString("dd MMM yyyy, h:mm tt")</span>
+                        }
+                        <span class="text-white-50 d-none d-md-inline">(Testing Environment: FYPTracker_Test)</span>
+                    </div>
+
+                    @if (isAdmin)
+                    {
+                        <div class="d-flex align-items-center gap-2">
+                            <form asp-controller="TestingClock" asp-action="AdvanceDays" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="days" value="1" />
+                                <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                <button type="submit" class="btn btn-xs btn-outline-warning text-white py-1 px-2 rounded fw-bold" style="font-size: 0.75rem;" title="Advance clock by 1 day">+1 Day</button>
+                            </form>
+                            <form asp-controller="TestingClock" asp-action="AdvanceDays" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="days" value="7" />
+                                <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                <button type="submit" class="btn btn-xs btn-outline-warning text-white py-1 px-2 rounded fw-bold" style="font-size: 0.75rem;" title="Advance clock by 1 week">+1 Week</button>
+                            </form>
+                            <button type="button" class="btn btn-xs btn-warning text-dark py-1 px-2 rounded fw-bold" style="font-size: 0.75rem;" data-toggle="modal" data-target="#testingClockModal" data-bs-toggle="modal" data-bs-target="#testingClockModal">
+                                <i class="fas fa-calendar-alt me-1"></i>Set Clock
+                            </button>
+                            @if (SystemClock.IsSimulated)
+                            {
+                                <form asp-controller="TestingClock" asp-action="ResetToRealTime" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                    <button type="submit" class="btn btn-xs btn-outline-light py-1 px-2 rounded fw-bold" style="font-size: 0.75rem;" title="Reset to real system time">Reset</button>
+                                </form>
+                            }
+                        </div>
+                    }
+                </div>
+
+                @if (isAdmin)
+                {
+                    <!-- Admin Set Clock Modal -->
+                    <div class="modal fade" id="testingClockModal" tabindex="-1" role="dialog" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered" role="document">
+                            <div class="modal-content border-0 shadow-lg rounded-4">
+                                <div class="modal-header bg-dark text-white p-4">
+                                    <h5 class="modal-title fw-bold text-white"><i class="fas fa-clock text-warning me-2"></i>Configure Simulated Clock</h5>
+                                    <button type="button" class="close text-white btn-close-white" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" style="background: none; border: none; font-size: 1.5rem; opacity: 0.8;">&times;</button>
+                                </div>
+                                <form asp-controller="TestingClock" asp-action="SetSimulatedTime" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                    <div class="modal-body p-4">
+                                        <p class="text-muted small mb-3">
+                                            Select any target date and time between January and October 2026 for manual testing. All users will observe this simulated time.
+                                        </p>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold text-dark small text-uppercase">Target Date</label>
+                                            <input type="date" name="targetDate" class="form-control" value="@SystemClock.Now.ToString("yyyy-MM-dd")" required />
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold text-dark small text-uppercase">Target Time</label>
+                                            <input type="time" name="targetTime" class="form-control" value="@SystemClock.Now.ToString("HH:mm")" required />
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer bg-light p-3">
+                                        <button type="button" class="btn btn-secondary rounded-pill px-4 fw-bold" data-dismiss="modal" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold text-dark">Apply Simulated Time</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
 
             <!-- Main Content -->
             <div class="container-fluid d-flex flex-column flex-column-fluid">

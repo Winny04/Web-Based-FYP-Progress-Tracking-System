@@ -134,6 +134,16 @@ builder.Services.AddSingleton<
     IHttpContextAccessor,
     HttpContextAccessor>();
 
+// Register Centralized Clock Provider (Development uses RealSystemClock; Testing uses TestingSystemClock)
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddSingleton<FYPTracker.Services.Time.ISystemClock, FYPTracker.Services.Time.TestingSystemClock>();
+}
+else
+{
+    builder.Services.AddSingleton<FYPTracker.Services.Time.ISystemClock, FYPTracker.Services.Time.RealSystemClock>();
+}
+
 builder.Services.AddHttpClient();
 
 builder.Services.AddScoped<IWebHelper, WebHelper>();

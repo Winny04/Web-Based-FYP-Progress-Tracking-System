@@ -3,6 +3,7 @@
 @inject FYPTracker.Services.Forms.MeetingLogTemplateService MeetingLogTemplateService
 @inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment WebHostEnv
 @inject Microsoft.Extensions.Configuration.IConfiguration AppConfig
+@inject FYPTracker.Services.Time.ISystemClock SystemClock
 @{
     ViewData["Title"] = "Book Meeting";
     var currentUser           = ViewBag.CurrentUser as ApplicationUser;
@@ -778,7 +779,7 @@
 
                                                         if (m.MeetingLog == null || m.MeetingLog.LogStatus == "Draft")
                                                         {
-                                                            if (m.MeetingDate.Date <= DateTime.Today)
+                                                            if (m.MeetingDate.Date <= SystemClock.Today)
                                                             {
                                                                 var nextApprovedMeeting = meetings
                                                                     .Where(n =>
@@ -1115,7 +1116,7 @@
 
                                     if (m.MeetingLog == null || m.MeetingLog.LogStatus == "Draft")
                                     {
-                                        if (m.MeetingDate.Date <= DateTime.Today)
+                                        if (m.MeetingDate.Date <= SystemClock.Today)
                                         {
                                             var nextApprovedMeeting = meetings
                                                 .Where(n =>
