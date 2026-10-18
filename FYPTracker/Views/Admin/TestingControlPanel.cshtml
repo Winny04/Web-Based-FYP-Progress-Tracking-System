@@ -1,0 +1,165 @@
+@model FYPTracker.ViewModels.TestingRelaxedModeSettingsVM
+
+@{
+    ViewData["Title"] = "Admin Testing Control Panel";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid px-4 py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1 text-primary">
+                <i class="bi bi-sliders me-2"></i>Testing Control Panel
+            </h2>
+            <p class="text-muted mb-0">
+                Configure Testing-Only Relaxed Validation Mode for fast manual end-to-end testing across Stages 1 & 2.
+            </p>
+        </div>
+        <div class="badge bg-warning text-dark px-3 py-2 fs-6">
+            <i class="bi bi-shield-lock me-1"></i> Testing Environment Only (FYPTracker_Test)
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i> @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i> @TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <form asp-controller="TestingControlPanel" asp-action="SaveSettings" method="post">
+        @Html.AntiForgeryToken()
+
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3 border-bottom">
+                <div class="form-check form-switch fs-5 mb-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="masterSwitch"
+                           asp-for="IsRelaxedModeEnabled" />
+                    <label class="form-check-label fw-bold text-dark" for="masterSwitch">
+                        Enable Relaxed Manual Testing Mode
+                    </label>
+                </div>
+                <small class="text-muted d-block mt-1">
+                    When switched OFF, all normal validations and strict academic rules apply. Turning this OFF does NOT delete or alter any created test records.
+                </small>
+            </div>
+            <div class="card-body p-4" id="relaxedTogglesSection">
+                <h5 class="fw-semibold text-secondary mb-3">Configurable Bypass Options</h5>
+                <div class="row g-4">
+                    <!-- 1. Flexible Dates -->
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100 bg-light">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="toggleFlexibleDates"
+                                       asp-for="AllowFlexibleDates" />
+                                <label class="form-check-label fw-bold" for="toggleFlexibleDates">
+                                    Flexible Historical & Future Dates
+                                </label>
+                            </div>
+                            <p class="small text-muted mb-0">
+                                Allows student booking on past or future dates without restrictions. Essential for simulating January to October 2026 timelines.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 2. Manual Meeting Only -->
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100 bg-light">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="toggleManualMeetingOnly"
+                                       asp-for="ManualMeetingOnly" />
+                                <label class="form-check-label fw-bold" for="toggleManualMeetingOnly">
+                                    Manual Meeting Only (Disable Auto-Generation)
+                                </label>
+                            </div>
+                            <p class="small text-muted mb-0">
+                                When supervisor approves a meeting booking, stops the system from automatically generating recurring meetings for Weeks 2–10. Leaves you in 100% manual control.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 3. Immediate Logbook Unlock -->
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100 bg-light">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="toggleLogbookUnlock"
+                                       asp-for="ImmediateLogbookUnlock" />
+                                <label class="form-check-label fw-bold" for="toggleLogbookUnlock">
+                                    Immediate Meeting Logbook Unlock
+                                </label>
+                            </div>
+                            <p class="small text-muted mb-0">
+                                Allows students to fill and submit meeting logbooks immediately without waiting for the simulated calendar date to arrive.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 4. Relax Academic Deadlines -->
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100 bg-light">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="toggleDeadlines"
+                                       asp-for="RelaxAcademicDeadlines" />
+                                <label class="form-check-label fw-bold" for="toggleDeadlines">
+                                    Relax Academic Deadlines & Cutoffs
+                                </label>
+                            </div>
+                            <p class="small text-muted mb-0">
+                                Bypasses the requirement that meetings must be completed 7 days before milestone deadlines.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 5. Relax Meeting Frequency -->
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100 bg-light">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="toggleFrequency"
+                                       asp-for="RelaxMeetingFrequency" />
+                                <label class="form-check-label fw-bold" for="toggleFrequency">
+                                    Relax Meeting Frequency (One Per Week & Max 14)
+                                </label>
+                            </div>
+                            <p class="small text-muted mb-0">
+                                Allows booking multiple test meetings within the same calendar week and beyond the 14-meeting cap if needed for manual testing.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 6. Relax Timetable & Availability -->
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100 bg-light">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="toggleTimetable"
+                                       asp-for="RelaxTimetableAvailability" />
+                                <label class="form-check-label fw-bold" for="toggleTimetable">
+                                    Relax Timetable & Slot Conflict Rules
+                                </label>
+                            </div>
+                            <p class="small text-muted mb-0">
+                                Allows meeting booking even if the supervisor has not uploaded a teaching timetable or has an availability conflict.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-white py-3 border-top d-flex justify-content-between align-items-center">
+                <span class="text-muted small">
+                    <i class="bi bi-info-circle me-1"></i> Target Database: <strong>@(Model.ActiveDatabaseName ?? "FYPTracker_Test")</strong>
+                </span>
+                <button type="submit" class="btn btn-primary px-4 fw-semibold shadow-sm">
+                    <i class="bi bi-save me-1"></i> Save Configuration
+                </button>
+            </div>
+        </div>
+    </form>
+</div>

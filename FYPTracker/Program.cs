@@ -157,6 +157,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
 builder.Services.AddTransient<IFileWriter, FileWriter>();
+builder.Services.AddScoped<FYPTracker.Services.Testing.ITestingModePolicy, FYPTracker.Services.Testing.TestingModePolicy>();
 
 // Existing background services.
 // Keep original workflow unchanged.
