@@ -1,7 +1,9 @@
 @using FYPTracker.Models
+@inject FYPTracker.Services.Time.ISystemClock SystemClock
 @model IEnumerable<FYPProject>
 @{
     ViewData["Title"] = "My Students";
+    string simulatedToday = SystemClock.Now.ToString("yyyy-MM-dd");
     var allMilestoneTemplates = Model.SelectMany(p => p.Milestones)
                                     .GroupBy(m => new { m.Title, m.Stage, m.MilestoneSource })
                                     .Select(g => g.First())
@@ -690,7 +692,8 @@
                 isValid = false;
             } else {
                 var selectedDate = new Date(date.value);
-                var today = new Date();
+                var simulatedTodayStr = "@simulatedToday";
+                var today = simulatedTodayStr ? new Date(simulatedTodayStr + "T00:00:00") : new Date();
                 today.setHours(0,0,0,0);
                 
                 var propDate = sysProposalDate ? new Date(sysProposalDate) : null;
@@ -711,10 +714,16 @@
                     return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
                 };
                 
-                if (isNaN(selectedDate.getTime()) || selectedDate < today) {
+                if (isNaN(selectedDate.getTime())) {
                     date.classList.remove('is-valid');
                     date.classList.add('is-invalid');
-                    dateError.innerText = selectedDate < today ? "Due date cannot be in the past." : "Please select a valid due date.";
+                    dateError.innerText = "Please select a valid due date.";
+                    dateError.classList.remove('d-none');
+                    isValid = false;
+                } else if (selectedDate < today) {
+                    date.classList.remove('is-valid');
+                    date.classList.add('is-invalid');
+                    dateError.innerText = "Due date cannot be in the past.";
                     dateError.classList.remove('d-none');
                     isValid = false;
                 } else if (isStage2 && !previewTitle.includes("Step 1") && step1Date && selectedDate < step1Date) {
@@ -754,7 +763,6 @@
                             date.classList.remove('is-invalid');
                             date.classList.add('is-valid');
                             dateError.classList.add('d-none');
-                        }
                     }
                 } else {
                     date.classList.remove('is-invalid');
@@ -832,7 +840,8 @@
             
             if (date.value) {
                 var selectedDate = new Date(date.value);
-                var today = new Date();
+                var simulatedTodayStr = "@simulatedToday";
+                var today = simulatedTodayStr ? new Date(simulatedTodayStr + "T00:00:00") : new Date();
                 today.setHours(0,0,0,0);
                 
                 var propDate = sysProposalDate ? new Date(sysProposalDate) : null;
@@ -853,10 +862,16 @@
                     return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
                 };
 
-                if (isNaN(selectedDate.getTime()) || selectedDate < today) {
+                if (isNaN(selectedDate.getTime())) {
                     date.classList.add('is-invalid');
                     date.classList.remove('is-valid');
-                    dateError.innerText = selectedDate < today ? "Due date cannot be in the past." : "Please select a valid due date.";
+                    dateError.innerText = "Please select a valid due date.";
+                    dateError.style.display = 'block';
+                    isValid = false;
+                } else if (selectedDate < today) {
+                    date.classList.add('is-invalid');
+                    date.classList.remove('is-valid');
+                    dateError.innerText = "Due date cannot be in the past.";
                     dateError.style.display = 'block';
                     isValid = false;
                 } else if (isStage2 && !targetTitleToValidate.includes("Step 1") && step1Date && selectedDate < step1Date) {

@@ -1722,7 +1722,6 @@ namespace FYPTracker.Controllers
             }
 
             // Validations handled above
-
             bool hasTimetable = await _context.SupervisorTimetableEntries.AnyAsync(t => t.SupervisorId == supervisorId && t.AcademicSessionId == activeSession.Id);
             if (!hasTimetable)
             {
@@ -1767,6 +1766,16 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
+            // Academic Policy: Maximum 14 meetings per stage.
+            var activeBookingsInStage = await _context.MeetingBookings
+                .CountAsync(m => m.StudentId == user.Id && m.Stage == currentStage && m.Status != "Rejected" && m.Status != "Cancelled" && m.Status != "Expired");
+
+            if (activeBookingsInStage >= 14)
+            {
+                TempData["Error"] = $"Maximum limit reached: You cannot book more than 14 meetings for Stage {currentStage}.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
             var startOfWeek = parsedDate.Date.AddDays(-(int)parsedDate.DayOfWeek);
             var endOfWeek = startOfWeek.AddDays(7);
             var existingThisWeek = await _context.MeetingBookings
@@ -1778,36 +1787,29 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
-            // Academic Policy: Maximum 14 meetings per stage
-            var activeBookingsInStage = await _context.MeetingBookings
-                .CountAsync(m => m.StudentId == user.Id && m.Stage == currentStage && m.Status != "Rejected" && m.Status != "Cancelled" && m.Status != "Expired");
-
-            if (activeBookingsInStage >= 14)
-            {
-                TempData["Error"] = $"Maximum limit reached: You cannot book more than 14 meetings for Stage {currentStage}.";
-                return RedirectToAction(nameof(BookMeeting));
-            }
-
             // Check active weekly recurring schedule day and time constraints
-            var activeSchedule = await _context.WeeklyMeetingSchedules
-                .FirstOrDefaultAsync(s => s.StudentId == user.Id && s.AcademicSessionId == activeSession.Id && s.Stage == currentStage && s.IsActive);
-            if (activeSchedule != null)
             {
-                if (parsedDate.DayOfWeek != activeSchedule.LockedDayOfWeek)
+                var activeSchedule = await _context.WeeklyMeetingSchedules
+                    .FirstOrDefaultAsync(s => s.StudentId == user.Id && s.AcademicSessionId == activeSession.Id && s.Stage == currentStage && s.IsActive);
+                if (activeSchedule != null)
                 {
-                    TempData["Error"] = $"Your weekly recurring meeting is scheduled for {activeSchedule.LockedDayOfWeek}s. You cannot book on {parsedDate.DayOfWeek}. If you need to meet on a different day, please request a reschedule.";
-                    return RedirectToAction(nameof(BookMeeting));
-                }
+                    if (parsedDate.DayOfWeek != activeSchedule.LockedDayOfWeek)
+                    {
+                        TempData["Error"] = $"Your weekly recurring meeting is scheduled for {activeSchedule.LockedDayOfWeek}s. You cannot book on {parsedDate.DayOfWeek}. If you need to meet on a different day, please request a reschedule.";
+                        return RedirectToAction(nameof(BookMeeting));
+                    }
 
-                if (reqTime != activeSchedule.LockedTime)
-                {
-                    string displayLocked = DateTime.Today.Add(activeSchedule.LockedTime).ToString("h:mm tt");
-                    TempData["Error"] = $"Your weekly recurring meeting is locked to {displayLocked}. You cannot book at {meetingTime}.";
-                    return RedirectToAction(nameof(BookMeeting));
+                    if (reqTime != activeSchedule.LockedTime)
+                    {
+                        string displayLocked = DateTime.Today.Add(activeSchedule.LockedTime).ToString("h:mm tt");
+                        TempData["Error"] = $"Your weekly recurring meeting is locked to {displayLocked}. You cannot book at {meetingTime}.";
+                        return RedirectToAction(nameof(BookMeeting));
+                    }
                 }
             }
 
             // Calculate WeekNumber for this stage (starts at Week 1 independent of other stages)
+            // Each approved/pending meeting takes the next available sequential week number up to 14.
             int calculatedWeekNumber = 1;
             var maxExistingWeekInStage = (await _context.MeetingBookings
                 .Where(m => m.StudentId == user.Id && m.Stage == currentStage && m.Status != "Rejected" && m.Status != "Cancelled")
@@ -1815,7 +1817,13 @@ namespace FYPTracker.Controllers
 
             if (maxExistingWeekInStage > 0)
             {
-                calculatedWeekNumber = Math.Min(14, maxExistingWeekInStage + 1);
+                calculatedWeekNumber = maxExistingWeekInStage + 1;
+            }
+
+            if (calculatedWeekNumber > 14)
+            {
+                TempData["Error"] = $"Maximum limit reached: All 14 weekly meeting slots for Stage {currentStage} are already allocated.";
+                return RedirectToAction(nameof(BookMeeting));
             }
 
             int? projectId = project?.Id;
@@ -2014,126 +2022,143 @@ namespace FYPTracker.Controllers
                 }
             }
 
-            // 1. Validate One-Meeting-Per-Week Rule
-            int diff = (7 + (parsedDate.Date.DayOfWeek - DayOfWeek.Monday)) % 7;
-            var startOfWeek = parsedDate.Date.AddDays(-diff);
-            var endOfWeek = startOfWeek.AddDays(7);
+            // Academic Policy: Maximum 14 meetings per stage
+            var activeBookingsInStage = await _context.MeetingBookings
+                .CountAsync(m => m.StudentId == user.Id && m.Stage == currentStage && m.Status != "Rejected" && m.Status != "Cancelled" && m.Status != "Expired");
 
-            var existingThisWeek = await _context.MeetingBookings
-                .Include(m => m.MeetingLog)
-                .FirstOrDefaultAsync(m => m.StudentId == user.Id && 
-                                          (validExcludeMeetingId == null || m.Id != validExcludeMeetingId.Value) &&
-                                          m.Status != "Rejected" && m.Status != "Cancelled" && m.Status != "Expired" && m.Status != "Postponed" &&
-                                          m.MeetingDate >= startOfWeek && m.MeetingDate < endOfWeek);
-
-            if (existingThisWeek != null)
+            if (!excludeMeetingId.HasValue && activeBookingsInStage >= 14)
             {
-                string formattedTime = existingThisWeek.MeetingTime;
-                try {
-                    if (TimeSpan.TryParse(existingThisWeek.MeetingTime, out var ts))
-                        formattedTime = DateTime.Today.Add(ts).ToString("h:mm tt");
-                } catch {}
-
-                bool canReschedule = existingThisWeek.Status == "Approved" &&
-                                     existingThisWeek.MeetingDate.Date >= DateTime.Today &&
-                                     (existingThisWeek.MeetingLog == null || existingThisWeek.MeetingLog.LogStatus != "Signed");
-
-                string weekMessage = existingThisWeek.Status == "Pending"
-                    ? $"You already have a Pending meeting request for this week on {existingThisWeek.MeetingDate:dd MMM yyyy} at {formattedTime}. Please wait for your supervisor's approval or rejection before requesting changes. You can only book one meeting per week."
-                    : $"You already have an {existingThisWeek.Status} meeting scheduled for this week on {existingThisWeek.MeetingDate:dd MMM yyyy} at {formattedTime}. You can only book one meeting per week.";
-
                 return Json(new
                 {
                     slots = new List<string>(),
-                    hasExistingMeetingThisWeek = true,
-                    existingMeetingId = existingThisWeek.Id,
-                    existingMeetingStatus = existingThisWeek.Status,
-                    existingMeetingDate = existingThisWeek.MeetingDate.ToString("yyyy-MM-dd"),
-                    existingMeetingDateDisplay = existingThisWeek.MeetingDate.ToString("dd MMM yyyy"),
-                    existingMeetingTime = formattedTime,
-                    canReschedule = canReschedule,
-                    message = weekMessage
+                    noAvailability = true,
+                    message = $"Maximum limit reached: You cannot book more than 14 meetings for Stage {currentStage}."
                 });
             }
 
-            // 2. Validate Active Recurring Weekly Meeting Schedule (when not rescheduling)
-            if (!validExcludeMeetingId.HasValue)
+            // 1. Validate One-Meeting-Per-Week Rule
             {
-                var activeSchedule = await _context.WeeklyMeetingSchedules
-                    .FirstOrDefaultAsync(s => s.StudentId == user.Id && 
-                                              s.AcademicSessionId == activeSession.Id && 
-                                              s.Stage == currentStage && 
-                                              s.IsActive);
+                // 1. Validate One-Meeting-Per-Week Rule
+                int diff = (7 + (parsedDate.Date.DayOfWeek - DayOfWeek.Monday)) % 7;
+                var startOfWeek = parsedDate.Date.AddDays(-diff);
+                var endOfWeek = startOfWeek.AddDays(7);
 
-                DayOfWeek? lockedDay = activeSchedule?.LockedDayOfWeek;
-                TimeSpan? lockedTime = activeSchedule?.LockedTime;
+                var existingThisWeek = await _context.MeetingBookings
+                    .Include(m => m.MeetingLog)
+                    .FirstOrDefaultAsync(m => m.StudentId == user.Id && 
+                                              (validExcludeMeetingId == null || m.Id != validExcludeMeetingId.Value) &&
+                                              m.Status != "Rejected" && m.Status != "Cancelled" && m.Status != "Expired" && m.Status != "Postponed" &&
+                                              m.MeetingDate >= startOfWeek && m.MeetingDate < endOfWeek);
 
-                if (!lockedDay.HasValue || !lockedTime.HasValue)
+                if (existingThisWeek != null)
                 {
-                    var approvedInitial = await _context.MeetingBookings
-                        .Where(m => m.StudentId == user.Id && 
-                                    m.AcademicSessionId == activeSession.Id && 
-                                    m.Stage == currentStage && 
-                                    m.Status == "Approved" && 
-                                    m.ParentMeetingBookingId == null)
-                        .OrderBy(m => m.MeetingDate)
-                        .FirstOrDefaultAsync();
+                    string formattedTime = existingThisWeek.MeetingTime;
+                    try {
+                        if (TimeSpan.TryParse(existingThisWeek.MeetingTime, out var ts))
+                            formattedTime = DateTime.Today.Add(ts).ToString("h:mm tt");
+                    } catch {}
 
-                    if (approvedInitial != null && TimeSpan.TryParse(approvedInitial.MeetingTime, out var appTime))
+                    bool canReschedule = existingThisWeek.Status == "Approved" &&
+                                         existingThisWeek.MeetingDate.Date >= DateTime.Today &&
+                                         (existingThisWeek.MeetingLog == null || existingThisWeek.MeetingLog.LogStatus != "Signed");
+
+                    string weekMessage = existingThisWeek.Status == "Pending"
+                        ? $"You already have a Pending meeting request for this week on {existingThisWeek.MeetingDate:dd MMM yyyy} at {formattedTime}. Please wait for your supervisor's approval or rejection before requesting changes. You can only book one meeting per week."
+                        : $"You already have an {existingThisWeek.Status} meeting scheduled for this week on {existingThisWeek.MeetingDate:dd MMM yyyy} at {formattedTime}. You can only book one meeting per week.";
+
+                    return Json(new
                     {
-                        lockedDay = approvedInitial.MeetingDate.DayOfWeek;
-                        lockedTime = appTime;
-                    }
+                        slots = new List<string>(),
+                        hasExistingMeetingThisWeek = true,
+                        existingMeetingId = existingThisWeek.Id,
+                        existingMeetingStatus = existingThisWeek.Status,
+                        existingMeetingDate = existingThisWeek.MeetingDate.ToString("yyyy-MM-dd"),
+                        existingMeetingDateDisplay = existingThisWeek.MeetingDate.ToString("dd MMM yyyy"),
+                        existingMeetingTime = formattedTime,
+                        canReschedule = canReschedule,
+                        message = weekMessage
+                    });
                 }
 
-                if (lockedDay.HasValue && lockedTime.HasValue)
+                // 2. Validate Active Recurring Weekly Meeting Schedule (when not rescheduling)
+                if (!validExcludeMeetingId.HasValue)
                 {
-                    // If selected day does not match locked recurring weekday
-                    if (parsedDate.DayOfWeek != lockedDay.Value)
+                    var activeSchedule = await _context.WeeklyMeetingSchedules
+                        .FirstOrDefaultAsync(s => s.StudentId == user.Id && 
+                                                  s.AcademicSessionId == activeSession.Id && 
+                                                  s.Stage == currentStage && 
+                                                  s.IsActive);
+
+                    DayOfWeek? lockedDay = activeSchedule?.LockedDayOfWeek;
+                    TimeSpan? lockedTime = activeSchedule?.LockedTime;
+
+                    if (!lockedDay.HasValue || !lockedTime.HasValue)
                     {
-                        string displayLocked = DateTime.Today.Add(lockedTime.Value).ToString("h:mm tt");
-                        return Json(new
+                        var approvedInitial = await _context.MeetingBookings
+                            .Where(m => m.StudentId == user.Id && 
+                                        m.AcademicSessionId == activeSession.Id && 
+                                        m.Stage == currentStage && 
+                                        m.Status == "Approved" && 
+                                        m.ParentMeetingBookingId == null)
+                            .OrderBy(m => m.MeetingDate)
+                            .FirstOrDefaultAsync();
+
+                        if (approvedInitial != null && TimeSpan.TryParse(approvedInitial.MeetingTime, out var appTime))
                         {
-                            slots = new List<string>(),
-                            isDayMismatch = true,
-                            lockedDay = lockedDay.Value.ToString(),
-                            lockedTime = displayLocked,
-                            message = $"Your weekly meeting schedule is locked to {lockedDay.Value}s at {displayLocked}. {parsedDate.DayOfWeek} is not your recurring meeting day. If you need to meet on a different day, please request a reschedule for that specific week."
-                        });
+                            lockedDay = approvedInitial.MeetingDate.DayOfWeek;
+                            lockedTime = appTime;
+                        }
                     }
 
-                    // Matching weekday: revalidate the locked slot on this date against timetable/overrides/defenses
-                    var lStart = lockedTime.Value;
-                    var lEnd = lStart.Add(TimeSpan.FromMinutes(meetingDur));
-                    var (hasConflict, conflictReason) = await _weeklyMeetingSchedulingService.ValidateMeetingConflictAsync(
-                        supervisorId, parsedDate.Date, lStart, lEnd, activeSession.Id, validExcludeMeetingId);
-
-                    string displayLockedTime = DateTime.Today.Add(lStart).ToString("h:mm tt");
-                    string rawLockedTime = lStart.ToString(@"hh\:mm");
-
-                    if (hasConflict)
+                    if (lockedDay.HasValue && lockedTime.HasValue)
                     {
-                        return Json(new
+                        // If selected day does not match locked recurring weekday
+                        if (parsedDate.DayOfWeek != lockedDay.Value)
                         {
-                            slots = new List<string>(),
-                            isLockedTimeConflicted = true,
-                            lockedTime = rawLockedTime,
-                            lockedTimeDisplay = displayLockedTime,
-                            conflictReason = conflictReason,
-                            message = $"Your recurring meeting time ({displayLockedTime}) is unavailable on {parsedDate:dd MMM yyyy}: {conflictReason}. Please request a reschedule for this week."
-                        });
-                    }
-                    else
-                    {
-                        return Json(new
+                            string displayLocked = DateTime.Today.Add(lockedTime.Value).ToString("h:mm tt");
+                            return Json(new
+                            {
+                                slots = new List<string>(),
+                                isDayMismatch = true,
+                                lockedDay = lockedDay.Value.ToString(),
+                                lockedTime = displayLocked,
+                                message = $"Your weekly meeting schedule is locked to {lockedDay.Value}s at {displayLocked}. {parsedDate.DayOfWeek} is not your recurring meeting day. If you need to meet on a different day, please request a reschedule for that specific week."
+                            });
+                        }
+
+                        // Matching weekday: revalidate the locked slot on this date against timetable/overrides/defenses
+                        var lStart = lockedTime.Value;
+                        var lEnd = lStart.Add(TimeSpan.FromMinutes(meetingDur));
+                        var (hasConflict, conflictReason) = await _weeklyMeetingSchedulingService.ValidateMeetingConflictAsync(
+                            supervisorId, parsedDate.Date, lStart, lEnd, activeSession.Id, validExcludeMeetingId);
+
+                        string displayLockedTime = DateTime.Today.Add(lStart).ToString("h:mm tt");
+                        string rawLockedTime = lStart.ToString(@"hh\:mm");
+
+                        if (hasConflict)
                         {
-                            slots = new List<string> { rawLockedTime },
-                            displaySlots = new List<string> { displayLockedTime },
-                            isLocked = true,
-                            lockedTime = rawLockedTime,
-                            lockedTimeDisplay = displayLockedTime,
-                            message = "Success"
-                        });
+                            return Json(new
+                            {
+                                slots = new List<string>(),
+                                isLockedTimeConflicted = true,
+                                lockedTime = rawLockedTime,
+                                lockedTimeDisplay = displayLockedTime,
+                                conflictReason = conflictReason,
+                                message = $"Your recurring meeting time ({displayLockedTime}) is unavailable on {parsedDate:dd MMM yyyy}: {conflictReason}. Please request a reschedule for this week."
+                            });
+                        }
+                        else
+                        {
+                            return Json(new
+                            {
+                                slots = new List<string> { rawLockedTime },
+                                displaySlots = new List<string> { displayLockedTime },
+                                isLocked = true,
+                                lockedTime = rawLockedTime,
+                                lockedTimeDisplay = displayLockedTime,
+                                message = "Success"
+                            });
+                        }
                     }
                 }
             }

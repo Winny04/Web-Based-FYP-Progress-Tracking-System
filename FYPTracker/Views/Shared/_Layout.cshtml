@@ -439,9 +439,7 @@
                                 <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
                                 <button type="submit" class="btn btn-xs btn-outline-warning text-white py-1 px-2 rounded fw-bold" style="font-size: 0.75rem;" title="Advance clock by 1 week">+1 Week</button>
                             </form>
-                            <a asp-controller="TestingControlPanel" asp-action="Index" class="btn btn-xs btn-outline-info text-white py-1 px-2 rounded fw-bold" style="font-size: 0.75rem;" title="Configure Testing-Only Relaxed Validation Mode">
-                                <i class="fas fa-sliders-h me-1"></i>Testing Mode
-                            </a>
+
                             <button type="button" class="btn btn-xs btn-warning text-dark py-1 px-2 rounded fw-bold" style="font-size: 0.75rem;" data-toggle="modal" data-target="#testingClockModal" data-bs-toggle="modal" data-bs-target="#testingClockModal">
                                 <i class="fas fa-calendar-alt me-1"></i>Set Clock
                             </button>

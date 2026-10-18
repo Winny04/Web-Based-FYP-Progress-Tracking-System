@@ -635,7 +635,7 @@ namespace FYPTracker.Controllers
                 if (firstProject != null)
                 {
                     var existingMilestones = await _context.FYPMilestones.Where(m => m.FYPProjectId == firstProject.Id).ToListAsync();
-                    string validationError = ValidateChronology(existingMilestones, finalTitle, dueDate);
+                    string validationError = await ValidateChronologyAsync(existingMilestones, finalTitle, dueDate);
                     if (validationError != null)
                     {
                         TempData["AddModalError"] = validationError;
@@ -719,7 +719,7 @@ namespace FYPTracker.Controllers
                 {
                     var existingMilestones = await _context.FYPMilestones.Where(m => m.FYPProjectId == firstProject.Id).ToListAsync();
                     string effectiveTitle = string.IsNullOrWhiteSpace(newTitle) ? targetTitle : newTitle;
-                    string validationError = ValidateChronology(existingMilestones, effectiveTitle, newDueDate, targetTitle);
+                    string validationError = await ValidateChronologyAsync(existingMilestones, effectiveTitle, newDueDate, targetTitle);
                     if (validationError != null)
                     {
                         TempData["EditModalError"] = validationError;
@@ -2898,7 +2898,7 @@ namespace FYPTracker.Controllers
             return RedirectToAction(nameof(Notifications));
         }
 
-        private string ValidateChronology(List<FYPMilestone> existingMilestones, string targetTitle, DateTime? newDueDate, string originalTitle = null)
+        private async Task<string?> ValidateChronologyAsync(List<FYPMilestone> existingMilestones, string targetTitle, DateTime? newDueDate, string originalTitle = null)
         {
             if (!newDueDate.HasValue) return null;
 

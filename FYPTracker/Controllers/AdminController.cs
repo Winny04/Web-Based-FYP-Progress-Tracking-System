@@ -17,8 +17,8 @@ using System.Collections.Generic;
 using FYPTracker.Common;
 using Microsoft.AspNetCore.SignalR;
 using FYPTracker.Hubs;
+using FYPTracker.Services;
 using FYPTracker.Services.Defense;
-
 
 namespace FYPTracker.Controllers
 {
@@ -3697,101 +3697,109 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 });
             }
 
-            // Diagnostic checks for lecturer prerequisites
-            foreach (var lecturerId in lecturerIds.Distinct())
+            if (academicSessionId.HasValue)
             {
-                bool hasTimetable = await _context.SupervisorTimetableEntries
-                    .AsNoTracking()
-                    .AnyAsync(t => t.SupervisorId == lecturerId && t.AcademicSessionId == academicSessionId.Value);
-
-                if (!hasTimetable)
+                // Diagnostic checks for lecturer prerequisites
+                foreach (var lecturerId in lecturerIds.Distinct())
                 {
-                    var userObj = await _context.ApplicationUsers.AsNoTracking().FirstOrDefaultAsync(u => u.Id == lecturerId);
-                    string lecturerRole = (lecturerId == examinerId) ? "Independent Examiner" : "Original Supervisor";
-                    return Json(new
+                    bool hasTimetable = await _context.SupervisorTimetableEntries
+                        .AsNoTracking()
+                        .AnyAsync(t => t.SupervisorId == lecturerId && t.AcademicSessionId == academicSessionId.Value);
+
+                    if (!hasTimetable)
                     {
-                        success = false,
-                        code = "TimetableNotConfigured",
-                        message = $"{lecturerRole} ({userObj?.FullName ?? lecturerId.ToString()}) has not configured a teaching timetable for Academic Session {milestone.Project.AcademicSession}. Genuine availability cannot be determined.",
-                        slots = Array.Empty<object>()
-                    });
-                }
-            }
-
-            // 7.1. Diagnostic check: verify if any participating lecturer has an indeterminate meeting on defenseDate
-            var meetingsOnDate = await _context.MeetingBookings
-                .AsNoTracking()
-                .Where(m => lecturerIds.Contains(m.SupervisorId) && 
-                            m.MeetingDate == defenseDate.Date && 
-                            (m.Status == "Approved" || m.Status == "Pending"))
-                .ToListAsync();
-
-            var indeterminateMeeting = meetingsOnDate.FirstOrDefault(m => 
-                (!m.StartDateTime.HasValue || !m.EndDateTime.HasValue) &&
-                (string.IsNullOrWhiteSpace(m.MeetingTime) || 
-                 (!TimeSpan.TryParse(m.MeetingTime, out _) && !DateTime.TryParse(m.MeetingTime, out _))));
-
-            if (indeterminateMeeting != null)
-            {
-                var lecturer = await _context.ApplicationUsers.AsNoTracking().FirstOrDefaultAsync(u => u.Id == indeterminateMeeting.SupervisorId);
-                string lecturerRole = (indeterminateMeeting.SupervisorId == examinerId) ? "Independent Examiner" : "Original Supervisor";
-                return Json(new
-                {
-                    success = false,
-                    code = "ConflictOrUnavailable",
-                    message = $"{lecturerRole} ({lecturer?.FullName ?? indeterminateMeeting.SupervisorId.ToString()}) has a scheduled meeting (Booking #{indeterminateMeeting.Id}) on {defenseDate:yyyy-MM-dd} with an unresolved duration/time. Slots cannot be safely determined.",
-                    slots = Array.Empty<object>()
-                });
-            }
-
-            // 7.2. Diagnostic check: verify Final Viva presentations and require authoritative duration & participant info
-            var vivasOnDate = await _context.FYPProjects
-                .AsNoTracking()
-                .Include(p => p.AssignedExaminers)
-                .Where(p => p.VivaDate.HasValue && p.VivaDate.Value.Date == defenseDate.Date &&
-                            (lecturerIds.Contains(p.SupervisorId ?? -1) || 
-                             (p.AssignedExaminers != null && p.AssignedExaminers.Any(ae => lecturerIds.Contains(ae.ExaminerId)))))
-                .ToListAsync();
-
-            if (vivasOnDate.Any())
-            {
-                var vivaDurationSetting = await _context.FYPSettings
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(s => s.Key == "VivaDurationMinutes");
-
-                if (!int.TryParse(vivaDurationSetting?.Value, out int parsedVivaDur) || parsedVivaDur < 15 || parsedVivaDur > 180)
-                {
-                    return Json(new
-                    {
-                        success = false,
-                        configurationRequired = true,
-                        code = "AcademicConfigurationRequired",
-                        message = "A participating lecturer has a Final Viva presentation scheduled on this date, but Viva Duration is not configured in Admin Settings. Defense slots cannot be safely generated.",
-                        slots = Array.Empty<object>()
-                    });
+                        var userObj = await _context.ApplicationUsers.AsNoTracking().FirstOrDefaultAsync(u => u.Id == lecturerId);
+                        string lecturerRole = (lecturerId == examinerId) ? "Independent Examiner" : "Original Supervisor";
+                        return Json(new
+                        {
+                            success = false,
+                            code = "TimetableNotConfigured",
+                            message = $"{lecturerRole} ({userObj?.FullName ?? lecturerId.ToString()}) has not configured a teaching timetable for Academic Session {milestone.Project.AcademicSession}. Genuine availability cannot be determined.",
+                            slots = Array.Empty<object>()
+                        });
+                    }
                 }
 
-                var incompleteViva = vivasOnDate.FirstOrDefault(p => 
-                    p.SupervisorId == null || p.AssignedExaminers == null || !p.AssignedExaminers.Any());
-                if (incompleteViva != null)
+                // 7.1. Diagnostic check: verify if any participating lecturer has an indeterminate meeting on defenseDate
+                var meetingsOnDate = await _context.MeetingBookings
+                    .AsNoTracking()
+                    .Where(m => lecturerIds.Contains(m.SupervisorId) && 
+                                m.MeetingDate == defenseDate.Date && 
+                                (m.Status == "Approved" || m.Status == "Pending"))
+                    .ToListAsync();
+
+                var indeterminateMeeting = meetingsOnDate.FirstOrDefault(m => 
+                    (!m.StartDateTime.HasValue || !m.EndDateTime.HasValue) &&
+                    (string.IsNullOrWhiteSpace(m.MeetingTime) || 
+                     (!TimeSpan.TryParse(m.MeetingTime, out _) && !DateTime.TryParse(m.MeetingTime, out _))));
+
+                if (indeterminateMeeting != null)
                 {
+                    var lecturer = await _context.ApplicationUsers.AsNoTracking().FirstOrDefaultAsync(u => u.Id == indeterminateMeeting.SupervisorId);
+                    string lecturerRole = (indeterminateMeeting.SupervisorId == examinerId) ? "Independent Examiner" : "Original Supervisor";
                     return Json(new
                     {
                         success = false,
                         code = "ConflictOrUnavailable",
-                        message = $"Project '{incompleteViva.Title}' has a Viva scheduled on {defenseDate:yyyy-MM-dd} with incomplete participant assignments. Defense slots cannot be safely confirmed.",
+                        message = $"{lecturerRole} ({lecturer?.FullName ?? indeterminateMeeting.SupervisorId.ToString()}) has a scheduled meeting (Booking #{indeterminateMeeting.Id}) on {defenseDate:yyyy-MM-dd} with an unresolved duration/time. Slots cannot be safely determined.",
                         slots = Array.Empty<object>()
                     });
                 }
+
+                // 7.2. Diagnostic check: verify Final Viva presentations and require authoritative duration & participant info
+                var vivasOnDate = await _context.FYPProjects
+                    .AsNoTracking()
+                    .Include(p => p.AssignedExaminers)
+                    .Where(p => p.VivaDate.HasValue && p.VivaDate.Value.Date == defenseDate.Date &&
+                                (lecturerIds.Contains(p.SupervisorId ?? -1) || 
+                                 (p.AssignedExaminers != null && p.AssignedExaminers.Any(ae => lecturerIds.Contains(ae.ExaminerId)))))
+                    .ToListAsync();
+
+                if (vivasOnDate.Any())
+                {
+                    var vivaDurationSetting = await _context.FYPSettings
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(s => s.Key == "VivaDurationMinutes");
+
+                    if (!int.TryParse(vivaDurationSetting?.Value, out int parsedVivaDur) || parsedVivaDur < 15 || parsedVivaDur > 180)
+                    {
+                        return Json(new
+                        {
+                            success = false,
+                            configurationRequired = true,
+                            code = "AcademicConfigurationRequired",
+                            message = "A participating lecturer has a Final Viva presentation scheduled on this date, but Viva Duration is not configured in Admin Settings. Defense slots cannot be safely generated.",
+                            slots = Array.Empty<object>()
+                        });
+                    }
+
+                    var incompleteViva = vivasOnDate.FirstOrDefault(p => 
+                        p.SupervisorId == null || p.AssignedExaminers == null || !p.AssignedExaminers.Any());
+                    if (incompleteViva != null)
+                    {
+                        return Json(new
+                        {
+                            success = false,
+                            code = "ConflictOrUnavailable",
+                            message = $"Project '{incompleteViva.Title}' has a Viva scheduled on {defenseDate:yyyy-MM-dd} with incomplete participant assignments. Defense slots cannot be safely confirmed.",
+                            slots = Array.Empty<object>()
+                        });
+                    }
+                }
             }
 
-            // Calculate using the correct Academic Session.
-            var slots = await availabilityService
-                .GetMutualAvailableSlotsAsync(
-                    lecturerIds.Distinct().ToList(),
-                    defenseDate.Date,
-                    durationMinutes,
-                    academicSessionId.Value);   
+            // Calculate slots
+            List<TimeSpanRange> slots = new();
+            if (academicSessionId.HasValue)
+            {
+                slots = await availabilityService
+                    .GetMutualAvailableSlotsAsync(
+                        lecturerIds.Distinct().ToList(),
+                        defenseDate.Date,
+                        durationMinutes,
+                        academicSessionId.Value);
+            }
+
 
             // 8. Format response for existing JavaScript UI
             var formattedSlots = slots.Select(s =>
