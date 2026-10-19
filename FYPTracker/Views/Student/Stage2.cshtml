@@ -4,14 +4,14 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 
     var milestones = Model.Milestones.ToList();
-    // Stage 2 Milestones
+    // Stage 2 Milestones (excluding redundant student Marksheet submission as grading is conducted via Online Rubric)
     var stage2Milestones = milestones
-        .Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
+        .Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase) && !m.Title.Contains("Marksheet", StringComparison.OrdinalIgnoreCase))
         .OrderBy(m => m.DueDate ?? DateTime.MaxValue)
         .ToList();
     
     // Overall completion check
-    bool isStage2Completed = stage2Milestones.All(m => m.Status == "Submitted" || m.Status == "Approved" || m.Status == "Completed");
+    bool isStage2Completed = stage2Milestones.Any() && stage2Milestones.All(m => m.Status == "Submitted" || m.Status == "Approved" || m.Status == "Completed");
 
     double? supStage2Score = FYPTracker.Utils.GradingHelper.CalculateStage2Score(Model.Stage2SupervisorMarksheetData, "Supervisor");
     double? exStage2Score = FYPTracker.Utils.GradingHelper.CalculateStage2Score(Model.Stage2ExaminerMarksheetData, "Examiner");
@@ -183,12 +183,162 @@
         }
     }
 
+    @{
+        var stage2CustomMilestones = Model.Milestones
+            .Where(m => m.MilestoneSource == "Supervisor" && m.Stage == 2)
+            .OrderBy(m => m.DueDate ?? DateTime.MaxValue)
+            .ToList();
+    }
+
+    <!-- ============================================================== -->
+    <!-- SECTION: Stage 2 — Supervisor Progress Milestones             -->
+    <!-- ============================================================== -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-header bg-white border-bottom pt-3 pb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h6 class="fw-bolder text-dark mb-0">
+                    <i class="fas fa-tasks text-primary me-2"></i>Stage 2 — Supervisor Progress Milestones
+                </h6>
+                <small class="text-muted">Supervisor-assigned progress checkpoints and draft review milestones for Stage 2.</small>
+            </div>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill fw-semibold fs-8">
+                <i class="fas fa-user-tie me-1"></i> Supervisor Monitored
+            </span>
+        </div>
+        <div class="card-body p-4">
+            @if (!stage2CustomMilestones.Any())
+            {
+                <div class="alert alert-light border d-flex align-items-center mb-0 p-3 rounded-3">
+                    <i class="fas fa-info-circle text-primary fs-4 me-3"></i>
+                    <div>
+                        <span class="fw-bold text-dark d-block">No Custom Progress Milestones Assigned</span>
+                        <span class="text-muted small">Your supervisor has not assigned any custom progress milestones for Stage 2 at this time. Only the 4 required final submission steps below are currently pending.</span>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="d-flex flex-column gap-3">
+                    @foreach (var cm in stage2CustomMilestones)
+                    {
+                        bool isEditable = cm.Status == "Draft" || cm.Status == "Pending" || cm.Status == "ReturnedForChanges";
+                        var cmFiles = cm.SubmissionFiles?.Where(f => !f.IsDeleted).OrderByDescending(f => f.UploadedDate).ToList() ?? new List<FYPTracker.Models.FYPSubmissionFile>();
+                        var latestFile = cmFiles.FirstOrDefault();
+
+                        string statusClass = cm.Status switch
+                        {
+                            "Completed" => "bg-success text-white",
+                            "Approved" => "bg-success text-white",
+                            "PendingSupervisorReview" => "bg-warning text-dark",
+                            "ReturnedForChanges" => "bg-danger text-white",
+                            _ => "bg-secondary text-white"
+                        };
+                        string displayStatus = cm.Status switch
+                        {
+                            "PendingSupervisorReview" => "Pending Supervisor Review",
+                            "ReturnedForChanges" => "Returned for Changes",
+                            _ => cm.Status
+                        };
+
+                        <div class="card border rounded-3 p-3 bg-light">
+                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge @statusClass rounded-pill px-3 py-1 fw-bold fs-8">@displayStatus</span>
+                                    <h6 class="fw-bold text-dark mb-0">@cm.Title</h6>
+                                </div>
+                                @if (cm.DueDate.HasValue)
+                                {
+                                    <small class="text-muted fw-semibold">
+                                        <i class="far fa-calendar-alt me-1 text-primary"></i>Due: @cm.DueDate.Value.ToString("dd MMM yyyy")
+                                    </small>
+                                }
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(cm.Description))
+                            {
+                                <p class="text-muted small mb-3">@cm.Description</p>
+                            }
+
+                            @if (!string.IsNullOrEmpty(cm.SupervisorFeedback))
+                            {
+                                <div class="alert @(cm.Status == "ReturnedForChanges" ? "alert-danger" : "alert-info") border-0 py-2 px-3 rounded-2 small mb-3">
+                                    <strong class="d-block mb-1"><i class="fas fa-comment-dots me-1"></i>Supervisor Feedback:</strong>
+                                    <span>@cm.SupervisorFeedback</span>
+                                </div>
+                            }
+
+                            <!-- Uploaded Documents History -->
+                            @if (cmFiles.Any())
+                            {
+                                <div class="mb-3">
+                                    <small class="text-muted fw-bold d-block text-uppercase mb-1" style="font-size: 0.75rem;">Submitted Documents</small>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        @foreach (var f in cmFiles)
+                                        {
+                                            <a href="@Url.Action("ViewFile", "Student", new { fileId = f.Id })" target="_blank" class="btn btn-sm btn-outline-primary bg-white text-decoration-none d-flex align-items-center gap-2">
+                                                <i class="fas fa-file-pdf text-danger"></i>
+                                                <span class="text-truncate" style="max-width: 250px;">@f.FileName</span>
+                                                <span class="badge bg-light text-secondary border small">@f.UploadedDate.ToString("dd MMM HH:mm")</span>
+                                            </a>
+                                        }
+                                    </div>
+                                </div>
+                            }
+
+                            <!-- Submission Form (if editable) -->
+                            @if (isEditable)
+                            {
+                                <form asp-action="SubmitDigitalForm" asp-controller="Student" method="post" enctype="multipart/form-data" class="mt-2 pt-2 border-top">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="milestoneId" value="@cm.Id" />
+                                    <input type="hidden" name="formType" value="Stage 2 Progress Milestone" />
+
+                                    <div class="row g-2 align-items-center">
+                                        <div class="col-md-7">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                @(cm.Status == "ReturnedForChanges" ? "Upload revised document (PDF only):" : "Upload progress document (PDF only):")
+                                            </label>
+                                            <input type="file" name="attachedFile" class="form-control form-control-sm" accept=".pdf" required />
+                                        </div>
+                                        <div class="col-md-5 d-flex align-items-end gap-2 mt-md-0 mt-2">
+                                            <button type="submit" class="btn btn-primary btn-sm fw-bold px-3 py-1 flex-grow-1">
+                                                <i class="fas fa-upload me-1"></i> @(cm.Status == "ReturnedForChanges" ? "Resubmit for Review" : "Submit Progress")
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            }
+                            else if (cm.Status == "PendingSupervisorReview")
+                            {
+                                <div class="text-muted small mt-2 pt-2 border-top">
+                                    <i class="fas fa-clock text-warning me-1"></i> Awaiting supervisor review. Document cannot be modified while under review.
+                                </div>
+                            }
+                            else if (cm.Status == "Completed" || cm.Status == "Approved")
+                            {
+                                <div class="text-success small mt-2 pt-2 border-top fw-semibold">
+                                    <i class="fas fa-check-circle me-1"></i> Milestone approved and completed by your supervisor.
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
     <div class="row g-4">
-        <!-- Submission Steps -->
-        <div class="col-lg-8">
-            <div class="card border-0 shadow-sm rounded-3 h-100">
-                <div class="card-header bg-white border-bottom pt-3 pb-2">
-                    <h6 class="fw-bolder text-dark mb-0"><i class="fas fa-tasks text-primary me-2"></i>Submission Steps</h6>
+        <!-- Submission Steps (Full Width Layout) -->
+        <div class="col-12">
+            <div class="card border-0 shadow-sm rounded-3">
+                <div class="card-header bg-white border-bottom pt-3 pb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <h6 class="fw-bolder text-dark mb-0"><i class="fas fa-tasks text-primary me-2"></i>Stage 2 Submission Steps</h6>
+                        <small class="text-muted">Complete all 4 steps in sequential order. Each step accepts official PDF documents only.</small>
+                    </div>
+                    <span class="badge bg-light text-secondary border px-3 py-2 rounded-pill fw-semibold fs-8">
+                        <i class="fas fa-info-circle me-1 text-primary"></i> Step-by-Step Verification Workflow
+                    </span>
                 </div>
                 <div class="card-body p-4">
                     
@@ -203,119 +353,277 @@
                         bool isUnderReview = step.Status == "UnderReview";
                         bool isUnlocked = previousDone || isRejected || isUnderReview;
                         bool isLast = i == stage2Milestones.Count - 1;
+                        bool isTurnitinStep = step.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase);
 
-                        string labelText = "Upload your document (PDF only)";
+                        int stepNumber = i + 1;
+                        string stepDisplayTitle = step.Title;
+                        if (isTurnitinStep)
+                        {
+                            stepDisplayTitle = $"Step {stepNumber}: Turnitin Similarity Verification";
+                        }
+                        else if (step.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase) || step.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase))
+                        {
+                            stepDisplayTitle = $"Step {stepNumber}: Final Report Submission";
+                        }
+                        else if (step.Title.Contains("Meeting", StringComparison.OrdinalIgnoreCase))
+                        {
+                            stepDisplayTitle = $"Step {stepNumber}: Record of Supervisor Meeting Form Submission";
+                        }
+                        else if (step.Title.Contains("Presentation", StringComparison.OrdinalIgnoreCase))
+                        {
+                            stepDisplayTitle = $"Step {stepNumber}: Presentation Slides Submission";
+                        }
+                        else
+                        {
+                            // Strip any existing "Step X: " prefix to renumber cleanly
+                            var colonIdx = step.Title.IndexOf(':');
+                            var cleanName = colonIdx >= 0 ? step.Title.Substring(colonIdx + 1).Trim() : step.Title;
+                            stepDisplayTitle = $"Step {stepNumber}: {cleanName}";
+                        }
+
+                        string labelText = "Upload your document (PDF format only, max 50MB):";
                         string btnText = "Submit Document";
-                        if (step.Title.Contains("Turnitin")) { labelText = "Upload your Turnitin similarity report (PDF only)"; btnText = "Submit Turnitin Report"; }
-                        else if (step.Title.Contains("DPP")) { labelText = "Upload your full dissertation report (max 300-350 pages, PDF only)"; btnText = "Submit DPP Report"; }
-                        else if (step.Title.Contains("Marksheet")) { labelText = "Upload your evaluation marksheet template (PDF only)"; btnText = "Submit Marksheet Form"; }
-                        else if (step.Title.Contains("Meeting")) { labelText = "Upload your completed and signed supervisor meeting record (PDF only)"; btnText = "Submit Meeting Record"; }
-                        else if (step.Title.Contains("Presentation")) { labelText = "Upload your final presentation slides (PDF only)"; btnText = "Submit Presentation Slides"; }
+                        if (isTurnitinStep) {
+                            labelText = "Upload the official Turnitin Similarity Report (PDF format only):";
+                            btnText = "Submit for Verification";
+                        }
+                        else if (step.Title.Contains("DPP") || step.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase)) { labelText = "Upload your full dissertation report (PDF format only):"; btnText = "Submit Final Report"; }
+                        else if (step.Title.Contains("Meeting")) { labelText = "Upload your completed and signed supervisor meeting record (PDF format only):"; btnText = "Submit Meeting Record"; }
+                        else if (step.Title.Contains("Presentation")) { labelText = "Upload your final presentation slides (PDF format only):"; btnText = "Submit Presentation Slides"; }
 
-                        <div class="@(isLast ? "" : "mb-4")" style="opacity: @(isUnlocked ? "1" : "0.5"); pointer-events: @(isUnlocked ? "auto" : "none");">
-                            <div class="d-flex align-items-center mb-3">
-                                <div class="rounded-circle text-white d-flex align-items-center justify-content-center me-3 @(isDone ? "bg-success" : (isUnlocked ? "bg-primary" : "bg-secondary"))" style="width: 32px; height: 32px; font-weight: bold; font-size: 14px;">
-                                    @(isDone ? Html.Raw("<i class=\"fas fa-check\"></i>") : (i + 1).ToString())
-                                </div>
-                                <h6 class="fw-bold mb-0 @(isDone ? "text-success" : (isRejected ? "text-danger" : (isUnderReview ? "text-warning" : "text-dark")))">@step.Title</h6>
-                            </div>
-                            <div class="ms-3 ps-4 @(isLast ? "" : "border-start border-2 " + (isDone ? "border-success" : (isRejected ? "border-danger" : (isUnderReview ? "border-warning" : "border-light"))))">
-                                <form asp-action="SubmitStage2Milestone" asp-controller="Student" enctype="multipart/form-data" method="post" class="pb-2">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="stepTitle" value="@step.Title" />
-                                    <div class="mb-0">
-                                        <label class="form-label text-muted fs-8 fw-bold">@labelText</label>
-                                        @{ var latestFile = step.SubmissionFiles?.Where(f => f.UploadedBy == Model.StudentId).OrderByDescending(f => f.UploadedDate).FirstOrDefault(); }
-                                        
-                                        @if (step.Title.Contains("Meeting") && !isDone)
+                        <div class="@(isLast ? "" : "mb-4")" style="opacity: @(isUnlocked ? "1" : "0.55");">
+                            <div class="d-flex align-items-center justify-content-between mb-3">
+                                <div class="d-flex align-items-center">
+                                    <div class="rounded-circle text-white d-flex align-items-center justify-content-center me-3 @(step.Status == "Approved" || step.Status == "Completed" ? "bg-success" : (step.Status == "Submitted" ? "bg-info" : (isUnlocked ? "bg-primary" : "bg-secondary")))" style="width: 34px; height: 34px; font-weight: bold; font-size: 14px;">
+                                        @if (step.Status == "Approved" || step.Status == "Completed")
                                         {
-                                            <div class="mb-3 p-3 bg-light rounded-3 border">
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <div>
-                                                        <h6 class="fw-bold mb-1 fs-8"><i class="fas fa-calendar-check text-primary me-2"></i>Signed Supervisor Meeting Record</h6>
-                                                        <small class="text-muted fs-9">You can download your official signed meeting logbook from the Book Meeting page.</small>
-                                                    </div>
-                                                    <a href="@Url.Action("BookMeeting", "Student")" class="btn btn-sm btn-outline-primary fs-8">
-                                                        <i class="fas fa-external-link-alt me-1"></i> Go to Meetings
-                                                    </a>
-                                                </div>
-                                            </div>
+                                            <i class="fas fa-check"></i>
                                         }
+                                        else if (step.Status == "Submitted")
+                                        {
+                                            <i class="fas fa-clock"></i>
+                                        }
+                                        else
+                                        {
+                                            <span>@(i + 1)</span>
+                                        }
+                                    </div>
+                                    <div>
+                                        <h6 class="fw-bold mb-0 @(step.Status == "Approved" || step.Status == "Completed" ? "text-success" : (isRejected ? "text-danger" : (step.Status == "Submitted" ? "text-info" : (isUnlocked ? "text-dark" : "text-muted"))))">
+                                            @stepDisplayTitle
+                                        </h6>
+                                        @if (!isUnlocked)
+                                        {
+                                            <small class="text-muted"><i class="fas fa-lock me-1"></i>Locked &bull; Complete and submit the preceding step first</small>
+                                        }
+                                    </div>
+                                </div>
 
-                                        @if(isDone) {
-                                            <div class="alert alert-light border shadow-sm p-3 mb-0 d-flex justify-content-between align-items-center rounded-3">
-                                                <div class="d-flex align-items-center text-truncate me-2">
-                                                    <i class="fas fa-file-pdf text-danger fs-3 me-3"></i>
-                                                    <div class="text-truncate">
-                                                        <span class="fs-7 fw-bold text-dark d-block text-truncate">@(latestFile?.FileName ?? "Document Submitted")</span>
-                                                        <small class="text-muted">Submitted on @(step.SubmittedDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</small>
+                                <div>
+                                    @if (step.Status == "Approved" || step.Status == "Completed")
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fw-bold">
+                                            <i class="fas fa-check-circle me-1"></i> Approved
+                                        </span>
+                                    }
+                                    else if (step.Status == "Submitted")
+                                    {
+                                        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-3 py-2 rounded-pill fw-bold">
+                                            <i class="fas fa-hourglass-half me-1"></i> Submitted / Awaiting Review
+                                        </span>
+                                    }
+                                    else if (isRejected)
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 rounded-pill fw-bold">
+                                            <i class="fas fa-times-circle me-1"></i> Revision Required
+                                        </span>
+                                    }
+                                    else if (isUnlocked)
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2 rounded-pill fw-bold">
+                                            <i class="fas fa-circle-notch me-1"></i> Not Submitted
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-muted border px-3 py-2 rounded-pill fw-semibold">
+                                            <i class="fas fa-lock me-1"></i> Locked
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="ms-3 ps-4 @(isLast ? "" : "border-start border-2 " + (step.Status == "Approved" || step.Status == "Completed" ? "border-success" : (isRejected ? "border-danger" : (step.Status == "Submitted" ? "border-info" : "border-light"))))">
+                                @if (isTurnitinStep)
+                                {
+                                    <div class="mb-3 text-muted fs-8">
+                                        Upload the official Turnitin Similarity Report for your final report. Your supervisor will review the report and confirm whether the requirement is satisfied.
+                                    </div>
+                                }
+
+                                @if (!isUnlocked)
+                                {
+                                    <div class="alert alert-secondary border bg-light p-3 mb-2 rounded-3 text-muted fs-8 d-flex align-items-center">
+                                        <i class="fas fa-lock me-2 text-secondary fs-6"></i>
+                                        <span>This step is currently locked. Complete and submit preceding step(s) to unlock document submission.</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <form asp-action="SubmitStage2Milestone" asp-controller="Student" enctype="multipart/form-data" method="post" class="pb-2">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="stepTitle" value="@step.Title" />
+                                        <div class="mb-0">
+                                            @{ var latestFile = step.SubmissionFiles?.Where(f => f.UploadedBy == Model.StudentId).OrderByDescending(f => f.UploadedDate).FirstOrDefault(); }
+                                            
+                                            @if (step.Title.Contains("Meeting") && !isDone)
+                                            {
+                                                <div class="mb-3 p-3 bg-light rounded-3 border">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <h6 class="fw-bold mb-1 fs-8"><i class="fas fa-calendar-check text-primary me-2"></i>Signed Supervisor Meeting Record</h6>
+                                                            <small class="text-muted fs-9">You can download your official signed meeting logbook from the Book Meeting page.</small>
+                                                        </div>
+                                                        <a href="@Url.Action("BookMeeting", "Student")" class="btn btn-sm btn-outline-primary fs-8">
+                                                            <i class="fas fa-external-link-alt me-1"></i> Go to Meetings
+                                                        </a>
                                                     </div>
                                                 </div>
-                                                @if(latestFile != null && !string.IsNullOrEmpty(latestFile.FilePath)) {
-                                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = latestFile.Id })" target="_blank" class="btn btn-sm btn-outline-primary fw-bold px-3 py-1 fs-8">
-                                                        <i class="fas fa-eye me-1"></i> View File
-                                                    </a>
-                                                }
-                                            </div>
-                                            @if(step.Status == "Approved" || step.Status == "Completed") {
-                                                <div class="text-success mt-2 fs-8 fw-bold"><i class="fas fa-check-circle me-1"></i> Approved by Supervisor</div>
-                                            }
-                                            else if(step.Status == "Submitted") {
-                                                <div class="text-warning mt-2 fs-8 fw-bold"><i class="fas fa-clock me-1"></i> Submitted — Pending Supervisor Review</div>
                                             }
 
-                                            @if (step.SubmissionFiles != null && step.SubmissionFiles.Any(f => f.UploadedBy != Model.StudentId))
-                                            {
-                                                <div class="mt-3 p-3 bg-light rounded-3 border">
-                                                    <h6 class="fw-bold text-primary mb-2 fs-8"><i class="fas fa-comment-dots me-1"></i>Supervisor Feedback Files</h6>
-                                                    @foreach (var sFile in step.SubmissionFiles.Where(f => f.UploadedBy != Model.StudentId).ToList())
-                                                    {
-                                                        <a href="@Url.Action("ViewFile", "Student", new { fileId = sFile.Id })" target="_blank" class="btn btn-sm btn-white border shadow-sm w-100 text-start mb-1 text-truncate fs-8 fw-bold">
-                                                            <i class="fas fa-file-download text-primary me-2"></i>@sFile.FileName
+                                            @if (isDone) {
+                                                <div class="alert alert-light border shadow-sm p-3 mb-2 d-flex justify-content-between align-items-center rounded-3">
+                                                    <div class="d-flex align-items-center text-truncate me-2">
+                                                        <i class="fas fa-file-pdf text-danger fs-3 me-3"></i>
+                                                        <div class="text-truncate">
+                                                            <span class="fs-7 fw-bold text-dark d-block text-truncate">@(latestFile?.FileName ?? "Document Submitted")</span>
+                                                            <small class="text-muted">Submitted on @(step.SubmittedDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</small>
+                                                        </div>
+                                                    </div>
+                                                    @if (latestFile != null && !string.IsNullOrEmpty(latestFile.FilePath)) {
+                                                        <a href="@Url.Action("ViewFile", "Student", new { fileId = latestFile.Id })" target="_blank" class="btn btn-sm btn-outline-primary fw-bold px-3 py-1 fs-8">
+                                                            <i class="fas fa-eye me-1"></i> View Document
                                                         </a>
                                                     }
                                                 </div>
-                                            }
-                                        } else {
-                                            @if (isRejected || isUnderReview) {
-                                                <div class="alert @(isRejected ? "alert-danger" : "alert-warning") shadow-sm p-3 mb-3 border-0 rounded-3" style="border-left: 4px solid @(isRejected ? "#dc3545" : "#ffc107") !important;">
-                                                    <h6 class="fw-bold mb-1 fs-7"><i class="fas fa-exclamation-triangle me-2"></i>@(isRejected ? "Revision Required" : "Needs Attention")</h6>
-                                                    <p class="mb-2 text-dark fs-8">@(string.IsNullOrEmpty(step.SupervisorFeedback) ? "Please check your document." : step.SupervisorFeedback)</p>
-                                                    @if(latestFile != null && !string.IsNullOrEmpty(latestFile.FilePath)) {
-                                                        <a href="@Url.Action("ViewFile", "Student", new { fileId = latestFile.Id })" target="_blank" class="btn btn-sm @(isRejected ? "btn-outline-danger" : "btn-outline-warning") mt-1 fw-bold fs-8 px-3 py-1"><i class="fas fa-eye me-1"></i> View Previous Submission</a>
-                                                    }
+
+                                                @if (isTurnitinStep && Model.IsTurnitinApproved && Model.TurnitinScore.HasValue)
+                                                {
+                                                    <div class="alert alert-success border-success-subtle bg-success-subtle p-3 mb-2 rounded-3 text-dark fs-8 d-flex align-items-center justify-content-between">
+                                                        <div class="d-flex align-items-center">
+                                                            <i class="fas fa-check-circle text-success fs-4 me-2"></i>
+                                                            <div>
+                                                                <span class="fw-bold text-success">Supervisor Verified Turnitin Similarity Index: @Model.TurnitinScore.Value%</span>
+                                                                <div class="text-muted fs-9">Report has been reviewed and verified by your supervisor. This satisfies the Step 1 requirement.</div>
+                                                            </div>
+                                                        </div>
+                                                        <span class="badge bg-success px-3 py-2 fw-bold">Verified</span>
+                                                    </div>
+                                                }
+                                                else if (step.Status == "Approved" || step.Status == "Completed") {
+                                                    <div class="text-success mt-2 fs-8 fw-bold"><i class="fas fa-check-circle me-1"></i> Approved by Supervisor</div>
+                                                }
+                                                else if (step.Status == "Submitted") {
+                                                    <div class="alert alert-info border-info-subtle bg-info-subtle p-3 mb-2 rounded-3 text-dark fs-8">
+                                                        <div class="d-flex align-items-start">
+                                                            <i class="fas fa-info-circle text-info fs-5 me-2 mt-1"></i>
+                                                            <div>
+                                                                <span class="fw-bold text-info-emphasis d-block mb-1">Awaiting Supervisor Verification</span>
+                                                                <span class="text-muted">Your document has been securely uploaded and submitted. Your supervisor will review the report and verify whether it meets university requirements. Once reviewed and approved, your submission is locked and Step 2 will unlock automatically.</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                }
+
+                                                @if (step.SubmissionFiles != null && step.SubmissionFiles.Any(f => f.UploadedBy != Model.StudentId))
+                                                {
+                                                    <div class="mt-3 p-3 bg-light rounded-3 border">
+                                                        <h6 class="fw-bold text-primary mb-2 fs-8"><i class="fas fa-comment-dots me-1"></i>Supervisor Feedback Files</h6>
+                                                        @foreach (var sFile in step.SubmissionFiles.Where(f => f.UploadedBy != Model.StudentId).ToList())
+                                                        {
+                                                            <a href="@Url.Action("ViewFile", "Student", new { fileId = sFile.Id })" target="_blank" class="btn btn-sm btn-white border shadow-sm w-100 text-start mb-1 text-truncate fs-8 fw-bold">
+                                                                <i class="fas fa-file-download text-primary me-2"></i>@sFile.FileName
+                                                            </a>
+                                                        }
+                                                    </div>
+                                                }
+                                            } else {
+                                                @if (isRejected || isUnderReview) {
+                                                    <div class="alert @(isRejected ? "alert-danger" : "alert-warning") shadow-sm p-3 mb-3 border-0 rounded-3" style="border-left: 4px solid @(isRejected ? "#dc3545" : "#ffc107") !important;">
+                                                        <h6 class="fw-bold mb-1 fs-7"><i class="fas fa-exclamation-triangle me-2"></i>@(isRejected ? "Revision Required" : "Needs Attention")</h6>
+                                                        <p class="mb-2 text-dark fs-8">@(string.IsNullOrEmpty(step.SupervisorFeedback) ? "Please review your document and submit a revised version." : step.SupervisorFeedback)</p>
+                                                        @if (latestFile != null && !string.IsNullOrEmpty(latestFile.FilePath)) {
+                                                            <a href="@Url.Action("ViewFile", "Student", new { fileId = latestFile.Id })" target="_blank" class="btn btn-sm @(isRejected ? "btn-outline-danger" : "btn-outline-warning") mt-1 fw-bold fs-8 px-3 py-1"><i class="fas fa-eye me-1"></i> View Previous Submission</a>
+                                                        }
+                                                    </div>
+                                                }
+
+                                                <div class="p-3 bg-light rounded-3 border mb-3">
+                                                    <label class="form-label text-dark fs-8 fw-bold mb-2">@labelText</label>
+                                                    <input class="form-control form-control-sm" type="file" name="file" accept=".pdf" required onchange="handleFileSelect(this, '@step.Id')">
+                                                    <div id="fileMeta_@step.Id" class="mt-2 fs-9 text-muted d-none">
+                                                        <i class="fas fa-file-pdf text-danger me-1"></i> Selected: <strong id="fileName_@step.Id" class="text-dark"></strong> (<span id="fileSize_@step.Id"></span>)
+                                                    </div>
+                                                    <small class="text-muted fs-9 d-block mt-2">
+                                                        <i class="fas fa-check text-success me-1"></i> Accepted format: <strong>PDF (.pdf)</strong> &bull; Max file size: 50MB
+                                                    </small>
                                                 </div>
+                                                <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold shadow-sm"><i class="fas fa-paper-plane me-2"></i> @btnText</button>
                                             }
-                                            <input class="form-control form-control-sm" type="file" name="file" accept=".pdf" required>
-                                            <button type="submit" class="btn btn-primary btn-sm mt-3 px-4 fw-bold shadow-sm"><i class="fas fa-upload me-2"></i> @btnText</button>
-                                        }
-                                    </div>
-                                </form>
+                                        </div>
+                                    </form>
+                                }
                             </div>
                         </div>
 
                         previousDone = isDone;
                     }
 
-                </div>
-            </div>
-        </div>
+                    <!-- Joint Marking & Assessment Info Box (After Final Step) -->
+                    <div class="mt-4 p-3 rounded-3 bg-light border d-flex align-items-center gap-3">
+                        <i class="fas fa-graduation-cap text-primary fs-3"></i>
+                        <div>
+                            <span class="fw-bold text-dark fs-7 d-block">Stage 2 Final Assessment &amp; Joint Marking</span>
+                            <small class="text-muted">Once Step 4 is submitted, your full dissertation submission will be forwarded for joint evaluation by your Supervisor and Examiner. Final grades and overall percentages are calculated and released officially upon completion of both marksheet evaluations.</small>
+                        </div>
+                    </div>
 
-        <!-- Important Notes -->
-        <div class="col-lg-4">
-            <div class="card border-0 shadow-sm rounded-3 sticky-top" style="top: 20px;">
-                <div class="card-header bg-white border-bottom pt-3 pb-2">
-                    <h6 class="fw-bolder text-dark mb-0"><i class="fas fa-info-circle text-primary me-2"></i>Important Notes</h6>
-                </div>
-                <div class="card-body p-4 text-muted">
-                    <ul class="list-unstyled mb-0 fs-7" style="line-height: 1.6;">
-                        <li class="mb-3 d-flex align-items-start gap-2"><i class="fas fa-angle-right text-primary mt-1"></i> <span>You must complete each step in sequential order.</span></li>
-                        <li class="mb-3 d-flex align-items-start gap-2"><i class="fas fa-angle-right text-primary mt-1"></i> <span>The DPP Report must strictly be between 300 to 350 pages long.</span></li>
-                        <li class="mb-3 d-flex align-items-start gap-2"><i class="fas fa-angle-right text-primary mt-1"></i> <span>All uploads must be in <strong>PDF format</strong>.</span></li>
-                        <li class="d-flex align-items-start gap-2"><i class="fas fa-angle-right text-primary mt-1"></i> <span>Once Step 5 is submitted, your project will be available for joint marking by your Supervisor and Examiner.</span></li>
-                    </ul>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        function handleFileSelect(input, stepId) {
+            const metaContainer = document.getElementById('fileMeta_' + stepId);
+            const nameSpan = document.getElementById('fileName_' + stepId);
+            const sizeSpan = document.getElementById('fileSize_' + stepId);
+            
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                const fileName = file.name;
+                const fileExtension = fileName.split('.').pop().toLowerCase();
+                
+                if (fileExtension !== 'pdf') {
+                    alert('Invalid file format. Please select an official PDF (.pdf) file.');
+                    input.value = '';
+                    if (metaContainer) metaContainer.classList.add('d-none');
+                    return;
+                }
+                
+                let sizeStr = (file.size / 1024).toFixed(1) + ' KB';
+                if (file.size > 1024 * 1024) {
+                    sizeStr = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+                }
+                
+                if (nameSpan) nameSpan.textContent = fileName;
+                if (sizeSpan) sizeSpan.textContent = sizeStr;
+                if (metaContainer) metaContainer.classList.remove('d-none');
+            } else {
+                if (metaContainer) metaContainer.classList.add('d-none');
+            }
+        }
+    </script>
+}

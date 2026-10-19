@@ -69,7 +69,7 @@ namespace FYPTracker.Tests
         {
             var env = CreateEnv("Development");
             var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Development;Trusted_Connection=True;");
-            var smtpSettings = new SmtpSettings { Offline = true, DevRedirectEmail = "test@domain.com" };
+            var smtpSettings = new SmtpSettings { Offline = true, DevRedirectEmail = "boonwinny04@gmail.com" };
 
             var emailService = new EmailService(smtpSettings, env, config);
 

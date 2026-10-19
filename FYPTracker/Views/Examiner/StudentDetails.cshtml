@@ -73,29 +73,17 @@
                 </h3>
             </div>
             <div class="card-body py-3">
-                <div class="mb-4 p-3 bg-light rounded border">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="fw-bold mb-1"><i class="fas fa-file-excel text-success me-2"></i>Stage 1 Marksheet Template (Reference Only)</h6>
-                            <small class="text-muted">Download the official Stage 1 Excel marksheet template for reference. Official evaluation is completed using the Online Rubric below.</small>
-                        </div>
-                        <a href="@Url.Action("DownloadMarksheet", "Examiner", new { projectId = Model.Id })" class="btn btn-sm btn-outline-success">
-                            <i class="fas fa-download me-1"></i> Download
-                        </a>
-                    </div>
-                </div>
-
                 <div class="mb-5 bg-light p-4 rounded">
                     <p class="text-muted fs-6 mb-3">
                         Student's submitted proposal/report files for your evaluation:
                     </p>
                     <h6 class="fw-bold fs-7 mb-2 text-dark">Student's Submitted Files:</h6>
                     @{
-                        var stage1Milestone = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission"));
-                        if (stage1Milestone != null && stage1Milestone.SubmissionFiles != null && stage1Milestone.SubmissionFiles.Any())
+                        var stage1Milestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(Model.Milestones);
+                        if (stage1Milestone != null && stage1Milestone.SubmissionFiles != null && stage1Milestone.SubmissionFiles.Any(f => !f.IsDeleted))
                         {
                             <div class="d-flex flex-wrap gap-2 mt-2">
-                                @foreach (var file in stage1Milestone.SubmissionFiles)
+                                @foreach (var file in stage1Milestone.SubmissionFiles.Where(f => !f.IsDeleted))
                                 {
                                     <a href="@file.FilePath" class="btn btn-sm btn-outline-primary" target="_blank" download>
                                         <i class="fas fa-file-download me-1"></i> @file.FileName
@@ -114,15 +102,24 @@
                 
                 <!-- Stage 1 Upload Section -->
                 <div class="mb-5">
+                    @{
+                        var s1FinalMilestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(Model.Milestones);
+                        string exData = s1FinalMilestone?.ExaminerMarksheetData ?? "";
+                        bool isExStage1Draft = FYPTracker.Utils.GradingHelper.IsMarksheetDraft(exData);
+                        bool isExStage1Done = !string.IsNullOrEmpty(Model.Stage1ExaminerMarksheetPath) || (!string.IsNullOrEmpty(exData) && !isExStage1Draft);
+                    }
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h4 class="fw-bolder text-dark mb-0">Stage 1: Proposal Assessment</h4>
-                        @{
-                            bool isExStage1Done = !string.IsNullOrEmpty(Model.Stage1ExaminerMarksheetPath);
-                        }
+                        <h4 class="fw-bolder text-dark mb-0">Stage 1 Proposal Assessment</h4>
                         @if (isExStage1Done)
                         {
                             <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fw-bold">
                                 <i class="fas fa-check-circle me-1"></i> Stage 1 Evaluated
+                            </span>
+                        }
+                        else if (isExStage1Draft)
+                        {
+                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 rounded-pill fw-bold">
+                                <i class="fas fa-edit me-1"></i> Draft Saved
                             </span>
                         }
                     </div>
@@ -135,12 +132,12 @@
                                     <i class="fas fa-clipboard-check text-primary me-2"></i>Stage 1 Online Rubric Evaluation
                                 </h5>
                                 <p class="text-muted small mb-0">
-                                    Evaluate student's proposal using the official 6-criterion rubric with interactive sliders, feedback, and draft saving.
+                                    Official 6-criterion proposal assessment with interactive criteria, qualitative feedback, and automatic grading.
                                 </p>
                             </div>
                             <a href="@Url.Action("GradeMarksheetStage1", "Examiner", new { id = Model.Id })" class="btn btn-primary px-4 py-2 fw-bold text-nowrap shadow-sm">
-                                <i class="fas @(isExStage1Done ? "fa-eye" : "fa-edit") me-2"></i>
-                                @(isExStage1Done ? "View / Update Stage 1 Assessment" : "Grade Stage 1 Rubric Marksheet")
+                                <i class="fas @(isExStage1Done ? "fa-eye" : (isExStage1Draft ? "fa-pencil-alt" : "fa-edit")) me-2"></i>
+                                @(isExStage1Done ? "View / Update Stage 1 Assessment" : (isExStage1Draft ? "Continue Draft Evaluation" : "Grade Stage 1 Rubric"))
                             </a>
                         </div>
                     </div>
@@ -204,7 +201,7 @@
 
                 <div class="separator mb-5"></div>
                 
-                <!-- Stage 2 Upload Section -->
+                <!-- Stage 2 Section -->
                 <div class="mb-5">
                     <h4 class="fw-bolder text-dark mb-4 mt-2">Stage 2: Final Assessment</h4>
                     @{
@@ -277,7 +274,8 @@
                             </div>
                             }
                         }
-                    }                    else
+                    }
+                    else
                     {
                         <div class="alert alert-warning d-flex align-items-center p-4">
                             <i class="bi bi-exclamation-triangle fs-2 text-warning me-3"></i>
@@ -298,46 +296,46 @@
                             </div>
                         </div>
                     }      
-                        @if (!string.IsNullOrEmpty(Model.FinalGrade))
-                        {
-                            <div class="alert alert-primary mt-3 p-3 d-flex align-items-center">
-                                <i class="bi bi-award-fill text-primary fs-3 me-3"></i>
-                                <div class="d-flex flex-column">
-                                    <span class="fw-bolder fs-6">Auto-Graded Result</span>
-                                    <span class="text-dark fs-4 fw-bold">Final Grade: <span class="text-primary">@Model.FinalGrade</span></span>
-                                </div>
+                    @if (!string.IsNullOrEmpty(Model.FinalGrade))
+                    {
+                        <div class="alert alert-primary mt-3 p-3 d-flex align-items-center">
+                            <i class="bi bi-award-fill text-primary fs-3 me-3"></i>
+                            <div class="d-flex flex-column">
+                                <span class="fw-bolder fs-6">Auto-Graded Result</span>
+                                <span class="text-dark fs-4 fw-bold">Final Grade: <span class="text-primary">@Model.FinalGrade</span></span>
                             </div>
+                        </div>
+                        
+                        <!-- Extracted Feedback -->
+                        <div class="mt-4">
+                            <h5 class="fw-bolder text-dark mb-3">Extracted Feedback</h5>
                             
-                            <!-- Extracted Feedback -->
-                            <div class="mt-4">
-                                <h5 class="fw-bolder text-dark mb-3">Extracted Feedback</h5>
-                                
-                                @if (!string.IsNullOrEmpty(Model.ExaminerStrengths))
-                                {
-                                    <div class="mb-3">
-                                        <h6 class="text-gray-800 fw-bold mb-1">Strengths of Report</h6>
-                                        <div class="p-2 bg-light rounded text-gray-700 fs-7">@Model.ExaminerStrengths</div>
-                                    </div>
-                                }
-                                
-                                @if (!string.IsNullOrEmpty(Model.ExaminerImprovements))
-                                {
-                                    <div class="mb-3">
-                                        <h6 class="text-gray-800 fw-bold mb-1">Areas for Improvement</h6>
-                                        <div class="p-2 bg-light rounded text-gray-700 fs-7">@Model.ExaminerImprovements</div>
-                                    </div>
-                                }
-                                
-                                @if (!string.IsNullOrEmpty(Model.ExaminerComments))
-                                {
-                                    <div class="mb-3">
-                                        <h6 class="text-gray-800 fw-bold mb-1">Additional Comments</h6>
-                                        <div class="p-2 bg-light rounded text-gray-700 fs-7">@Model.ExaminerComments</div>
-                                    </div>
-                                }
-                            </div>
-                        }
+                            @if (!string.IsNullOrEmpty(Model.ExaminerStrengths))
+                            {
+                                <div class="mb-3">
+                                    <h6 class="text-gray-800 fw-bold mb-1">Strengths of Report</h6>
+                                    <div class="p-2 bg-light rounded text-gray-700 fs-7">@Model.ExaminerStrengths</div>
+                                </div>
+                            }
+                            
+                            @if (!string.IsNullOrEmpty(Model.ExaminerImprovements))
+                            {
+                                <div class="mb-3">
+                                    <h6 class="text-gray-800 fw-bold mb-1">Areas for Improvement</h6>
+                                    <div class="p-2 bg-light rounded text-gray-700 fs-7">@Model.ExaminerImprovements</div>
+                                </div>
+                            }
+                            
+                            @if (!string.IsNullOrEmpty(Model.ExaminerComments))
+                            {
+                                <div class="mb-3">
+                                    <h6 class="text-gray-800 fw-bold mb-1">Additional Comments</h6>
+                                    <div class="p-2 bg-light rounded text-gray-700 fs-7">@Model.ExaminerComments</div>
+                                </div>
+                            }
+                        </div>
                     }
+                </div>
                 </div>
             </div>
         </div>
@@ -484,64 +482,110 @@
                     <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
                         <thead>
                             <tr class="fw-bolder text-muted bg-light">
-                                <th class="ps-4 min-w-50px rounded-start">Week</th>
-                                <th class="min-w-150px">Date & Time</th>
-                                <th class="min-w-150px">Key Topics Discussed</th>
-                                <th class="min-w-150px">Action Points</th>
-                                <th class="min-w-150px">Completed Actions</th>
-                                <th class="min-w-150px">Supervisor Feedback</th>
-                                <th class="min-w-100px">Status</th>
-                                <th class="min-w-100px text-end rounded-end">View</th>
+                                <th class="ps-4 min-w-80px rounded-start">Week</th>
+                                <th class="min-w-140px">Date & Time</th>
+                                <th class="min-w-160px">Key Topics Discussed</th>
+                                <th class="min-w-160px">Action Points</th>
+                                <th class="min-w-160px">Completed Actions</th>
+                                <th class="min-w-180px">Supervisor Feedback</th>
+                                <th class="min-w-120px text-center">Status</th>
+                                <th class="min-w-120px text-end pe-4 rounded-end">Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @if(ViewBag.MeetingBookings != null && ((IEnumerable<dynamic>)ViewBag.MeetingBookings).Any())
+                            @if (ViewBag.MeetingBookings != null && ((IEnumerable<dynamic>)ViewBag.MeetingBookings).Any())
                             {
-                                foreach(var booking in ViewBag.MeetingBookings)
+                                foreach (var booking in ViewBag.MeetingBookings)
                                 {
-                                    var log = booking.MeetingLog;
+                                    var log = booking.MeetingLog as FYPTracker.Models.MeetingLog;
                                     <tr>
                                         <td class="ps-4">
-                                            <span class="fw-bold text-dark">Week @(booking.WeekNumber ?? 0)</span>
+                                            <span class="fw-bolder text-dark">Week @(booking.WeekNumber ?? 0)</span>
                                             <div class="text-muted fs-8">Stage @(booking.Stage ?? 1)</div>
                                         </td>
                                         <td>
-                                            @booking.MeetingDate.ToString("dd MMM yyyy") <br/>
+                                            <span class="fw-bold text-dark">@booking.MeetingDate.ToString("dd MMM yyyy")</span><br/>
                                             <span class="text-muted fs-7">@booking.MeetingTime</span>
                                         </td>
                                         
                                         @if (log != null)
                                         {
-                                            <td>@log.KeyTopicsDiscussed</td>
-                                            <td>@log.ActionPointsForNextMeeting</td>
-                                            <td>@log.CompletedActionsAndNotes</td>
-                                            <td>@(string.IsNullOrWhiteSpace(log.SupervisorComments) ? "-" : log.SupervisorComments)</td>
                                             <td>
-                                                @if(log.LogStatus == "Signed") {
-                                                    <span class="badge badge-light-success"><i class="fas fa-check-circle text-success me-1"></i>Signed</span>
-                                                } else {
-                                                    <span class="badge badge-light-warning">@log.LogStatus</span>
+                                                <div class="text-dark fs-7" style="max-width: 220px; word-break: break-word;">
+                                                    @(string.IsNullOrWhiteSpace(log.KeyTopicsDiscussed) ? "-" : log.KeyTopicsDiscussed)
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="text-dark fs-7" style="max-width: 220px; word-break: break-word;">
+                                                    @(string.IsNullOrWhiteSpace(log.ActionPointsForNextMeeting) ? "-" : log.ActionPointsForNextMeeting)
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="text-dark fs-7" style="max-width: 220px; word-break: break-word;">
+                                                    @(string.IsNullOrWhiteSpace(log.CompletedActionsAndNotes) ? "-" : log.CompletedActionsAndNotes)
+                                                </div>
+                                            </td>
+                                            <td>
+                                                @{
+                                                    string cleanFeedback = log.DisplayComments?.Trim() ?? "";
+                                                    if (cleanFeedback.StartsWith("data:image", StringComparison.OrdinalIgnoreCase) ||
+                                                        cleanFeedback.StartsWith("data:application", StringComparison.OrdinalIgnoreCase) ||
+                                                        (cleanFeedback.Length > 100 && !cleanFeedback.Contains(" ") && !cleanFeedback.Contains(".")) ||
+                                                        cleanFeedback.Contains("base64,", StringComparison.OrdinalIgnoreCase))
+                                                    {
+                                                        cleanFeedback = "";
+                                                    }
+                                                }
+                                                <div class="text-dark fs-7" style="max-width: 220px; word-break: break-word;">
+                                                    @if (!string.IsNullOrWhiteSpace(cleanFeedback))
+                                                    {
+                                                        <span>@cleanFeedback</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted fst-italic">No feedback provided</span>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td class="text-center">
+                                                @if (log.LogStatus == "Signed")
+                                                {
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fw-bold">
+                                                        <i class="fas fa-check-circle me-1"></i> Signed
+                                                    </span>
+                                                }
+                                                else if (log.LogStatus == "Submitted")
+                                                {
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill fw-bold">
+                                                        <i class="fas fa-clock me-1"></i> Submitted
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 rounded-pill fw-bold">
+                                                        <i class="fas fa-pencil-alt me-1"></i> Draft
+                                                    </span>
                                                 }
                                             </td>
-                                            <td class="text-end">
-                                                @if(!string.IsNullOrEmpty(log.PdfLogbookPath))
+                                            <td class="text-end pe-4">
+                                                @if (log.LogStatus == "Signed")
                                                 {
-                                                    <a href="@log.PdfLogbookPath" class="btn btn-sm btn-light btn-active-light-primary px-3" target="_blank" title="View PDF">
-                                                        View
+                                                    <a href="@Url.Action("ViewMeetingLog", "Examiner", new { id = log.Id })" target="_blank" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center" title="View Digital Record of Supervisor Meeting PDF">
+                                                        <i class="fas fa-file-pdf me-1"></i> View PDF
                                                     </a>
                                                 }
                                                 else
                                                 {
-                                                    <span class="text-muted fs-8">No PDF</span>
+                                                    <span class="text-muted small fst-italic">Not Available</span>
                                                 }
                                             </td>
                                         }
                                         else
                                         {
-                                            <td colspan="3" class="text-muted fst-italic">Not submitted yet</td>
-                                            <td class="text-muted">-</td>
-                                            <td><span class="badge badge-light-secondary">Pending Log</span></td>
-                                            <td class="text-end"><span class="text-muted fs-8">-</span></td>
+                                            <td colspan="3" class="text-muted fst-italic">Logbook not created yet</td>
+                                            <td><span class="text-muted fst-italic">No feedback provided</span></td>
+                                            <td class="text-center"><span class="badge bg-secondary-subtle text-secondary border px-3 py-2 rounded-pill">Not Created</span></td>
+                                            <td class="text-end pe-4"><span class="text-muted small fst-italic">Not Available</span></td>
                                         }
                                     </tr>
                                 }
@@ -549,8 +593,8 @@
                             else
                             {
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted py-5">
-                                        No meeting logs found.
+                                    <td colspan="8" class="text-center text-muted py-5">
+                                        No meeting logs found for this project.
                                     </td>
                                 </tr>
                             }

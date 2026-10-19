@@ -792,7 +792,10 @@ namespace FYPTracker.Controllers
             }
             catch { /* Continue on notification error */ }
 
-            TempData["Success"] = $"Successfully assigned {examiner.FullName} as Examiner for '{project.Title}'.";
+            TempData["SuccessTitle"] = "Examiner Assigned Successfully";
+            TempData["SuccessExaminerName"] = examiner.FullName;
+            TempData["SuccessProjectTitle"] = project.Title;
+            TempData["Success"] = $"{examiner.FullName} has been assigned as the examiner for {project.Title}.";
             return RedirectToAction(nameof(ManageProjects));
         }
 
@@ -952,11 +955,15 @@ namespace FYPTracker.Controllers
             }
             catch { /* Continue on notification error */ }
 
-            string matchMsg = aiScore > 0
-                ? $"AI matched <strong>{selectedExaminer.FullName}</strong> with <strong>{aiScore} keyword(s)</strong> in common with the project scope."
-                : $"No strong keyword match found. AI assigned <strong>{selectedExaminer.FullName}</strong> as the best available examiner (you may override manually).";
+            string secondaryMsg = aiScore > 0
+                ? $"The system matched {selectedExaminer.FullName} with {aiScore} keyword(s) in common with the project scope."
+                : "No strong specialization match was found, so the system selected an eligible examiner.";
 
-            TempData["Success"] = $"🤖 AI Auto-Assign Complete! {matchMsg} Assigned to '{project.Title}'.";
+            TempData["SuccessTitle"] = "Examiner Assigned Successfully";
+            TempData["SuccessExaminerName"] = selectedExaminer.FullName;
+            TempData["SuccessProjectTitle"] = project.Title;
+            TempData["SuccessSecondary"] = secondaryMsg;
+            TempData["Success"] = $"{selectedExaminer.FullName} has been assigned as the examiner for {project.Title}.";
             return RedirectToAction(nameof(ManageProjects));
         }
 

@@ -3,7 +3,7 @@
     ViewData["Title"] = "Stage 1 Proposal Assessment";
     Layout = "~/Views/Shared/_Layout.cshtml";
 
-    var stage1Milestone = Model.Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase));
+    var stage1Milestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(Model.Milestones);
     var proposalFile = stage1Milestone?.SubmissionFiles?.Where(f => !f.IsDeleted).OrderByDescending(f => f.UploadedDate).FirstOrDefault();
     var existingMarks = stage1Milestone?.ExaminerMarksheetData ?? "";
     bool isDraft = FYPTracker.Utils.GradingHelper.IsMarksheetDraft(existingMarks);

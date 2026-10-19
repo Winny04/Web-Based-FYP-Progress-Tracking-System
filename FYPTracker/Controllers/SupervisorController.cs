@@ -505,33 +505,47 @@ namespace FYPTracker.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AddMilestone(int projectId, string title, string description, DateTime? dueDate)
+        public async Task<IActionResult> AddMilestone(int projectId, string title, string description, DateTime? dueDate, int stage = 1)
         {
             var user = await GetCurrentUserAsync();
             var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user!.Id);
             
             if (project != null)
             {
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    TempData["Error"] = "Milestone title cannot be empty.";
+                    return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+                }
+
+                if (stage == 2 && project.Stage1Grade != "Pass")
+                {
+                    TempData["Error"] = "Cannot create Stage 2 milestones until Stage 1 has been passed.";
+                    return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+                }
+
+                int effectiveStage = (stage == 2) ? 2 : 1;
+
                 var milestone = new FYPMilestone
                 {
                     FYPProjectId = projectId,
-                    Title = title,
+                    Title = title.Trim(),
                     Description = description,
                     DueDate = dueDate,
                     Status = "Draft",
                     MilestoneSource = "Supervisor",
                     IsRequired = false,
-                    Stage = 1,
+                    Stage = effectiveStage,
                     CreatedDate = DateTime.Now
                 };
                 _context.FYPMilestones.Add(milestone);
                 await _context.SaveChangesAsync();
                 
                 // --- SignalR Real-Time Notification ---
-                var assignPayload = new { Type = "AssignMilestone", MilestoneId = milestone.Id, Title = title, Message = $"You have been assigned a new milestone: {title}" };
+                var assignPayload = new { Type = "AssignMilestone", MilestoneId = milestone.Id, Title = milestone.Title, Message = $"You have been assigned a new milestone: {milestone.Title}" };
                 await _hubContext.Clients.Group($"User_{project.StudentId}").SendAsync("ReceiveMilestoneUpdate", assignPayload);
 
-                TempData["Success"] = "Milestone added successfully.";
+                TempData["Success"] = $"Stage {effectiveStage} milestone added successfully.";
             }
             return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
         }
@@ -549,7 +563,7 @@ namespace FYPTracker.Controllers
                 .Include(m => m.Project)
                 .FirstOrDefaultAsync(m => m.Id == milestoneId && m.Project.SupervisorId == user.Id);
 
-            if (milestone == null || milestone.MilestoneSource != "Supervisor" || milestone.Stage != 1)
+            if (milestone == null || milestone.MilestoneSource != "Supervisor" || (milestone.Stage != 1 && milestone.Stage != 2))
             {
                 TempData["Error"] = "Invalid progress milestone.";
                 return RedirectToAction(nameof(MyProjects));
@@ -875,21 +889,32 @@ namespace FYPTracker.Controllers
 
             if (milestone != null)
             {
-                if (milestone.Status == "Approved")
+                if (milestone.MilestoneSource != "Supervisor")
                 {
-                    TempData["Error"] = "Cannot edit an approved milestone.";
+                    TempData["Error"] = "Only custom supervisor-created milestones can be edited.";
                     return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
                 }
 
-                if (milestone.Status != "Pending")
+                if (milestone.Status == "Approved" || milestone.Status == "Completed")
                 {
-                    // For Submitted/UnderReview/Rejected, only allow editing the Due Date
+                    TempData["Error"] = "Cannot edit an approved or completed milestone.";
+                    return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
+                }
+
+                if (milestone.Status != "Pending" && milestone.Status != "Draft")
+                {
+                    // For Submitted/PendingSupervisorReview/ReturnedForChanges, only allow editing the Due Date
                     milestone.DueDate = dueDate;
                     TempData["Success"] = "Milestone due date extended.";
                 }
                 else
                 {
-                    milestone.Title = title;
+                    if (string.IsNullOrWhiteSpace(title))
+                    {
+                        TempData["Error"] = "Milestone title cannot be empty.";
+                        return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
+                    }
+                    milestone.Title = title.Trim();
                     milestone.Description = description;
                     milestone.DueDate = dueDate;
                     TempData["Success"] = "Milestone updated successfully.";
@@ -898,7 +923,7 @@ namespace FYPTracker.Controllers
                 await _context.SaveChangesAsync();
                 
                 // --- SignalR Real-Time Notification ---
-                var editPayload = new { Type = "EditMilestone", MilestoneId = milestone.Id, Title = title, Message = $"Your milestone '{title}' has been updated." };
+                var editPayload = new { Type = "EditMilestone", MilestoneId = milestone.Id, Title = milestone.Title, Message = $"Your milestone '{milestone.Title}' has been updated." };
                 await _hubContext.Clients.Group($"User_{milestone.Project.StudentId}").SendAsync("ReceiveMilestoneUpdate", editPayload);
                 
                 return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
@@ -917,13 +942,19 @@ namespace FYPTracker.Controllers
 
             if (milestone != null)
             {
-                if (milestone.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase))
+                if (milestone.MilestoneSource != "Supervisor")
                 {
-                    TempData["Error"] = "Core system milestones (Proposal and Final Report) cannot be deleted.";
+                    TempData["Error"] = "System-required milestones cannot be deleted.";
                     return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
                 }
 
-                if (milestone.Status != "Pending")
+                if (milestone.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || milestone.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
+                {
+                    TempData["Error"] = "Core system milestones cannot be deleted.";
+                    return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
+                }
+
+                if (milestone.Status != "Pending" && milestone.Status != "Draft")
                 {
                     TempData["Error"] = "Cannot delete a milestone that has already been submitted by the student.";
                     return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
@@ -1154,8 +1185,8 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var stage1Milestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase));
-            if (stage1Milestone == null || (stage1Milestone.Status != "Approved" && stage1Milestone.Status != "Completed"))
+            var stage1Milestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(project.Milestones);
+            if (stage1Milestone == null || !FYPTracker.Utils.GradingHelper.IsStage1DppApproved(stage1Milestone))
             {
                 TempData["Error"] = "You must review and approve the Stage 1 Final Submission milestone before grading the proposal rubric.";
                 return RedirectToAction(nameof(ProjectDetails), new { id = id });
@@ -1182,10 +1213,10 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var stage1Milestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase));
-            if (stage1Milestone == null)
+            var stage1Milestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(project.Milestones);
+            if (stage1Milestone == null || !FYPTracker.Utils.GradingHelper.IsStage1DppApproved(stage1Milestone))
             {
-                TempData["Error"] = "Stage 1 Proposal milestone not found.";
+                TempData["Error"] = "You must review and approve the Stage 1 Final Submission milestone before grading the proposal rubric.";
                 return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
             }
 
@@ -1429,6 +1460,24 @@ namespace FYPTracker.Controllers
 
             if (milestone != null && milestone.Project.SupervisorId == user?.Id)
             {
+                bool isStage1Dpp = !string.IsNullOrEmpty(milestone.Title) &&
+                    (milestone.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase)) &&
+                    !milestone.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase);
+
+                if (isStage1Dpp)
+                {
+                    // Stage 1 Final DPP permits only Approve Submission or Reject Submission
+                    if (status != "Approved" && status != "Rejected")
+                    {
+                        return BadRequest(new { message = "Only 'Approve Submission' or 'Reject Submission' is permitted for Stage 1 Final DPP." });
+                    }
+
+                    if (status == "Rejected" && string.IsNullOrWhiteSpace(remarks))
+                    {
+                        return BadRequest(new { message = "Feedback / Remarks are required to reject the submission." });
+                    }
+                }
+
                 if (milestone.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase))
                 {
                     if (status == "Approved") {
@@ -1617,7 +1666,10 @@ namespace FYPTracker.Controllers
                 if (gradedFile != null && gradedFile.Length > 0)
                 {
                     var extCheck = System.IO.Path.GetExtension(gradedFile.FileName).ToLowerInvariant();
-                    bool isMarksheetStage = milestone.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase);
+                    bool isStage1FinalDpp = !string.IsNullOrEmpty(milestone.Title) &&
+                        (milestone.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase)) &&
+                        !milestone.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase);
+                    bool isMarksheetStage = !isStage1FinalDpp && milestone.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase);
                     
                     var allowedExt = isMarksheetStage 
                         ? new[] { ".xls", ".xlsx" } 
@@ -1625,7 +1677,7 @@ namespace FYPTracker.Controllers
 
                     if (!allowedExt.Contains(extCheck))
                     {
-                        string msg = isMarksheetStage ? "Only Excel (.xls, .xlsx) files are allowed for the graded marksheet." : "Only PDF, Word, and Excel documents are allowed for graded files.";
+                        string msg = isMarksheetStage ? "Only Excel (.xls, .xlsx) files are allowed for the graded marksheet." : "Only PDF, Word, and Excel documents are allowed for feedback files.";
                         return BadRequest(new { message = msg });
                     }
                     if (gradedFile.Length > 20 * 1024 * 1024)

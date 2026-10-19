@@ -308,7 +308,7 @@
                                                 }
                                                 
                                                 @{
-                                                    var s1FinalMilestone = s1.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
+                                                    var s1FinalMilestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(s1);
                                                     bool isS1Approved = s1FinalMilestone != null && (s1FinalMilestone.Status == "Approved" || s1FinalMilestone.Status == "Completed");
                                                     bool isS1SupGraded = !string.IsNullOrEmpty(s1FinalMilestone?.SupervisorMarksheetData);
                                                     if (isS1Approved)

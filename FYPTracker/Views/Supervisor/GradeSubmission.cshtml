@@ -1015,10 +1015,10 @@
                     </h5>
                 </div>
                 <div class="card-body p-4">
-                    @if (Model.MilestoneSource == "Supervisor" && Model.Stage == 1)
+                    @if (Model.MilestoneSource == "Supervisor" && (Model.Stage == 1 || Model.Stage == 2))
                     {
                         <div class="mb-3">
-                            <span class="badge bg-info-subtle text-info-emphasis rounded-pill px-3 py-2"><i class="fas fa-tasks me-1"></i>DPP Work &amp; Progress (not a formal submission)</span>
+                            <span class="badge bg-info-subtle text-info-emphasis rounded-pill px-3 py-2"><i class="fas fa-tasks me-1"></i>@(Model.Stage == 2 ? "Stage 2 Progress Milestone (not a formal submission)" : "DPP Work & Progress (not a formal submission)")</span>
                             <div class="small text-muted mt-2">Current status: <strong>@(Model.Status == "PendingSupervisorReview" ? "Pending Supervisor Review" : Model.Status == "ReturnedForChanges" ? "Returned for Changes" : Model.Status)</strong></div>
                         </div>
                         @if (Model.Status == "PendingSupervisorReview")
@@ -1047,6 +1047,9 @@
                             // Lock the form if the milestone has already been graded
                             bool isLocked = Model.Status == "Approved" || Model.Status == "Rejected" || Model.Status == "SupervisorSigned" || Model.Status == "ReturnedForEdits" || Model.Status == "PendingPanelReview" || Model.Status == "DefenseRequired" || Model.Status == "DefenseScheduled" || Model.Status == "AdminApproved" || Model.Status == "Completed";
                             bool isMarksheetStage = !string.IsNullOrEmpty(Model.Title) && Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase);
+                            bool isStage1Dpp = !string.IsNullOrEmpty(Model.Title) &&
+                                (Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase)) &&
+                                !Model.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase);
                         }
                         
                         @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)))
@@ -1136,23 +1139,10 @@
                             {
                                 <label class="form-label fw-bold text-dark"><i class="fas fa-file-upload text-danger me-2"></i>Upload Feedback File (Optional)</label>
                             }
-                            @if (Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase))
-                            {
-                                <div class="mb-3 p-3 bg-light rounded border">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <h6 class="fw-bold mb-1"><i class="fas fa-file-excel text-success me-2"></i>Stage 1 Marksheet Template (Reference Only)</h6>
-                                            <small class="text-muted">Official evaluation is completed via the <strong>Stage 1 Online Rubric</strong>. Download this template for reference if needed.</small>
-                                        </div>
-                                        <a href="@Url.Action("DownloadMarksheet", "Supervisor", new { projectId = Model.Project.Id })" class="btn btn-sm btn-outline-success">
-                                            <i class="fas fa-download me-1"></i> Download
-                                        </a>
-                                    </div>
-                                </div>
-                            }
+                            @* Stage 1 Marksheet Template panel removed: official grading is conducted via Online Rubric *@
 
                             <input type="file" id="gradedFile" name="gradedFile" accept=".pdf,.doc,.docx,.xls,.xlsx" class="form-control form-control-solid form-control-lg" @(isLocked ? "disabled" : "") />
-                            <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Optional: Upload marked/annotated feedback version of the student's submission (PDF, Word, or Excel). Official marks are evaluated via the online rubric.</div>
+                            <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Upload Additional Feedback (Optional): annotated PDF, Word, or Excel document. Official marks are evaluated via the online rubric.</div>
                         </div>
 
                         @if (isLocked)
@@ -1171,6 +1161,15 @@
                                     </button>
                                     <button type="submit" name="status" value="Rejected" class="btn btn-warning btn-lg rounded-3 fw-bold shadow-sm flex-fill text-dark" style="flex: 1 1 auto; min-width: 120px;" onclick="if(typeof updateSignatureData === 'function') updateSignatureData();">
                                         <i class="fas fa-undo me-1"></i> Return to Student for Edits
+                                    </button>
+                                }
+                                else if (isStage1Dpp)
+                                {
+                                    <button type="submit" name="status" value="Approved" class="btn btn-success btn-lg rounded-3 fw-bold shadow-sm flex-fill" style="flex: 1 1 auto; min-width: 140px;">
+                                        <i class="fas fa-check-circle me-1"></i> Approve Submission
+                                    </button>
+                                    <button type="submit" name="status" value="Rejected" class="btn btn-danger btn-lg rounded-3 fw-bold shadow-sm flex-fill" style="flex: 1 1 auto; min-width: 140px;">
+                                        <i class="fas fa-times-circle me-1"></i> Reject Submission
                                     </button>
                                 }
                                 else

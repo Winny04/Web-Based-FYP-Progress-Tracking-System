@@ -121,13 +121,19 @@ Console.WriteLine($"FYPTracker Server: {serverName}");
 Console.WriteLine($"FYPTracker Database: {dbName}");
 Console.WriteLine("====================================");
 
+
+// =====================================================
+// 3. ENTITY FRAMEWORK / SQL SERVER
+// =====================================================
+
 builder.Services.AddDbContext<FYPTrackerContext>(options =>
     options.UseSqlServer(connectionString, sqlOptions =>
     {
         sqlOptions.CommandTimeout(80);
     }));
+
 // =====================================================
-// 3. REGISTER SERVICES
+// 4. REGISTER SERVICES
 // =====================================================
 
 builder.Services.AddSingleton<
@@ -166,7 +172,7 @@ builder.Services.AddHostedService<
     SupervisorRequestTimeoutService>();
 
 // =====================================================
-// 4. SMTP CONFIGURATION
+// 5. SMTP CONFIGURATION
 // =====================================================
 
 var smtpSettings = new SmtpSettings();
@@ -177,17 +183,6 @@ builder.Configuration.Bind(
 
 builder.Services.AddSingleton(smtpSettings);
 
-// =====================================================
-// 5. ENTITY FRAMEWORK / SQL SERVER
-// =====================================================
-
-builder.Services.AddDbContext<FYPTrackerContext>(options =>
-    options.UseSqlServer(
-        connectionString,
-        sqlOptions =>
-        {
-            sqlOptions.CommandTimeout(80);
-        }));
 
 // =====================================================
 // 6. CONTROLLERS / SESSION / SIGNALR

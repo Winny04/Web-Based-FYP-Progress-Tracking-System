@@ -360,8 +360,8 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var stage1Milestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase));
-            if (stage1Milestone == null || (stage1Milestone.Status != "Approved" && stage1Milestone.Status != "Completed"))
+            var stage1Milestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(project.Milestones);
+            if (stage1Milestone == null || !FYPTracker.Utils.GradingHelper.IsStage1DppApproved(stage1Milestone))
             {
                 TempData["Error"] = "The supervisor must approve the Stage 1 Final Submission milestone before you can evaluate the proposal rubric.";
                 return RedirectToAction(nameof(StudentDetails), new { projectId = id });
@@ -387,10 +387,10 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var stage1Milestone = project.Milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase));
-            if (stage1Milestone == null)
+            var stage1Milestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(project.Milestones);
+            if (stage1Milestone == null || !FYPTracker.Utils.GradingHelper.IsStage1DppApproved(stage1Milestone))
             {
-                TempData["Error"] = "Stage 1 Proposal milestone not found.";
+                TempData["Error"] = "The supervisor must approve the Stage 1 Final Submission milestone before you can evaluate the proposal rubric.";
                 return RedirectToAction(nameof(StudentDetails), new { projectId });
             }
 
@@ -602,6 +602,73 @@ namespace FYPTracker.Controllers
                     return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"Marksheet_{safeTitle}.xlsx");
                 }
             }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ViewMeetingLog(int id)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var log = await _context.MeetingLogs
+                .Include(l => l.MeetingBooking)
+                    .ThenInclude(m => m.Student)
+                .Include(l => l.MeetingBooking)
+                    .ThenInclude(m => m.Supervisor)
+                .FirstOrDefaultAsync(l => l.Id == id);
+
+            if (log == null || log.MeetingBooking == null)
+                return NotFound();
+
+            // Authorize: ensure the logged in Examiner is assigned to this meeting's project
+            bool isAssigned = await _context.FYPProjects
+                .AnyAsync(p => p.Id == log.MeetingBooking.FYPProjectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
+
+            if (!isAssigned)
+                return Forbid();
+
+            if (log.LogStatus != "Signed")
+                return NotFound();
+
+            // The PDF lives outside wwwroot: never Redirect() to App_Data.
+            string? stored = log.SignedPdfLogbookPath?.Replace('\\', '/');
+
+            if (!string.IsNullOrWhiteSpace(stored))
+            {
+                string? relativeDir = null;
+                string? name = null;
+
+                const string testingPrefix = "App_Data/MeetingLogSnapshots/Testing/";
+                const string standardPrefix = "App_Data/MeetingLogSnapshots/";
+
+                if (stored.StartsWith(testingPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    relativeDir = "App_Data/MeetingLogSnapshots/Testing";
+                    name = stored.Substring(testingPrefix.Length);
+                }
+                else if (stored.StartsWith(standardPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    relativeDir = "App_Data/MeetingLogSnapshots";
+                    name = stored.Substring(standardPrefix.Length);
+                }
+
+                if (!string.IsNullOrWhiteSpace(relativeDir) &&
+                    !string.IsNullOrWhiteSpace(name) &&
+                    name == Path.GetFileName(name) &&
+                    name.StartsWith($"Signed_Log_{log.MeetingBookingId}_", StringComparison.OrdinalIgnoreCase) &&
+                    name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    string physicalPath = Path.Combine(
+                        _env.ContentRootPath, relativeDir.Replace('/', Path.DirectorySeparatorChar), name);
+                    if (System.IO.File.Exists(physicalPath))
+                        return PhysicalFile(physicalPath, "application/pdf", enableRangeProcessing: true);
+                }
+            }
+
+            // Fallback for legacy signed records without a signed PDF snapshot: show printable view
+            var proj = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Id == log.MeetingBooking.FYPProjectId);
+            ViewBag.ProjectName = proj?.Title ?? "FYP Project";
+            return View("~/Views/Shared/MeetingLogPrintable.cshtml", log);
         }
 
         // --- Joint Evaluation Marksheet ---

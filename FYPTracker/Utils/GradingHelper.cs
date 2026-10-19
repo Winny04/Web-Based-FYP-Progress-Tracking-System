@@ -335,5 +335,167 @@ namespace FYPTracker.Utils
             }
             return 0;
         }
+
+        public static Models.FYPMilestone? GetStage1FinalMilestone(IEnumerable<Models.FYPMilestone>? milestones)
+        {
+            if (milestones == null) return null;
+
+            // 1. Precise match on canonical MilestoneCode
+            var byCode = milestones.FirstOrDefault(m => string.Equals(m.MilestoneCode, "STAGE1_FINAL", StringComparison.OrdinalIgnoreCase));
+            if (byCode != null) return byCode;
+
+            // 2. Specific title match for Stage 1 Final Submission (ignoring Turnitin Checking)
+            var byTitle = milestones.FirstOrDefault(m => 
+                !string.IsNullOrEmpty(m.Title) &&
+                m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
+            if (byTitle != null) return byTitle;
+
+            // 3. Fallback DPP match excluding Turnitin
+            return milestones.FirstOrDefault(m =>
+                !string.IsNullOrEmpty(m.Title) &&
+                m.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase) &&
+                !m.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase));
+        }
+
+        public static bool IsStage1DppApproved(Models.FYPMilestone? milestone)
+        {
+            if (milestone == null) return false;
+            return string.Equals(milestone.Status, "Approved", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(milestone.Status, "Completed", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsStage1ProposalLocked(Models.FYPMilestone? milestone, string? stage1Grade)
+        {
+            if (string.Equals(stage1Grade, "Pass", StringComparison.OrdinalIgnoreCase)) return true;
+            if (milestone == null) return false;
+            return string.Equals(milestone.Status, "Submitted", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(milestone.Status, "UnderReview", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(milestone.Status, "Approved", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(milestone.Status, "Completed", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static List<ViewModels.StudentFeedbackItemVM> GetAuthorizedStudentFeedback(Models.FYPProject? project)
+        {
+            var result = new List<ViewModels.StudentFeedbackItemVM>();
+            if (project == null || project.Milestones == null) return result;
+
+            var milestones = project.Milestones.ToList();
+
+            // 1. Supervisor Milestone Review Remarks (SupervisorFeedback on milestones)
+            foreach (var m in milestones)
+            {
+                if (!string.IsNullOrWhiteSpace(m.SupervisorFeedback))
+                {
+                    // Find optional supervisor-uploaded feedback attachment if available
+                    var feedbackFile = m.SubmissionFiles?
+                        .Where(f => !f.IsDeleted && f.UploadedBy != project.StudentId)
+                        .OrderByDescending(f => f.UploadedDate)
+                        .FirstOrDefault();
+
+                    string sourceLabel = m.Stage == 2 ? "Stage 2 Submission Feedback" : "Supervisor Submission Review";
+                    string badgeColor = m.Stage == 2 ? "bg-info text-white" : "bg-primary text-white";
+                    string targetUrl = m.Stage == 2 ? "/Student/Stage2" : "/Student/Forms#stage1HistorySection";
+
+                    result.Add(new ViewModels.StudentFeedbackItemVM
+                    {
+                        SourceType = sourceLabel,
+                        SourceBadgeClass = badgeColor,
+                        IconClass = "fas fa-user-tie",
+                        MilestoneTitle = m.Title,
+                        MilestoneStage = m.Stage,
+                        FeedbackContent = m.SupervisorFeedback.Trim(),
+                        FeedbackDate = m.DueDate ?? m.SubmittedDate,
+                        TargetUrl = targetUrl,
+                        AttachmentFileName = feedbackFile?.FileName ?? string.Empty,
+                        AttachmentFileId = feedbackFile?.Id
+                    });
+                }
+            }
+
+            // 2. Supervisor Stage 1 Online Rubric Evaluation Feedback (when finalized)
+            var stage1Milestone = GetStage1FinalMilestone(milestones);
+            if (stage1Milestone != null && !string.IsNullOrWhiteSpace(stage1Milestone.SupervisorMarksheetData))
+            {
+                bool isDraft = IsMarksheetDraft(stage1Milestone.SupervisorMarksheetData);
+                if (!isDraft)
+                {
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(stage1Milestone.SupervisorMarksheetData);
+                        var root = doc.RootElement;
+                        var parts = new List<string>();
+
+                        if (root.TryGetProperty("Strengths", out var sProp) && !string.IsNullOrWhiteSpace(sProp.GetString()))
+                            parts.Add($"Strengths: {sProp.GetString()!.Trim()}");
+                        if (root.TryGetProperty("Improvements", out var iProp) && !string.IsNullOrWhiteSpace(iProp.GetString()))
+                            parts.Add($"Improvements: {iProp.GetString()!.Trim()}");
+                        if (root.TryGetProperty("Comments", out var cProp) && !string.IsNullOrWhiteSpace(cProp.GetString()))
+                            parts.Add($"Comments: {cProp.GetString()!.Trim()}");
+
+                        if (parts.Any())
+                        {
+                            result.Add(new ViewModels.StudentFeedbackItemVM
+                            {
+                                SourceType = "Supervisor Evaluation",
+                                SourceBadgeClass = "bg-primary text-white",
+                                IconClass = "fas fa-clipboard-check",
+                                MilestoneTitle = "Stage 1 Proposal Assessment",
+                                MilestoneStage = 1,
+                                FeedbackContent = string.Join(" | ", parts),
+                                FeedbackDate = stage1Milestone.SubmittedDate,
+                                TargetUrl = "/Student/Forms#stage1HistorySection"
+                            });
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            // 3. Stage 2 Supervisor Marksheet Feedback (if recorded)
+            if (!string.IsNullOrWhiteSpace(project.Stage2SupervisorMarksheetData))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(project.Stage2SupervisorMarksheetData);
+                    if (doc.RootElement.TryGetProperty("Feedback", out var fbProp) && !string.IsNullOrWhiteSpace(fbProp.GetString()))
+                    {
+                        result.Add(new ViewModels.StudentFeedbackItemVM
+                        {
+                            SourceType = "Stage 2 Submission Feedback",
+                            SourceBadgeClass = "bg-info text-white",
+                            IconClass = "fas fa-clipboard-check",
+                            MilestoneTitle = "Stage 2 Supervisor Evaluation",
+                            MilestoneStage = 2,
+                            FeedbackContent = fbProp.GetString()!.Trim(),
+                            FeedbackDate = project.UpdatedDate ?? project.CreatedDate,
+                            TargetUrl = "/Student/Stage2"
+                        });
+                    }
+                }
+                catch { }
+            }
+
+            // 4. Released Examiner Marksheet Feedback
+            // Only released when Stage1ExaminerMarksheetPath is set or explicit ExaminerComments released
+            if (!string.IsNullOrWhiteSpace(project.ExaminerComments))
+            {
+                result.Add(new ViewModels.StudentFeedbackItemVM
+                {
+                    SourceType = "Examiner Evaluation",
+                    SourceBadgeClass = "bg-success text-white",
+                    IconClass = "fas fa-user-graduate",
+                    MilestoneTitle = "Examiner Evaluation",
+                    MilestoneStage = 2,
+                    FeedbackContent = project.ExaminerComments.Trim(),
+                    FeedbackDate = project.UpdatedDate,
+                    TargetUrl = "/Student/Stage2"
+                });
+            }
+
+            // Order by most recent date descending (fallback to newest additions)
+            return result
+                .OrderByDescending(f => f.FeedbackDate ?? DateTime.MinValue)
+                .ToList();
+        }
     }
 }

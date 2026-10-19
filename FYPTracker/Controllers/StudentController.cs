@@ -117,6 +117,9 @@ namespace FYPTracker.Controllers
 
             ViewBag.MyRequests = myRequests;
 
+            // Fetch authorized feedback for student dashboard
+            ViewBag.LatestFeedbacks = FYPTracker.Utils.GradingHelper.GetAuthorizedStudentFeedback(project);
+
             return View(project);
         }
 
@@ -311,7 +314,7 @@ namespace FYPTracker.Controllers
                     Status = "Submitted",
                     CreatedDate = DateTime.Now,
                     SubmittedDate = DateTime.Now,
-                    IsReadyForJointEvaluation = stepTitle.StartsWith("Step 5") // Only ready after step 5 is submitted
+                    IsReadyForJointEvaluation = stepTitle.StartsWith("Step 5") || stepTitle.Contains("Presentation", StringComparison.OrdinalIgnoreCase)
                 };
                 _context.FYPMilestones.Add(milestone);
             }
@@ -319,7 +322,7 @@ namespace FYPTracker.Controllers
             {
                 milestone.Status = "Submitted";
                 milestone.SubmittedDate = DateTime.Now;
-                if (stepTitle.StartsWith("Step 5")) milestone.IsReadyForJointEvaluation = true;
+                if (stepTitle.StartsWith("Step 5") || stepTitle.Contains("Presentation", StringComparison.OrdinalIgnoreCase)) milestone.IsReadyForJointEvaluation = true;
                 _context.FYPMilestones.Update(milestone);
             }
 
@@ -867,9 +870,14 @@ namespace FYPTracker.Controllers
             }
 
             // ── Guard: Prevent modifying graded milestones (except Rejected which needs revision) ──
-            if (milestone.Status == "Approved" || milestone.Status == "Completed")
+            bool isStage1Passed = milestone.Project?.Stage1Grade == "Pass";
+            bool isStage1FinalMilestone = milestone.MilestoneCode == "STAGE1_FINAL" || 
+                                          (!string.IsNullOrEmpty(milestone.Title) && milestone.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase)) ||
+                                          (formType == "Proposal Form");
+
+            if (milestone.Status == "Approved" || milestone.Status == "Completed" || (isStage1FinalMilestone && isStage1Passed))
             {
-                TempData["Error"] = "This milestone has already been graded and cannot be modified or resubmitted.";
+                TempData["Error"] = "This milestone has already been finalized/graded and cannot be modified or resubmitted.";
                 return RedirectToAction("Forms");
             }
 
@@ -936,13 +944,14 @@ namespace FYPTracker.Controllers
                 await _context.SaveChangesAsync();
             }
 
-            // ── Guard: DPP Work & Progress (Supervisor-added Stage 1) milestones ──
-            if (milestone.MilestoneSource == "Supervisor" && milestone.Stage == 1)
+            // ── Guard: Supervisor-added progress milestones (Stage 1 & Stage 2) ──
+            if (milestone.MilestoneSource == "Supervisor" && (milestone.Stage == 1 || milestone.Stage == 2))
             {
-                if (formType != "DPP Work & Progress" || !(milestone.Status == "Draft" || milestone.Status == "Pending" || milestone.Status == "ReturnedForChanges"))
+                bool isAllowedFormType = formType == "DPP Work & Progress" || formType == "Stage 2 Progress Milestone";
+                if (!isAllowedFormType || !(milestone.Status == "Draft" || milestone.Status == "Pending" || milestone.Status == "ReturnedForChanges"))
                 {
                     TempData["Error"] = "This progress milestone cannot be modified in its current status.";
-                    return RedirectToAction("Forms");
+                    return milestone.Stage == 2 ? RedirectToAction("Stage2") : RedirectToAction("Forms");
                 }
             }
 
@@ -1207,7 +1216,7 @@ namespace FYPTracker.Controllers
                             TempData["Success"] = "Sent for Supervisor Review successfully.";
                         }
                     } else {
-                        if (milestone.MilestoneSource == "Supervisor" && milestone.Stage == 1)
+                        if (milestone.MilestoneSource == "Supervisor" && (milestone.Stage == 1 || milestone.Stage == 2))
                         {
                             if (milestone.Status != "ReturnedForChanges") milestone.Status = "Draft";
                         }
@@ -1229,8 +1238,8 @@ namespace FYPTracker.Controllers
                             milestone.Status = "AdminApproved";
                         }
                         milestone.Remarks = $"Form: {formType}. Details: {title}. JSON: {detailsJson}";
-                    } else if (milestone.MilestoneSource == "Supervisor" && milestone.Stage == 1) {
-                        // DPP Work & Progress: not a formal submission
+                    } else if (milestone.MilestoneSource == "Supervisor" && (milestone.Stage == 1 || milestone.Stage == 2)) {
+                        // Supervisor progress milestone (Stage 1 / Stage 2): not a formal submission, awaits supervisor review
                         milestone.Status = "PendingSupervisorReview";
                         milestone.Remarks = $"Form: {formType}. Details: {title}. JSON: {detailsJson}";
                     } else {
@@ -1280,7 +1289,7 @@ namespace FYPTracker.Controllers
                         if (System.IO.File.Exists(physicalPath)) System.IO.File.Delete(physicalPath);
                     }
                     TempData["Error"] = "Failed to save submission to database. Please try again.";
-                    return RedirectToAction("Forms");
+                    return milestone.Stage == 2 ? RedirectToAction("Stage2") : RedirectToAction("Forms");
                 }
                 
                 await LogActivityAsync(user.Id, "Submission", isDraft ? "Draft Saved" : "Form Submitted", isDraft ? $"Saved draft of {formType} for {milestone.Title}" : $"Submitted {formType} for {milestone.Title}");
@@ -1302,7 +1311,7 @@ namespace FYPTracker.Controllers
                 }
 
             if (!isDraft) TempData["Success"] = "Your form has been submitted successfully!";
-            return RedirectToAction("Forms");
+            return milestone.Stage == 2 ? RedirectToAction("Stage2") : RedirectToAction("Forms");
         }
 
         [HttpGet]

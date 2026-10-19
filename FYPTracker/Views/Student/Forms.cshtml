@@ -442,8 +442,8 @@
             (iafMilestone.Status != "Draft" && iafMilestone.Status != "Pending" && iafMilestone.Status != "ReturnedForEdits" && iafMilestone.Status != "PanelRevisionRequired" && iafMilestone.Status != "ChangeOfTopicRequired" && !string.IsNullOrEmpty(iafMilestone.Status))
         ));
 
-        var proposalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
-        bool isProposalApproved = proposalMilestone != null && proposalMilestone.Status == "Approved";
+        var proposalMilestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(milestones);
+        bool isProposalApproved = proposalMilestone != null && FYPTracker.Utils.GradingHelper.IsStage1DppApproved(proposalMilestone);
         
         var stage2Milestones = milestones.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
 
@@ -1260,12 +1260,13 @@
                             
                                 @* Select corresponding Milestone *@
                                 @{
-                                    var propMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase)) ?? milestones.FirstOrDefault();
+                                    var propMilestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(milestones);
                                     int propMilestoneId = propMilestone?.Id ?? 0;
-                                    bool isPropLocked = propMilestone != null && (propMilestone.Status == "Submitted" || propMilestone.Status == "UnderReview" || propMilestone.Status == "Approved");
+                                    bool isStage1PassedNow = Model?.Stage1Grade == "Pass";
+                                    bool isPropLocked = FYPTracker.Utils.GradingHelper.IsStage1ProposalLocked(propMilestone, Model?.Stage1Grade);
                                 }
                                 
-                                @if (propMilestone != null && propMilestone.Status == "Rejected")
+                                @if (propMilestone != null && propMilestone.Status == "Rejected" && !isStage1PassedNow)
                                 {
                                     <div class="alert alert-danger d-flex align-items-center mt-3 border-danger shadow-sm">
                                         <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
@@ -1277,33 +1278,103 @@
                                 }
                                 else if (isPropLocked)
                                 {
-                                    <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
-                                        <i class="fas fa-lock fs-2 me-3 text-info"></i>
-                                        <div>
-                                            <h5 class="fw-bold text-dark mb-1">Stage 1 Final Submission Locked</h5>
-                                            <p class="mb-0 text-muted">Your proposal has already been submitted. Current Status: <span class="badge bg-white text-dark ms-1 shadow-sm border">@propMilestone.Status</span></p>
+                                    <div class="alert alert-info d-flex align-items-start mt-3 border-info shadow-sm">
+                                        <i class="fas fa-lock fs-2 me-3 text-info mt-1"></i>
+                                        <div class="w-100">
+                                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                                                <h5 class="fw-bold text-dark mb-0">Stage 1 DPP — Submission Completed</h5>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    @if (isStage1PassedNow)
+                                                    {
+                                                        <span class="badge bg-success text-white shadow-sm px-3 py-1 fw-bold"><i class="fas fa-check-circle me-1"></i>Stage 1 Passed</span>
+                                                    }
+                                                    <span class="badge bg-white text-dark shadow-sm border px-3 py-1"><i class="fas fa-lock me-1 text-muted"></i>Read-Only</span>
+                                                </div>
+                                            </div>
+                                            <p class="mb-2 text-muted">
+                                                <strong>Project Title:</strong> @Model.Title<br />
+                                                <strong>Submission Status:</strong> <span class="badge bg-primary text-white ms-1 shadow-sm">@(propMilestone?.Status ?? "Completed")</span>
+                                            </p>
+
+                                            @* Submitted Proposal Files (Student upload) *@
+                                            @{
+                                                var studentSubmittedFiles = propMilestone?.SubmissionFiles?
+                                                    .Where(f => !f.IsDeleted && (f.UploadedBy == Model.StudentId || f.UploadedBy == ViewBag.CurrentUser?.Id || (propMilestone.SubmissionFiles.All(sf => sf.UploadedBy == f.UploadedBy))))
+                                                    .OrderByDescending(f => f.UploadedDate)
+                                                    .ToList();
+                                                
+                                                if (studentSubmittedFiles == null || !studentSubmittedFiles.Any())
+                                                {
+                                                    // Fallback to any non-deleted file on the proposal milestone
+                                                    studentSubmittedFiles = propMilestone?.SubmissionFiles?
+                                                        .Where(f => !f.IsDeleted)
+                                                        .OrderByDescending(f => f.UploadedDate)
+                                                        .ToList();
+                                                }
+                                            }
+
+                                            @if (studentSubmittedFiles != null && studentSubmittedFiles.Any())
+                                            {
+                                                <hr class="my-3 border-info opacity-25">
+                                                <h6 class="fw-bold text-dark mb-2"><i class="fas fa-file-pdf text-danger me-2"></i>Submitted Final Proposal (DPP)</h6>
+                                                <div class="d-flex flex-column gap-2 mb-3">
+                                                    @foreach (var file in studentSubmittedFiles)
+                                                    {
+                                                        <div class="d-flex align-items-center justify-content-between rounded-3 p-2 bg-white border border-info border-opacity-25 shadow-sm">
+                                                            <div class="d-flex align-items-center text-truncate me-3">
+                                                                <i class="fas fa-file-pdf text-danger fs-5 me-3"></i>
+                                                                <div class="d-flex flex-column text-truncate">
+                                                                    <span class="text-dark fw-bold text-truncate">@file.FileName</span>
+                                                                    <small class="text-muted">Submitted on @(file.UploadedDate.ToString("dd MMM yyyy, hh:mm tt"))</small>
+                                                                </div>
+                                                            </div>
+                                                            <div class="d-flex gap-2 flex-shrink-0">
+                                                                <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" target="_blank" class="btn btn-sm btn-outline-primary fw-semibold">
+                                                                    <i class="fas fa-eye me-1"></i>View
+                                                                </a>
+                                                                <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" download="@file.FileName" class="btn btn-sm btn-outline-secondary fw-semibold">
+                                                                    <i class="fas fa-download me-1"></i>Download
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+
                                             @if (!string.IsNullOrEmpty(propMilestone?.SupervisorFeedback))
                                             {
                                                 <hr class="my-2 border-info opacity-25">
-                                                <p class="mb-0 text-dark"><strong>Feedback:</strong> @propMilestone.SupervisorFeedback</p>
+                                                <p class="mb-0 text-dark"><strong>Supervisor Feedback:</strong> @propMilestone.SupervisorFeedback</p>
                                             }
 
                                             @* Supervisor Feedback / Graded Files *@
-                                            @if (propMilestone?.SubmissionFiles != null && propMilestone.SubmissionFiles.Any(f => f.UploadedBy != Model.StudentId))
+                                            @if (propMilestone?.SubmissionFiles != null && propMilestone.SubmissionFiles.Any(f => f.UploadedBy != Model.StudentId && !f.IsDeleted))
                                             {
-                                                var gFiles = propMilestone.SubmissionFiles.Where(f => f.UploadedBy != Model.StudentId).ToList();
-                                                <hr class="my-3 border-info opacity-25">
-                                                <h6 class="fw-bold text-primary mb-2"><i class="fas fa-file-pdf me-2"></i>Supervisor Graded / Feedback Files</h6>
-                                                <div class="d-flex flex-column gap-2 mb-3">
-                                                    @foreach (var file in gFiles)
-                                                    {
-                                                        <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" target="_blank" class="btn btn-outline-primary text-start d-flex align-items-center rounded-3 p-2 text-decoration-none bg-white border-primary border-opacity-25 shadow-sm">
-                                                            <i class="fas fa-file-pdf text-primary me-3"></i>
-                                                            <span class="text-dark fw-bold text-truncate flex-grow-1">@file.FileName</span>
-                                                            <i class="fas fa-external-link-alt text-primary ms-3"></i>
-                                                        </a>
-                                                    }
-                                                </div>
+                                                var gFiles = propMilestone.SubmissionFiles.Where(f => f.UploadedBy != Model.StudentId && !f.IsDeleted).ToList();
+                                                if (gFiles.Any())
+                                                {
+                                                    <hr class="my-3 border-info opacity-25">
+                                                    <h6 class="fw-bold text-primary mb-2"><i class="fas fa-file-pdf me-2"></i>Supervisor Graded / Feedback Files</h6>
+                                                    <div class="d-flex flex-column gap-2 mb-3">
+                                                        @foreach (var file in gFiles)
+                                                        {
+                                                            <div class="d-flex align-items-center justify-content-between rounded-3 p-2 bg-white border border-primary border-opacity-25 shadow-sm">
+                                                                <div class="d-flex align-items-center text-truncate me-3">
+                                                                    <i class="fas fa-file-pdf text-primary me-3"></i>
+                                                                    <span class="text-dark fw-bold text-truncate">@file.FileName</span>
+                                                                </div>
+                                                                <div class="d-flex gap-2 flex-shrink-0">
+                                                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" target="_blank" class="btn btn-sm btn-outline-primary fw-semibold">
+                                                                        <i class="fas fa-eye me-1"></i>View
+                                                                    </a>
+                                                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" download="@file.FileName" class="btn btn-sm btn-outline-secondary fw-semibold">
+                                                                        <i class="fas fa-download me-1"></i>Download
+                                                                    </a>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
                                             }
 
                                             @* Examiner Feedback / Marksheet *@
