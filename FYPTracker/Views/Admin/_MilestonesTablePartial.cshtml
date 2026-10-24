@@ -1,0 +1,219 @@
+@using FYPTracker.Models
+@model IEnumerable<FYPMilestone>
+
+@{
+    var milestonesList = Model?.ToList() ?? new List<FYPMilestone>();
+
+    bool IsApproved(FYPMilestone m) =>
+        m.Status == "Approved" || m.Status == "Completed" || m.Status == "AdminApproved" || m.Status == "SupervisorSigned";
+
+    bool IsUnderReview(FYPMilestone m) =>
+        m.Status == "Submitted" || m.Status == "UnderReview" || m.Status == "PendingSupervisorReview";
+
+    bool IsRejected(FYPMilestone m) =>
+        m.Status == "Rejected" || m.Status == "Revision" || m.Status == "ReturnedForChanges" || m.Status == "ReturnedForEdits";
+}
+
+@if (!milestonesList.Any())
+{
+    <div class="text-center py-5 text-muted">
+        <i class="fas fa-folder-open fs-1 opacity-25 d-block mb-3"></i>
+        <h6 class="fw-bold text-dark mb-1">No Milestones Found</h6>
+        <p class="text-muted small mb-0">No milestones have been configured or generated for this category yet.</p>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="bg-light text-uppercase fs-8 text-muted fw-bold">
+                <tr>
+                    <th class="ps-4 py-3" style="min-width: 280px;">Milestone</th>
+                    <th class="py-3" style="min-width: 120px;">Deadline</th>
+                    <th class="py-3" style="min-width: 150px;">Submission</th>
+                    <th class="py-3 text-center" style="min-width: 130px;">Approval Status</th>
+                    <th class="pe-4 py-3" style="min-width: 180px;">Grading & Review Details</th>
+                </tr>
+            </thead>
+            <tbody class="fs-7">
+                @foreach (var m in milestonesList)
+                {
+                    bool approved = IsApproved(m);
+                    bool underReview = IsUnderReview(m);
+                    bool rejected = IsRejected(m);
+                    bool isOverdue = !approved && m.DueDate.HasValue && m.DueDate.Value.Date < DateTime.Today;
+
+                    <tr>
+                        <!-- Milestone Title & Attributes -->
+                        <td class="ps-4 py-3">
+                            <div class="d-flex align-items-start gap-2">
+                                <span class="badge @(m.Stage == 1 ? "bg-light-info text-info" : "bg-light-primary text-primary") fw-bold mt-1">
+                                    Stage @m.Stage
+                                </span>
+                                <div>
+                                    <div class="fw-bolder text-dark mb-1">@m.Title</div>
+                                    <div class="d-flex flex-wrap gap-1 align-items-center">
+                                        @if (!string.IsNullOrWhiteSpace(m.MilestoneCode) && m.MilestoneCode != "GENERIC")
+                                        {
+                                            <span class="badge bg-light text-secondary border fs-9">@m.MilestoneCode</span>
+                                        }
+                                        <span class="badge @(m.IsRequired ? "bg-light-dark text-dark" : "bg-light text-muted border") fs-9">
+                                            @(m.IsRequired ? "Required" : "Optional")
+                                        </span>
+                                        @if (m.MilestoneSource == "Supervisor")
+                                        {
+                                            <span class="badge bg-light-warning text-warning border border-warning border-opacity-25 fs-9">Supervisor Custom</span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(m.Description))
+                                    {
+                                        <div class="text-muted small mt-1 text-truncate" style="max-width: 380px;" title="@m.Description">
+                                            @m.Description
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- Deadline -->
+                        <td class="py-3">
+                            @if (m.DueDate.HasValue)
+                            {
+                                <div class="fw-bold @(isOverdue ? "text-danger" : "text-dark")">
+                                    @m.DueDate.Value.ToString("dd MMM yyyy")
+                                </div>
+                                @if (isOverdue)
+                                {
+                                    <span class="badge bg-danger rounded-pill px-2 py-1 fs-9 text-white">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>Overdue
+                                    </span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-muted small fst-italic">No deadline</span>
+                            }
+                        </td>
+
+                        <!-- Submission -->
+                        <td class="py-3">
+                            @if (m.SubmittedDate.HasValue)
+                            {
+                                <div class="fw-bold text-dark">@m.SubmittedDate.Value.ToString("dd MMM yyyy")</div>
+                                <div class="text-muted small">@m.SubmittedDate.Value.ToString("hh:mm tt")</div>
+                                @if (m.SubmissionFiles != null && m.SubmissionFiles.Any())
+                                {
+                                    <div class="mt-1">
+                                        <span class="badge bg-light-primary text-primary fs-9">
+                                            <i class="fas fa-paperclip me-1"></i>@m.SubmissionFiles.Count file(s)
+                                        </span>
+                                    </div>
+                                }
+                            }
+                            else if (approved)
+                            {
+                                <span class="text-muted small"><i class="fas fa-check text-success me-1"></i>Completed</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small fst-italic">Not submitted</span>
+                            }
+                        </td>
+
+                        <!-- Approval Status -->
+                        <td class="py-3 text-center">
+                            @if (approved)
+                            {
+                                <span class="badge bg-success rounded-pill px-3 py-2 fw-bold text-white shadow-sm">
+                                    <i class="fas fa-check-circle me-1"></i>Approved
+                                </span>
+                            }
+                            else if (underReview)
+                            {
+                                <span class="badge bg-warning rounded-pill px-3 py-2 fw-bold text-dark shadow-sm">
+                                    <i class="fas fa-clock me-1"></i>Under Review
+                                </span>
+                            }
+                            else if (rejected)
+                            {
+                                <span class="badge bg-danger rounded-pill px-3 py-2 fw-bold text-white shadow-sm">
+                                    <i class="fas fa-times-circle me-1"></i>Revision Required
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary rounded-pill px-3 py-2 fw-bold text-dark">
+                                    <i class="fas fa-hourglass-start me-1"></i>Pending
+                                </span>
+                            }
+                        </td>
+
+                        <!-- Grading & Review Details -->
+                        <td class="pe-4 py-3">
+                            @if (m.MilestoneCode == "STAGE1_FINAL")
+                            {
+                                <div class="small mb-1">
+                                    <span class="text-muted fw-bold">Supervisor Marking:</span>
+                                    @if (!string.IsNullOrWhiteSpace(m.SupervisorMarksheetData))
+                                    {
+                                        <span class="badge bg-light-success text-success fw-bold ms-1">Submitted</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light-secondary text-muted fw-bold ms-1">Pending</span>
+                                    }
+                                </div>
+                                <div class="small">
+                                    <span class="text-muted fw-bold">Examiner Marking:</span>
+                                    @if (!string.IsNullOrWhiteSpace(m.ExaminerMarksheetData))
+                                    {
+                                        <span class="badge bg-light-success text-success fw-bold ms-1">Submitted</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light-secondary text-muted fw-bold ms-1">Pending</span>
+                                    }
+                                </div>
+                            }
+                            else if (m.Stage == 2 && (m.MilestoneCode.Contains("FINAL", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                <div class="small mb-1">
+                                    <span class="text-muted fw-bold">Stage 2 Final Assessment:</span>
+                                    @if (!string.IsNullOrWhiteSpace(m.SupervisorMarksheetData) || !string.IsNullOrWhiteSpace(m.ExaminerMarksheetData))
+                                    {
+                                        <span class="badge bg-light-success text-success fw-bold ms-1">Evaluated</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light-secondary text-muted fw-bold ms-1">Pending</span>
+                                    }
+                                </div>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(m.SupervisorFeedback))
+                            {
+                                <div class="p-2 bg-light rounded-3 text-dark small" style="max-width: 250px;">
+                                    <div class="fw-bold text-muted small"><i class="fas fa-comment-dots text-primary me-1"></i>Feedback:</div>
+                                    <div class="text-truncate" title="@m.SupervisorFeedback">@m.SupervisorFeedback</div>
+                                </div>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(m.Remarks) && !m.Remarks.Contains("JSON: "))
+                            {
+                                <div class="text-muted small text-truncate" style="max-width: 220px;" title="@m.Remarks">
+                                    <i class="fas fa-info-circle me-1"></i>@m.Remarks
+                                </div>
+                            }
+                            else if (approved)
+                            {
+                                <span class="text-success small fw-semibold"><i class="fas fa-check-circle me-1"></i>Verified &amp; Approved</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small fst-italic">No feedback recorded</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

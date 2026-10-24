@@ -13,14 +13,7 @@ namespace FYPTracker.Utils
                 using var doc = JsonDocument.Parse(jsonString);
                 var root = doc.RootElement;
                 
-                // 1. Check for direct extracted Excel score: { "Score": "75", ... }
-                if (root.TryGetProperty("Score", out var sProp))
-                {
-                    if (sProp.ValueKind == JsonValueKind.Number && sProp.TryGetDouble(out double numScore)) return Math.Clamp(numScore, 0, 100.0);
-                    if (sProp.ValueKind == JsonValueKind.String && double.TryParse(sProp.GetString(), out double parsedScore)) return Math.Clamp(parsedScore, 0, 100.0);
-                }
-
-                // 2. Official 6-Criterion Stage 1 Rubric (Version >= 2 or Crit1..6 defined)
+                // 1. Official 6-Criterion Stage 1 Rubric (Version >= 2 or Crit1..6 defined)
                 // Weights: Crit1=10, Crit2=20, Crit3=30, Crit4=20, Crit5=10, Crit6=10 (Total: 100)
                 if (root.TryGetProperty("Crit1", out _) || root.TryGetProperty("Crit3", out _) || root.TryGetProperty("Crit6", out _))
                 {
@@ -39,6 +32,18 @@ namespace FYPTracker.Utils
                                    ((crit6 / 4.0) * 10.0);
 
                     return Math.Clamp(score, 0, 100.0);
+                }
+
+                // 2. Direct extracted Excel score: { "Score": "75", ... } or { "Total": "75", ... }
+                if (root.TryGetProperty("Score", out var sProp))
+                {
+                    if (sProp.ValueKind == JsonValueKind.Number && sProp.TryGetDouble(out double numScore)) return Math.Clamp(numScore, 0, 100.0);
+                    if (sProp.ValueKind == JsonValueKind.String && double.TryParse(sProp.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedScore)) return Math.Clamp(parsedScore, 0, 100.0);
+                }
+                if (root.TryGetProperty("Total", out var tProp))
+                {
+                    if (tProp.ValueKind == JsonValueKind.Number && tProp.TryGetDouble(out double numTotal)) return Math.Clamp(numTotal, 0, 100.0);
+                    if (tProp.ValueKind == JsonValueKind.String && double.TryParse(tProp.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsedTotal)) return Math.Clamp(parsedTotal, 0, 100.0);
                 }
 
                 // 3. Fallback for legacy 4-5 criteria prototype if any
@@ -90,7 +95,7 @@ namespace FYPTracker.Utils
 
                     double scoreVal;
                     if (cVal.ValueKind == JsonValueKind.Number) scoreVal = cVal.GetDouble();
-                    else if (cVal.ValueKind == JsonValueKind.String && double.TryParse(cVal.GetString(), out double parsed)) scoreVal = parsed;
+                    else if (cVal.ValueKind == JsonValueKind.String && double.TryParse(cVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsed)) scoreVal = parsed;
                     else
                     {
                         errorMessage = $"Invalid score value format for {prop}.";
@@ -273,7 +278,7 @@ namespace FYPTracker.Utils
                     {
                         scoreVal = cVal.GetDouble();
                     }
-                    else if (cVal.ValueKind == JsonValueKind.String && double.TryParse(cVal.GetString(), out double parsed))
+                    else if (cVal.ValueKind == JsonValueKind.String && double.TryParse(cVal.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double parsed))
                     {
                         scoreVal = parsed;
                     }
@@ -324,7 +329,7 @@ namespace FYPTracker.Utils
         {
             if (element.TryGetProperty(propName, out var prop))
             {
-                if (prop.ValueKind == JsonValueKind.String && double.TryParse(prop.GetString(), out double val))
+                if (prop.ValueKind == JsonValueKind.String && double.TryParse(prop.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double val))
                 {
                     return val;
                 }
@@ -357,11 +362,135 @@ namespace FYPTracker.Utils
                 !m.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase));
         }
 
+        public static Models.FYPMilestone? GetIafMilestone(IEnumerable<Models.FYPMilestone>? milestones)
+        {
+            if (milestones == null) return null;
+
+            // 1. Precise match on canonical MilestoneCode
+            var byCode = milestones.FirstOrDefault(m => string.Equals(m.MilestoneCode, "IAF", StringComparison.OrdinalIgnoreCase));
+            if (byCode != null) return byCode;
+
+            // 2. Specific title match for Initial Project Allocation Form (IAF) excluding Industrial
+            return milestones.FirstOrDefault(m =>
+                !string.IsNullOrEmpty(m.Title) &&
+                (m.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) ||
+                 m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) &&
+                !m.Title.Contains("Industrial", StringComparison.OrdinalIgnoreCase));
+        }
+
+        public static bool CanProgressToStage1Dpp(Models.FYPMilestone? iafMilestone, Models.IAFDefenseBooking? activeBooking = null)
+        {
+            if (iafMilestone == null) return false;
+
+            // If an active booking exists, it must have passed (AdminApproved academic outcome).
+            // A scheduled, rescheduled, or pending booking must never be interpreted as passed.
+            if (activeBooking != null)
+            {
+                if (!string.Equals(activeBooking.AcademicOutcome, "AdminApproved", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            // IAF Milestone itself must be formally AdminApproved, Approved, or Completed
+            return string.Equals(iafMilestone.Status, "AdminApproved", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(iafMilestone.Status, "Approved", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(iafMilestone.Status, "Completed", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Validates mandatory prerequisites for Stage 1 Final DPP Submission:
+        /// 1. IAF must be passed/AdminApproved (and booking passed if defense occurred).
+        /// 2. At least one Supervisor-assigned Stage 1 DPP progress task must exist on the project.
+        /// 3. All assigned Stage 1 DPP progress tasks must be completed and approved by the assigned Supervisor.
+        /// Tasks that are Not Started, In Progress, Submitted/Pending Review, Returned for Revision, or Rejected do NOT satisfy approval.
+        /// </summary>
+        public static (bool Allowed, string Reason, bool HasTasks, bool AllApproved) CanSubmitStage1FinalDpp(
+            IEnumerable<Models.FYPMilestone>? projectMilestones,
+            Models.FYPMilestone? iafMilestone = null,
+            Models.IAFDefenseBooking? activeBooking = null)
+        {
+            var milestonesList = projectMilestones?.ToList() ?? new List<Models.FYPMilestone>();
+            if (iafMilestone == null)
+            {
+                iafMilestone = GetIafMilestone(milestonesList);
+            }
+
+            // 1. Gate: IAF Approval & Defense Outcome
+            if (!CanProgressToStage1Dpp(iafMilestone, activeBooking))
+            {
+                string reason = iafMilestone == null ? "IAF milestone not found." :
+                    (iafMilestone.Status == "DefenseScheduled" ? "Your IAF Defense session is scheduled and awaiting assessment." :
+                    (iafMilestone.Status == "DefenseRequired" ? "IAF Defense is required and awaiting scheduling." :
+                    (iafMilestone.Status == "ChangeOfTopicRequired" ? "IAF Defense was unsuccessful; change of topic is required." :
+                    $"IAF is currently in '{iafMilestone.Status}' status and has not been approved.")));
+
+                return (false, $"Cannot submit Stage 1 Proposal. {reason}", false, false);
+            }
+
+            // 2. Gate: Require at least one valid Supervisor-assigned Stage 1 DPP progress task
+            var stage1Tasks = milestonesList
+                .Where(m => m.MilestoneSource == "Supervisor" && m.Stage == 1)
+                .ToList();
+
+            if (!stage1Tasks.Any())
+            {
+                return (false, "DPP Submission Locked — Waiting for your Supervisor to assign Stage 1 DPP progress tasks.", false, false);
+            }
+
+            // 3. Gate: Require all mandatory Stage 1 DPP progress tasks to be completed and approved
+            bool isTaskApproved(Models.FYPMilestone m) =>
+                string.Equals(m.Status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(m.Status, "Approved", StringComparison.OrdinalIgnoreCase);
+
+            if (!stage1Tasks.All(isTaskApproved))
+            {
+                return (false, "DPP Submission Locked — Waiting for Supervisor approval of all required Stage 1 progress tasks.", true, false);
+            }
+
+            return (true, string.Empty, true, true);
+        }
+
+
         public static bool IsStage1DppApproved(Models.FYPMilestone? milestone)
         {
             if (milestone == null) return false;
             return string.Equals(milestone.Status, "Approved", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(milestone.Status, "Completed", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Determines if an assigned project is eligible for Stage 1 supervisor rubric grading and is currently pending evaluation.
+        /// Academic Prerequisites:
+        /// 1. Project must be active (not null, not Completed, Archived, RepeatRequested, or Failed).
+        /// 2. Stage 1 Final Submission (DPP) milestone must exist and be approved (IsStage1DppApproved).
+        /// 3. Supervisor rubric marksheet has NOT been validly submitted (empty, null, or saved as draft).
+        /// </summary>
+        public static bool IsStage1SupervisorRubricPending(Models.FYPProject? project, IEnumerable<Models.FYPMilestone>? milestones = null)
+        {
+            if (project == null) return false;
+            if (string.Equals(project.Status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(project.Status, "Archived", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(project.Status, "RepeatRequested", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(project.Status, "Failed", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var msList = (milestones ?? project.Milestones)?.ToList() ?? new List<Models.FYPMilestone>();
+            var s1Final = GetStage1FinalMilestone(msList);
+            if (s1Final == null || !IsStage1DppApproved(s1Final))
+            {
+                return false;
+            }
+
+            string? supMarks = s1Final.SupervisorMarksheetData;
+            if (string.IsNullOrWhiteSpace(supMarks) || IsMarksheetDraft(supMarks))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         public static bool IsStage1ProposalLocked(Models.FYPMilestone? milestone, string? stage1Grade)
@@ -374,6 +503,329 @@ namespace FYPTracker.Utils
                    string.Equals(milestone.Status, "Completed", StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// Validates academic eligibility to access Stage 2 or submit Stage 2 deliverables:
+        /// 1. Project must be active and not archived, completed, or in RepeatRequested status.
+        /// 2. If Stage 1 Grade is 'Pass', Stage 2 is unlocked (unless IAF attempt >= 2 is exhausted).
+        /// 3. If Stage 1 Grade is 'Fail', academic exception allows proceeding concurrently with Stage 2
+        ///    while remediating Stage 1 deliverables, provided IAF was valid/approved and not exhausted.
+        /// 4. If Stage 1 Grade is Pending / Not Graded (null, empty, or unassessed), Stage 2 is strictly locked.
+        /// </summary>
+        public static (bool IsEligible, string Reason, bool IsPendingGrading) CheckStage2AcademicEligibility(
+            Models.FYPProject? project,
+            IEnumerable<Models.FYPMilestone>? projectMilestones = null,
+            Models.IAFDefenseBooking? activeBooking = null)
+        {
+            if (project == null)
+            {
+                return (false, "Active project not found.", false);
+            }
+
+            if (string.Equals(project.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+            {
+                return (false, "This project has already been completed and is in read-only status.", false);
+            }
+
+            if (string.Equals(project.Status, "Archived", StringComparison.OrdinalIgnoreCase))
+            {
+                return (false, "This project has been archived.", false);
+            }
+
+            if (string.Equals(project.Status, "RepeatRequested", StringComparison.OrdinalIgnoreCase))
+            {
+                return (false, "Your repeat FYP request is currently pending Admin review. Stage 2 access is locked.", false);
+            }
+
+            var milestonesList = (projectMilestones ?? project.Milestones)?.ToList() ?? new List<Models.FYPMilestone>();
+            var iafMilestone = GetIafMilestone(milestonesList);
+
+            if (iafMilestone != null && string.Equals(iafMilestone.Status, "ChangeOfTopicRequired", StringComparison.OrdinalIgnoreCase))
+            {
+                int attemptNum = 1;
+                if (!string.IsNullOrEmpty(iafMilestone.Remarks) && iafMilestone.Remarks.Contains("JSON: "))
+                {
+                    try
+                    {
+                        string rawJson = iafMilestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1].Trim();
+                        var h = Models.IafAttemptHistory.ParseOrMigrate(rawJson);
+                        attemptNum = h?.CurrentAttempt ?? 1;
+                    }
+                    catch { }
+                }
+
+                if (attemptNum >= 2)
+                {
+                    return (false, "Maximum 2 IAF attempts reached. Please contact Admin regarding the FYP repeat process.", false);
+                }
+            }
+
+            string? grade = project.Stage1Grade?.Trim();
+
+            // 1. Stage 1 Pass -> Unlocks Stage 2
+            if (string.Equals(grade, "Pass", StringComparison.OrdinalIgnoreCase))
+            {
+                return (true, string.Empty, false);
+            }
+
+            // 2. Stage 1 Fail -> Academic exception: Stage 1 Fail with valid IAF and approved Stage 1 remediation
+            // may proceed concurrently with Stage 2 only when the established workflow permits it.
+            if (string.Equals(grade, "Fail", StringComparison.OrdinalIgnoreCase))
+            {
+                if (iafMilestone != null && !CanProgressToStage1Dpp(iafMilestone, activeBooking))
+                {
+                    return (false, "Cannot proceed to Stage 2: Initial Project Allocation Form (IAF) is not approved.", false);
+                }
+
+                return (true, string.Empty, false);
+            }
+
+            // 3. Stage 1 Pending / Not Graded -> Strictly locked
+            return (false, "Stage 1 Grading Pending — Awaiting Supervisor and Examiner Final Evaluation", true);
+        }
+
+        /// <summary>
+        /// Identifies whether a milestone is an obsolete or retired Stage 2 student upload requirement.
+        /// Obsolete/retired items:
+        /// 1. "Marksheet Submission" — student never submits marksheets; grading is performed via online 7-criteria rubrics.
+        /// 2. "Record of Supervisor Meeting Form Submission" — student meetings are logged and digitally signed; duplicate PDF upload is redundant.
+        /// </summary>
+        public static bool IsObsoleteOrRetiredStage2Milestone(Models.FYPMilestone? milestone)
+        {
+            if (milestone == null || string.IsNullOrWhiteSpace(milestone.Title)) return false;
+            string t = milestone.Title.Trim();
+            if (t.Contains("Marksheet", StringComparison.OrdinalIgnoreCase)) return true;
+            if (t.Contains("Record of Supervisor Meeting", StringComparison.OrdinalIgnoreCase) ||
+                t.Contains("Meeting Form", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(milestone.MilestoneCode, "STAGE2_MARKSHEET", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(milestone.MilestoneCode, "STAGE2_MEETING_FORM", StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        public static bool IsStage2TurnitinMilestone(Models.FYPMilestone? m)
+        {
+            if (m == null || string.IsNullOrWhiteSpace(m.Title)) return false;
+            if (IsObsoleteOrRetiredStage2Milestone(m)) return false;
+
+            // Explicitly exclude Stage 1 milestones (e.g. Stage 1 "Turnitin Checking - DPP")
+            if (m.Stage == 1) return false;
+            if (m.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase) && !m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)) return false;
+
+            // Canonical milestone code
+            if (string.Equals(m.MilestoneCode, "STAGE2_TURNITIN", StringComparison.OrdinalIgnoreCase)) return true;
+
+            // Legacy Step-based titles (e.g. "Step 1: Turnitin Checking" or "Step 1: Turnitin")
+            if (m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase) && m.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase)) return true;
+
+            // Explicit Stage 2 classification
+            if (m.Stage == 2 && m.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase)) return true;
+
+            // Fallback for non-Stage-1 records
+            return m.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase) && m.Stage != 1;
+        }
+
+        public static bool IsStage2FinalReportMilestone(Models.FYPMilestone? m)
+        {
+            if (m == null || string.IsNullOrWhiteSpace(m.Title)) return false;
+            if (IsObsoleteOrRetiredStage2Milestone(m)) return false;
+
+            // Explicitly exclude Stage 1 milestones
+            if (m.Stage == 1) return false;
+            if (m.Title.Contains("Stage 1", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Proposal", StringComparison.OrdinalIgnoreCase)) return false;
+
+            // Canonical milestone code
+            if (string.Equals(m.MilestoneCode, "STAGE2_FINAL", StringComparison.OrdinalIgnoreCase)) return true;
+
+            // Legacy Step 2 titles
+            if (m.Title.StartsWith("Step 2", StringComparison.OrdinalIgnoreCase) && !m.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase)) return true;
+            if (m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase) && 
+                (m.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("DPP report full", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Dissertation", StringComparison.OrdinalIgnoreCase))) return true;
+
+            // Explicit Stage 2 classification
+            if (m.Stage == 2 && 
+                (m.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("DPP report full", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Dissertation", StringComparison.OrdinalIgnoreCase))) return true;
+
+            return (m.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("DPP report full", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Dissertation", StringComparison.OrdinalIgnoreCase)) && m.Stage != 1;
+        }
+
+        public static bool IsStage2PresentationMilestone(Models.FYPMilestone? m)
+        {
+            if (m == null || string.IsNullOrWhiteSpace(m.Title)) return false;
+            if (IsObsoleteOrRetiredStage2Milestone(m)) return false;
+
+            // Explicitly exclude Stage 1 milestones
+            if (m.Stage == 1) return false;
+
+            // Canonical milestone code
+            if (string.Equals(m.MilestoneCode, "STAGE2_PRESENTATION", StringComparison.OrdinalIgnoreCase)) return true;
+
+            // Legacy Step 5 or Step 3 presentation titles
+            if (m.Title.StartsWith("Step 5", StringComparison.OrdinalIgnoreCase)) return true;
+            if (m.Title.StartsWith("Step 3", StringComparison.OrdinalIgnoreCase) && !m.Title.Contains("Marksheet", StringComparison.OrdinalIgnoreCase)) return true;
+            if (m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase) && 
+                (m.Title.Contains("Presentation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Slide", StringComparison.OrdinalIgnoreCase))) return true;
+
+            // Explicit Stage 2 classification
+            if (m.Stage == 2 && 
+                (m.Title.Contains("Presentation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Slide", StringComparison.OrdinalIgnoreCase))) return true;
+
+            return (m.Title.Contains("Presentation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Slide", StringComparison.OrdinalIgnoreCase)) && m.Stage != 1;
+        }
+
+        public static bool IsMilestoneApproved(Models.FYPMilestone? m)
+        {
+            if (m == null || string.IsNullOrWhiteSpace(m.Status)) return false;
+            return string.Equals(m.Status, "Approved", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(m.Status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(m.Status, "AdminApproved", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(m.Status, "SupervisorSigned", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Returns the genuine required Stage 2 student upload milestones:
+        /// Exactly 3 deliverables: Turnitin Checking, Final Report Submission, and Presentation Slides Submission.
+        /// </summary>
+        public static List<Models.FYPMilestone> GetRequiredStage2Milestones(IEnumerable<Models.FYPMilestone>? milestones)
+        {
+            var result = new List<Models.FYPMilestone>();
+            if (milestones == null) return result;
+            var list = milestones
+                .Where(m => m.Stage != 1 && !IsObsoleteOrRetiredStage2Milestone(m))
+                .ToList();
+
+            var turnitin = list.Where(IsStage2TurnitinMilestone).OrderByDescending(IsMilestoneApproved).FirstOrDefault();
+            if (turnitin != null) result.Add(turnitin);
+
+            var finalReport = list.Where(IsStage2FinalReportMilestone).OrderByDescending(IsMilestoneApproved).FirstOrDefault();
+            if (finalReport != null) result.Add(finalReport);
+
+            var presentation = list.Where(IsStage2PresentationMilestone).OrderByDescending(IsMilestoneApproved).FirstOrDefault();
+            if (presentation != null) result.Add(presentation);
+
+            return result;
+        }
+
+        /// <summary>
+        /// Returns all active Stage 2 milestones excluding obsolete or retired student submission requirements.
+        /// </summary>
+        public static List<Models.FYPMilestone> GetActiveStage2Milestones(IEnumerable<Models.FYPMilestone>? milestones)
+        {
+            if (milestones == null) return new List<Models.FYPMilestone>();
+            return milestones
+                .Where(m => (m.Stage == 2 || (m.Stage != 1 && (m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase) || m.MilestoneCode?.StartsWith("STAGE2_", StringComparison.OrdinalIgnoreCase) == true))) && !IsObsoleteOrRetiredStage2Milestone(m))
+                .ToList();
+        }
+
+        /// <summary>
+        /// Returns clean, sequential display numbering (Step 1, Step 2, Step 3) for the 3 genuine Stage 2 student upload deliverables
+        /// without altering stable database milestone codes, titles, or historical records.
+        /// </summary>
+        public static string GetStage2DisplayTitle(Models.FYPMilestone? m)
+        {
+            if (m == null || string.IsNullOrWhiteSpace(m.Title)) return string.Empty;
+            if (IsStage2TurnitinMilestone(m)) return "Step 1: Turnitin Similarity Verification";
+            if (IsStage2FinalReportMilestone(m)) return "Step 2: Final Report Submission";
+            if (IsStage2PresentationMilestone(m)) return "Step 3: Presentation Slides Submission";
+
+            return m.Title;
+        }
+
+        /// <summary>
+        /// Checks whether all genuine required Stage 2 student uploads are present and have been approved by the supervisor.
+        /// </summary>
+        public static bool AreStage2DeliverablesApproved(IEnumerable<Models.FYPMilestone>? milestones)
+        {
+            if (milestones == null) return false;
+            var list = milestones
+                .Where(m => m.Stage != 1 && !IsObsoleteOrRetiredStage2Milestone(m))
+                .ToList();
+
+            var turnitin = list.Where(IsStage2TurnitinMilestone).OrderByDescending(IsMilestoneApproved).FirstOrDefault();
+            var finalReport = list.Where(IsStage2FinalReportMilestone).OrderByDescending(IsMilestoneApproved).FirstOrDefault();
+            var presentation = list.Where(IsStage2PresentationMilestone).OrderByDescending(IsMilestoneApproved).FirstOrDefault();
+
+            if (turnitin == null || finalReport == null || presentation == null)
+                return false;
+
+            return IsMilestoneApproved(turnitin) && IsMilestoneApproved(finalReport) && IsMilestoneApproved(presentation);
+        }
+
+        /// <summary>
+        /// Checks whether the Stage 2 signed supervisor meeting requirement is satisfied.
+        /// </summary>
+        public static bool IsStage2MeetingRequirementSatisfied(int completedMeetings, int? requiredMeetings)
+        {
+            if (!requiredMeetings.HasValue || requiredMeetings.Value <= 0) return true;
+            return completedMeetings >= requiredMeetings.Value;
+        }
+
+        /// <summary>
+        /// Authoritative validation for unlocking Stage 2 Final Marksheet grading for Supervisor and Examiner:
+        /// 1. Project must be active and not in an archived/terminal non-passing state.
+        /// 2. Stage 1 must be passed.
+        /// 3. All 3 genuine required Stage 2 student deliverables (Turnitin, Final Report, Presentation Slides) must be approved.
+        /// 4. Configured required Stage 2 supervisor meeting count must be satisfied via signed digital meeting logs.
+        /// </summary>
+        public static (bool IsUnlocked, string Reason) CanUnlockStage2Grading(
+            Models.FYPProject? project,
+            int completedStage2Meetings,
+            int? requiredStage2Meetings)
+        {
+            if (project == null)
+                return (false, "Active project not found.");
+
+            if (string.Equals(project.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                return (false, "This project has already been completed.");
+
+            if (string.Equals(project.Status, "Archived", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(project.Status, "Failed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(project.Status, "RepeatRequested", StringComparison.OrdinalIgnoreCase))
+            {
+                return (false, "This project is not currently active for Stage 2 grading.");
+            }
+
+            if (!string.Equals(project.Stage1Grade, "Pass", StringComparison.OrdinalIgnoreCase))
+            {
+                return (false, "Stage 2 grading is locked: Stage 1 must be Passed first.");
+            }
+
+            if (!AreStage2DeliverablesApproved(project.Milestones))
+            {
+                var list = (project.Milestones ?? Enumerable.Empty<Models.FYPMilestone>())
+                    .Where(m => m.Stage != 1 && !IsObsoleteOrRetiredStage2Milestone(m))
+                    .ToList();
+                var t = list.Where(IsStage2TurnitinMilestone).OrderByDescending(IsMilestoneApproved).FirstOrDefault();
+                var f = list.Where(IsStage2FinalReportMilestone).OrderByDescending(IsMilestoneApproved).FirstOrDefault();
+                var p = list.Where(IsStage2PresentationMilestone).OrderByDescending(IsMilestoneApproved).FirstOrDefault();
+
+                var pendingNames = new List<string>();
+                if (!IsMilestoneApproved(t)) pendingNames.Add("Turnitin Similarity Verification");
+                if (!IsMilestoneApproved(f)) pendingNames.Add("Final Report Submission");
+                if (!IsMilestoneApproved(p)) pendingNames.Add("Presentation Slides Submission");
+
+                return (false, $"Stage 2 grading is locked: All required student submissions must be approved ({string.Join(", ", pendingNames)}).");
+            }
+
+            if (!IsStage2MeetingRequirementSatisfied(completedStage2Meetings, requiredStage2Meetings))
+            {
+                return (false, $"Stage 2 grading is locked: Meeting requirement incomplete ({completedStage2Meetings}/{(requiredStage2Meetings ?? 10)} signed meetings completed).");
+            }
+
+            return (true, string.Empty);
+        }
+
+        /// <summary>
+        /// Retrieves the latest uploaded file for the Stage 2 Final Report submission.
+        /// </summary>
+        public static Models.FYPSubmissionFile? GetStage2FinalReportFile(IEnumerable<Models.FYPMilestone>? milestones)
+        {
+            if (milestones == null) return null;
+            var finalReportMilestone = milestones.FirstOrDefault(IsStage2FinalReportMilestone);
+            return finalReportMilestone?.SubmissionFiles?
+                .Where(f => !f.IsDeleted)
+                .OrderByDescending(f => f.UploadedDate)
+                .FirstOrDefault();
+        }
+
         public static List<ViewModels.StudentFeedbackItemVM> GetAuthorizedStudentFeedback(Models.FYPProject? project)
         {
             var result = new List<ViewModels.StudentFeedbackItemVM>();
@@ -384,6 +836,8 @@ namespace FYPTracker.Utils
             // 1. Supervisor Milestone Review Remarks (SupervisorFeedback on milestones)
             foreach (var m in milestones)
             {
+                if (IsObsoleteOrRetiredStage2Milestone(m)) continue;
+
                 if (!string.IsNullOrWhiteSpace(m.SupervisorFeedback))
                 {
                     // Find optional supervisor-uploaded feedback attachment if available
@@ -395,13 +849,14 @@ namespace FYPTracker.Utils
                     string sourceLabel = m.Stage == 2 ? "Stage 2 Submission Feedback" : "Supervisor Submission Review";
                     string badgeColor = m.Stage == 2 ? "bg-info text-white" : "bg-primary text-white";
                     string targetUrl = m.Stage == 2 ? "/Student/Stage2" : "/Student/Forms#stage1HistorySection";
+                    string milestoneTitle = m.Stage == 2 ? GetStage2DisplayTitle(m) : m.Title;
 
                     result.Add(new ViewModels.StudentFeedbackItemVM
                     {
                         SourceType = sourceLabel,
                         SourceBadgeClass = badgeColor,
                         IconClass = "fas fa-user-tie",
-                        MilestoneTitle = m.Title,
+                        MilestoneTitle = milestoneTitle,
                         MilestoneStage = m.Stage,
                         FeedbackContent = m.SupervisorFeedback.Trim(),
                         FeedbackDate = m.DueDate ?? m.SubmittedDate,

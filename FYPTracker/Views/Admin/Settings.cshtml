@@ -1,817 +1,956 @@
 @{
-    ViewData["Title"] = "System Settings";
+    ViewData["Title"] = "System Settings & Academic Configuration";
+    string currentSession = ViewBag.CurrentSessionFilter as string ?? "2026 Jan";
+    var currentSessionObj = ViewBag.CurrentSessionObj as FYPTracker.Models.AcademicSession;
+    var defaultMilestones = ViewBag.DefaultMilestoneTemplates as IEnumerable<FYPTracker.Models.DefaultMilestoneTemplate> ?? Enumerable.Empty<FYPTracker.Models.DefaultMilestoneTemplate>();
+    string defenseSupervisorPolicy = ViewBag.IAFDefenseSupervisorRequired as string ?? "false";
 }
 
 <style>
-    .card {
-        border: 1px solid rgba(0,0,0,0.08);
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-        border-radius: 0.75rem;
+    /* Admin Settings Theme & Typography */
+    .settings-container {
+        max-width: 1320px;
+        margin: 0 auto;
     }
-    .card-header {
+    .settings-card {
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+        border-radius: 0.85rem;
+        background-color: #ffffff;
+        transition: box-shadow 0.2s ease-in-out;
+    }
+    .settings-card:hover {
+        box-shadow: 0 6px 16px -2px rgba(0, 0, 0, 0.08), 0 3px 8px -1px rgba(0, 0, 0, 0.04);
+    }
+    .settings-card-header {
         background-color: transparent;
-        border-bottom: 1px solid rgba(0,0,0,0.05);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        padding: 1.25rem 1.5rem;
     }
+    .settings-card-body {
+        padding: 1.5rem;
+    }
+    .settings-card-footer {
+        background-color: rgba(248, 249, 250, 0.6);
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+        padding: 1rem 1.5rem;
+        border-bottom-left-radius: 0.85rem;
+        border-bottom-right-radius: 0.85rem;
+    }
+
+    /* Modern Pill Navigation */
+    .settings-nav-pills {
+        gap: 0.5rem;
+        border-bottom: 2px solid #e9ecef;
+        padding-bottom: 0.5rem;
+    }
+    .settings-nav-pills .nav-link {
+        color: #495057;
+        font-weight: 600;
+        font-size: 0.925rem;
+        padding: 0.65rem 1.15rem;
+        border-radius: 0.5rem;
+        border: 1px solid transparent;
+        transition: all 0.2s ease-in-out;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background-color: #f8f9fa;
+    }
+    .settings-nav-pills .nav-link:hover {
+        color: #0d6efd;
+        background-color: #eef2ff;
+        border-color: rgba(13, 110, 253, 0.15);
+    }
+    .settings-nav-pills .nav-link.active {
+        color: #ffffff !important;
+        background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%) !important;
+        box-shadow: 0 4px 10px rgba(13, 110, 253, 0.3);
+        border-color: #0d6efd;
+    }
+
+    /* Policy Radio Selection Cards */
+    .policy-option-card {
+        border: 2px solid #dee2e6;
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background-color: #fafbfc;
+        position: relative;
+        height: 100%;
+    }
+    .policy-option-card:hover {
+        border-color: #86b7fe;
+        background-color: #ffffff;
+    }
+    .policy-option-card.selected {
+        border-color: #0d6efd;
+        background-color: #f0f7ff;
+        box-shadow: 0 0 0 1px #0d6efd;
+    }
+    .policy-option-card input[type="radio"] {
+        position: absolute;
+        top: 1.25rem;
+        right: 1.25rem;
+        width: 1.2rem;
+        height: 1.2rem;
+    }
+
+    /* Form & Input Styling */
     .form-control, .form-select {
         border-color: #dee2e6;
-        border-radius: 0.375rem;
+        border-radius: 0.5rem;
+        padding: 0.6rem 0.85rem;
     }
     .form-control:focus, .form-select:focus {
         border-color: #86b7fe;
         box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
     }
-    /* Milestone Status Badges */
-    .milestone-status-badge {
-        display: inline-block;
-        padding: 6px 12px;
-        font-size: 12px;
-        font-weight: 600;
-        border-radius: 6px;
-        line-height: 1.4;
+    .form-label-custom {
+        font-size: 0.825rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #6c757d;
+        margin-bottom: 0.4rem;
     }
 
-    /* Active - Green */
-    .milestone-status-badge.status-active {
-        background-color: #d1e7dd !important;
-        color: #0f5132 !important;
-        border: 1px solid #a3cfbb !important;
-    }
-
-    /* Inactive - Gray */
-    .milestone-status-badge.status-inactive {
-        background-color: #e9ecef !important;
-        color: #495057 !important;
-        border: 1px solid #ced4da !important;
+    /* Badges */
+    .badge-session {
+        background-color: #e0e7ff;
+        color: #3730a3;
+        font-weight: 700;
+        padding: 0.4rem 0.85rem;
+        border-radius: 2rem;
+        font-size: 0.85rem;
+        border: 1px solid #c7d2fe;
     }
 </style>
 
-<div class="container-xxl py-4">
-    <!-- Header -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <h1 class="h3 fw-bold text-dark mb-1">System Settings</h1>
-            <p class="text-muted mb-0">Manage academic deadlines, milestones, and system preferences.</p>
+<div class="container-xxl py-4 settings-container">
+    <!-- Header & Quick Nav -->
+    <div class="row align-items-center mb-4">
+        <div class="col-lg-7 mb-3 mb-lg-0">
+            <div class="d-flex align-items-center gap-3">
+                <div class="bg-primary bg-opacity-10 text-primary p-3 rounded-circle d-flex align-items-center justify-content-center" style="width: 54px; height: 54px;">
+                    <i class="fas fa-sliders-h fs-4"></i>
+                </div>
+                <div>
+                    <h1 class="h3 fw-bold text-dark mb-1">System Settings</h1>
+                    <p class="text-muted mb-0">Manage academic session deadlines, defense attendance policies, and system-wide configurations.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5 text-lg-end">
+            <div class="d-inline-flex flex-wrap gap-2">
+                <a asp-controller="Admin" asp-action="ApprovedIafList" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm">
+                    <i class="fas fa-folder-open me-1"></i> IAF Directory
+                </a>
+                <a asp-controller="Admin" asp-action="ManageDefenses" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-sm">
+                    <i class="fas fa-calendar-alt me-1"></i> Manage Defenses
+                </a>
+                <a asp-controller="Admin" asp-action="FormTemplateSettings" class="btn btn-outline-dark btn-sm rounded-pill px-3 shadow-sm">
+                    <i class="fas fa-file-code me-1"></i> Form Templates
+                </a>
+            </div>
         </div>
     </div>
 
-    <!-- Alert Messages -->
-    @if (TempData["FYPSettingSuccess"] != null)
+    <!-- Feedback Alerts -->
+    @if (TempData["Success"] != null)
     {
-        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-            <i class="fas fa-check-circle me-2"></i>@TempData["FYPSettingSuccess"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 d-flex align-items-center mb-4" role="alert">
+            <i class="fas fa-check-circle fs-5 me-3"></i>
+            <div>@TempData["Success"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
-    @if (TempData["FYPSettingError"] != null)
+    @if (TempData["FYPSettingSuccess"] != null)
     {
-        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-            <i class="fas fa-exclamation-circle me-2"></i>@TempData["FYPSettingError"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 d-flex align-items-center mb-4" role="alert">
+            <i class="fas fa-check-circle fs-5 me-3"></i>
+            <div>@TempData["FYPSettingSuccess"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
     @if (TempData["BulkUpdateSuccess"] != null)
     {
-        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-            <i class="fas fa-check-circle me-2"></i>@TempData["BulkUpdateSuccess"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 d-flex align-items-center mb-4" role="alert">
+            <i class="fas fa-check-circle fs-5 me-3"></i>
+            <div>@TempData["BulkUpdateSuccess"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
-    @if (TempData["BulkUpdateInfo"] != null)
+    @if (TempData["Error"] != null)
     {
-        <div class="alert alert-info alert-dismissible fade show shadow-sm" role="alert">
-            <i class="fas fa-info-circle me-2"></i>@TempData["BulkUpdateInfo"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0 d-flex align-items-center mb-4" role="alert">
+            <i class="fas fa-exclamation-triangle fs-5 me-3"></i>
+            <div>@TempData["Error"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["FYPSettingError"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0 d-flex align-items-center mb-4" role="alert">
+            <i class="fas fa-exclamation-triangle fs-5 me-3"></i>
+            <div>@TempData["FYPSettingError"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
     @if (TempData["BulkUpdateError"] != null)
     {
-        <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-            <i class="fas fa-exclamation-triangle me-2"></i>@TempData["BulkUpdateError"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0 d-flex align-items-center mb-4" role="alert">
+            <i class="fas fa-exclamation-circle fs-5 me-3"></i>
+            <div>@TempData["BulkUpdateError"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["BulkUpdateInfo"] != null)
+    {
+        <div class="alert alert-info alert-dismissible fade show shadow-sm border-0 d-flex align-items-center mb-4" role="alert">
+            <i class="fas fa-info-circle fs-5 me-3"></i>
+            <div>@TempData["BulkUpdateInfo"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
 
-    <!-- Global Session Filter -->
-    <div class="card mb-4 border-primary border-opacity-25">
-        <div class="card-body bg-light rounded bg-opacity-50 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-            <div class="d-flex align-items-center gap-3">
-                <div class="bg-primary bg-opacity-10 text-primary p-2 rounded">
-                    <i class="fas fa-calendar-alt fs-5"></i>
-                </div>
-                <div>
-                    <h6 class="mb-0 fw-bold">Academic Session Context</h6>
-                    <small class="text-muted">Select a session to view and manage its specific milestones.</small>
-                </div>
-            </div>
-            <form method="get" class="m-0">
-                <select name="sessionFilter" class="form-select border-primary shadow-sm fw-bold" style="min-width: 200px;" onchange="this.form.submit()">
-                    @if(ViewBag.DistinctSessions != null)
-                    {
-                        var hasSessions = false;
-                        foreach (var sessionName in (IEnumerable<string>)ViewBag.DistinctSessions)
-                        {
-                            hasSessions = true;
-                            if (ViewBag.CurrentSessionFilter == sessionName)
+    <!-- Tabbed Navigation Bar -->
+    <ul class="nav nav-pills settings-nav-pills mb-4 flex-column flex-md-row" id="settingsTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-session-btn" data-bs-toggle="pill" data-bs-target="#tab-session" type="button" role="tab" aria-controls="tab-session" aria-selected="true">
+                <i class="fas fa-calendar-alt"></i>
+                <span>Session Milestones</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-iaf-defense-btn" data-bs-toggle="pill" data-bs-target="#tab-iaf-defense" type="button" role="tab" aria-controls="tab-iaf-defense" aria-selected="false">
+                <i class="fas fa-user-shield"></i>
+                <span>IAF Defense</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-final-viva-btn" data-bs-toggle="pill" data-bs-target="#tab-final-viva" type="button" role="tab" aria-controls="tab-final-viva" aria-selected="false">
+                <i class="fas fa-graduation-cap"></i>
+                <span>Final Viva</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-supervisor-meetings-btn" data-bs-toggle="pill" data-bs-target="#tab-supervisor-meetings" type="button" role="tab" aria-controls="tab-supervisor-meetings" aria-selected="false">
+                <i class="fas fa-handshake"></i>
+                <span>Supervisor Meetings</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-dpp-exhibition-btn" data-bs-toggle="pill" data-bs-target="#tab-dpp-exhibition" type="button" role="tab" aria-controls="tab-dpp-exhibition" aria-selected="false">
+                <i class="fas fa-award"></i>
+                <span>DPP & Exhibition</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-workflow-policies-btn" data-bs-toggle="pill" data-bs-target="#tab-workflow-policies" type="button" role="tab" aria-controls="tab-workflow-policies" aria-selected="false">
+                <i class="fas fa-shield-alt"></i>
+                <span>Workflow Policies</span>
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tab Contents -->
+    <div class="tab-content" id="settingsTabsContent">
+
+        <!-- ========================================================= -->
+        <!-- TAB 1: ACADEMIC SESSION & MILESTONE DEADLINES -->
+        <!-- ========================================================= -->
+        <div class="tab-pane fade show active" id="tab-session" role="tabpanel" aria-labelledby="tab-session-btn">
+            
+            <!-- Session Context Card -->
+            <div class="settings-card mb-4 border-primary border-opacity-25 bg-light bg-opacity-25">
+                <div class="settings-card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="bg-primary text-white p-3 rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 48px; height: 48px;">
+                            <i class="fas fa-calendar-check fs-5"></i>
+                        </div>
+                        <div>
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <h5 class="fw-bold text-dark mb-0">Active Academic Session Context</h5>
+                                <span class="badge-session">@currentSession</span>
+                            </div>
+                            <small class="text-muted">
+                                All deadlines configured below strictly apply to students enrolled in this Academic Session.
+                            </small>
+                        </div>
+                    </div>
+                    <form method="get" class="m-0 d-flex align-items-center gap-2">
+                        <label for="sessionFilterSelect" class="small fw-bold text-muted text-nowrap d-none d-sm-inline">Switch Session:</label>
+                        <select name="sessionFilter" id="sessionFilterSelect" class="form-select border-primary shadow-sm fw-bold" style="min-width: 200px;" onchange="this.form.submit()">
+                            @if (ViewBag.DistinctSessions != null)
                             {
-                                <option value="@sessionName" selected>@sessionName</option>
+                                foreach (var sessionName in (IEnumerable<string>)ViewBag.DistinctSessions)
+                                {
+                                    <option value="@sessionName" selected="@(ViewBag.CurrentSessionFilter == sessionName)">@sessionName</option>
+                                }
                             }
                             else
                             {
-                                <option value="@sessionName">@sessionName</option>
+                                <option value="">No Active Sessions</option>
                             }
-                        }
-                        if (!hasSessions)
-                        {
-                            <option value="">No Active Sessions</option>
-                        }
-                    }
-                    else
-                    {
-                        <option value="">No Active Sessions</option>
-                    }
-                </select>
-            </form>
-        </div>
-    </div>
-
-    <!-- Default Milestones Section -->
-    
-<!-- ========================================================= -->
-<!-- SECTION 1: MILESTONE DEADLINES (SESSION-SPECIFIC) -->
-<!-- ========================================================= -->
-
-<div class="row g-4 mb-4">
-
-    <!-- Milestone Deadline Management -->
-    <div class="col-lg-8">
-        <div class="card h-100">
-
-            <div class="card-header pt-4 pb-3">
-                <h5 class="card-title fw-bold mb-1">
-                    <i class="fas fa-calendar-check text-primary me-2"></i>
-                    Milestone Deadlines
-                </h5>
-
-                <p class="text-muted small mb-0">
-                    Manage academic milestone due dates for the selected session.
-                </p>
+                        </select>
+                    </form>
+                </div>
             </div>
 
-            <div class="card-body">
+            <!-- Single Source of Truth Notice -->
+            <div class="alert alert-primary bg-primary bg-opacity-10 border-0 d-flex align-items-start gap-3 p-3 mb-4 rounded-3">
+                <i class="fas fa-info-circle fs-5 text-primary mt-1"></i>
+                <div class="small text-dark">
+                    <strong>Authoritative Session Rule:</strong> Official academic deadlines are centrally managed per Academic Session. All students belonging to <strong>@currentSession</strong> share identical official due dates. Supervisors cannot modify official session deadlines. Optional supervisor-assigned DPP tasks have separate dates and are never overwritten.
+                </div>
+            </div>
 
-                <div class="alert alert-primary bg-primary bg-opacity-10 border-0 mb-4">
-                    <i class="fas fa-info-circle me-2"></i>
-                    You are managing milestone deadlines for
-                    <strong>@ViewBag.CurrentSessionFilter</strong>.
-                    Changes may affect multiple students in this session.
+            <div class="row g-4 mb-4">
+                <!-- Session Deadlines Overview Table -->
+                <div class="col-lg-7">
+                    <div class="settings-card h-100">
+                        <div class="settings-card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="card-title fw-bold mb-0 text-dark">
+                                    <i class="fas fa-list-check text-primary me-2"></i>Official Session Milestones
+                                </h5>
+                                <small class="text-muted">Current authoritative deadlines for @currentSession</small>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" data-bs-toggle="modal" data-bs-target="#addTemplateModal">
+                                <i class="fas fa-plus me-1"></i> Add Milestone
+                            </button>
+                        </div>
+                        <div class="settings-card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="bg-light text-muted small text-uppercase">
+                                        <tr>
+                                            <th class="ps-3 py-3">Stage</th>
+                                            <th class="py-3">Milestone Name</th>
+                                            <th class="py-3">Code</th>
+                                            <th class="py-3 text-end pe-3">Official Due Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- IAF Milestone -->
+                                        <tr>
+                                            <td class="ps-3"><span class="badge bg-primary bg-opacity-10 text-primary fw-bold">Stage 1</span></td>
+                                            <td>
+                                                <div class="fw-bold text-dark">Initial Project Allocation Form (IAF)</div>
+                                                <small class="text-muted">Supervisor assignment & project scope</small>
+                                            </td>
+                                            <td><code class="text-primary fw-bold">IAF</code></td>
+                                            <td class="text-end pe-3">
+                                                @if (!string.IsNullOrEmpty(ViewBag.IAFDeadline))
+                                                {
+                                                    <span class="badge bg-light text-dark border px-2 py-1 fs-6 fw-bold">@ViewBag.IAFDeadline</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning px-2 py-1">Not Set</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                        <!-- Stage 1 Proposal -->
+                                        <tr>
+                                            <td class="ps-3"><span class="badge bg-primary bg-opacity-10 text-primary fw-bold">Stage 1</span></td>
+                                            <td>
+                                                <div class="fw-bold text-dark">Stage 1 Final / DPP Proposal</div>
+                                                <small class="text-muted">Detailed project proposal submission</small>
+                                            </td>
+                                            <td><code class="text-primary fw-bold">STAGE1_FINAL</code></td>
+                                            <td class="text-end pe-3">
+                                                @if (!string.IsNullOrEmpty(ViewBag.ProposalDeadline))
+                                                {
+                                                    <span class="badge bg-light text-dark border px-2 py-1 fs-6 fw-bold">@ViewBag.ProposalDeadline</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning px-2 py-1">Not Set</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                        <!-- Stage 2 Step 1 to 4 -->
+                                        <tr>
+                                            <td class="ps-3"><span class="badge bg-info bg-opacity-10 text-info fw-bold">Stage 2</span></td>
+                                            <td>
+                                                <div class="fw-bold text-dark">Steps 1–4: Reports & Marksheet</div>
+                                                <small class="text-muted">Turnitin, final report, marksheet, meeting records</small>
+                                            </td>
+                                            <td><code class="text-info fw-bold">STAGE2_STEP1-4</code></td>
+                                            <td class="text-end pe-3">
+                                                @if (!string.IsNullOrEmpty(ViewBag.Step1to4Deadline))
+                                                {
+                                                    <span class="badge bg-light text-dark border px-2 py-1 fs-6 fw-bold">@ViewBag.Step1to4Deadline</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border px-2 py-1">Not Set</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                        <!-- Stage 2 Step 5 -->
+                                        <tr>
+                                            <td class="ps-3"><span class="badge bg-info bg-opacity-10 text-info fw-bold">Stage 2</span></td>
+                                            <td>
+                                                <div class="fw-bold text-dark">Step 5: Presentation Slides</div>
+                                                <small class="text-muted">Final Viva presentation slides</small>
+                                            </td>
+                                            <td><code class="text-info fw-bold">STAGE2_STEP5</code></td>
+                                            <td class="text-end pe-3">
+                                                @if (!string.IsNullOrEmpty(ViewBag.Step5Deadline))
+                                                {
+                                                    <span class="badge bg-light text-dark border px-2 py-1 fs-6 fw-bold">@ViewBag.Step5Deadline</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border px-2 py-1">Not Set</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <form asp-controller="Admin"
-                      asp-action="UpdateDefaultMilestoneDate"
-                      method="post"
-                      id="bulkUpdateForm"
-                      onsubmit="return confirm('Are you sure you want to update this milestone deadline for all matching students in the selected academic session?');">
+                <!-- Update Official Deadline Form -->
+                <div class="col-lg-5">
+                    <form asp-controller="Admin"
+                          asp-action="UpdateDefaultMilestoneDate"
+                          method="post"
+                          class="settings-card h-100 d-flex flex-column"
+                          id="bulkUpdateForm"
+                          onsubmit="return handleSettingsFormSubmit(this, 'Update official deadline for selected milestone across session @currentSession?');">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="sessionFilter" value="@currentSession" />
 
-                    @Html.AntiForgeryToken()
-
-                    <input type="hidden"
-                           name="sessionFilter"
-                           value="@ViewBag.CurrentSessionFilter" />
-
-                    <div class="row g-3">
-
-                        <div class="col-md-6">
-                            <label for="milestoneTitleSelect"
-                                   class="form-label small fw-bold text-muted text-uppercase">
-                                Milestone
-                            </label>
-
-                            <select name="milestoneTitle"
-                                    id="milestoneTitleSelect"
-                                    class="form-select"
-                                    required
-                                    onchange="validateBulkUpdate()">
-
-                                <option value="">
-                                    Select milestone...
-                                </option>
-
-                                <option value="IAF">
-                                    FYP I: Initial Assessment Form (IAF)
-                                </option>
-
-                                <option value="Proposal">
-                                    FYP I: Stage 1 Final Submission
-                                </option>
-
-                                <option value="Step 1:">
-                                    Step 1: Turnitin Checking
-                                </option>
-
-                                <option value="Step 2:">
-                                    Step 2: Final Report Submission
-                                </option>
-
-                                <option value="Step 3:">
-                                    Step 3: Marksheet Submission
-                                </option>
-
-                                <option value="Step 4:">
-                                    Step 4: Record of Supervisor Meeting Form
-                                </option>
-
-                                <option value="Step 5:">
-                                    Step 5: Presentation Slides Submission
-                                </option>
-
-                            </select>
+                        <div class="settings-card-header">
+                            <h5 class="card-title fw-bold mb-1 text-dark">
+                                <i class="fas fa-edit text-primary me-2"></i>Update Session Deadline
+                            </h5>
+                            <small class="text-muted">Centrally modify a milestone deadline for all enrolled students</small>
                         </div>
 
-                        <div class="col-md-6">
-                            <label for="bulkUpdateDate"
-                                   class="form-label small fw-bold text-muted text-uppercase">
-                                New Due Date
-                            </label>
+                        <div class="settings-card-body flex-grow-1">
+                            <div class="mb-3">
+                                <label for="milestoneTitleSelect" class="form-label form-label-custom">Select Milestone Target</label>
+                                <select name="milestoneTitle" id="milestoneTitleSelect" class="form-select" required onchange="validateBulkUpdate()">
+                                    <option value="">-- Choose academic milestone --</option>
+                                    <option value="IAF">Stage 1: Initial Project Allocation Form (IAF)</option>
+                                    <option value="Proposal">Stage 1: Final Submission / DPP Proposal</option>
+                                    <option value="Step 1:">Stage 2: Step 1 Turnitin Checking</option>
+                                    <option value="Step 2:">Stage 2: Step 2 Final Report Submission</option>
+                                    <option value="Presentation">Stage 2: Presentation Slides Submission</option>
+                                </select>
+                            </div>
 
-                            <input type="date"
-                                   name="deadline"
-                                   id="bulkUpdateDate"
-                                   class="form-control"
-                                   required
-                                   onchange="validateBulkUpdate()" />
+                            <div class="mb-4">
+                                <label for="bulkUpdateDate" class="form-label form-label-custom">New Authoritative Due Date</label>
+                                <input type="date" name="deadline" id="bulkUpdateDate" class="form-control" required onchange="validateBulkUpdate()" />
+                                <div class="form-text mt-2 small text-muted">
+                                    <i class="fas fa-clock me-1"></i> Due date will be registered at 23:59:59 on the selected date.
+                                </div>
+                            </div>
+
+                            <div class="alert alert-light border small text-muted p-3 mb-0">
+                                <i class="fas fa-shield-alt text-primary me-1"></i>
+                                <strong>Safety Rule:</strong> Existing student submissions, grades, and audit trail are preserved. Only official submission deadlines are updated.
+                            </div>
                         </div>
 
-                    </div>
-
-                    <div class="d-flex flex-column flex-sm-row
-                                justify-content-between align-items-sm-center
-                                gap-3 mt-4">
-
-                        <small class="text-muted">
-                            <i class="fas fa-exclamation-circle me-1"></i>
-                            Verify the session, milestone and date before updating.
-                        </small>
-
-                        <button type="submit"
-                                id="btnBulkUpdate"
-                                class="btn btn-outline-primary px-4"
-                                disabled>
-
-                            <i class="fas fa-save me-2"></i>
-                            Update Deadline
-
-                        </button>
-
-                    </div>
-
-                </form>
-
+                        <div class="settings-card-footer">
+                            <button type="submit" id="btnBulkUpdate" class="btn btn-primary w-100 py-2 fw-semibold" disabled>
+                                <i class="fas fa-save me-2"></i> Update Session Deadline
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
+
+        <!-- ========================================================= -->
+        <!-- TAB 2: IAF DEFENSE SETTINGS -->
+        <!-- ========================================================= -->
+        <div class="tab-pane fade" id="tab-iaf-defense" role="tabpanel" aria-labelledby="tab-iaf-defense-btn">
+            <div class="row justify-content-center">
+                <div class="col-lg-10 col-xl-9">
+                    <form asp-controller="Admin"
+                          asp-action="UpdateIafDefenseSettings"
+                          method="post"
+                          class="settings-card"
+                          id="iafDefenseSettingsForm"
+                          onsubmit="return handleSettingsFormSubmit(this);">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="sessionFilter" value="@currentSession" />
+
+                        <div class="settings-card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="card-title fw-bold mb-1 text-dark">
+                                    <i class="fas fa-user-shield text-primary me-2"></i>IAF Defense & Scheduling Settings
+                                </h5>
+                                <small class="text-muted">Configure Stage 1 Face-to-Face defense duration, supervisor attendance policy, and working hours.</small>
+                            </div>
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-3 py-2 rounded-pill fw-bold">
+                                Stage 1 Defense
+                            </span>
+                        </div>
+
+                        <div class="settings-card-body">
+                            <!-- Defense Duration Field -->
+                            <div class="mb-4 pb-3 border-bottom">
+                                <label for="durationMinutes" class="form-label form-label-custom">
+                                    Defense Slot Duration (Minutes) <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group" style="max-width: 260px;">
+                                    <input type="number"
+                                           id="durationMinutes"
+                                           name="durationMinutes"
+                                           class="form-control"
+                                           min="15"
+                                           max="180"
+                                           required
+                                           value="@(ViewBag.IAFDefenseDurationMinutes ?? "45")" />
+                                    <span class="input-group-text bg-light text-muted">minutes</span>
+                                </div>
+                                <div class="form-text mt-2 small text-muted">
+                                    Authoritative length per scheduled student defense. Recommended value: <strong>45 minutes</strong> (permitted range: 15–180 mins).
+                                </div>
+                            </div>
+
+                            <!-- Original Supervisor Attendance Policy -->
+                            <div class="mb-4 pb-3 border-bottom">
+                                <label class="form-label form-label-custom d-block mb-3">
+                                    Original Supervisor Attendance Policy <span class="text-danger">*</span>
+                                </label>
+
+                                <div class="row g-3">
+                                    <!-- Option 1: Optional -->
+                                    <div class="col-md-6">
+                                        <label class="policy-option-card d-block @(defenseSupervisorPolicy == "false" ? "selected" : "")" id="policyCardOptional">
+                                            <input type="radio"
+                                                   name="supervisorRequired"
+                                                   id="policyRadioOptional"
+                                                   value="false"
+                                                   checked="@(defenseSupervisorPolicy == "false")"
+                                                   onchange="updatePolicyCardSelection()" />
+                                            <div class="d-flex align-items-center gap-2 mb-2">
+                                                <i class="fas fa-user-clock fs-5 text-secondary"></i>
+                                                <h6 class="fw-bold mb-0 text-dark">Optional Attendance</h6>
+                                            </div>
+                                            <p class="small text-muted mb-2">
+                                                Original Supervisor attendance is <strong>not required</strong> for the defense.
+                                            </p>
+                                            <ul class="small text-muted ps-3 mb-0">
+                                                <li>Independent Examiner attendance is <strong>Mandatory</strong></li>
+                                                <li>Student attendance is <strong>Mandatory</strong></li>
+                                                <li>Defense can proceed even if Supervisor has timetable conflicts or leave</li>
+                                            </ul>
+                                        </label>
+                                    </div>
+
+                                    <!-- Option 2: Required -->
+                                    <div class="col-md-6">
+                                        <label class="policy-option-card d-block @(defenseSupervisorPolicy == "true" ? "selected" : "")" id="policyCardRequired">
+                                            <input type="radio"
+                                                   name="supervisorRequired"
+                                                   id="policyRadioRequired"
+                                                   value="true"
+                                                   checked="@(defenseSupervisorPolicy == "true")"
+                                                   onchange="updatePolicyCardSelection()" />
+                                            <div class="d-flex align-items-center gap-2 mb-2">
+                                                <i class="fas fa-user-check fs-5 text-primary"></i>
+                                                <h6 class="fw-bold mb-0 text-dark">Required Attendance</h6>
+                                            </div>
+                                            <p class="small text-muted mb-2">
+                                                Original Supervisor attendance is <strong>mandatory</strong>.
+                                            </p>
+                                            <ul class="small text-muted ps-3 mb-0">
+                                                <li>Independent Examiner attendance is <strong>Mandatory</strong></li>
+                                                <li>Original Supervisor attendance is <strong>Mandatory</strong></li>
+                                                <li>Smart Scheduling strictly checks mutual availability of all 3 parties</li>
+                                                <li>Conflicting defense appointments are strictly rejected</li>
+                                            </ul>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Lecturer Working Hours Window -->
+                            <div class="mb-3">
+                                <label class="form-label form-label-custom d-block">
+                                    Lecturer Working Hours Window (Mandatory) <span class="text-danger">*</span>
+                                </label>
+                                <div class="row g-3" style="max-width: 480px;">
+                                    <div class="col-6">
+                                        <label class="form-label small text-muted">Daily Start Time</label>
+                                        <input type="time"
+                                               name="workingHoursStart"
+                                               class="form-control"
+                                               required
+                                               value="@(ViewBag.LecturerWorkingHoursStart ?? "09:00")" />
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small text-muted">Daily End Time</label>
+                                        <input type="time"
+                                               name="workingHoursEnd"
+                                               class="form-control"
+                                               required
+                                               value="@(ViewBag.LecturerWorkingHoursEnd ?? "17:00")" />
+                                    </div>
+                                </div>
+                                <div class="form-text mt-2 small text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Defense appointments can only be booked during this window (e.g., 09:00 to 17:00). Outside-hours slots fail-closed.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-card-footer d-flex justify-content-between align-items-center">
+                            <span class="small text-muted">
+                                <i class="fas fa-lock me-1"></i> Historical completed bookings retain their original audit records.
+                            </span>
+                            <button type="submit" class="btn btn-primary px-4 py-2 fw-semibold">
+                                <i class="fas fa-save me-2"></i> Save IAF Defense Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- TAB 3: FINAL VIVA SETTINGS -->
+        <!-- ========================================================= -->
+        <div class="tab-pane fade" id="tab-final-viva" role="tabpanel" aria-labelledby="tab-final-viva-btn">
+            <div class="row justify-content-center">
+                <div class="col-lg-10 col-xl-8">
+                    <form asp-controller="Admin"
+                          asp-action="UpdateFinalVivaSettings"
+                          method="post"
+                          class="settings-card"
+                          id="finalVivaSettingsForm"
+                          onsubmit="return handleSettingsFormSubmit(this);">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="sessionFilter" value="@currentSession" />
+
+                        <div class="settings-card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="card-title fw-bold mb-1 text-dark">
+                                    <i class="fas fa-graduation-cap text-primary me-2"></i>Final Viva Settings
+                                </h5>
+                                <small class="text-muted">Independent settings for FYP Stage 2 Final Viva presentations</small>
+                            </div>
+                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-3 py-2 rounded-pill fw-bold">
+                                Stage 2 Viva
+                            </span>
+                        </div>
+
+                        <div class="settings-card-body">
+                            <div class="alert alert-info bg-info bg-opacity-10 border-0 d-flex align-items-start gap-3 p-3 mb-4 rounded-3">
+                                <i class="fas fa-info-circle fs-5 text-info mt-1"></i>
+                                <div class="small text-dark">
+                                    <strong>Separation of Stage 2 Final Viva:</strong> Final Viva presentation settings operate separately from Stage 1 IAF Defense to preserve distinct academic evaluation criteria and graduation timelines.
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="vivaDurationMinutes" class="form-label form-label-custom">
+                                    Final Viva Presentation Duration (Minutes) <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group" style="max-width: 260px;">
+                                    <input type="number"
+                                           id="vivaDurationMinutes"
+                                           name="vivaDurationMinutes"
+                                           class="form-control"
+                                           min="15"
+                                           max="180"
+                                           required
+                                           value="@(ViewBag.VivaDurationMinutes ?? "60")" />
+                                    <span class="input-group-text bg-light text-muted">minutes</span>
+                                </div>
+                                <div class="form-text mt-2 small text-muted">
+                                    Authoritative duration used for final presentation timetable slots and examiner scheduling conflict checks. Recommended: <strong>60 minutes</strong> (range: 15–180 mins).
+                                </div>
+                            </div>
+
+                            <div class="alert alert-light border small text-muted p-3 mb-0">
+                                <i class="fas fa-shield-alt text-primary me-1"></i>
+                                <strong>Conflict Detection Rule:</strong> Viva booking slots verify lecturer working hours, teaching timetable conflicts, and existing defense bookings across both examiners.
+                            </div>
+                        </div>
+
+                        <div class="settings-card-footer d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary px-4 py-2 fw-semibold">
+                                <i class="fas fa-save me-2"></i> Save Final Viva Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- TAB 4: SUPERVISOR MEETING SETTINGS -->
+        <!-- ========================================================= -->
+        <div class="tab-pane fade" id="tab-supervisor-meetings" role="tabpanel" aria-labelledby="tab-supervisor-meetings-btn">
+            <div class="row justify-content-center">
+                <div class="col-lg-10 col-xl-8">
+                    <form asp-controller="Admin"
+                          asp-action="UpdateMeetingDurationSetting"
+                          method="post"
+                          class="settings-card"
+                          id="meetingDurationForm"
+                          onsubmit="return handleSettingsFormSubmit(this);">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="sessionFilter" value="@currentSession" />
+
+                        <div class="settings-card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="card-title fw-bold mb-1 text-dark">
+                                    <i class="fas fa-handshake text-primary me-2"></i>Supervisor Weekly Meeting Settings
+                                </h5>
+                                <small class="text-muted">Standard meeting duration for student-supervisor weekly progress meetings</small>
+                            </div>
+                            <span class="badge bg-secondary bg-opacity-10 text-secondary border px-3 py-2 rounded-pill fw-bold">
+                                Progress Meetings
+                            </span>
+                        </div>
+
+                        <div class="settings-card-body">
+                            <div class="mb-4">
+                                <label for="meetingDurationMinutes" class="form-label form-label-custom">
+                                    Supervisor Meeting Duration (Minutes) <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group" style="max-width: 260px;">
+                                    <input type="number"
+                                           id="meetingDurationMinutes"
+                                           name="meetingDurationMinutes"
+                                           class="form-control"
+                                           min="15"
+                                           max="180"
+                                           required
+                                           value="@(ViewBag.MeetingDurationMinutes ?? "30")" />
+                                    <span class="input-group-text bg-light text-muted">minutes</span>
+                                </div>
+                                <div class="form-text mt-2 small text-muted">
+                                    Authoritative duration applied to all newly created or rescheduled weekly supervisor progress meetings. Development default: <strong>30 minutes</strong> (range: 15–180 mins).
+                                </div>
+                            </div>
+
+                            <div class="alert alert-info py-3 px-3 small mb-0 rounded-3">
+                                <div class="d-flex gap-2">
+                                    <i class="fas fa-shield-alt text-primary fs-5 mt-1"></i>
+                                    <div>
+                                        <strong>Historical Data Protection:</strong> Existing approved meetings retain their established intervals. Modifying this duration only influences future bookings and reschedules; historical records, logs, and supervisor time slots are never altered.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-card-footer d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary px-4 py-2 fw-semibold">
+                                <i class="fas fa-save me-2"></i> Save Supervisor Meeting Duration
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- TAB 5: DPP & EXHIBITION SETTINGS -->
+        <!-- ========================================================= -->
+        <div class="tab-pane fade" id="tab-dpp-exhibition" role="tabpanel" aria-labelledby="tab-dpp-exhibition-btn">
+            <div class="row g-4 justify-content-center">
+                <!-- Card 1: Thesis Cover Page DPP Date (Global Setting) -->
+                <div class="col-lg-6">
+                    <form asp-controller="Admin"
+                          asp-action="UpdateDppSettings"
+                          method="post"
+                          class="settings-card h-100 d-flex flex-column"
+                          id="dppSettingsForm"
+                          onsubmit="if (!this.querySelector('[name=dppDeadline]').value) return confirm('Clear the DPP deadline? The Thesis Cover Page will no longer have a configured date.'); return handleSettingsFormSubmit(this);">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="sessionFilter" value="@currentSession" />
+
+                        <div class="settings-card-header">
+                            <h5 class="card-title fw-bold mb-1 text-dark">
+                                <i class="fas fa-file-invoice text-primary me-2"></i>Thesis Cover Page DPP Date
+                            </h5>
+                            <small class="text-muted">Global date printed on Thesis Cover Page documents</small>
+                        </div>
+
+                        <div class="settings-card-body flex-grow-1">
+                            <div class="mb-3">
+                                <label for="dppDeadline" class="form-label form-label-custom">
+                                    DPP Submission Date (Cover Page)
+                                </label>
+                                <input type="date"
+                                       id="dppDeadline"
+                                       name="dppDeadline"
+                                       class="form-control"
+                                       value="@ViewBag.DPPDeadline" />
+                                <div class="form-text mt-2 small text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Used specifically as the date source for the <strong>Thesis Cover Page</strong> export. Leave blank if no date should be displayed.
+                                </div>
+                            </div>
+
+                            <div class="alert alert-light border small text-muted p-3 mb-0">
+                                <strong>Note:</strong> Official student submission deadlines for academic progression are managed separately in the <strong>Session Milestones</strong> tab.
+                            </div>
+                        </div>
+
+                        <div class="settings-card-footer">
+                            <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+                                <i class="fas fa-save me-2"></i> Save Cover Page Date
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Card 2: FYP Exhibition Schedule -->
+                <div class="col-lg-6">
+                    <form asp-controller="Admin"
+                          asp-action="UpdateExhibitionSettings"
+                          method="post"
+                          class="settings-card h-100 d-flex flex-column"
+                          id="exhibitionSettingsForm"
+                          onsubmit="return handleSettingsFormSubmit(this);">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="sessionFilter" value="@currentSession" />
+
+                        <div class="settings-card-header">
+                            <h5 class="card-title fw-bold mb-1 text-dark">
+                                <i class="fas fa-calendar-check text-primary me-2"></i>FYP Innovation & Project Exhibition
+                            </h5>
+                            <small class="text-muted">Schedule for the annual FYP project exhibition</small>
+                        </div>
+
+                        <div class="settings-card-body flex-grow-1">
+                            <div class="mb-3">
+                                <label for="exhibitionDate" class="form-label form-label-custom">Exhibition Date</label>
+                                <input type="date"
+                                       id="exhibitionDate"
+                                       name="exhibitionDate"
+                                       class="form-control"
+                                       value="@ViewBag.ExhibitionDate" />
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-6">
+                                    <label for="exhibitionTimeStart" class="form-label form-label-custom">Start Time</label>
+                                    <input type="time"
+                                           id="exhibitionTimeStart"
+                                           name="exhibitionTimeStart"
+                                           class="form-control"
+                                           value="@ViewBag.ExhibitionTimeStart" />
+                                </div>
+                                <div class="col-6">
+                                    <label for="exhibitionTimeEnd" class="form-label form-label-custom">End Time</label>
+                                    <input type="time"
+                                           id="exhibitionTimeEnd"
+                                           name="exhibitionTimeEnd"
+                                           class="form-control"
+                                           value="@ViewBag.ExhibitionTimeEnd" />
+                                </div>
+                            </div>
+
+                            <div class="small text-muted">
+                                Saving exhibition hours does not alter DPP Cover Page dates or workflow policies.
+                            </div>
+                        </div>
+
+                        <div class="settings-card-footer">
+                            <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+                                <i class="fas fa-save me-2"></i> Save Exhibition Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- TAB 6: WORKFLOW POLICIES -->
+        <!-- ========================================================= -->
+        <div class="tab-pane fade" id="tab-workflow-policies" role="tabpanel" aria-labelledby="tab-workflow-policies-btn">
+            <div class="row justify-content-center">
+                <div class="col-lg-10 col-xl-8">
+                    <form asp-controller="Admin"
+                          asp-action="UpdateWorkflowPolicySettings"
+                          method="post"
+                          class="settings-card"
+                          id="workflowPolicyForm"
+                          onsubmit="return handleSettingsFormSubmit(this);">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="sessionFilter" value="@currentSession" />
+
+                        <div class="settings-card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="card-title fw-bold mb-1 text-dark">
+                                    <i class="fas fa-sliders-h text-primary me-2"></i>Workflow Automation Policies
+                                </h5>
+                                <small class="text-muted">Automated system timeouts and student request lifecycle rules</small>
+                            </div>
+                            <span class="badge bg-secondary bg-opacity-10 text-secondary border px-3 py-2 rounded-pill fw-bold">
+                                Automation
+                            </span>
+                        </div>
+
+                        <div class="settings-card-body">
+                            <div class="mb-4">
+                                <label for="supervisorRequestTimeoutDays" class="form-label form-label-custom">
+                                    Supervisor Request Auto-Rejection Timeout (Days) <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group" style="max-width: 240px;">
+                                    <input type="number"
+                                           id="supervisorRequestTimeoutDays"
+                                           name="supervisorRequestTimeoutDays"
+                                           class="form-control"
+                                           min="1"
+                                           max="30"
+                                           required
+                                           value="@(ViewBag.SupervisorRequestTimeoutDays ?? "3")" />
+                                    <span class="input-group-text bg-light text-muted">days</span>
+                                </div>
+                                <div class="form-text mt-2 small text-muted">
+                                    Pending student supervisor requests without a response from the lecturer will be automatically rejected after this number of days (range: 1–30 days). Default: <strong>3 days</strong>.
+                                </div>
+                            </div>
+
+                            <div class="alert alert-light border small text-muted p-3 mb-0">
+                                <i class="fas fa-info-circle text-primary me-1"></i>
+                                <strong>System-Wide Policy:</strong> This timeout policy is processed by the background lifecycle service and applies across all academic sessions.
+                            </div>
+                        </div>
+
+                        <div class="settings-card-footer d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary px-4 py-2 fw-semibold">
+                                <i class="fas fa-save me-2"></i> Save Workflow Policy
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
     </div>
-
-    <!-- IAF Directory -->
-    <div class="col-lg-4">
-        <div class="card h-100">
-
-            <div class="card-header pt-4 pb-3">
-                <h5 class="card-title fw-bold mb-1">
-                    <i class="fas fa-folder-open text-primary me-2"></i>
-                    IAF Directory
-                </h5>
-
-                <p class="text-muted small mb-0">
-                    Initial Project Allocation Form records
-                </p>
-            </div>
-
-            <div class="card-body d-flex flex-column">
-
-                <div class="mb-4">
-                    <p class="text-muted small">
-                        View and manage submitted IAF records,
-                        reviews and approval statuses.
-                    </p>
-                </div>
-
-                <div class="mt-auto">
-                    <a asp-controller="Admin"
-                       asp-action="ApprovedIafList"
-                       class="btn btn-outline-primary w-100">
-
-                        <i class="fas fa-external-link-alt me-2"></i>
-                        View IAF Records
-
-                    </a>
-                </div>
-
-            </div>
-        </div>
-    </div>
-
-</div>
-
-
-
-<!-- ========================================================= -->
-<!-- SECTION 2: GLOBAL SETTINGS - INDEPENDENT SAVE FORMS -->
-<!-- ========================================================= -->
-
-<div class="mb-3">
-
-    <h5 class="fw-bold mb-1">
-        <i class="fas fa-cogs text-primary me-2"></i>
-        Global Settings
-    </h5>
-
-    <p class="text-muted small mb-0">
-        Manage DPP, Exhibition and Workflow settings independently.
-        Each section has its own Save button.
-        These settings currently apply system-wide.
-    </p>
-
-</div>
-
-<div class="row g-4 mb-4">
-
-    <!-- ===================================================== -->
-    <!-- DPP SETTINGS -->
-    <!-- ===================================================== -->
-
-    <div class="col-md-6 col-xl-4">
-
-        <form asp-controller="Admin"
-              asp-action="UpdateDppSettings"
-              method="post"
-              class="card h-100"
-              id="dppSettingsForm"
-              onsubmit="if (!this.querySelector('[name=dppDeadline]').value) return confirm('Clear the DPP deadline? The Thesis Cover Page will no longer have a configured date.'); return true;">
-
-            @Html.AntiForgeryToken()
-
-            <input type="hidden"
-                   name="sessionFilter"
-                   value="@ViewBag.CurrentSessionFilter" />
-
-            <div class="card-header pt-4 pb-3">
-
-                <h5 class="card-title fw-bold mb-1">
-                    <i class="fas fa-file-alt text-primary me-2"></i>
-                    DPP Settings
-                </h5>
-
-                <p class="text-muted small mb-0">
-                    Final DPP submission deadline
-                </p>
-
-            </div>
-
-            <div class="card-body">
-
-                <label for="dppDeadline"
-                       class="form-label small fw-bold
-                              text-muted text-uppercase">
-
-                    DPP Submission Deadline
-
-                </label>
-
-                <input type="date"
-                       id="dppDeadline"
-                       name="dppDeadline"
-                       class="form-control"
-                       value="@ViewBag.DPPDeadline" />
-
-                <div class="form-text mt-3">
-                    Used as the date source for the
-                    Thesis Cover Page.
-                </div>
-
-                <div class="small text-muted mt-3">
-                    <i class="fas fa-info-circle me-1"></i>
-                    Source: FYPSettings / DPPDeadline
-                </div>
-
-            </div>
-
-            <div class="card-footer bg-white border-top-0 pb-4">
-
-                <button type="submit"
-                        class="btn btn-primary w-100">
-
-                    <i class="fas fa-save me-2"></i>
-                    Save DPP Settings
-
-                </button>
-
-            </div>
-
-        </form>
-
-    </div>
-
-
-    <!-- ===================================================== -->
-    <!-- EXHIBITION SETTINGS -->
-    <!-- ===================================================== -->
-
-    <div class="col-md-6 col-xl-4">
-
-        <form asp-controller="Admin"
-              asp-action="UpdateExhibitionSettings"
-              method="post"
-              class="card h-100"
-              id="exhibitionSettingsForm">
-
-            @Html.AntiForgeryToken()
-
-            <input type="hidden"
-                   name="sessionFilter"
-                   value="@ViewBag.CurrentSessionFilter" />
-
-            <div class="card-header pt-4 pb-3">
-
-                <h5 class="card-title fw-bold mb-1">
-                    <i class="fas fa-calendar-alt text-primary me-2"></i>
-                    Exhibition Settings
-                </h5>
-
-                <p class="text-muted small mb-0">
-                    Exhibition event schedule
-                </p>
-
-            </div>
-
-            <div class="card-body">
-
-                <div class="mb-3">
-
-                    <label for="exhibitionDate"
-                           class="form-label small fw-bold
-                                  text-muted text-uppercase">
-
-                        Exhibition Date
-
-                    </label>
-
-                    <input type="date"
-                           id="exhibitionDate"
-                           name="exhibitionDate"
-                           class="form-control"
-                           value="@ViewBag.ExhibitionDate" />
-
-                </div>
-
-                <div class="row g-3">
-
-                    <div class="col-sm-6">
-
-                        <label for="exhibitionTimeStart"
-                               class="form-label small fw-bold
-                                      text-muted text-uppercase">
-
-                            Start Time
-
-                        </label>
-
-                        <input type="time"
-                               id="exhibitionTimeStart"
-                               name="exhibitionTimeStart"
-                               class="form-control"
-                               value="@ViewBag.ExhibitionTimeStart" />
-
-                    </div>
-
-                    <div class="col-sm-6">
-
-                        <label for="exhibitionTimeEnd"
-                               class="form-label small fw-bold
-                                      text-muted text-uppercase">
-
-                            End Time
-
-                        </label>
-
-                        <input type="time"
-                               id="exhibitionTimeEnd"
-                               name="exhibitionTimeEnd"
-                               class="form-control"
-                               value="@ViewBag.ExhibitionTimeEnd" />
-
-                    </div>
-
-                </div>
-
-                <div class="form-text mt-3">
-                    Saving this section does not modify
-                    DPP Deadline or Workflow Policies.
-                </div>
-
-            </div>
-
-            <div class="card-footer bg-white border-top-0 pb-4">
-
-                <button type="submit"
-                        class="btn btn-primary w-100">
-
-                    <i class="fas fa-save me-2"></i>
-                    Save Exhibition Settings
-
-                </button>
-
-            </div>
-
-        </form>
-
-    </div>
-
-
-    <!-- ===================================================== -->
-    <!-- WORKFLOW POLICIES -->
-    <!-- ===================================================== -->
-
-    <div class="col-md-12 col-xl-4">
-
-        <form asp-controller="Admin"
-              asp-action="UpdateWorkflowPolicySettings"
-              method="post"
-              class="card h-100"
-              id="workflowPolicyForm">
-
-            @Html.AntiForgeryToken()
-
-            <input type="hidden"
-                   name="sessionFilter"
-                   value="@ViewBag.CurrentSessionFilter" />
-
-            <div class="card-header pt-4 pb-3">
-
-                <h5 class="card-title fw-bold mb-1">
-                    <i class="fas fa-shield-alt text-primary me-2"></i>
-                    Workflow Policies
-                </h5>
-
-                <p class="text-muted small mb-0">
-                    Supervisor request management
-                </p>
-
-            </div>
-
-            <div class="card-body">
-
-                <label for="supervisorRequestTimeoutDays"
-                       class="form-label small fw-bold
-                              text-muted text-uppercase">
-
-                    Supervisor Request Timeout
-
-                </label>
-
-                <div class="input-group"
-                     style="max-width: 230px;">
-
-                    <input type="number"
-                           id="supervisorRequestTimeoutDays"
-                           name="supervisorRequestTimeoutDays"
-                           class="form-control"
-                           min="1"
-                           max="30"
-                           required
-                           value="@ViewBag.SupervisorRequestTimeoutDays" />
-
-                    <span class="input-group-text">
-                        days
-                    </span>
-
-                </div>
-
-                <div class="form-text mt-3">
-                    Pending supervisor requests without
-                    a response will be automatically
-                    rejected after the configured number
-                    of days.
-                </div>
-
-                <div class="small text-muted mt-3">
-                    This policy applies system-wide.
-                </div>
-
-            </div>
-
-            <div class="card-footer bg-white border-top-0 pb-4">
-
-                <button type="submit"
-                        class="btn btn-primary w-100">
-
-                    <i class="fas fa-save me-2"></i>
-                    Save Workflow Policy
-
-                </button>
-
-            </div>
-
-        </form>
-
-    </div>
-
-    @{
-    string defensePolicy =
-        ViewBag.IAFDefenseSupervisorRequired as string ?? "";
-}
-
-<div class="col-md-12 col-xl-4">
-
-    <form asp-controller="Admin"
-          asp-action="UpdateIafDefenseSettings"
-          method="post"
-          class="card h-100">
-
-        @Html.AntiForgeryToken()
-
-        <input type="hidden"
-               name="sessionFilter"
-               value="@ViewBag.CurrentSessionFilter" />
-
-        <div class="card-header">
-            <h5 class="card-title fw-bold">
-                IAF Defense Settings
-            </h5>
-        </div>
-
-        <div class="card-body">
-
-            <label class="form-label">
-                Defense Duration (Minutes)
-            </label>
-
-            <input type="number"
-                   name="durationMinutes"
-                   class="form-control mb-3"
-                   min="15"
-                   max="180"
-                   required
-                   value="@ViewBag.IAFDefenseDurationMinutes" />
-
-            <label class="form-label">
-                Original Supervisor Attendance
-            </label>
-
-            <select name="supervisorRequired"
-                    class="form-select"
-                    required>
-
-                <option value=""
-                        selected="@(defensePolicy == "")">
-                    Select Attendance Policy
-                </option>
-
-                <option value="false"
-                        selected="@(defensePolicy == "false")">
-                    Optional - Not Required
-                </option>
-
-                <option value="true"
-                        selected="@(defensePolicy == "true")">
-                    Required - Must Attend
-                </option>
-
-            </select>
-
-            <label class="form-label mt-3">
-                Lecturer Working Hours Window (Mandatory)
-            </label>
-            <div class="row g-2 mb-3">
-                <div class="col-6">
-                    <label class="form-label small text-muted">Start Time</label>
-                    <input type="time"
-                           name="workingHoursStart"
-                           class="form-control"
-                           value="@ViewBag.LecturerWorkingHoursStart" />
-                </div>
-                <div class="col-6">
-                    <label class="form-label small text-muted">End Time</label>
-                    <input type="time"
-                           name="workingHoursEnd"
-                           class="form-control"
-                           value="@ViewBag.LecturerWorkingHoursEnd" />
-                </div>
-                <div class="col-12">
-                    <small class="text-danger">Mandatory for Defense scheduling. Both start and end times must be configured.</small>
-                </div>
-            </div>
-
-            <label class="form-label mt-2">
-                Final Viva Duration (Minutes)
-            </label>
-            <input type="number"
-                   name="vivaDurationMinutes"
-                   class="form-control mb-1"
-                   min="15"
-                   max="180"
-                   placeholder="e.g. 60"
-                   value="@ViewBag.VivaDurationMinutes" />
-            <small class="text-muted d-block mb-3">Authoritative duration used to detect Viva conflicts during defense scheduling.</small>
-
-            <label class="form-label">
-                Supervisor Meeting Duration (Minutes)
-            </label>
-            <input type="number"
-                   name="meetingDurationMinutes"
-                   class="form-control mb-1"
-                   min="15"
-                   max="180"
-                   placeholder="e.g. 30"
-                   value="@ViewBag.MeetingDurationMinutes" />
-            <small class="text-muted d-block mb-3">Authoritative supervisor meeting duration rule (range: 15–180 mins). Can also be saved in dedicated card.</small>
-
-            <div class="form-text mt-2">
-                Recommended for development testing:
-                45 minutes and Supervisor Optional.
-                Working hours: 09:00 - 17:00.
-            </div>
-
-        </div>
-
-        <div class="card-footer">
-            <button type="submit"
-                    class="btn btn-primary w-100">
-                Save IAF Defense Settings
-            </button>
-        </div>
-
-    </form>
-
-</div>
-
-<div class="col-md-12 col-xl-4">
-
-    <form asp-controller="Admin"
-          asp-action="UpdateMeetingDurationSetting"
-          method="post"
-          class="card h-100">
-
-        @Html.AntiForgeryToken()
-
-        <input type="hidden"
-               name="sessionFilter"
-               value="@ViewBag.CurrentSessionFilter" />
-
-        <div class="card-header">
-            <h5 class="card-title fw-bold">
-                Supervisor Meeting Settings
-            </h5>
-        </div>
-
-        <div class="card-body">
-
-            <label class="form-label">
-                Supervisor Meeting Duration (Minutes) <span class="text-danger">*</span>
-            </label>
-
-            <input type="number"
-                   name="meetingDurationMinutes"
-                   class="form-control mb-1"
-                   min="15"
-                   max="180"
-                   required
-                   placeholder="e.g. 30"
-                   value="@ViewBag.MeetingDurationMinutes" />
-
-            <small class="text-muted d-block mb-3">
-                Authoritative duration for all newly booked and rescheduled supervisor meetings (15–180 mins). Development test value: 30 minutes.
-            </small>
-
-            <div class="alert alert-info py-2 px-3 small mt-3 mb-0">
-                <i class="fas fa-info-circle me-1"></i>
-                <strong>Historical Protection:</strong> Existing approved meetings retain their established intervals. Historical records are never modified.
-            </div>
-
-        </div>
-
-        <div class="card-footer">
-            <button type="submit"
-                    class="btn btn-primary w-100">
-                Save Supervisor Meeting Duration
-            </button>
-        </div>
-
-    </form>
-
-</div>
-
-</div>
-
-
 
     <!-- Add Milestone Modal -->
     <div class="modal fade text-start" id="addTemplateModal" tabindex="-1">
         <div class="modal-dialog">
-            <form asp-action="AddDefaultMilestoneTemplate" method="post" class="modal-content">
-                <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSessionFilter" />
+            <form asp-action="AddDefaultMilestoneTemplate" method="post" class="modal-content" onsubmit="return handleSettingsFormSubmit(this);">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="sessionFilter" value="@currentSession" />
                 <input type="hidden" name="model.Stage" value="1" />
                 
-                <div class="modal-header border-bottom-0">
-                    <h5 class="modal-title fw-bold">Add Milestone</h5>
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold">Add Official Milestone Template</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -855,24 +994,76 @@
             </form>
         </div>
     </div>
-
 </div>
 
 <script>
+    // Tab Persistence (URL Hash & SessionStorage)
+    document.addEventListener("DOMContentLoaded", function () {
+        var activeTab = window.location.hash || sessionStorage.getItem('activeSettingsTab');
+        if (activeTab) {
+            var triggerEl = document.querySelector('button[data-bs-target="' + activeTab + '"]');
+            if (triggerEl) {
+                var tab = new bootstrap.Tab(triggerEl);
+                tab.show();
+            }
+        }
+
+        var tabButtons = document.querySelectorAll('#settingsTabs button[data-bs-toggle="pill"]');
+        tabButtons.forEach(function (btn) {
+            btn.addEventListener('shown.bs.tab', function (e) {
+                var target = e.target.getAttribute('data-bs-target');
+                window.location.hash = target;
+                sessionStorage.setItem('activeSettingsTab', target);
+            });
+        });
+
+        // Initialize policy card selection styling
+        updatePolicyCardSelection();
+    });
+
+    // Milestone update validation
     function validateBulkUpdate() {
-        var milestone = document.querySelector('select[name="milestoneTitle"]').value;
+        var milestone = document.getElementById('milestoneTitleSelect').value;
         var date = document.getElementById('bulkUpdateDate').value;
         var btn = document.getElementById('btnBulkUpdate');
-        
-        if (milestone && date) {
-            btn.disabled = false;
+        btn.disabled = !(milestone && date);
+    }
+
+    // Policy Radio Card Visual Styling
+    function updatePolicyCardSelection() {
+        var isRequired = document.getElementById('policyRadioRequired')?.checked;
+        var cardRequired = document.getElementById('policyCardRequired');
+        var cardOptional = document.getElementById('policyCardOptional');
+
+        if (isRequired) {
+            cardRequired?.classList.add('selected');
+            cardOptional?.classList.remove('selected');
         } else {
-            btn.disabled = true;
+            cardOptional?.classList.add('selected');
+            cardRequired?.classList.remove('selected');
         }
     }
-    
-    function confirmToggle(form, isActive) {
-        var actionText = (isActive === 'True' || isActive === 'true') ? 'disable' : 'enable';
-        return confirm('Are you sure you want to ' + actionText + ' this milestone?');
+
+    // Submit handler: prevent double submissions & show spinner
+    function handleSettingsFormSubmit(form, confirmMessage) {
+        if (confirmMessage && !confirm(confirmMessage)) {
+            return false;
+        }
+
+        var submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            var originalHtml = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Saving...';
+            
+            // Safety timeout to re-enable button if response takes unexpectedly long
+            setTimeout(function () {
+                if (submitBtn.disabled) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalHtml;
+                }
+            }, 10000);
+        }
+        return true;
     }
 </script>

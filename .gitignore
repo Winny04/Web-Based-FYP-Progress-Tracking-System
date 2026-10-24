@@ -380,3 +380,32 @@ FYPTracker/FYPTracker.db
 FYPTracker/wwwroot/uploads/
 
 old_forms.txt
+
+# ==========================================
+# FYPTracker - Local Development & Testing
+# ==========================================
+
+# Visual Studio 2026 temporary files
+/.vs/
+.vs_backup/
+**/bin/
+**/obj/
+
+# Local development configurations
+FYPTracker/appsettings.Development.json
+FYPTracker/appsettings.Testing.json
+FYPTracker/appsettings.*.local.json
+
+# Runtime-generated meeting log snapshots
+FYPTracker/App_Data/MeetingLogSnapshots/
+
+# Temporary debugging scripts
+FYPTracker/scratch_inspect.py
+
+# Local database backups
+*.bak
+
+# Local environment secrets
+.env
+.env.*
+!.env.example

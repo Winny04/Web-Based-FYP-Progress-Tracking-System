@@ -19,9 +19,19 @@ namespace FYPTracker.Filters
         public override void OnActionExecuting(ActionExecutingContext context)
         {
             var user = context.HttpContext.User;
+            bool isAjaxOrJson = context.HttpContext.Request.Headers["X-Requested-With"] == "XMLHttpRequest" ||
+                                context.HttpContext.Request.Headers["Accept"].ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase);
 
             if (user == null || user.Identity?.IsAuthenticated != true)
             {
+                if (isAjaxOrJson)
+                {
+                    context.Result = new JsonResult(new { success = false, message = "You must be logged in to perform this action." })
+                    {
+                        StatusCode = StatusCodes.Status401Unauthorized
+                    };
+                    return;
+                }
                 context.Result =
                     new RedirectToActionResult("Login", "User", null);
                 return;
@@ -48,6 +58,14 @@ namespace FYPTracker.Filters
                         activeRole,
                         StringComparison.OrdinalIgnoreCase)))
             {
+                if (isAjaxOrJson)
+                {
+                    context.Result = new JsonResult(new { success = false, message = "Access denied: insufficient permissions." })
+                    {
+                        StatusCode = StatusCodes.Status403Forbidden
+                    };
+                    return;
+                }
                 context.Result =
                     new RedirectToActionResult(
                         "AccessDenied",

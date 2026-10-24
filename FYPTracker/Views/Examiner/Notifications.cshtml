@@ -163,6 +163,7 @@
                         "SubmissionFeedback" => "fas fa-comment-alt",
                         "RevisionRequest"    => "fas fa-edit",
                         "ExaminerAssignment" => "fas fa-user-tag",
+                        "VivaScheduled"      => "fas fa-graduation-cap",
                         _                   => "fas fa-bell"
                     };
                     var bgColor = n.Type switch {
@@ -172,6 +173,7 @@
                         "SubmissionFeedback" => "#ede9fe",
                         "RevisionRequest"    => "#fef3c7",
                         "ExaminerAssignment" => "#ffedd5",
+                        "VivaScheduled"      => "#dbeafe",
                         _                   => "#f3f4f6"
                     };
                     var iconColor = n.Type switch {
@@ -181,12 +183,14 @@
                         "SubmissionFeedback" => "#7c3aed",
                         "RevisionRequest"    => "#d97706",
                         "ExaminerAssignment" => "#ea580c",
+                        "VivaScheduled"      => "#1d4ed8",
                         _                   => "#6b7280"
                     };
                     var timeAgo = GetTimeAgo(n.CreatedDate);
 
                     var targetUrl = n.Type switch {
                         "ExaminerAssignment" => $"/Examiner/StudentDetails?projectId={n.RelatedRecordId}",
+                        "VivaScheduled"      => "/Examiner/Index",
                         _                    => "#"
                     };
 

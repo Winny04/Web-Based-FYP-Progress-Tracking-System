@@ -63,7 +63,8 @@ namespace FYPTracker.Services.Defense
             TimeSpan startTime,
             string venue,
             int currentUserId,
-            string? changeReason = null);
+            string? changeReason = null,
+            Func<IAFDefenseBooking, Task<AlternativeTimeRequestResult?>>? onBeforeCommit = null);
 
         /// <summary>
         /// Validates scheduling rules and conflicts without persisting. Useful for preflight checks.
@@ -77,11 +78,14 @@ namespace FYPTracker.Services.Defense
 
         /// <summary>
         /// Atomically records Pass or Fail for the current IAF Defense attempt.
+        /// Attempt 1 Fail -> PanelRevisionRequired (Revision/Resubmission).
+        /// Attempt 2 Fail -> ChangeOfTopicRequired.
+        /// Defense Pass -> AdminApproved.
         /// Synchronizes IAFDefenseBooking, IAFDefenseHistory, and FYPMilestone.
         /// </summary>
         Task<DefenseOutcomeResult> RecordDefenseOutcomeAsync(
             int milestoneId,
-            string outcome, // "AdminApproved" or "ChangeOfTopicRequired"
+            string outcome, // "AdminApproved" (Pass) or "PanelRevisionRequired" / "ChangeOfTopicRequired" (Fail)
             string? outcomeComments,
             int currentUserId,
             bool isEarlyOutcomeTestOverride = false);

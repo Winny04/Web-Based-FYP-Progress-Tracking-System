@@ -272,6 +272,12 @@
             } catch(e) {}
         }
 
+        function formatScore(val) {
+            let rounded = Math.round(val * 100) / 100;
+            if (rounded % 1 === 0) return rounded.toString();
+            return (Math.round(rounded * 10) / 10 === rounded) ? rounded.toFixed(1) : rounded.toFixed(2);
+        }
+
         function updateScore(category, updateAvg = true) {
             let weight = parseInt(document.getElementById('score' + category).value) || 0;
             if (document.getElementById('weight' + category)) {
@@ -281,7 +287,7 @@
             let fullMark = fullMarks[category];
             let score = (weight / 4.0) * fullMark;
             
-            document.getElementById('val' + category).innerText = score.toFixed(1) + "/" + fullMark;
+            document.getElementById('val' + category).innerText = formatScore(score) + "/" + fullMark;
             
             if (updateAvg) calculateTotal();
         }
@@ -293,7 +299,7 @@
                 total += (weight / 4.0) * fullMarks[cat];
             });
             
-            document.getElementById('totalScore').innerText = Math.round(total);
+            document.getElementById('totalScore').innerText = formatScore(total);
         }
 
         function saveDraft() {

@@ -786,7 +786,6 @@
                                                                         n.StudentId == m.StudentId &&
                                                                         n.SupervisorId == m.SupervisorId &&
                                                                         n.Stage == m.Stage &&
-                                                                        n.AcademicSessionId == m.AcademicSessionId &&
                                                                         n.Status == "Approved" &&
                                                                         n.MeetingDate.Date > m.MeetingDate.Date)
                                                                     .OrderBy(n => n.MeetingDate)
@@ -801,6 +800,7 @@
                                                                         data-supervisor="@(m.Supervisor?.FullName ?? "")"
                                                                         data-meeting-date="@m.MeetingDate.ToString("yyyy-MM-dd")"
                                                                         data-next-date="@(nextApprovedMeeting?.MeetingDate.ToString("yyyy-MM-dd") ?? "")"
+                                                                        data-week="@(m.WeekNumber.HasValue && m.WeekNumber.Value > 0 ? $"Week {m.WeekNumber.Value}" : "")"
                                                                         data-topics="@(m.MeetingLog?.KeyTopicsDiscussed ?? "")"
                                                                         data-completed="@(m.MeetingLog?.CompletedActionsAndNotes ?? "")"
                                                                         data-action="@(m.MeetingLog?.ActionPointsForNextMeeting ?? "")"
@@ -949,7 +949,8 @@
                                                             data-student="@(currentUser?.FullName ?? "")"
                                                             data-supervisor="@(m.Supervisor?.FullName ?? "")"
                                                             data-meeting-date="@m.MeetingDate.ToString("yyyy-MM-dd")"
-                                                            data-next-date=""
+                                                            data-next-date="@(m.MeetingLog.NextMeetingDate?.ToString("yyyy-MM-dd") ?? "")"
+                                                            data-week="@(m.WeekNumber.HasValue && m.WeekNumber.Value > 0 ? $"Week {m.WeekNumber.Value}" : "")"
                                                             data-topics="@(m.MeetingLog?.KeyTopicsDiscussed ?? "")"
                                                             data-completed="@(m.MeetingLog?.CompletedActionsAndNotes ?? "")"
                                                             data-action="@(m.MeetingLog?.ActionPointsForNextMeeting ?? "")"
@@ -1123,7 +1124,6 @@
                                                     n.StudentId == m.StudentId &&
                                                     n.SupervisorId == m.SupervisorId &&
                                                     n.Stage == m.Stage &&
-                                                    n.AcademicSessionId == m.AcademicSessionId &&
                                                     n.Status == "Approved" &&
                                                     n.MeetingDate.Date > m.MeetingDate.Date)
                                                 .OrderBy(n => n.MeetingDate)
@@ -1138,6 +1138,7 @@
                                                     data-supervisor="@(m.Supervisor?.FullName ?? "")"
                                                     data-meeting-date="@m.MeetingDate.ToString("yyyy-MM-dd")"
                                                     data-next-date="@(nextApprovedMeeting?.MeetingDate.ToString("yyyy-MM-dd") ?? "")"
+                                                    data-week="@(m.WeekNumber.HasValue && m.WeekNumber.Value > 0 ? $"Week {m.WeekNumber.Value}" : "")"
                                                     data-topics="@(m.MeetingLog?.KeyTopicsDiscussed ?? "")"
                                                     data-completed="@(m.MeetingLog?.CompletedActionsAndNotes ?? "")"
                                                     data-action="@(m.MeetingLog?.ActionPointsForNextMeeting ?? "")"
@@ -1259,23 +1260,21 @@
                             @{
                                 var session = ViewBag.ActiveSession as AcademicSession;
                                 var cutoff = (DateTime?)ViewBag.MeetingBookingCutoff;
+                                var bStartDate = (DateTime?)ViewBag.BookingStartDate;
+                                var bWindowError = ViewBag.BookingWindowError as string;
 
                                 DateTime minDate = DateTime.Today;
                                 DateTime maxDate = DateTime.Today;
 
                                 bool noValidDates = true;
 
-                                if (session?.StartDate is DateTime start &&
-                                    session.EndDate is DateTime end &&
-                                    cutoff.HasValue)
+                                if (bStartDate.HasValue && cutoff.HasValue)
                                 {
                                     minDate = isFlexibleTesting 
-                                        ? start.Date 
-                                        : (start.Date > DateTime.Today ? start.Date : DateTime.Today);
+                                        ? bStartDate.Value.Date 
+                                        : (bStartDate.Value.Date > DateTime.Today ? bStartDate.Value.Date : DateTime.Today);
 
-                                    maxDate = cutoff.Value.Date < end.Date
-                                        ? cutoff.Value.Date
-                                        : end.Date;
+                                    maxDate = cutoff.Value.Date;
 
                                     noValidDates = minDate > maxDate;
                                 }
@@ -1283,7 +1282,7 @@
                             @if (noValidDates)
                             {
                                 <div class="alert alert-warning">
-                                    No available meeting dates in this academic session.
+                                    @(bWindowError ?? "No available meeting dates in this academic stage.")
                                 </div>
                             }
                             else
@@ -1441,24 +1440,24 @@
                         @{
                             var rSession = ViewBag.ActiveSession as AcademicSession;
                             var rCutoff = (DateTime?)ViewBag.MeetingBookingCutoff;
+                            var rStartDate = (DateTime?)ViewBag.BookingStartDate;
+                            var rWindowError = ViewBag.BookingWindowError as string;
                             DateTime rMinDate = DateTime.Today;
                             DateTime rMaxDate = DateTime.Today;
                             bool rNoValidDates = true;
 
-                            if (rSession?.StartDate is DateTime rStart &&
-                                rSession.EndDate is DateTime rEnd &&
-                                rCutoff.HasValue)
+                            if (rStartDate.HasValue && rCutoff.HasValue)
                             {
                                 rMinDate = isFlexibleTesting
-                                    ? rStart.Date
-                                    : (rStart.Date > DateTime.Today ? rStart.Date : DateTime.Today);
-                                rMaxDate = rCutoff.Value.Date < rEnd.Date ? rCutoff.Value.Date : rEnd.Date;
+                                    ? rStartDate.Value.Date
+                                    : (rStartDate.Value.Date > DateTime.Today ? rStartDate.Value.Date : DateTime.Today);
+                                rMaxDate = rCutoff.Value.Date;
                                 rNoValidDates = rMinDate > rMaxDate;
                             }
                         }
                         @if (rNoValidDates)
                         {
-                            <div class="alert alert-warning">No available dates in this academic session.</div>
+                            <div class="alert alert-warning">@(rWindowError ?? "No available dates in this academic stage.")</div>
                         }
                         else
                         {
@@ -1999,8 +1998,9 @@
     document.getElementById('logTemplateTitle').textContent =
         template.title + ' — Version ' + template.version;
     // UI-only context from the existing meeting button attributes.
+    const weekInfo = btn.dataset.week ? '  ·  ' + btn.dataset.week : '';
     document.getElementById('logMeetingMeta').textContent =
-        'Stage ' + stage + '  ·  Meeting date: ' + (btn.dataset.meetingDate || 'Unknown');
+        'Stage ' + stage + weekInfo + '  ·  Meeting date: ' + (btn.dataset.meetingDate || 'Unknown');
 
     const container = document.getElementById(
         'meetingLogTemplateFields'
@@ -2074,7 +2074,9 @@
         // Label
         const label = document.createElement('label');
         label.className = 'form-label fw-bold';
-        label.textContent = field.label;
+        label.textContent = (field.label === 'Key topics Discussed & Screenshot of the Task Done')
+            ? 'Key Topics Discussed & Tasks Completed'
+            : field.label;
 
         col.appendChild(label);
 
@@ -2127,6 +2129,13 @@
             }
 
             col.appendChild(input);
+
+            if (field.key === 'TopicsDiscussed') {
+                const note = document.createElement('small');
+                note.className = 'text-muted d-block mt-1';
+                note.innerHTML = '<i class="fas fa-info-circle me-1" aria-hidden="true"></i>Screenshots of completed tasks can be shared with your supervisor through Messages. Please describe the work completed in the meeting record.';
+                col.appendChild(note);
+            }
 
         } else {
 

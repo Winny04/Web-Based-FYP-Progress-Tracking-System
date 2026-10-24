@@ -169,12 +169,13 @@
             bool isDashboard = currentPath == "/Admin" || currentPath == "/Admin/" || currentPath.StartsWith("/Admin/Index", StringComparison.OrdinalIgnoreCase);
             bool isUsers = currentPath.StartsWith("/Admin/ManageUsers", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/EditUser", StringComparison.OrdinalIgnoreCase);
             bool isProjects = currentPath.StartsWith("/Admin/ManageProjects", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/ProjectDetails", StringComparison.OrdinalIgnoreCase);
-            bool isSettings = currentPath.StartsWith("/Admin/Settings", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/ApprovedIafList", StringComparison.OrdinalIgnoreCase);
+            bool isIafReview = currentPath.StartsWith("/Admin/ApprovedIafList", StringComparison.OrdinalIgnoreCase);
+            bool isSettings = currentPath.StartsWith("/Admin/Settings", StringComparison.OrdinalIgnoreCase);
             bool isLookups = currentPath.StartsWith("/Admin/ManageLookups", StringComparison.OrdinalIgnoreCase);
             bool isFormTemplates = currentPath.StartsWith("/Admin/FormTemplateSettings", StringComparison.OrdinalIgnoreCase);
             bool isDefenses = currentPath.StartsWith("/Admin/ManageDefenses", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/SmartScheduleDefense", StringComparison.OrdinalIgnoreCase);
 
-            bool isAcademicsGroup = isProjects || isDefenses;
+            bool isAcademicsGroup = isProjects || isDefenses || isIafReview;
             bool isConfigGroup = isSettings || isFormTemplates || isLookups;
 
             <!-- 1. Dashboard -->
@@ -208,9 +209,15 @@
                         </a>
                     </div>
                     <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isIafReview ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/ApprovedIafList">
+                            <span class="menu-icon me-2"><i class="fas fa-file-signature text-warning fs-6"></i></span>
+                            <span class="menu-title">IAF Review &amp; Approval</span>
+                        </a>
+                    </div>
+                    <div class="menu-item px-1">
                         <a class="menu-link py-2 px-3 rounded-2 @(isDefenses ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/ManageDefenses">
                             <span class="menu-icon me-2"><i class="fas fa-calendar-check text-success fs-6"></i></span>
-                            <span class="menu-title">Manage Defenses</span>
+                            <span class="menu-title">Manage IAF Defenses</span>
                         </a>
                     </div>
                 </div>

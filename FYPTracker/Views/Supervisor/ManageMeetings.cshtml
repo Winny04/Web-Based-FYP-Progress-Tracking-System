@@ -758,6 +758,23 @@
                                     {
                                         if (m.MeetingLog.LogStatus == "Draft")
                                         {
+                                            DateTime? nextMeetingDate = m.MeetingLog?.NextMeetingDate;
+                                            if (!nextMeetingDate.HasValue)
+                                            {
+                                                var nextBooking = Model
+                                                    .Where(n =>
+                                                        n.StudentId == m.StudentId &&
+                                                        n.SupervisorId == m.SupervisorId &&
+                                                        n.Stage == m.Stage &&
+                                                        (n.Status == "Approved" || n.Status == "Scheduled") &&
+                                                        n.MeetingDate.Date > m.MeetingDate.Date)
+                                                    .OrderBy(n => n.MeetingDate)
+                                                    .ThenBy(n => n.MeetingTime)
+                                                    .FirstOrDefault();
+
+                                                nextMeetingDate = nextBooking?.MeetingDate;
+                                            }
+
                                             <button type="button" class="btn btn-sm btn-warning rounded-3 ms-1" 
                                                     data-id="@m.Id"
                                                     data-student="@m.Student?.FullName"
@@ -765,7 +782,8 @@
                                                     data-topics="@(m.MeetingLog?.KeyTopicsDiscussed)"
                                                     data-completed="@(m.MeetingLog?.CompletedActionsAndNotes)"
                                                     data-action="@(m.MeetingLog?.ActionPointsForNextMeeting)"
-                                                    data-next-date="@(m.MeetingLog?.NextMeetingDate?.ToString("yyyy-MM-dd") ?? "")"
+                                                    data-next-date="@(nextMeetingDate.HasValue ? nextMeetingDate.Value.ToString("dd/MM/yyyy") : "")"
+                                                    data-week="@(m.WeekNumber.HasValue && m.WeekNumber.Value > 0 ? $"Week {m.WeekNumber.Value}" : "")"
                                                     data-stage="@m.Stage"
                                                     data-supervisor="@(m.Supervisor?.FullName ?? "")"
                                                     onclick="openReviewLogModal(this)">
@@ -1644,8 +1662,9 @@
         document.getElementById('revTemplateTitle').textContent =
             template.title + ' — Version ' + template.version;
         // Display context only; the submitted form data and signing endpoint are unchanged.
+        const weekInfo = btn.dataset.week ? '  ·  ' + btn.dataset.week : '';
         document.getElementById('revMeetingMeta').textContent =
-            'Stage ' + stage + '  ·  Meeting date: ' + (btn.dataset.date || 'Unknown');
+            'Stage ' + stage + weekInfo + '  ·  Meeting date: ' + (btn.dataset.date || 'Unknown');
 
         const container = document.getElementById('revTemplateFields');
         container.replaceChildren();
@@ -1658,7 +1677,9 @@
             ActionPoints: btn.dataset.action || '',
             ActionsCompleted: btn.dataset.completed || '',
             NextMeetingDate: btn.dataset.nextDate || 'Not specified',
-            SupervisorSignatureDate: 'Automatically recorded when signed'
+            SupervisorSignatureDate: 'Automatically recorded when signed',
+            Week: btn.dataset.week || 'TBD',
+            WeekNumber: btn.dataset.week || 'TBD'
         };
 
         const fields = [...template.fields]
@@ -1679,7 +1700,9 @@
 
             const label = document.createElement('label');
             label.className = 'form-label fw-bold';
-            label.textContent = field.label;
+            label.textContent = (field.label === 'Key topics Discussed & Screenshot of the Task Done')
+                ? 'Key Topics Discussed & Tasks Completed'
+                : field.label;
             if (field.key === 'SupervisorSignature') {
                 const required = document.createElement('span');
                 required.className = 'text-danger';

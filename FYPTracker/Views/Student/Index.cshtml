@@ -1,7 +1,9 @@
 @using FYPTracker.Models
+@inject FYPTracker.Services.Time.ISystemClock SystemClock
 @model FYPProject?
 @{
     ViewData["Title"] = "Student Dashboard";
+    var today = SystemClock.Now.Date;
     var currentUser = ViewBag.CurrentUser as ApplicationUser;
     var name = currentUser?.FullName ?? "Student";
     var studentId = currentUser?.EmployeeId ?? "S12345678";
@@ -9,17 +11,25 @@
     var session = !string.IsNullOrEmpty(currentUser?.AcademicSession) ? currentUser.AcademicSession : (!string.IsNullOrEmpty(Model?.AcademicSession) ? Model.AcademicSession : "—");
     
     var milestones = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
+    var iafMilestone = FYPTracker.Utils.GradingHelper.GetIafMilestone(milestones);
+    var scheduledBooking = ViewBag.ScheduledIafBooking as IAFDefenseBooking;
     
     // --- Submission Progress Calculation ---
     bool IsSubmitted(FYPMilestone m) {
         if (m == null) return false;
-        if (m.SubmittedDate.HasValue) return true;
-        if (m.Status == "Approved" || m.Status == "Completed" || m.Status == "AdminApproved" || m.Status == "SupervisorSigned") return true;
+        // Defense pending/required/failed or rejected states are never considered completed submissions
+        if (m.Status == "DefenseRequired" || m.Status == "DefenseScheduled" || 
+            m.Status == "ChangeOfTopicRequired" || m.Status == "Rejected" || 
+            m.Status == "PanelRevisionRequired" || m.Status == "ReturnedForChanges" || 
+            m.Status == "ReturnedForEdits") return false;
+
+        if (m.Status == "Approved" || m.Status == "Completed" || m.Status == "AdminApproved") return true;
+        if (m.SubmittedDate.HasValue && m.Status != "Draft" && m.Status != "Pending") return true;
         return false;
     }
 
     var stage1Required = milestones.Where(m => m.Stage == 1 && m.IsRequired).ToList();
-    var stage2Required = milestones.Where(m => m.Stage == 2 && m.IsRequired).ToList();
+    var stage2Required = FYPTracker.Utils.GradingHelper.GetRequiredStage2Milestones(milestones);
 
     int stage1Completed = stage1Required.Count(m => IsSubmitted(m));
     int stage2Completed = stage2Required.Count(m => IsSubmitted(m));
@@ -39,50 +49,284 @@
     string actionLink = "/Student/ProjectDetails";
     string actionBadge = "bg-success";
     int? actionDaysLeft = null;
+    bool isIafDefenseScheduled = false;
+    string defenseScheduledDate = "";
+    string defenseScheduledTime = "";
+    string defenseScheduledVenue = "";
 
-    var rejectedMilestone = milestones.FirstOrDefault(m => m.Status == "Rejected" || m.Status == "Revision" || m.Status == "ReturnedForChanges" || m.Status == "ReturnedForEdits");
-    if (rejectedMilestone != null) {
-        nextAction = rejectedMilestone;
-        actionTitle = nextAction.Title;
-        actionDesc = "Revision is required based on recent feedback. Please update your work and resubmit.";
-        actionStatus = "Revision Required";
-        actionBtnText = "Revise Submission";
-        actionLink = "/Student/Forms"; // Or Stage2 based on Stage
-        actionBadge = "bg-danger";
-    }
-    else {
-        var unsubmitted = milestones.Where(m => m.IsRequired && !IsSubmitted(m) && m.Status != "Locked" && m.Status != "DefenseScheduled")
-                                    .OrderBy(m => m.DueDate ?? DateTime.MaxValue).FirstOrDefault();
-        if (unsubmitted != null) {
-            nextAction = unsubmitted;
-            actionTitle = nextAction.Title;
-            actionDesc = $"Your next required milestone is due soon. Please prepare your submission.";
-            actionStatus = "Not Submitted";
-            actionBtnText = "Submit Now";
-            actionLink = nextAction.Stage == 2 ? "/Student/Stage2" : "/Student/Forms";
-            actionBadge = "bg-warning text-dark";
+    bool canProgressStage1 = FYPTracker.Utils.GradingHelper.CanProgressToStage1Dpp(iafMilestone, scheduledBooking);
+    var stage2Eligibility = FYPTracker.Utils.GradingHelper.CheckStage2AcademicEligibility(Model, milestones, scheduledBooking);
+
+    if (iafMilestone != null && !canProgressStage1)
+    {
+        nextAction = iafMilestone;
+        // 1. IAF Defense Scheduled / Awaiting Assessment
+        if (iafMilestone.Status == "DefenseScheduled" || (scheduledBooking != null && scheduledBooking.BookingStatus == "Scheduled" && scheduledBooking.AcademicOutcome == "Pending"))
+        {
+            isIafDefenseScheduled = true;
+            actionTitle = "IAF Defense — Scheduled / Awaiting Assessment";
+            actionStatus = "Scheduled";
+            actionBadge = "bg-info text-dark";
+
+            var dDate = scheduledBooking != null ? (DateTime?)scheduledBooking.DefenseDate : iafMilestone.DefenseDate;
+            defenseScheduledDate = dDate?.ToString("dd MMMM yyyy") ?? "Scheduled";
+
+            if (scheduledBooking != null)
+            {
+                string startAmPm = DateTime.Today.Add(scheduledBooking.StartTime).ToString("tt");
+                string endAmPm = DateTime.Today.Add(scheduledBooking.EndTime).ToString("tt");
+                defenseScheduledTime = startAmPm == endAmPm
+                    ? $"{DateTime.Today.Add(scheduledBooking.StartTime):hh:mm}–{DateTime.Today.Add(scheduledBooking.EndTime):hh:mm tt}"
+                    : $"{DateTime.Today.Add(scheduledBooking.StartTime):hh:mm tt}–{DateTime.Today.Add(scheduledBooking.EndTime):hh:mm tt}";
+            }
+            else if (!string.IsNullOrEmpty(iafMilestone.DefenseTime))
+            {
+                defenseScheduledTime = iafMilestone.DefenseTime;
+            }
+            else
+            {
+                defenseScheduledTime = "10:00–10:15 AM";
+            }
+
+            defenseScheduledVenue = !string.IsNullOrEmpty(scheduledBooking?.Venue)
+                ? scheduledBooking.Venue
+                : (!string.IsNullOrEmpty(iafMilestone.DefenseVenue) ? iafMilestone.DefenseVenue : "FYP Testing Room 1");
+
+            actionDesc = $"Your IAF Defense is scheduled for {defenseScheduledDate} at {defenseScheduledTime} ({defenseScheduledVenue}). Awaiting assessment outcome.";
+            actionBtnText = "View Defense Details";
+            actionLink = "/Student/Forms";
         }
-        else {
-            var pendingReview = milestones.Where(m => IsSubmitted(m) && m.Status != "Approved" && m.Status != "Completed" && m.Status != "AdminApproved")
-                                          .OrderByDescending(m => m.SubmittedDate).FirstOrDefault();
-            if (pendingReview != null) {
-                nextAction = pendingReview;
-                actionTitle = nextAction.Title;
-                actionDesc = "Your submission is currently under review by your supervisor or examiner.";
-                actionStatus = "Pending Review";
-                actionBtnText = "View Submission";
-                actionLink = nextAction.Stage == 2 ? "/Student/Stage2" : "/Student/Forms";
-                actionBadge = "bg-info text-dark";
+        // 2. IAF Defense Required (Awaiting Scheduling)
+        else if (iafMilestone.Status == "DefenseRequired")
+        {
+            actionTitle = "IAF Defense — Awaiting Scheduling";
+            actionDesc = "An IAF Defense session is required. Waiting for the administrator to schedule your defense date, time, and venue.";
+            actionStatus = "Awaiting Scheduling";
+            actionBadge = "bg-warning text-dark";
+            actionBtnText = "View IAF Status";
+            actionLink = "/Student/Forms";
+        }
+        // 3. IAF Defense Failed / Change of Topic Required
+        else if (iafMilestone.Status == "ChangeOfTopicRequired")
+        {
+            int attemptNum = 1;
+            if (!string.IsNullOrEmpty(iafMilestone.Remarks) && iafMilestone.Remarks.Contains("JSON: "))
+            {
+                var h = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(iafMilestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1]);
+                attemptNum = h?.CurrentAttempt ?? 1;
+            }
+
+            if (attemptNum >= 2)
+            {
+                actionTitle = "Change of Topic Required (Repeat FYP)";
+                actionDesc = "Maximum 2 IAF attempts reached. Please contact Admin regarding the FYP repeat process.";
+                actionStatus = "Action Required";
+                actionBadge = "bg-danger";
+                actionBtnText = "Contact Admin";
+                actionLink = "/Student/Forms";
+            }
+            else
+            {
+                actionTitle = "IAF Defense Failed — Change of Topic Required";
+                actionDesc = "Defense was unsuccessful. You are required to submit a new Initial Allocation Form with a change of topic for Attempt 2.";
+                actionStatus = "Resubmission Required";
+                actionBadge = "bg-danger";
+                actionBtnText = "Submit Attempt 2";
+                actionLink = "/Student/Forms";
             }
         }
+        // 4. Revision Required
+        else if (iafMilestone.Status == "Rejected" || iafMilestone.Status == "Revision" || iafMilestone.Status == "ReturnedForChanges" || iafMilestone.Status == "ReturnedForEdits" || iafMilestone.Status == "PanelRevisionRequired")
+        {
+            actionTitle = iafMilestone.Title;
+            actionDesc = "Revision is required for your Initial Project Allocation Form. Please update your work and resubmit.";
+            actionStatus = "Revision Required";
+            actionBtnText = "Revise Submission";
+            actionLink = "/Student/Forms";
+            actionBadge = "bg-danger";
+        }
+        // 5. Not submitted yet
+        else if (iafMilestone.Status == "Draft" || iafMilestone.Status == "Pending")
+        {
+            actionTitle = iafMilestone.Title;
+            actionDesc = "Please complete and submit your Initial Project Allocation Form (IAF).";
+            actionStatus = "Not Submitted";
+            actionBtnText = "Submit Now";
+            actionLink = "/Student/Forms";
+            actionBadge = "bg-warning text-dark";
+        }
+        // 6. Under review
+        else
+        {
+            actionTitle = iafMilestone.Title;
+            actionDesc = "Your Initial Project Allocation Form is currently under review.";
+            actionStatus = "Pending Review";
+            actionBtnText = "View Submission";
+            actionLink = "/Student/Forms";
+            actionBadge = "bg-info text-dark";
+        }
+    }
+    else
+    {
+        // Subsequent Stage 1 / Stage 2 Milestones
+        var otherMilestones = milestones
+            .Where(m => m.Id != iafMilestone?.Id && !FYPTracker.Utils.GradingHelper.IsObsoleteOrRetiredStage2Milestone(m))
+            .ToList();
+        var rejectedMilestone = otherMilestones.FirstOrDefault(m => m.Status == "Rejected" || m.Status == "Revision" || m.Status == "ReturnedForChanges" || m.Status == "ReturnedForEdits");
+        
+        var stage1Final = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(milestones);
+        bool isStage1Passed = Model?.Stage1Grade == "Pass";
+        bool isStage1FinalDone = isStage1Passed || (stage1Final != null && (IsSubmitted(stage1Final) || stage1Final.Status == "Approved" || stage1Final.Status == "Completed"));
+
+        if (rejectedMilestone != null) {
+            nextAction = rejectedMilestone;
+            actionTitle = nextAction.Stage == 2 ? FYPTracker.Utils.GradingHelper.GetStage2DisplayTitle(nextAction) : nextAction.Title;
+            actionDesc = "Revision is required based on recent feedback. Please update your work and resubmit.";
+            actionStatus = "Revision Required";
+            actionBtnText = "Revise Submission";
+            actionLink = nextAction.Stage == 2 ? "/Student/Stage2" : "/Student/Forms";
+            actionBadge = "bg-danger";
+        }
+        else if (!isStage1FinalDone)
+        {
+            var dppPrereq = FYPTracker.Utils.GradingHelper.CanSubmitStage1FinalDpp(milestones, iafMilestone, scheduledBooking);
+            if (!dppPrereq.HasTasks)
+            {
+                nextAction = stage1Final;
+                actionTitle = "Stage 1 DPP — Waiting for Supervisor Tasks";
+                actionDesc = "DPP Submission Locked — Waiting for your Supervisor to assign Stage 1 DPP progress tasks.";
+                actionStatus = "Waiting for Supervisor";
+                actionBtnText = "View Progress Requirements";
+                actionLink = "/Student/Forms";
+                actionBadge = "bg-warning text-dark";
+            }
+            else if (!dppPrereq.AllApproved)
+            {
+                var unsubmittedTask = otherMilestones.FirstOrDefault(m => m.MilestoneSource == "Supervisor" && m.Stage == 1 && (m.Status == "Draft" || m.Status == "Pending"));
+                if (unsubmittedTask != null)
+                {
+                    nextAction = unsubmittedTask;
+                    actionTitle = $"DPP Progress: {unsubmittedTask.Title}";
+                    actionDesc = "Please complete and submit your assigned Stage 1 DPP progress task for supervisor review.";
+                    actionStatus = "Action Required";
+                    actionBtnText = "Submit Progress Task";
+                    actionLink = "/Student/Forms";
+                    actionBadge = "bg-warning text-dark";
+                }
+                else
+                {
+                    var taskUnderReview = otherMilestones.FirstOrDefault(m => m.MilestoneSource == "Supervisor" && m.Stage == 1 && m.Status == "PendingSupervisorReview");
+                    nextAction = taskUnderReview ?? stage1Final;
+                    actionTitle = "Stage 1 DPP — Waiting for Supervisor Approval";
+                    actionDesc = "DPP Submission Locked — Waiting for Supervisor approval of all required Stage 1 progress tasks.";
+                    actionStatus = "Pending Review";
+                    actionBtnText = "View Progress Status";
+                    actionLink = "/Student/Forms";
+                    actionBadge = "bg-info text-dark";
+                }
+            }
+            else
+            {
+                // All progress tasks are approved! Unlocked for final DPP submission
+                if (stage1Final != null && !IsSubmitted(stage1Final))
+                {
+                    nextAction = stage1Final;
+                    actionTitle = stage1Final.Title;
+                    actionDesc = "All required Stage 1 progress tasks are approved. You can now finalize and submit your Stage 1 Final DPP.";
+                    actionStatus = "Ready to Submit";
+                    actionBtnText = "Submit Stage 1 DPP";
+                    actionLink = "/Student/Forms";
+                    actionBadge = "bg-primary";
+                }
+                else
+                {
+                    var unsubmitted = otherMilestones.Where(m => m.IsRequired && !IsSubmitted(m) && m.Status != "Locked")
+                                                    .OrderBy(m => m.DueDate ?? DateTime.MaxValue).FirstOrDefault();
+                    if (unsubmitted != null)
+                    {
+                        nextAction = unsubmitted;
+                        actionTitle = unsubmitted.Stage == 2 ? FYPTracker.Utils.GradingHelper.GetStage2DisplayTitle(unsubmitted) : unsubmitted.Title;
+                        actionDesc = $"Your next required milestone is due soon. Please prepare your submission.";
+                        actionStatus = "Not Submitted";
+                        actionBtnText = "Submit Now";
+                        actionLink = nextAction.Stage == 2 ? "/Student/Stage2" : "/Student/Forms";
+                        actionBadge = "bg-warning text-dark";
+                    }
+                }
+            }
+        }
+        else {
+            if (!stage2Eligibility.IsEligible)
+            {
+                // Stage 1 submission is done, but Stage 1 grading is not yet confirmed (or Stage 2 locked)
+                nextAction = stage1Final;
+                if (stage2Eligibility.IsPendingGrading)
+                {
+                    actionTitle = "Stage 1 Grading Pending — Awaiting Supervisor and Examiner Final Evaluation";
+                    actionDesc = "Your Stage 1 Final Proposal has been submitted and is currently awaiting final grading and marksheet evaluation from your Supervisor and Examiner.";
+                    actionStatus = "Grading Pending";
+                    actionBadge = "bg-info text-dark";
+                    actionBtnText = "View Submission";
+                    actionLink = "/Student/Forms";
+                }
+                else
+                {
+                    actionTitle = "Stage 2 Locked";
+                    actionDesc = stage2Eligibility.Reason;
+                    actionStatus = "Locked";
+                    actionBadge = "bg-secondary";
+                    actionBtnText = "View Status";
+                    actionLink = "/Student/Forms";
+                }
+            }
+            else
+            {
+                var unsubmitted = otherMilestones.Where(m => m.IsRequired && !IsSubmitted(m) && m.Status != "Locked")
+                                                .OrderBy(m => m.DueDate ?? DateTime.MaxValue).FirstOrDefault();
+                if (unsubmitted != null) {
+                    nextAction = unsubmitted;
+                    actionTitle = unsubmitted.Stage == 2 ? FYPTracker.Utils.GradingHelper.GetStage2DisplayTitle(unsubmitted) : unsubmitted.Title;
+                    actionDesc = $"Your next required milestone is due soon. Please prepare your submission.";
+                    actionStatus = "Not Submitted";
+                    actionBtnText = "Submit Now";
+                    actionLink = nextAction.Stage == 2 ? "/Student/Stage2" : "/Student/Forms";
+                    actionBadge = "bg-warning text-dark";
+                }
+                else {
+                    var pendingReview = otherMilestones.Where(m => IsSubmitted(m) && m.Status != "Approved" && m.Status != "Completed" && m.Status != "AdminApproved")
+                                                      .OrderByDescending(m => m.SubmittedDate).FirstOrDefault();
+                    if (pendingReview != null) {
+                        nextAction = pendingReview;
+                        actionTitle = pendingReview.Stage == 2 ? FYPTracker.Utils.GradingHelper.GetStage2DisplayTitle(pendingReview) : pendingReview.Title;
+                        actionDesc = "Your submission is currently under review by your supervisor or examiner.";
+                        actionStatus = "Pending Review";
+                        actionBtnText = "View Submission";
+                        actionLink = nextAction.Stage == 2 ? "/Student/Stage2" : "/Student/Forms";
+                        actionBadge = "bg-info text-dark";
+                    }
+                    else if (stage2Eligibility.IsEligible) {
+                        bool areStage2Approved = FYPTracker.Utils.GradingHelper.AreStage2DeliverablesApproved(milestones);
+                        if (areStage2Approved) {
+                            actionTitle = "Stage 2 Submissions Completed";
+                            actionDesc = "All required Stage 2 deliverables have been submitted and approved. Awaiting final grading.";
+                            actionStatus = "Approved";
+                            actionBtnText = "View Stage 2";
+                            actionLink = "/Student/Stage2";
+                            actionBadge = "bg-success";
+                        }
+                    }
+                }
+            }
+        }
+
     }
 
-    if (nextAction != null && nextAction.DueDate.HasValue) {
-        actionDaysLeft = (int)(nextAction.DueDate.Value.Date - DateTime.Today).TotalDays;
+    if (nextAction != null && nextAction.DueDate.HasValue && !isIafDefenseScheduled && actionStatus != "Grading Pending") {
+        actionDaysLeft = (int)(nextAction.DueDate.Value.Date - today).TotalDays;
     }
 
     // --- Upcoming Deadlines ---
-    var upcomingDeadlines = milestones.Where(m => m.IsRequired && !IsSubmitted(m) && m.Status != "Locked")
+    var upcomingDeadlines = milestones.Where(m => m.IsRequired && !IsSubmitted(m) && !FYPTracker.Utils.GradingHelper.IsObsoleteOrRetiredStage2Milestone(m))
                                       .OrderBy(m => m.DueDate ?? DateTime.MaxValue)
                                       .Take(4)
                                       .ToList();
@@ -90,6 +334,20 @@
     // --- Latest Feedback ---
     var latestFeedbacks = (ViewBag.LatestFeedbacks as List<FYPTracker.ViewModels.StudentFeedbackItemVM>) 
                           ?? FYPTracker.Utils.GradingHelper.GetAuthorizedStudentFeedback(Model);
+
+    // --- Unread Notifications & Viva Schedule Details ---
+    var unreadNotifCount = (int)(ViewBag.UnreadNotificationCount ?? 0);
+    var unreadVivaNotifs = (ViewBag.UnreadVivaNotifications as List<FYPNotification>) ?? new List<FYPNotification>();
+
+    var vivaDateVal = Model?.VivaDate;
+    bool hasVivaDate = vivaDateVal.HasValue;
+    bool isVivaPast = hasVivaDate && vivaDateVal.Value < SystemClock.Now;
+    string vivaStatusText = !hasVivaDate ? "Not Scheduled" : (isVivaPast ? "Past Oral Examination" : "Upcoming Oral Examination");
+    string vivaBadgeClass = !hasVivaDate ? "bg-light text-muted border" : (isVivaPast ? "bg-secondary text-white" : "bg-success text-white");
+    string vivaDateStr = hasVivaDate ? vivaDateVal.Value.ToString("dddd, dd MMMM yyyy") : "Pending Scheduling";
+    string vivaTimeStr = hasVivaDate ? vivaDateVal.Value.ToString("hh:mm tt") : "—";
+    string vivaVenueStr = !string.IsNullOrWhiteSpace(Model?.VivaVenue) ? Model.VivaVenue : (hasVivaDate ? "TBA" : "—");
+    int vivaDaysLeft = hasVivaDate && !isVivaPast ? (int)Math.Ceiling((vivaDateVal.Value - SystemClock.Now).TotalDays) : 0;
 }
 
 <div class="container-xxl py-4">
@@ -122,6 +380,37 @@
     </div>
 
     @if(Model != null) {
+        @if (unreadVivaNotifs.Any())
+        {
+            var latestViva = unreadVivaNotifs.First();
+            <div class="alert border-0 shadow-sm rounded-3 d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4 p-3" style="background: linear-gradient(135deg, #eff6ff, #dbeafe); border-left: 5px solid #2563eb !important;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center justify-content-center bg-primary text-white rounded-circle flex-shrink-0" style="width: 42px; height: 42px;">
+                        <i class="fas fa-graduation-cap fs-5"></i>
+                    </div>
+                    <div>
+                        <div class="fw-bold text-dark fs-6 mb-1">
+                            @latestViva.Title
+                            <span class="badge bg-primary text-white rounded-pill ms-2 fs-9">@unreadVivaNotifs.Count Unread</span>
+                        </div>
+                        <div class="text-secondary small">@latestViva.Message</div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <form asp-action="MarkAsRead" asp-controller="Student" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="notificationId" value="@latestViva.Id" />
+                        <button type="submit" class="btn btn-outline-primary btn-sm fw-bold">
+                            <i class="fas fa-check me-1"></i> Mark as Read
+                        </button>
+                    </form>
+                    <a href="#vivaScheduleCard" class="btn btn-primary btn-sm fw-bold">
+                        View Viva Schedule <i class="fas fa-arrow-down ms-1"></i>
+                    </a>
+                </div>
+            </div>
+        }
+
         <div class="row g-4 mb-4">
             <!-- Next Required Action (col-lg-8) -->
             <div class="col-lg-8">
@@ -132,9 +421,12 @@
                     <div class="card-body p-4 d-flex flex-column justify-content-center">
                         <div class="d-flex align-items-start gap-3 p-3 rounded-3" style="background-color: #f8fafc; border: 1px solid #e2e8f0;">
                             <div class="flex-shrink-0 mt-1">
-                                @if (actionStatus == "Revision Required") { <i class="fas fa-exclamation-triangle text-danger fs-3"></i> }
+                                @if (actionStatus == "Revision Required" || actionStatus == "Resubmission Required") { <i class="fas fa-exclamation-triangle text-danger fs-3"></i> }
+                                else if (actionStatus == "Action Required") { <i class="fas fa-ban text-danger fs-3"></i> }
+                                else if (isIafDefenseScheduled) { <i class="fas fa-calendar-check text-info fs-3"></i> }
+                                else if (actionStatus == "Awaiting Scheduling") { <i class="fas fa-clock text-warning fs-3"></i> }
                                 else if (actionStatus == "Not Submitted") { <i class="fas fa-file-upload text-warning fs-3"></i> }
-                                else if (actionStatus == "Pending Review") { <i class="fas fa-hourglass-half text-info fs-3"></i> }
+                                else if (actionStatus == "Pending Review" || actionStatus == "Grading Pending") { <i class="fas fa-hourglass-half text-info fs-3"></i> }
                                 else { <i class="fas fa-check-circle text-success fs-3"></i> }
                             </div>
                             <div class="flex-grow-1">
@@ -143,8 +435,18 @@
                                     <span class="badge @actionBadge rounded-pill px-2 py-1 fw-bold fs-8">@actionStatus</span>
                                 </div>
                                 <p class="text-muted fs-7 mb-2">@actionDesc</p>
+
+                                @if (isIafDefenseScheduled) {
+                                    <div class="p-2 mb-3 bg-white rounded border border-info small text-dark">
+                                        <div class="d-flex flex-wrap gap-3">
+                                            <span><i class="far fa-calendar-alt text-primary me-1"></i><strong>Date:</strong> @defenseScheduledDate</span>
+                                            <span><i class="far fa-clock text-primary me-1"></i><strong>Time:</strong> @defenseScheduledTime</span>
+                                            <span><i class="fas fa-map-marker-alt text-primary me-1"></i><strong>Venue:</strong> @defenseScheduledVenue</span>
+                                        </div>
+                                    </div>
+                                }
                                 
-                                @if (nextAction != null && nextAction.DueDate.HasValue) {
+                                @if (nextAction != null && nextAction.DueDate.HasValue && !isIafDefenseScheduled && actionStatus != "Grading Pending") {
                                     <div class="d-flex align-items-center gap-3 mb-3">
                                         <div class="text-muted fs-8 fw-bold"><i class="far fa-calendar me-1"></i> Due: @nextAction.DueDate.Value.ToString("dd MMM yyyy")</div>
                                         @if (actionDaysLeft.HasValue) {
@@ -154,7 +456,7 @@
                                         }
                                     </div>
                                 }
-                                <div class="@(nextAction != null && nextAction.DueDate.HasValue ? "" : "mt-2")">
+                                <div class="@(nextAction != null && nextAction.DueDate.HasValue && !isIafDefenseScheduled && actionStatus != "Grading Pending" ? "" : "mt-2")">
                                     <a href="@actionLink" class="btn btn-primary fw-bold px-3 py-1 btn-sm">@actionBtnText</a>
                                 </div>
                             </div>
@@ -193,6 +495,130 @@
             </div>
         </div>
 
+        <!-- Final Viva Schedule Card -->
+        <div class="card border-0 shadow-sm rounded-3 mb-4" id="vivaScheduleCard">
+            <div class="card-header bg-white border-bottom pt-3 pb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h6 class="fw-bolder text-dark mb-0">
+                    <i class="fas fa-graduation-cap text-primary me-2"></i> Final Viva Oral Examination Schedule
+                </h6>
+                <div>
+                    @if (!hasVivaDate)
+                    {
+                        <span class="badge bg-light text-muted border rounded-pill px-3 py-1 fs-8 fw-bold">
+                            <i class="fas fa-hourglass-start me-1"></i> Not Scheduled
+                        </span>
+                    }
+                    else if (isVivaPast)
+                    {
+                        <span class="badge bg-secondary text-white rounded-pill px-3 py-1 fs-8 fw-bold">
+                            <i class="fas fa-history me-1"></i> Past Oral Examination
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-success text-white rounded-pill px-3 py-1 fs-8 fw-bold">
+                            <i class="fas fa-calendar-check me-1"></i> Upcoming Examination
+                        </span>
+                    }
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-3 col-sm-6">
+                        <div class="p-3 bg-light rounded-3 border h-100">
+                            <div class="text-muted fs-8 fw-bold text-uppercase mb-1">
+                                <i class="far fa-calendar-alt text-primary me-1"></i> Date
+                            </div>
+                            <div class="fw-bolder text-dark fs-7 text-truncate" title="@vivaDateStr">
+                                @(hasVivaDate ? vivaDateVal.Value.ToString("dd MMM yyyy (ddd)") : "Pending")
+                            </div>
+                            <small class="text-muted fs-9 d-block mt-1">
+                                @(hasVivaDate ? vivaDateVal.Value.ToString("yyyy") : "Awaiting Schedule")
+                            </small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="p-3 bg-light rounded-3 border h-100">
+                            <div class="text-muted fs-8 fw-bold text-uppercase mb-1">
+                                <i class="far fa-clock text-primary me-1"></i> Time
+                            </div>
+                            <div class="fw-bolder text-dark fs-7">
+                                @vivaTimeStr
+                            </div>
+                            <small class="text-muted fs-9 d-block mt-1">
+                                @(hasVivaDate ? "Official Slot" : "To be announced")
+                            </small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="p-3 bg-light rounded-3 border h-100">
+                            <div class="text-muted fs-8 fw-bold text-uppercase mb-1">
+                                <i class="fas fa-map-marker-alt text-primary me-1"></i> Venue
+                            </div>
+                            <div class="fw-bolder text-dark fs-7 text-truncate" title="@vivaVenueStr">
+                                @vivaVenueStr
+                            </div>
+                            <small class="text-muted fs-9 d-block mt-1">
+                                @(hasVivaDate ? "Oral Examination Location" : "To be confirmed")
+                            </small>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="p-3 bg-light rounded-3 border h-100">
+                            <div class="text-muted fs-8 fw-bold text-uppercase mb-1">
+                                <i class="fas fa-info-circle text-primary me-1"></i> Status
+                            </div>
+                            <div class="fw-bolder @(isVivaPast ? "text-secondary" : (hasVivaDate ? "text-success" : "text-muted")) fs-7">
+                                @vivaStatusText
+                            </div>
+                            <small class="text-muted fs-9 d-block mt-1">
+                                @if (!hasVivaDate)
+                                {
+                                    <span>Pending administrator assignment</span>
+                                }
+                                else if (isVivaPast)
+                                {
+                                    <span>Concluded on @vivaDateVal.Value.ToString("dd MMM yyyy")</span>
+                                }
+                                else
+                                {
+                                    <span>@(vivaDaysLeft == 0 ? "Scheduled for today" : (vivaDaysLeft == 1 ? "Scheduled for tomorrow" : $"In {vivaDaysLeft} days"))</span>
+                                }
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                @if (hasVivaDate && isVivaPast)
+                {
+                    <div class="alert alert-secondary bg-light border text-secondary rounded-3 mt-3 mb-0 p-3 d-flex align-items-center gap-3">
+                        <i class="fas fa-info-circle fs-5 flex-shrink-0 text-muted"></i>
+                        <div class="fs-8">
+                            <strong>Past Examination Record:</strong> The recorded Viva Oral Examination date (<strong>@vivaDateVal.Value.ToString("dd MMMM yyyy, hh:mm tt")</strong> at <strong>@vivaVenueStr</strong>) has passed. This record is displayed for historical tracking and is not an active upcoming examination. If you have inquiries regarding your viva evaluation or rescheduling, please contact your FYP Administrator.
+                        </div>
+                    </div>
+                }
+                else if (hasVivaDate && !isVivaPast)
+                {
+                    <div class="alert alert-success bg-success bg-opacity-10 border border-success border-opacity-25 text-success-emphasis rounded-3 mt-3 mb-0 p-3 d-flex align-items-center gap-3">
+                        <i class="fas fa-calendar-check fs-5 flex-shrink-0 text-success"></i>
+                        <div class="fs-8">
+                            <strong>Upcoming Viva Confirmed:</strong> Your Final Year Project Viva Oral Examination is officially scheduled for <strong>@vivaDateVal.Value.ToString("dddd, dd MMMM yyyy, hh:mm tt")</strong> at <strong>@vivaVenueStr</strong>. Please ensure your presentation materials are ready and arrive 15 minutes before your scheduled slot.
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-light border rounded-3 mt-3 mb-0 p-3 d-flex align-items-center gap-3">
+                        <i class="fas fa-clock fs-5 flex-shrink-0 text-muted"></i>
+                        <div class="fs-8 text-muted">
+                            Your Final Viva schedule has not been set yet. Once the FYP Administrator schedules your session, full details will be displayed here and you will receive a notification.
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
         <div class="row g-4">
             <!-- Upcoming Deadlines (col-lg-7) -->
             <div class="col-lg-7">
@@ -205,14 +631,25 @@
                         @if(upcomingDeadlines.Any()) {
                             <ul class="list-group list-group-flush rounded-bottom-3">
                                 @foreach(var ms in upcomingDeadlines) {
-                                    int days = ms.DueDate.HasValue ? (int)(ms.DueDate.Value.Date - DateTime.Today).TotalDays : 0;
+                                    int days = ms.DueDate.HasValue ? (int)(ms.DueDate.Value.Date - today).TotalDays : 0;
+                                    bool isMsStage2Locked = (ms.Stage == 2 && !stage2Eligibility.IsEligible);
                                     <li class="list-group-item px-4 py-3">
                                         <div class="d-flex justify-content-between align-items-center">
                                             <div>
-                                                <h6 class="fw-bold text-dark mb-1 fs-7">@ms.Title</h6>
+                                                <h6 class="fw-bold text-dark mb-1 fs-7">
+                                                    @(ms.Stage == 2 ? FYPTracker.Utils.GradingHelper.GetStage2DisplayTitle(ms) : ms.Title)
+                                                    @if (isMsStage2Locked)
+                                                    {
+                                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border ms-1 fs-9"><i class="fas fa-lock me-1"></i>Stage 2</span>
+                                                    }
+                                                </h6>
                                                 <div class="text-muted fs-8 fw-bold">Due: @(ms.DueDate?.ToString("dd MMM yyyy") ?? "-")</div>
                                             </div>
-                                            @if (days < 0) { <span class="badge bg-danger rounded-pill px-2 py-1 fs-8">Overdue</span> }
+                                            @if (isMsStage2Locked)
+                                            {
+                                                <span class="badge bg-secondary rounded-pill px-2 py-1 fs-8"><i class="fas fa-lock me-1"></i> Locked</span>
+                                            }
+                                            else if (days < 0) { <span class="badge bg-danger rounded-pill px-2 py-1 fs-8">Overdue</span> }
                                             else if (days <= 7) { <span class="badge bg-warning text-dark rounded-pill px-2 py-1 fs-8">In @days days</span> }
                                             else { <span class="badge bg-light border text-muted rounded-pill px-2 py-1 fs-8">In @days days</span> }
                                         </div>

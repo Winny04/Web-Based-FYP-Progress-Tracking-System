@@ -24,16 +24,32 @@ namespace FYPTracker.Controllers
         private readonly IWebHostEnvironment _env;
         private readonly IEmailService _emailService;
         private readonly IHubContext<NotificationHub> _hubContext;
-        // B3.9: Prepared dependency. Do not invoke while feature is disabled.
+        // B3.9: Prepared dependency.
         private readonly IIAFAlternativeTimeRequestService? _alternativeTimeRequestService;
+        private readonly Microsoft.Extensions.Configuration.IConfiguration? _configuration;
+        private readonly FYPTracker.Services.Meetings.IMeetingRequirementService? _meetingRequirementService;
 
-        public ExaminerController(FYPTrackerContext context, IWebHostEnvironment env, IEmailService emailService, IHubContext<NotificationHub> hubContext, IIAFAlternativeTimeRequestService? alternativeTimeRequestService = null)
+        public ExaminerController(
+            FYPTrackerContext context,
+            IWebHostEnvironment env,
+            IEmailService emailService,
+            IHubContext<NotificationHub> hubContext,
+            IIAFAlternativeTimeRequestService? alternativeTimeRequestService = null,
+            Microsoft.Extensions.Configuration.IConfiguration? configuration = null,
+            FYPTracker.Services.Meetings.IMeetingRequirementService? meetingRequirementService = null)
         {
             _context = context;
             _env = env;
             _emailService = emailService;
             _hubContext = hubContext;
             _alternativeTimeRequestService = alternativeTimeRequestService;
+            _configuration = configuration;
+            _meetingRequirementService = meetingRequirementService;
+        }
+
+        private bool IsAlternativeTimeFeatureEnabled()
+        {
+            return IAFAlternativeTimeFeatureGate.IsFeatureEnabled(_configuration, _env, _context) && _alternativeTimeRequestService != null;
         }
 
         [NonAction]
@@ -43,25 +59,66 @@ namespace FYPTracker.Controllers
 
         [HttpGet]
         [Authorize(Roles = "Examiner")]
-        public IActionResult MyIAFAlternativeTimeRequests()
+        public async Task<IActionResult> MyIAFAlternativeTimeRequests()
         {
-            // B3.7.2: Examiner read endpoint foundation only.
-            //
-            // SECURITY:
-            // - Do not query IAFAlternativeTimeRequests yet.
-            // - Do not accept a caller-supplied Examiner ID.
-            // - Do not expose other examiners' requests.
-            // - Keep disabled until database deployment and
-            //   authoritative ownership validation are approved.
+            if (!IsAlternativeTimeFeatureEnabled())
+            {
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new
+                    {
+                        success = false,
+                        code = "ALTERNATIVE_TIME_REQUEST_DISABLED",
+                        message = "IAF Alternative Time Requests are not yet available."
+                    });
+            }
 
-            return StatusCode(
-                StatusCodes.Status503ServiceUnavailable,
-                new
+            if (!int.TryParse(User.FindFirst("Id")?.Value, out int examinerId) || examinerId <= 0)
+            {
+                var userName = User.Identity?.Name;
+                var u = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
+                if (u != null) examinerId = u.Id;
+            }
+
+            if (examinerId <= 0)
+            {
+                return Unauthorized(new { success = false, message = "Examiner identity not authenticated." });
+            }
+
+            var requests = await _context.IAFAlternativeTimeRequests
+                .AsNoTracking()
+                .Include(r => r.Milestone).ThenInclude(m => m.Project).ThenInclude(p => p.Student)
+                .Include(r => r.Milestone).ThenInclude(m => m.Project).ThenInclude(p => p.Supervisor)
+                .Include(r => r.AcademicSession)
+                .Include(r => r.RequestedByAdmin)
+                .Where(r => r.RequestedLecturerId == examinerId)
+                .OrderByDescending(r => r.CreatedAt)
+                .Select(r => new
                 {
-                    success = false,
-                    code = "ALTERNATIVE_TIME_REQUEST_DISABLED",
-                    message = "IAF Alternative Time Requests are not yet available."
-                });
+                    r.Id,
+                    r.MilestoneId,
+                    r.AttemptNumber,
+                    StudentName = r.Milestone.Project.Student.FullName,
+                    StudentId = r.Milestone.Project.Student.EmployeeId ?? r.Milestone.Project.Student.CoventryId,
+                    ProjectTitle = r.Milestone.Project.Title,
+                    SupervisorName = r.Milestone.Project.Supervisor != null ? r.Milestone.Project.Supervisor.FullName : "N/A",
+                    AdminName = r.RequestedByAdmin.FullName,
+                    r.AdminNotes,
+                    r.Status,
+                    SuggestedDate = r.SuggestedDate.HasValue ? r.SuggestedDate.Value.ToString("yyyy-MM-dd") : null,
+                    SuggestedStartTime = r.SuggestedStartTime.HasValue ? r.SuggestedStartTime.Value.ToString(@"hh\:mm") : null,
+                    SuggestedEndTime = r.SuggestedEndTime.HasValue ? r.SuggestedEndTime.Value.ToString(@"hh\:mm") : null,
+                    r.SuggestedDurationMinutes,
+                    r.LecturerNotes,
+                    r.CreatedAt,
+                    r.RespondedAt,
+                    r.FinalizedAt,
+                    r.DecisionReason,
+                    RowVersion = r.RowVersion != null ? Convert.ToBase64String(r.RowVersion) : null
+                })
+                .ToListAsync();
+
+            return Json(new { success = true, requests });
         }
 
 
@@ -72,27 +129,146 @@ namespace FYPTracker.Controllers
             int requestId,
             DateTime suggestedDate,
             TimeSpan suggestedStartTime,
-            string? lecturerNotes)
+            string? lecturerNotes,
+            string? rowVersion = null)
         {
-            // B3.7.3: Examiner Suggest Time API foundation.
-            //
-            // SECURITY:
-            // - Feature is not activated.
-            // - Do not trust a caller-supplied Examiner ID.
-            // - Request ownership must be verified server-side.
-            // - Date, time, duration, and RowVersion must be
-            //   validated before future activation.
-            // - Do not call SubmitSuggestionAsync yet.
-            // - No database access, booking, or notifications.
+            if (!IsAlternativeTimeFeatureEnabled())
+            {
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new
+                    {
+                        success = false,
+                        code = "ALTERNATIVE_TIME_SUGGESTION_DISABLED",
+                        message = "IAF alternative time suggestions are not yet available."
+                    });
+            }
 
-            return StatusCode(
-                StatusCodes.Status503ServiceUnavailable,
-                new
+            return SubmitIAFAlternativeTimeSuggestionCoreAsync(requestId, suggestedDate, suggestedStartTime, lecturerNotes, rowVersion).GetAwaiter().GetResult();
+        }
+
+        private async Task<IActionResult> SubmitIAFAlternativeTimeSuggestionCoreAsync(
+            int requestId,
+            DateTime suggestedDate,
+            TimeSpan suggestedStartTime,
+            string? lecturerNotes,
+            string? rowVersion = null)
+        {
+
+            if (requestId <= 0)
+            {
+                return BadRequest(new { success = false, code = "INVALID_REQUEST_ID", message = "A valid request ID is required." });
+            }
+
+            if (!int.TryParse(User.FindFirst("Id")?.Value, out int currentExaminerUserId) || currentExaminerUserId <= 0)
+            {
+                var userName = User.Identity?.Name;
+                var u = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
+                if (u != null) currentExaminerUserId = u.Id;
+            }
+
+            if (currentExaminerUserId <= 0)
+            {
+                return Unauthorized(new { success = false, code = "UNAUTHORIZED_ACCESS", message = "A valid authenticated Examiner identity is required." });
+            }
+
+            // Resolve authoritative duration from FYPSetting
+            var durationSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "IAFDefenseDurationMinutes");
+
+            int authoritativeDurationMinutes = 45;
+            if (durationSetting != null &&
+                int.TryParse(durationSetting.Value, out int configuredDuration) &&
+                configuredDuration >= 15 &&
+                configuredDuration <= 180)
+            {
+                authoritativeDurationMinutes = configuredDuration;
+            }
+
+            // Resolve authoritative working hours
+            var startSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursStart");
+
+            var endSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursEnd");
+
+            if (!FYPTracker.Services.LecturerAvailabilityService.TryParseWorkingHours(
+                startSetting?.Value,
+                endSetting?.Value,
+                out TimeSpan authoritativeWorkStart,
+                out TimeSpan authoritativeWorkEnd))
+            {
+                authoritativeWorkStart = new TimeSpan(8, 0, 0);
+                authoritativeWorkEnd = new TimeSpan(17, 0, 0);
+            }
+
+            byte[]? clientRowVersion = null;
+            if (!string.IsNullOrEmpty(rowVersion))
+            {
+                try
+                {
+                    clientRowVersion = Convert.FromBase64String(rowVersion);
+                }
+                catch
+                {
+                    return BadRequest(new { success = false, code = "INVALID_ROW_VERSION", message = "Invalid concurrency token format." });
+                }
+            }
+            else
+            {
+                var req = await _context.IAFAlternativeTimeRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == requestId);
+                clientRowVersion = req?.RowVersion;
+            }
+
+            var result = await _alternativeTimeRequestService!.SubmitSuggestionAsync(
+                requestId: requestId,
+                currentLecturerUserId: currentExaminerUserId,
+                suggestedDate: suggestedDate,
+                suggestedStartTime: suggestedStartTime,
+                durationMinutes: authoritativeDurationMinutes,
+                workingHoursStart: authoritativeWorkStart,
+                workingHoursEnd: authoritativeWorkEnd,
+                lecturerNotes: lecturerNotes,
+                clientRowVersion: clientRowVersion);
+
+            if (!result.Success)
+            {
+                return BadRequest(new
                 {
                     success = false,
-                    code = "ALTERNATIVE_TIME_SUGGESTION_DISABLED",
-                    message = "IAF alternative time suggestions are not yet available."
+                    code = result.ErrorCode,
+                    message = result.ErrorMessage
                 });
+            }
+
+            // In-app notification to the requesting administrator
+            try
+            {
+                var adminNotification = new FYPNotification
+                {
+                    RecipientId = result.Request!.RequestedByAdminId,
+                    Type = "IAFAlternativeTimeSuggested",
+                    Title = "IAF Defense Alternative Time Proposed",
+                    Message = $"An Examiner has proposed an alternative defense time for request #{result.Request.Id} (Date: {suggestedDate:dd MMM yyyy}, Time: {suggestedStartTime:hh\\:mm}). Please review in Smart Schedule.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                };
+                _context.FYPNotifications.Add(adminNotification);
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SubmitIAFAlternativeTimeSuggestion] Notification warning: {ex.Message}");
+            }
+
+            return Json(new
+            {
+                success = true,
+                message = "Alternative time suggestion submitted successfully."
+            });
         }
 
 
@@ -223,6 +399,7 @@ namespace FYPTracker.Controllers
             var projectsQuery = _context.FYPProjects
                 .Include(p => p.Student)
                 .Include(p => p.Supervisor)
+                .Include(p => p.Milestones)
                 .Where(p => p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
 
             if (!string.IsNullOrEmpty(activeSession) && activeSession != "All")
@@ -245,7 +422,7 @@ namespace FYPTracker.Controllers
                         .ThenInclude(m => m.Project)
                             .ThenInclude(p => p.Supervisor)
                     .Include(b => b.AcademicSession)
-                    .Where(b => b.ExaminerId == user.Id && (b.BookingStatus == "Scheduled" || b.BookingStatus == "Rescheduled"));
+                    .Where(b => b.ExaminerId == user.Id && (b.BookingStatus == "Scheduled" || b.BookingStatus == "Rescheduled" || b.BookingStatus == "Completed"));
 
                 if (!string.IsNullOrEmpty(activeSession) && activeSession != "All")
                 {
@@ -253,14 +430,381 @@ namespace FYPTracker.Controllers
                 }
 
                 scheduledDefenses = await defensesQuery
-                    .OrderBy(b => b.DefenseDate)
+                    .OrderByDescending(b => b.BookingStatus == "Scheduled" || b.BookingStatus == "Rescheduled")
+                    .ThenBy(b => b.DefenseDate)
                     .ThenBy(b => b.StartTime)
                     .ToListAsync();
             }
 
             ViewBag.ScheduledDefenses = scheduledDefenses;
 
+            if (IsAlternativeTimeFeatureEnabled())
+            {
+                var altQuery = _context.IAFAlternativeTimeRequests
+                    .AsNoTracking()
+                    .Include(r => r.Milestone).ThenInclude(m => m.Project).ThenInclude(p => p.Student)
+                    .Include(r => r.Milestone).ThenInclude(m => m.Project).ThenInclude(p => p.Supervisor)
+                    .Include(r => r.AcademicSession)
+                    .Include(r => r.RequestedByAdmin)
+                    .Where(r => r.RequestedLecturerId == user.Id);
+
+                if (!string.IsNullOrEmpty(activeSession) && activeSession != "All")
+                {
+                    altQuery = altQuery.Where(r => (r.AcademicSession != null && r.AcademicSession.Name == activeSession) ||
+                                                   (r.Milestone != null && r.Milestone.Project != null && r.Milestone.Project.AcademicSession == activeSession));
+                }
+
+                ViewBag.AlternativeTimeRequests = await altQuery
+                    .OrderByDescending(r => r.CreatedAt)
+                    .ToListAsync();
+
+                var durationSetting = await _context.FYPSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == "IAFDefenseDurationMinutes");
+                ViewBag.DefenseDurationMinutes = (durationSetting != null && int.TryParse(durationSetting.Value, out int dur)) ? dur : 45;
+
+                var startSetting = await _context.FYPSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursStart");
+                var endSetting = await _context.FYPSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursEnd");
+                ViewBag.WorkingHoursStart = startSetting?.Value ?? "08:00";
+                ViewBag.WorkingHoursEnd = endSetting?.Value ?? "17:00";
+            }
+
             return View(projects);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RecordDefenseAssessment(
+            int bookingId,
+            string? result,
+            string? recommendation,
+            string feedback,
+            [FromServices] IIAFDefenseBookingService defenseBookingService,
+            [FromServices] FYPTracker.Services.Time.ISystemClock clock)
+        {
+            var user = await _context.ApplicationUsers
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+
+            if (user == null) return RedirectToAction("Login", "User");
+
+            // Server-side permission check: Active user with Examiner/Lecturer role
+            if (user.IsResign || (!user.UserRoles.Any(r => r.Role.Name == "Examiner") && !user.UserRoles.Any(r => r.Role.Name == "Lecturer")))
+            {
+                TempData["Error"] = "Access denied: Unauthorized examiner role.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var booking = await _context.IAFDefenseBookings
+                .Include(b => b.Milestone)
+                    .ThenInclude(m => m.Project)
+                        .ThenInclude(p => p.Student)
+                .FirstOrDefaultAsync(b => b.Id == bookingId);
+
+            if (booking == null)
+            {
+                TempData["Error"] = "Defense booking not found.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Server-side permission check: Only the assigned examiner can finalize the defense result
+            if (booking.ExaminerId != user.Id)
+            {
+                TempData["Error"] = "Access denied: You are not the assigned examiner for this defense session.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (booking.Milestone == null || booking.Milestone.Project == null)
+            {
+                TempData["Error"] = "Associated milestone or project record was not found.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (booking.BookingStatus != "Scheduled" && booking.BookingStatus != "Rescheduled")
+            {
+                TempData["Error"] = $"Cannot finalize defense for booking with status '{booking.BookingStatus}'.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (booking.AcademicOutcome != "Pending")
+            {
+                TempData["Error"] = $"An academic outcome has already been finalized ({booking.AcademicOutcome}).";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Face-to-face date/time safeguard: Defense must have concluded under authorized system clock
+            var defenseEndDateTime = booking.DefenseDate.Date.Add(booking.EndTime);
+            if (defenseEndDateTime > clock.Now)
+            {
+                TempData["Error"] = $"The physical defense session has not yet concluded. Scheduled until {booking.DefenseDate:dd MMM yyyy} {new DateTime(booking.EndTime.Ticks):hh:mm tt}.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (string.IsNullOrWhiteSpace(feedback))
+            {
+                TempData["Error"] = "Meaningful examiner feedback is required following the face-to-face defense.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Determine final academic outcome: Pass or Fail
+            string rawOutcome = !string.IsNullOrWhiteSpace(result) ? result : recommendation;
+            bool isPass = string.Equals(rawOutcome, "Pass", StringComparison.OrdinalIgnoreCase) ||
+                          string.Equals(rawOutcome, "AdminApproved", StringComparison.OrdinalIgnoreCase);
+            bool isFail = string.Equals(rawOutcome, "Fail", StringComparison.OrdinalIgnoreCase) ||
+                          string.Equals(rawOutcome, "RevisionRequired", StringComparison.OrdinalIgnoreCase) ||
+                          string.Equals(rawOutcome, "ChangeOfTopicRequired", StringComparison.OrdinalIgnoreCase);
+
+            if (!isPass && !isFail)
+            {
+                TempData["Error"] = "Invalid result selected. Please select Pass or Fail.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            string cleanFeedback = feedback.Trim();
+            string evidencePrefix = clock.IsSimulated ? "[Testing Simulation Evidence] " : "";
+            string outcomeStr = isPass ? "Pass" : "Fail";
+            string documentedAssessment = $"{evidencePrefix}Final Examiner ({user.FullName}) Outcome: {outcomeStr}. Feedback: {cleanFeedback}";
+
+            // Authoritative transactional finalization
+            var outcomeResult = await defenseBookingService.RecordDefenseOutcomeAsync(
+                booking.MilestoneId,
+                outcomeStr,
+                documentedAssessment,
+                user.Id,
+                isEarlyOutcomeTestOverride: false);
+
+            if (!outcomeResult.Success)
+            {
+                TempData["Error"] = outcomeResult.ErrorMessage;
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Create notifications only after successful outcome persistence
+            var studentId = booking.Milestone.Project.StudentId;
+            var studentName = booking.Milestone.Project.Student?.FullName ?? "Student";
+            int attemptNum = outcomeResult.Booking?.AttemptNumber ?? booking.AttemptNumber;
+            string finalStatus = outcomeResult.Booking?.AcademicOutcome ?? (isPass ? "AdminApproved" : "PanelRevisionRequired");
+
+            if (isPass)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = studentId,
+                    Type = "MilestoneCompleted",
+                    Title = "IAF Defense Passed",
+                    Message = "Congratulations! Your IAF defense was successful and your project title is accepted. You may now proceed to Stage 1 submissions.",
+                    IsRead = false,
+                    CreatedDate = clock.Now
+                });
+            }
+            else
+            {
+                if (finalStatus == "PanelRevisionRequired")
+                {
+                    _context.FYPNotifications.Add(new FYPNotification
+                    {
+                        RecipientId = studentId,
+                        Type = "RevisionRequest",
+                        Title = "IAF Defense Outcome: Revision Required",
+                        Message = "Your IAF defense requires revisions. Please review the examiner feedback and submit a revised Initial Project Allocation Form.",
+                        IsRead = false,
+                        CreatedDate = clock.Now
+                    });
+                }
+                else
+                {
+                    _context.FYPNotifications.Add(new FYPNotification
+                    {
+                        RecipientId = studentId,
+                        Type = "MilestoneRejected",
+                        Title = "IAF Defense Outcome: Change of Topic Required",
+                        Message = "Your IAF defense was unsuccessful on Attempt 2. A change of topic is required for your project.",
+                        IsRead = false,
+                        CreatedDate = clock.Now
+                    });
+                }
+            }
+
+            // Notify Admins
+            var adminUsers = await _context.ApplicationUsers
+                .Where(u => !u.IsResign && u.UserRoles.Any(ur => ur.Role.Name == "Admin" || ur.Role.Name == "SuperAdmin"))
+                .ToListAsync();
+
+            foreach (var admin in adminUsers)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = admin.Id,
+                    Type = "DefenseOutcomeFinalized",
+                    Title = "IAF Defense Finalized by Examiner",
+                    Message = $"Examiner {user.FullName} has finalized the IAF defense result for {studentName}: {(isPass ? "Passed" : "Failed")}. Feedback has been recorded.",
+                    IsRead = false,
+                    CreatedDate = clock.Now
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = "Final defense outcome and feedback successfully submitted and saved.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> FinalizeExistingDefenseAssessment(
+            int bookingId,
+            [FromServices] IIAFDefenseBookingService defenseBookingService,
+            [FromServices] FYPTracker.Services.Time.ISystemClock clock)
+        {
+            var user = await _context.ApplicationUsers
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+
+            if (user == null) return RedirectToAction("Login", "User");
+
+            if (user.IsResign || (!user.UserRoles.Any(r => r.Role.Name == "Examiner") && !user.UserRoles.Any(r => r.Role.Name == "Lecturer")))
+            {
+                TempData["Error"] = "Access denied: Unauthorized examiner role.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var booking = await _context.IAFDefenseBookings
+                .Include(b => b.Milestone)
+                    .ThenInclude(m => m.Project)
+                        .ThenInclude(p => p.Student)
+                .FirstOrDefaultAsync(b => b.Id == bookingId);
+
+            if (booking == null)
+            {
+                TempData["Error"] = "Defense booking not found.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (booking.ExaminerId != user.Id)
+            {
+                TempData["Error"] = "Access denied: You are not the assigned examiner for this defense session.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (booking.Milestone == null || booking.Milestone.Project == null)
+            {
+                TempData["Error"] = "Associated milestone or project record was not found.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (booking.BookingStatus != "Scheduled" && booking.BookingStatus != "Rescheduled")
+            {
+                TempData["Error"] = $"Cannot finalize defense for booking with status '{booking.BookingStatus}'.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (booking.AcademicOutcome != "Pending")
+            {
+                TempData["Error"] = $"An academic outcome has already been finalized ({booking.AcademicOutcome}).";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var defenseEndDateTime = booking.DefenseDate.Date.Add(booking.EndTime);
+            if (defenseEndDateTime > clock.Now)
+            {
+                TempData["Error"] = $"The physical defense session has not yet concluded. Scheduled until {booking.DefenseDate:dd MMM yyyy} {new DateTime(booking.EndTime.Ticks):hh:mm tt}.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (string.IsNullOrWhiteSpace(booking.OutcomeComments))
+            {
+                TempData["Error"] = "No recorded assessment or feedback found to finalize.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // Infer outcome from existing assessment comments
+            string comments = booking.OutcomeComments;
+            bool isPass = comments.IndexOf("Recommendation: Pass", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                          comments.IndexOf("Pass", StringComparison.OrdinalIgnoreCase) >= 0;
+            string outcomeStr = isPass ? "Pass" : "Fail";
+
+            string finalizedComments = comments;
+            if (!finalizedComments.Contains("[Official Finalized Result]"))
+            {
+                finalizedComments = $"{finalizedComments} [Official Finalized Result]";
+            }
+
+            var outcomeResult = await defenseBookingService.RecordDefenseOutcomeAsync(
+                booking.MilestoneId,
+                outcomeStr,
+                finalizedComments,
+                user.Id,
+                isEarlyOutcomeTestOverride: false);
+
+            if (!outcomeResult.Success)
+            {
+                TempData["Error"] = outcomeResult.ErrorMessage;
+                return RedirectToAction(nameof(Index));
+            }
+
+            var studentId = booking.Milestone.Project.StudentId;
+            var studentName = booking.Milestone.Project.Student?.FullName ?? "Student";
+            string finalStatus = outcomeResult.Booking?.AcademicOutcome ?? (isPass ? "AdminApproved" : "PanelRevisionRequired");
+
+            if (isPass)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = studentId,
+                    Type = "MilestoneCompleted",
+                    Title = "IAF Defense Passed",
+                    Message = "Congratulations! Your IAF defense was successful and your project title is accepted. You may now proceed to Stage 1 submissions.",
+                    IsRead = false,
+                    CreatedDate = clock.Now
+                });
+            }
+            else
+            {
+                if (finalStatus == "PanelRevisionRequired")
+                {
+                    _context.FYPNotifications.Add(new FYPNotification
+                    {
+                        RecipientId = studentId,
+                        Type = "RevisionRequest",
+                        Title = "IAF Defense Outcome: Revision Required",
+                        Message = "Your IAF defense requires revisions. Please review the examiner feedback and submit a revised Initial Project Allocation Form.",
+                        IsRead = false,
+                        CreatedDate = clock.Now
+                    });
+                }
+                else
+                {
+                    _context.FYPNotifications.Add(new FYPNotification
+                    {
+                        RecipientId = studentId,
+                        Type = "MilestoneRejected",
+                        Title = "IAF Defense Outcome: Change of Topic Required",
+                        Message = "Your IAF defense was unsuccessful on Attempt 2. A change of topic is required for your project.",
+                        IsRead = false,
+                        CreatedDate = clock.Now
+                    });
+                }
+            }
+
+            var adminUsers = await _context.ApplicationUsers
+                .Where(u => !u.IsResign && u.UserRoles.Any(ur => ur.Role.Name == "Admin" || ur.Role.Name == "SuperAdmin"))
+                .ToListAsync();
+
+            foreach (var admin in adminUsers)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = admin.Id,
+                    Type = "DefenseOutcomeFinalized",
+                    Title = "IAF Defense Finalized by Examiner",
+                    Message = $"Examiner {user.FullName} has finalized the IAF defense result for {studentName}: {(isPass ? "Passed" : "Failed")}. Feedback has been recorded.",
+                    IsRead = false,
+                    CreatedDate = clock.Now
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = "Successfully finalized existing assessment as official academic defense result.";
+            return RedirectToAction(nameof(Index));
         }
 
         public async Task<IActionResult> Notifications()
@@ -458,12 +1002,26 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var stage2Milestones = project.Milestones.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
-            bool isAllStage2Approved = stage2Milestones.Any() && stage2Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
-
-            if (!isAllStage2Approved)
+            int completedMeetings = 0;
+            int? requiredMeetings = null;
+            if (_meetingRequirementService != null)
             {
-                TempData["Error"] = "The supervisor must approve ALL Stage 2 milestones (including the Final Report and Turnitin Score) before you can submit the final marksheet.";
+                var progress = await _meetingRequirementService.GetStudentProgressAsync(project.StudentId, 2);
+                completedMeetings = progress?.Completed ?? 0;
+                requiredMeetings = progress?.Required;
+            }
+            else
+            {
+                completedMeetings = await _context.MeetingBookings
+                    .Include(m => m.MeetingLog)
+                    .Where(m => m.StudentId == project.StudentId && m.Stage == 2 && m.Status == "Approved" && m.MeetingLog != null && m.MeetingLog.LogStatus == "Signed")
+                    .CountAsync();
+            }
+
+            var unlockStatus = FYPTracker.Utils.GradingHelper.CanUnlockStage2Grading(project, completedMeetings, requiredMeetings);
+            if (!unlockStatus.IsUnlocked)
+            {
+                TempData["Error"] = unlockStatus.Reason;
                 return RedirectToAction(nameof(StudentDetails), new { projectId = id });
             }
 
@@ -478,12 +1036,36 @@ namespace FYPTracker.Controllers
             if (user == null) return RedirectToAction("Login", "User");
 
             var project = await _context.FYPProjects
+                .Include(p => p.Milestones)
                 .FirstOrDefaultAsync(p => p.Id == projectId && p.AssignedExaminers.Any(ae => ae.ExaminerId == user.Id));
                 
             if (project == null)
             {
                 TempData["Error"] = "Project not found or unauthorized.";
                 return RedirectToAction(nameof(Index));
+            }
+
+            int completedMeetingsPost = 0;
+            int? requiredMeetingsPost = null;
+            if (_meetingRequirementService != null)
+            {
+                var progress = await _meetingRequirementService.GetStudentProgressAsync(project.StudentId, 2);
+                completedMeetingsPost = progress?.Completed ?? 0;
+                requiredMeetingsPost = progress?.Required;
+            }
+            else
+            {
+                completedMeetingsPost = await _context.MeetingBookings
+                    .Include(m => m.MeetingLog)
+                    .Where(m => m.StudentId == project.StudentId && m.Stage == 2 && m.Status == "Approved" && m.MeetingLog != null && m.MeetingLog.LogStatus == "Signed")
+                    .CountAsync();
+            }
+
+            var unlockStatusPost = FYPTracker.Utils.GradingHelper.CanUnlockStage2Grading(project, completedMeetingsPost, requiredMeetingsPost);
+            if (!unlockStatusPost.IsUnlocked)
+            {
+                TempData["Error"] = unlockStatusPost.Reason;
+                return RedirectToAction(nameof(StudentDetails), new { projectId });
             }
 
             // Rule 1: Reject attempts to overwrite an existing unversioned/ambiguous historical Examiner marksheet

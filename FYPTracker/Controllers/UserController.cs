@@ -93,6 +93,34 @@ namespace FYPTracker.Controllers
         public ActionResult ForgotPassword(string username)
         {
             bool isAjax = Request.Headers["X-Requested-With"] == "XMLHttpRequest";
+
+
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                const string msg = "Please enter a username or email.";
+
+                if (isAjax)
+                    return Json(new { success = false, message = msg });
+
+                TempData["error"] = msg;
+                return RedirectToAction("Login");
+            }
+
+            var smtp = HttpContext.RequestServices
+                .GetRequiredService<FYPTracker.Configuration.SmtpSettings>();
+
+            if (smtp.Offline)
+            {
+                const string msg =
+                    "Password reset emails are disabled in this demo environment.";
+
+                if (isAjax)
+                    return Json(new { success = false, message = msg });
+
+                TempData["error"] = msg;
+                return RedirectToAction("Login");
+            }
+
             var title = "Reset Password";
             if (username != null)
             {

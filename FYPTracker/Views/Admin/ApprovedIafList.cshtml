@@ -1,7 +1,7 @@
 @using System.Text.Json
 @model IEnumerable<FYPTracker.Models.FYPMilestone>
 @{
-    ViewData["Title"] = "Approved IAF List";
+    ViewData["Title"] = "IAF Review & Approval";
     var rowData = Model.Select(m => {
         int latestAttempt = 1;
         if (!string.IsNullOrEmpty(m.Remarks) && m.Remarks.Contains("JSON: ")) {
@@ -81,9 +81,9 @@
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div>
                     <h2 class="fw-bolder text-dark mb-1" style="letter-spacing: -0.5px;">
-                        <i class="fas fa-file-signature text-success me-2"></i>Approved IAF List
+                        <i class="fas fa-file-signature text-success me-2"></i>IAF Review &amp; Approval
                     </h2>
-                    <p class="text-muted mb-0" style="font-size: 0.95rem;">Students who have submitted their signed Initial Project Allocation Form (IAF). Admin can grant final approval or schedule a defense.</p>
+                    <p class="text-muted mb-0" style="font-size: 0.95rem;">Review signed Initial Project Allocation Forms (IAF), grant initial panel approval, mandate defense sessions, or manage defense outcomes.</p>
                 </div>
             </div>
         </div>
@@ -160,13 +160,7 @@
     </div>
 </div>
 
-<form id="passDefenseForm" asp-action="AdminPassDefense" method="post" style="display:none;">
-    <input type="hidden" name="milestoneId" id="passDefenseMilestoneId" />
-</form>
 
-<form id="failDefenseForm" asp-action="AdminFailDefense" method="post" style="display:none;">
-    <input type="hidden" name="milestoneId" id="failDefenseMilestoneId" />
-</form>
 
 <!-- Schedule Defense Modal -->
 <div class="modal fade" id="scheduleDefenseModal" tabindex="-1" aria-hidden="true">
@@ -401,42 +395,6 @@
             document.getElementById('rejectIafForm').submit();
         }
 
-        function passDefense(id) {
-            Swal.fire({
-                title: 'Confirm Defense Pass',
-                text: 'Are you sure the student passed their IAF defense? The project milestone will be marked as AdminApproved, allowing the student to proceed to subsequent stage milestones.',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#10b981',
-                cancelButtonColor: '#6b7280',
-                confirmButtonText: '<i class="fas fa-check me-1"></i> Yes, Record Pass',
-                cancelButtonText: 'Cancel'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    document.getElementById('passDefenseMilestoneId').value = id;
-                    document.getElementById('passDefenseForm').submit();
-                }
-            });
-        }
-
-        function failDefense(id) {
-            Swal.fire({
-                title: 'Confirm Defense Failure',
-                text: 'Are you sure the student failed their IAF defense? Their topic will be rejected and they must submit a new Initial Allocation Form with a change of topic.',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#ef4444',
-                cancelButtonColor: '#6b7280',
-                confirmButtonText: '<i class="fas fa-times me-1"></i> Yes, Record Fail',
-                cancelButtonText: 'Cancel'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    document.getElementById('failDefenseMilestoneId').value = id;
-                    document.getElementById('failDefenseForm').submit();
-                }
-            });
-        }
-
         function scheduleDefense(id) {
             document.getElementById('defenseMilestoneId').value = id;
             var myModal = new bootstrap.Modal(document.getElementById('scheduleDefenseModal'));
@@ -475,26 +433,22 @@
                     },
                     {
                         headerName: "Actions",
-                        flex: 2,
+                        flex: 2.2,
                         sortable: false,
                         filter: false,
                         autoHeight: true,
                         cellRenderer: function(params) {
-                            if(params.data.Status === 'AdminApproved') {
-                                return `<div class="d-flex gap-1"><button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF">
-                                            <i class="fas fa-eye"></i>
-                                        </button></div>`;
-                            }
-                            
-                            if (params.data.Status === 'DefenseScheduled') {
+                            if (params.data.Status === 'PendingPanelReview') {
                                 return `
-                                    <div class="d-flex gap-1">
-                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF"><i class="fas fa-eye"></i></button>
-                                        <button onclick="passDefense(${params.data.Id})" class="btn btn-sm btn-success" title="Pass Defense">
-                                            <i class="fas fa-thumbs-up"></i> Pass
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF">
+                                            <i class="fas fa-eye"></i> View
                                         </button>
-                                        <button onclick="failDefense(${params.data.Id})" class="btn btn-sm btn-danger" title="Fail Defense">
-                                            <i class="fas fa-thumbs-down"></i> Fail
+                                        <button onclick="approveIaf(${params.data.Id})" class="btn btn-sm btn-success" title="Approve IAF">
+                                            <i class="fas fa-check"></i> Approve
+                                        </button>
+                                        <button onclick="rejectIaf(${params.data.Id})" class="btn btn-sm btn-warning text-dark" title="Request Revision or Require Defense">
+                                            <i class="fas fa-edit"></i> Review
                                         </button>
                                     </div>
                                 `;
@@ -503,29 +457,47 @@
                             if (params.data.Status === 'DefenseRequired') {
                                 return `
                                     <div class="d-flex gap-1">
-                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF"><i class="fas fa-eye"></i></button>
-                                        <a href="/Admin/SmartScheduleDefense?milestoneId=${params.data.Id}" class="btn btn-sm btn-info text-white" title="Smart Schedule Defense">
-                                            <i class="fas fa-magic"></i> Smart Schedule
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF"><i class="fas fa-eye"></i> View</button>
+                                        <a href="/Admin/SmartScheduleDefense?milestoneId=${params.data.Id}" class="btn btn-sm btn-info text-white fw-bold" title="Smart Schedule Defense">
+                                            <i class="fas fa-magic"></i> Schedule Defense
                                         </a>
-                                        <button onclick="scheduleDefense(${params.data.Id})" class="btn btn-sm btn-outline-danger" title="Legacy Schedule Defense">
-                                            <i class="fas fa-calendar-alt"></i> Legacy
-                                        </button>
                                     </div>
                                 `;
                             }
 
-                            if (params.data.Status === 'PendingPanelReview') {
+                            if (params.data.Status === 'DefenseScheduled') {
                                 return `
-                                    <div class="d-flex flex-wrap gap-1">
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF"><i class="fas fa-eye"></i> View</button>
+                                        <a href="/Admin/ManageDefenses" class="btn btn-sm btn-primary fw-bold" title="Manage Defenses">
+                                            <i class="fas fa-calendar-check"></i> Manage Defense
+                                        </a>
+                                    </div>
+                                `;
+                            }
+
+                            if (params.data.Status === 'AdminApproved') {
+                                return `
+                                    <div class="d-flex gap-1">
                                         <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF">
-                                            <i class="fas fa-eye"></i>
+                                            <i class="fas fa-eye"></i> View IAF
                                         </button>
-                                        <button onclick="approveIaf(${params.data.Id})" class="btn btn-sm btn-success" title="Approve">
-                                            <i class="fas fa-check"></i>
+                                        <a href="/Admin/ManageDefenses" class="btn btn-sm btn-outline-success" title="View Defense Details">
+                                            <i class="fas fa-check-circle"></i> Result
+                                        </a>
+                                    </div>
+                                `;
+                            }
+
+                            if (params.data.Status === 'PanelRevisionRequired' || params.data.Status === 'ChangeOfTopicRequired') {
+                                return `
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF">
+                                            <i class="fas fa-eye"></i> View
                                         </button>
-                                        <button onclick="rejectIaf(${params.data.Id})" class="btn btn-sm btn-warning text-dark" title="Request Revision">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
+                                        <a href="/Admin/ViewDigitalForm?milestoneId=${params.data.Id}&attemptNumber=${params.data.LatestAttempt}" target="_blank" class="btn btn-sm btn-outline-secondary" title="View Attempt History">
+                                            <i class="fas fa-history"></i> History
+                                        </a>
                                     </div>
                                 `;
                             }
@@ -533,7 +505,7 @@
                             return `
                                 <div class="d-flex gap-1">
                                     <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF">
-                                        <i class="fas fa-eye"></i>
+                                        <i class="fas fa-eye"></i> View IAF
                                     </button>
                                 </div>
                             `;

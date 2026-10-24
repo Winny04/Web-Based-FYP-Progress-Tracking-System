@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using FYPTracker.Models;
+using FYPTracker.Services.Time;
 
 namespace FYPTracker.Services.Defense
 {
@@ -14,13 +15,16 @@ namespace FYPTracker.Services.Defense
     {
         private readonly FYPTrackerContext _context;
         private readonly ILecturerAvailabilityService _availabilityService;
+        private readonly ISystemClock _clock;
 
         public IAFDefenseBookingService(
             FYPTrackerContext context,
-            ILecturerAvailabilityService availabilityService)
+            ILecturerAvailabilityService availabilityService,
+            ISystemClock? clock = null)
         {
             _context = context;
             _availabilityService = availabilityService;
+            _clock = clock ?? new RealSystemClock();
         }
 
         public async Task<DefenseBookingResult> ValidateDefenseScheduleAsync(
@@ -52,7 +56,8 @@ namespace FYPTracker.Services.Defense
             TimeSpan startTime,
             string venue,
             int currentUserId,
-            string? changeReason = null)
+            string? changeReason = null,
+            Func<IAFDefenseBooking, Task<AlternativeTimeRequestResult?>>? onBeforeCommit = null)
         {
             if (!await IsSchemaAvailableAsync())
             {
@@ -131,7 +136,9 @@ namespace FYPTracker.Services.Defense
 
             return await executionStrategy.ExecuteAsync(async () =>
             {
-                await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
+                await using var transaction = _context.Database.IsRelational()
+                    ? await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted)
+                    : null;
                 IAFDefenseBooking? booking = null;
                 IAFDefenseHistory? history = null;
                 FYPMilestone? milestoneToUpdate = null;
@@ -145,7 +152,7 @@ namespace FYPTracker.Services.Defense
                         var lockResult = await AcquireTransactionAppLockAsync(resource, timeoutSeconds: 5);
                         if (!lockResult.Success)
                         {
-                            await transaction.RollbackAsync();
+                            if (transaction != null) await transaction.RollbackAsync();
                             return DefenseBookingResult.Fail(
                                 "ConcurrencyConflict",
                                 $"Unable to acquire schedule lock for '{resource}'. A concurrent defense scheduling operation is in progress. Please retry.");
@@ -162,7 +169,7 @@ namespace FYPTracker.Services.Defense
 
                     if (!recheckPreflight.Success)
                     {
-                        await transaction.RollbackAsync();
+                        if (transaction != null) await transaction.RollbackAsync();
                         return recheckPreflight;
                     }
 
@@ -170,7 +177,7 @@ namespace FYPTracker.Services.Defense
                     var conflictCheck = await ValidateScheduleConflictsAsync(insideCtx);
                     if (!conflictCheck.Success)
                     {
-                        await transaction.RollbackAsync();
+                        if (transaction != null) await transaction.RollbackAsync();
                         return conflictCheck;
                     }
 
@@ -192,7 +199,7 @@ namespace FYPTracker.Services.Defense
                         booking.DurationMinutes = insideCtx.DurationMinutes;
                         booking.Venue = insideCtx.Venue;
                         booking.BookingStatus = "Rescheduled";
-                        booking.UpdatedAt = DateTime.Now;
+                        booking.UpdatedAt = _clock.Now;
                         booking.UpdatedByUserId = currentUserId;
                     }
                     else
@@ -212,7 +219,7 @@ namespace FYPTracker.Services.Defense
                             Venue = insideCtx.Venue,
                             BookingStatus = "Scheduled",
                             AcademicOutcome = "Pending",
-                            CreatedAt = DateTime.Now,
+                            CreatedAt = _clock.Now,
                             CreatedByUserId = currentUserId
                         };
                         _context.IAFDefenseBookings.Add(booking);
@@ -241,7 +248,7 @@ namespace FYPTracker.Services.Defense
                         AcademicOutcome = booking.AcademicOutcome,
                         OutcomeComments = booking.OutcomeComments,
                         ReasonForChange = changeReason ?? (isReschedule ? "Defense rescheduled by administrator." : "Initial defense session scheduled."),
-                        Timestamp = DateTime.Now,
+                        Timestamp = _clock.Now,
                         ActionByUserId = currentUserId
                     };
                     _context.IAFDefenseHistories.Add(history);
@@ -252,13 +259,19 @@ namespace FYPTracker.Services.Defense
 
                     if (milestoneToUpdate == null)
                     {
-                        await transaction.RollbackAsync();
+                        if (transaction != null) await transaction.RollbackAsync();
                         if (history != null) _context.Entry(history).State = EntityState.Detached;
                         if (booking != null) _context.Entry(booking).State = EntityState.Detached;
                         return DefenseBookingResult.Fail(
                             "MilestoneNotFound",
                             $"Milestone #{insideCtx.Milestone.Id} could not be found for synchronization.");
                     }
+
+                    var origMilestoneStatus = milestoneToUpdate.Status;
+                    var origMilestoneDate = milestoneToUpdate.DefenseDate;
+                    var origMilestoneTime = milestoneToUpdate.DefenseTime;
+                    var origMilestoneVenue = milestoneToUpdate.DefenseVenue;
+                    var origMilestoneRemarks = milestoneToUpdate.Remarks;
 
                     milestoneToUpdate.Status = "DefenseScheduled";
                     milestoneToUpdate.DefenseDate = insideCtx.DefenseDate.Date;
@@ -269,7 +282,18 @@ namespace FYPTracker.Services.Defense
                     var syncResult = SyncMilestoneRemarksAttemptStatus(milestoneToUpdate, insideCtx.AttemptNumber, "DefenseScheduled");
                     if (!syncResult.Success)
                     {
-                        await transaction.RollbackAsync();
+                        if (transaction != null) await transaction.RollbackAsync();
+                        if (!_context.Database.IsRelational())
+                        {
+                            if (booking != null) _context.IAFDefenseBookings.Remove(booking);
+                            if (history != null) _context.IAFDefenseHistories.Remove(history);
+                            milestoneToUpdate.Status = origMilestoneStatus;
+                            milestoneToUpdate.DefenseDate = origMilestoneDate;
+                            milestoneToUpdate.DefenseTime = origMilestoneTime;
+                            milestoneToUpdate.DefenseVenue = origMilestoneVenue;
+                            milestoneToUpdate.Remarks = origMilestoneRemarks;
+                            await _context.SaveChangesAsync();
+                        }
                         if (milestoneToUpdate != null) _context.Entry(milestoneToUpdate).State = EntityState.Detached;
                         if (history != null) _context.Entry(history).State = EntityState.Detached;
                         if (booking != null) _context.Entry(booking).State = EntityState.Detached;
@@ -279,8 +303,51 @@ namespace FYPTracker.Services.Defense
                     }
 
                     await _context.SaveChangesAsync();
+
+                    if (onBeforeCommit != null)
+                    {
+                        var hookResult = await onBeforeCommit(booking);
+                        if (hookResult != null && !hookResult.Success)
+                        {
+                            if (transaction != null) await transaction.RollbackAsync();
+                            if (!_context.Database.IsRelational())
+                            {
+                                if (history != null)
+                                {
+                                    booking?.HistoryRecords.Remove(history);
+                                    _context.IAFDefenseHistories.Remove(history);
+                                }
+                                if (booking != null)
+                                {
+                                    _context.IAFDefenseBookings.Remove(booking);
+                                }
+                                if (milestoneToUpdate != null)
+                                {
+                                    milestoneToUpdate.Status = origMilestoneStatus;
+                                    milestoneToUpdate.DefenseDate = origMilestoneDate;
+                                    milestoneToUpdate.DefenseTime = origMilestoneTime;
+                                    milestoneToUpdate.DefenseVenue = origMilestoneVenue;
+                                    milestoneToUpdate.Remarks = origMilestoneRemarks;
+                                }
+                                await _context.SaveChangesAsync();
+                            }
+                            if (milestoneToUpdate != null && _context.Entry(milestoneToUpdate).State != EntityState.Detached)
+                                _context.Entry(milestoneToUpdate).State = EntityState.Detached;
+                            if (history != null && _context.Entry(history).State != EntityState.Detached)
+                                _context.Entry(history).State = EntityState.Detached;
+                            if (booking != null && _context.Entry(booking).State != EntityState.Detached)
+                                _context.Entry(booking).State = EntityState.Detached;
+
+                            return DefenseBookingResult.Fail(
+                                hookResult.ErrorCode ?? "FinalizationFailed",
+                                hookResult.ErrorMessage ?? "Failed to finalize alternative time request inside booking transaction.");
+                        }
+
+                        await _context.SaveChangesAsync();
+                    }
+
                     isCommitStage = true;
-                    await transaction.CommitAsync();
+                    if (transaction != null) await transaction.CommitAsync();
 
                     return DefenseBookingResult.Ok(booking, history);
                 }
@@ -289,7 +356,7 @@ namespace FYPTracker.Services.Defense
                     bool rollbackConfirmed = false;
                     try
                     {
-                        await transaction.RollbackAsync();
+                        if (transaction != null) await transaction.RollbackAsync();
                         rollbackConfirmed = true;
                     }
                     catch
@@ -312,12 +379,15 @@ namespace FYPTracker.Services.Defense
                         "ConcurrencyError",
                         "The defense record was modified by another user concurrently. Please reload the schedule and retry.");
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     bool rollbackConfirmed = false;
                     try
                     {
-                        await transaction.RollbackAsync();
+                        if (transaction != null)
+                        {
+                            await transaction.RollbackAsync();
+                        }
                         rollbackConfirmed = true;
                     }
                     catch
@@ -333,19 +403,19 @@ namespace FYPTracker.Services.Defense
                     {
                         return DefenseBookingResult.Fail(
                             "ExecutionError",
-                            "An error occurred while confirming the schedule transaction. Please refresh and verify the current schedule before retrying.");
+                            $"An error occurred while confirming the schedule transaction: {ex.Message}");
                     }
 
                     if (!rollbackConfirmed)
                     {
                         return DefenseBookingResult.Fail(
                             "ExecutionError",
-                            "An unexpected error occurred and transaction rollback could not be confirmed. Please refresh and verify the schedule before taking further action.");
+                            $"An unexpected error occurred and transaction rollback could not be confirmed: {ex.Message}");
                     }
 
                     return DefenseBookingResult.Fail(
                         "ExecutionError",
-                        "An unexpected error occurred while scheduling the defense. Please retry.");
+                        $"An unexpected error occurred while scheduling the defense: {ex.GetType().Name}: {ex.Message} {ex.StackTrace}");
                 }
             });
         }
@@ -357,11 +427,11 @@ namespace FYPTracker.Services.Defense
             int currentUserId,
             bool isEarlyOutcomeTestOverride = false)
         {
-            if (outcome != "AdminApproved" && outcome != "ChangeOfTopicRequired")
+            if (outcome != "AdminApproved" && outcome != "ChangeOfTopicRequired" && outcome != "PanelRevisionRequired" && outcome != "Pass" && outcome != "Fail")
             {
                 return DefenseOutcomeResult.Fail(
                     "InvalidOutcome",
-                    "Outcome must be either 'AdminApproved' (Pass) or 'ChangeOfTopicRequired' (Fail).");
+                    "Outcome must be 'AdminApproved' (Pass) or 'PanelRevisionRequired' / 'ChangeOfTopicRequired' (Fail).");
             }
 
             if (!await IsSchemaAvailableAsync())
@@ -369,139 +439,195 @@ namespace FYPTracker.Services.Defense
                 return DefenseOutcomeResult.Fail("SchemaNotMigrated", "IAF Defense Booking schema (migration 20261011194333_AddIAFDefenseBookingAndAudit) has not been applied to this database.");
             }
 
+            if (!_context.Database.IsRelational())
+            {
+                return await RecordDefenseOutcomeInternalAsync(milestoneId, outcome, outcomeComments, currentUserId, isEarlyOutcomeTestOverride, null);
+            }
+
             var executionStrategy = _context.Database.CreateExecutionStrategy();
 
             return await executionStrategy.ExecuteAsync(async () =>
             {
                 await using var transaction = await _context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
-                FYPMilestone? milestone = null;
-                IAFDefenseBooking? booking = null;
-                IAFDefenseHistory? history = null;
-                bool isCommitStage = false;
+                return await RecordDefenseOutcomeInternalAsync(milestoneId, outcome, outcomeComments, currentUserId, isEarlyOutcomeTestOverride, transaction);
+            });
+        }
 
-                try
+        private async Task<DefenseOutcomeResult> RecordDefenseOutcomeInternalAsync(
+            int milestoneId,
+            string outcome,
+            string? outcomeComments,
+            int currentUserId,
+            bool isEarlyOutcomeTestOverride,
+            Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction)
+        {
+            FYPMilestone? milestone = null;
+            IAFDefenseBooking? booking = null;
+            IAFDefenseHistory? history = null;
+            bool isCommitStage = false;
+
+            try
+            {
+                milestone = await _context.FYPMilestones
+                    .Include(m => m.Project)
+                    .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+                if (milestone == null)
                 {
-                    milestone = await _context.FYPMilestones
-                        .Include(m => m.Project)
-                        .FirstOrDefaultAsync(m => m.Id == milestoneId);
-
-                    if (milestone == null)
-                    {
-                        return DefenseOutcomeResult.Fail("MilestoneNotFound", "Milestone was not found.");
-                    }
-
-                    if (milestone.Status != "DefenseScheduled")
-                    {
-                        return DefenseOutcomeResult.Fail(
-                            "InvalidMilestoneStatus",
-                            $"Cannot record defense outcome because the milestone status is '{milestone.Status}' (expected 'DefenseScheduled').");
-                    }
-
-                    var attemptResult = ResolveAuthoritativeAttemptNumber(milestone.Remarks);
-                    if (!attemptResult.Success)
-                    {
-                        return DefenseOutcomeResult.Fail(
-                            "MalformedAttemptHistory",
-                            attemptResult.ErrorMessage!);
-                    }
-                    int attemptNumber = attemptResult.AttemptNumber;
-
-                    booking = await _context.IAFDefenseBookings
-                        .FirstOrDefaultAsync(b => b.MilestoneId == milestoneId && b.AttemptNumber == attemptNumber);
-
-                    if (booking == null)
-                    {
-                        return DefenseOutcomeResult.Fail(
-                            "BookingNotFound",
-                            $"No active defense booking found for Milestone #{milestoneId} Attempt {attemptNumber}.");
-                    }
-
-                    if (booking.BookingStatus != "Scheduled" && booking.BookingStatus != "Rescheduled")
-                    {
-                        return DefenseOutcomeResult.Fail(
-                            "InvalidBookingStatus",
-                            $"Cannot record defense outcome because the defense booking status is '{booking.BookingStatus}' (expected 'Scheduled' or 'Rescheduled').");
-                    }
-
-                    if (booking.AcademicOutcome != "Pending")
-                    {
-                        return DefenseOutcomeResult.Fail(
-                            "OutcomeAlreadyRecorded",
-                            $"Academic outcome '{booking.AcademicOutcome}' has already been recorded for this defense attempt.");
-                    }
-
-                    // Timing safeguard: Ensure the scheduled defense session has actually concluded (unless explicitly authorized for controlled Development testing)
-                    var defenseEndDateTime = booking.DefenseDate.Date.Add(booking.EndTime);
-                    if (defenseEndDateTime > DateTime.Now && !isEarlyOutcomeTestOverride)
-                    {
-                        return DefenseOutcomeResult.Fail(
-                            "DefenseNotConcludedYet",
-                            $"Cannot record defense outcome before the defense session has concluded. Scheduled for {booking.DefenseDate:yyyy-MM-dd} from {FormatDisplayTime(booking.StartTime)} to {FormatDisplayTime(booking.EndTime)}.");
-                    }
-
-                    // Update Booking
-                    booking.AcademicOutcome = outcome;
-                    booking.BookingStatus = "Completed";
-                    booking.OutcomeComments = outcomeComments;
-                    booking.UpdatedAt = DateTime.Now;
-                    booking.UpdatedByUserId = currentUserId;
-
-                    // Append to History
-                    string reasonForChange = isEarlyOutcomeTestOverride
-                        ? "Controlled Development early-outcome test — defense not actually conducted."
-                        : $"Defense outcome recorded: {outcome}";
-
-                    history = new IAFDefenseHistory
-                    {
-                        BookingId = booking.Id,
-                        MilestoneId = booking.MilestoneId,
-                        AttemptNumber = booking.AttemptNumber,
-                        AcademicSessionId = booking.AcademicSessionId,
-                        ActionType = "OutcomeRecorded",
-                        ExaminerId = booking.ExaminerId,
-                        OriginalSupervisorId = booking.OriginalSupervisorId,
-                        IsSupervisorRequired = booking.IsSupervisorRequired,
-                        DefenseDate = booking.DefenseDate,
-                        StartTime = booking.StartTime,
-                        EndTime = booking.EndTime,
-                        DurationMinutes = booking.DurationMinutes,
-                        Venue = booking.Venue,
-                        BookingStatus = booking.BookingStatus,
-                        AcademicOutcome = outcome,
-                        OutcomeComments = outcomeComments,
-                        ReasonForChange = reasonForChange,
-                        Timestamp = DateTime.Now,
-                        ActionByUserId = currentUserId
-                    };
-                    _context.IAFDefenseHistories.Add(history);
-
-                    // Synchronize Milestone
-                    milestone.Status = outcome;
-                    string panelComment = outcome == "AdminApproved"
-                        ? "Passed Defense Session. Title accepted."
-                        : "Defense Failed. Please submit a new Initial Allocation Form with a change of topic.";
-
-                    var syncResult = SyncMilestoneRemarksAttemptStatus(milestone, attemptNumber, outcome, outcomeComments ?? panelComment);
-                    if (!syncResult.Success)
-                    {
-                        await transaction.RollbackAsync();
-                        if (history != null) _context.Entry(history).State = EntityState.Detached;
-                        if (booking != null) _context.Entry(booking).State = EntityState.Detached;
-                        if (milestone != null) _context.Entry(milestone).State = EntityState.Detached;
-                        return DefenseOutcomeResult.Fail(
-                            "RemarksSyncFailed",
-                            $"Failed to synchronize milestone remarks: {syncResult.ErrorMessage}");
-                    }
-
-                    await _context.SaveChangesAsync();
-                    isCommitStage = true;
-                    await transaction.CommitAsync();
-
-                    return DefenseOutcomeResult.Ok(booking, history);
+                    return DefenseOutcomeResult.Fail("MilestoneNotFound", "Milestone was not found.");
                 }
-                catch (DbUpdateConcurrencyException)
+
+                if (milestone.Status != "DefenseScheduled")
                 {
-                    bool rollbackConfirmed = false;
+                    return DefenseOutcomeResult.Fail(
+                        "InvalidMilestoneStatus",
+                        $"Cannot record defense outcome because the milestone status is '{milestone.Status}' (expected 'DefenseScheduled').");
+                }
+
+                var attemptResult = ResolveAuthoritativeAttemptNumber(milestone.Remarks);
+                if (!attemptResult.Success)
+                {
+                    return DefenseOutcomeResult.Fail(
+                        "MalformedAttemptHistory",
+                        attemptResult.ErrorMessage!);
+                }
+                int attemptNumber = attemptResult.AttemptNumber;
+
+                // Academic outcome normalization:
+                // Pass -> AdminApproved
+                // Attempt 1 Fail -> PanelRevisionRequired (Revision/Resubmission)
+                // Attempt 2 Fail -> ChangeOfTopicRequired
+                string finalOutcome;
+                bool isPass = string.Equals(outcome, "AdminApproved", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(outcome, "Pass", StringComparison.OrdinalIgnoreCase);
+
+                if (isPass)
+                {
+                    finalOutcome = "AdminApproved";
+                }
+                else
+                {
+                    finalOutcome = attemptNumber == 1 ? "PanelRevisionRequired" : "ChangeOfTopicRequired";
+                }
+
+                booking = await _context.IAFDefenseBookings
+                    .FirstOrDefaultAsync(b => b.MilestoneId == milestoneId && b.AttemptNumber == attemptNumber);
+
+                if (booking == null)
+                {
+                    return DefenseOutcomeResult.Fail(
+                        "BookingNotFound",
+                        $"No active defense booking found for Milestone #{milestoneId} Attempt {attemptNumber}.");
+                }
+
+                if (booking.BookingStatus != "Scheduled" && booking.BookingStatus != "Rescheduled")
+                {
+                    return DefenseOutcomeResult.Fail(
+                        "InvalidBookingStatus",
+                        $"Cannot record defense outcome because the defense booking status is '{booking.BookingStatus}' (expected 'Scheduled' or 'Rescheduled').");
+                }
+
+                if (booking.AcademicOutcome != "Pending")
+                {
+                    return DefenseOutcomeResult.Fail(
+                        "OutcomeAlreadyRecorded",
+                        $"Academic outcome '{booking.AcademicOutcome}' has already been recorded for this defense attempt.");
+                }
+
+                // Timing safeguard: Ensure the scheduled defense session has actually concluded (under the authorized system clock)
+                var defenseEndDateTime = booking.DefenseDate.Date.Add(booking.EndTime);
+                if (defenseEndDateTime > _clock.Now && !isEarlyOutcomeTestOverride)
+                {
+                    return DefenseOutcomeResult.Fail(
+                        "DefenseNotConcludedYet",
+                        $"Cannot record defense outcome before the defense session has concluded. Scheduled for {booking.DefenseDate:yyyy-MM-dd} from {FormatDisplayTime(booking.StartTime)} to {FormatDisplayTime(booking.EndTime)}.");
+                }
+
+                // Resolve meaningful comments & distinguish simulated testing evidence
+                string defaultComment = finalOutcome switch
+                {
+                    "AdminApproved" => "Passed Defense Session. Title accepted.",
+                    "PanelRevisionRequired" => "Defense Failed (Attempt 1). Please revise and resubmit your Initial Project Allocation Form.",
+                    "ChangeOfTopicRequired" => "Defense Failed (Attempt 2). Please submit a new Initial Allocation Form with a change of topic.",
+                    _ => $"Defense outcome recorded: {finalOutcome}"
+                };
+
+                string resolvedComments = !string.IsNullOrWhiteSpace(outcomeComments)
+                    ? outcomeComments.Trim()
+                    : defaultComment;
+
+                if (_clock.IsSimulated && !resolvedComments.StartsWith("[Testing Simulation Evidence]"))
+                {
+                    resolvedComments = $"[Testing Simulation Evidence] {resolvedComments} (Simulated test clock - physical defense not conducted)";
+                }
+
+                // Update Booking
+                booking.AcademicOutcome = finalOutcome;
+                booking.BookingStatus = "Completed";
+                booking.OutcomeComments = resolvedComments;
+                booking.UpdatedAt = _clock.Now;
+                booking.UpdatedByUserId = currentUserId;
+
+                // Append to History
+                string reasonForChange = _clock.IsSimulated
+                    ? $"[Testing Simulation Evidence] Defense outcome recorded: {finalOutcome} (Simulated test clock verification - physical defense not conducted)"
+                    : (isEarlyOutcomeTestOverride
+                        ? "Controlled Development early-outcome test — defense not actually conducted."
+                        : $"Defense outcome recorded: {finalOutcome}");
+
+                history = new IAFDefenseHistory
+                {
+                    BookingId = booking.Id,
+                    MilestoneId = booking.MilestoneId,
+                    AttemptNumber = booking.AttemptNumber,
+                    AcademicSessionId = booking.AcademicSessionId,
+                    ActionType = "OutcomeRecorded",
+                    ExaminerId = booking.ExaminerId,
+                    OriginalSupervisorId = booking.OriginalSupervisorId,
+                    IsSupervisorRequired = booking.IsSupervisorRequired,
+                    DefenseDate = booking.DefenseDate,
+                    StartTime = booking.StartTime,
+                    EndTime = booking.EndTime,
+                    DurationMinutes = booking.DurationMinutes,
+                    Venue = booking.Venue,
+                    BookingStatus = booking.BookingStatus,
+                    AcademicOutcome = finalOutcome,
+                    OutcomeComments = resolvedComments,
+                    ReasonForChange = reasonForChange,
+                    Timestamp = _clock.Now,
+                    ActionByUserId = currentUserId
+                };
+                _context.IAFDefenseHistories.Add(history);
+
+                // Synchronize Milestone
+                milestone.Status = finalOutcome;
+
+                var syncResult = SyncMilestoneRemarksAttemptStatus(milestone, attemptNumber, finalOutcome, resolvedComments);
+                if (!syncResult.Success)
+                {
+                    if (transaction != null) await transaction.RollbackAsync();
+                    if (history != null) _context.Entry(history).State = EntityState.Detached;
+                    if (booking != null) _context.Entry(booking).State = EntityState.Detached;
+                    if (milestone != null) _context.Entry(milestone).State = EntityState.Detached;
+                    return DefenseOutcomeResult.Fail(
+                        "RemarksSyncFailed",
+                        $"Failed to synchronize milestone remarks: {syncResult.ErrorMessage}");
+                }
+
+                await _context.SaveChangesAsync();
+                isCommitStage = true;
+                if (transaction != null)
+                {
+                    await transaction.CommitAsync();
+                }
+
+                return DefenseOutcomeResult.Ok(booking, history);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                bool rollbackConfirmed = false;
+                if (transaction != null)
+                {
                     try
                     {
                         await transaction.RollbackAsync();
@@ -511,25 +637,28 @@ namespace FYPTracker.Services.Defense
                     {
                         rollbackConfirmed = false;
                     }
+                }
 
-                    if (history != null) _context.Entry(history).State = EntityState.Detached;
-                    if (booking != null) _context.Entry(booking).State = EntityState.Detached;
-                    if (milestone != null) _context.Entry(milestone).State = EntityState.Detached;
+                if (history != null) _context.Entry(history).State = EntityState.Detached;
+                if (booking != null) _context.Entry(booking).State = EntityState.Detached;
+                if (milestone != null) _context.Entry(milestone).State = EntityState.Detached;
 
-                    if (!rollbackConfirmed)
-                    {
-                        return DefenseOutcomeResult.Fail(
-                            "ConcurrencyError",
-                            "A concurrency conflict occurred and the transaction rollback could not be confirmed. Please refresh the page to verify the recorded outcome.");
-                    }
-
+                if (transaction != null && !rollbackConfirmed)
+                {
                     return DefenseOutcomeResult.Fail(
                         "ConcurrencyError",
-                        "The defense record was modified by another user. Please refresh and verify its current status.");
+                        "A concurrency conflict occurred and the transaction rollback could not be confirmed. Please refresh the page to verify the recorded outcome.");
                 }
-                catch (Exception)
+
+                return DefenseOutcomeResult.Fail(
+                    "ConcurrencyError",
+                    "The defense record was modified by another user. Please refresh and verify its current status.");
+            }
+            catch (Exception)
+            {
+                bool rollbackConfirmed = false;
+                if (transaction != null)
                 {
-                    bool rollbackConfirmed = false;
                     try
                     {
                         await transaction.RollbackAsync();
@@ -539,30 +668,30 @@ namespace FYPTracker.Services.Defense
                     {
                         rollbackConfirmed = false;
                     }
+                }
 
-                    if (history != null) _context.Entry(history).State = EntityState.Detached;
-                    if (booking != null) _context.Entry(booking).State = EntityState.Detached;
-                    if (milestone != null) _context.Entry(milestone).State = EntityState.Detached;
+                if (history != null) _context.Entry(history).State = EntityState.Detached;
+                if (booking != null) _context.Entry(booking).State = EntityState.Detached;
+                if (milestone != null) _context.Entry(milestone).State = EntityState.Detached;
 
-                    if (isCommitStage)
-                    {
-                        return DefenseOutcomeResult.Fail(
-                            "ExecutionError",
-                            "An error occurred while confirming the defense outcome. Please refresh and verify the recorded outcome before taking further action.");
-                    }
-
-                    if (!rollbackConfirmed)
-                    {
-                        return DefenseOutcomeResult.Fail(
-                            "ExecutionError",
-                            "An unexpected error occurred and transaction rollback could not be confirmed. Please refresh and verify the recorded outcome before taking further action.");
-                    }
-
+                if (isCommitStage)
+                {
                     return DefenseOutcomeResult.Fail(
                         "ExecutionError",
-                        "An unexpected error occurred while recording defense outcome. Please retry.");
+                        "An error occurred while confirming the defense outcome. Please refresh and verify the recorded outcome before taking further action.");
                 }
-            });
+
+                if (transaction != null && !rollbackConfirmed)
+                {
+                    return DefenseOutcomeResult.Fail(
+                        "ExecutionError",
+                        "An unexpected error occurred and transaction rollback could not be confirmed. Please refresh and verify the recorded outcome before taking further action.");
+                }
+
+                return DefenseOutcomeResult.Fail(
+                    "ExecutionError",
+                    "An unexpected error occurred while recording defense outcome. Please retry.");
+            }
         }
 
         public async Task<IAFDefenseBooking?> GetActiveBookingAsync(int milestoneId, int? attemptNumber = null)
@@ -599,6 +728,11 @@ namespace FYPTracker.Services.Defense
 
         private async Task<bool> IsSchemaAvailableAsync()
         {
+            if (!_context.Database.IsRelational())
+            {
+                return true;
+            }
+
             try
             {
                 var conn = _context.Database.GetDbConnection();
@@ -1010,6 +1144,11 @@ namespace FYPTracker.Services.Defense
 
         private async Task<(bool Success, int ReturnCode)> AcquireTransactionAppLockAsync(string resource, int timeoutSeconds)
         {
+            if (!_context.Database.IsRelational())
+            {
+                return (true, 0);
+            }
+
             var returnParam = new SqlParameter
             {
                 ParameterName = "@ReturnCode",

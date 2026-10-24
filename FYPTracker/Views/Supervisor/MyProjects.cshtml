@@ -97,24 +97,13 @@
 <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
     <div>
         <h2 class="fw-bold mb-1 text-white"><i class="fas fa-user-graduate me-2"></i>My Students</h2>
-        <p class="mb-0 text-white opacity-75">Manage your assigned students, track their progress, and configure custom project milestones.</p>
+        <p class="mb-0 text-white opacity-75">Manage your assigned students, track their progress, and view official session milestone deadlines.</p>
     </div>
     <div class="d-flex my-2 gap-2 align-items-center">
         @await Html.PartialAsync("_SessionFilter")
-        @if (Model.Any())
-        {
-            <div class="dropdown">
-                <button class="btn btn-light fw-bold shadow-sm dropdown-toggle" type="button" id="manageMilestonesDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-layer-group me-1"></i> Manage Milestones
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="manageMilestonesDropdown">
-                    <li><button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#bulkAddMilestoneModal"><i class="fas fa-plus text-primary me-2"></i> Add Custom Milestone</button></li>
-                    <li><button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#bulkEditMilestoneModal"><i class="fas fa-edit text-info me-2"></i> Edit Milestones</button></li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><button type="button" class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#bulkDeleteMilestoneModal"><i class="fas fa-trash me-2"></i> Delete Milestones</button></li>
-                </ul>
-            </div>
-        }
+        <button class="btn btn-light fw-bold shadow-sm" type="button" data-bs-toggle="modal" data-bs-target="#viewSessionMilestonesModal">
+            <i class="fas fa-calendar-alt text-primary me-2"></i> View Session Milestones
+        </button>
     </div>
 </div>
 
@@ -134,26 +123,22 @@
 <div class="row g-4">
     @foreach (var proj in Model)
     {
-        var completed = proj.Milestones.Count(m => m.Status == "Approved");
-        var total = proj.Milestones.Count;
-        var progress = total > 0 ? (completed * 100) / total : 0;
-
         <div class="col-md-6 col-xl-4">
             <div class="card h-100 shadow-sm border-0" style="border-radius: 16px;">
                 <div class="card-body d-flex flex-column p-4">
                     <div class="flex-grow-1">
                         <div class="d-flex align-items-center justify-content-between mb-4">
-                            @if (proj.Status == "Failed")
-                            {
-                                <span class="badge bg-danger text-white px-3 py-2 rounded-pill"><i class="fas fa-times-circle me-1"></i> Failed</span>
-                            }
-                            else if (total > 0 && completed == total)
+                            @if (proj.Status == "Completed")
                             {
                                 <span class="badge bg-success text-white px-3 py-2 rounded-pill"><i class="fas fa-check-circle me-1"></i> Completed</span>
                             }
+                            else if (proj.Status == "Failed")
+                            {
+                                <span class="badge bg-danger text-white px-3 py-2 rounded-pill"><i class="fas fa-times-circle me-1"></i> Failed</span>
+                            }
                             else
                             {
-                                <span class="badge bg-light text-primary fw-bold px-3 py-2 rounded-pill border border-primary border-opacity-25">FYP Project</span>
+                                <span class="badge bg-light text-primary fw-bold px-3 py-2 rounded-pill border border-primary border-opacity-25">@(string.IsNullOrEmpty(proj.Status) ? "In Progress" : (proj.Status == "Approved" || proj.Status == "InProgress" ? "In Progress" : proj.Status))</span>
                             }
                             <span class="text-muted small fw-bold"><i class="fas fa-calendar-alt me-1"></i>@proj.CreatedDate.ToString("dd MMM yyyy")</span>
                         </div>
@@ -180,12 +165,49 @@
                     </div>
 
                     <div class="mt-auto pt-3 border-top border-light">
-                        <div class="d-flex justify-content-between align-items-center small fw-bold mb-2">
-                            <span class="text-muted">Progress</span>
-                            <span class="text-primary">@progress%</span>
-                        </div>
-                        <div class="progress mb-4" style="height: 6px; border-radius: 4px;">
-                            <div class="progress-bar bg-primary" role="progressbar" style="width: @progress%;"></div>
+                        <div class="bg-light rounded-3 p-3 mb-3 border border-light">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted small fw-bold"><i class="fas fa-file-alt text-primary me-1"></i> Stage 1</span>
+                                @if (proj.Stage1Grade == "Pass")
+                                {
+                                    <span class="badge bg-success text-white rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #ffffff !important; background-color: #50cd89 !important;">
+                                        <i class="fas fa-check-circle me-1 text-white"></i>Passed@(proj.Stage1TotalScore.HasValue ? $" ({proj.Stage1TotalScore.Value:0.0})" : "")
+                                    </span>
+                                }
+                                else if (proj.Stage1Grade == "Fail")
+                                {
+                                    <span class="badge bg-danger text-white rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #ffffff !important; background-color: #f1416c !important;">
+                                        <i class="fas fa-times-circle me-1 text-white"></i>Failed
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #1e293b !important; background-color: #e2e8f0 !important;">
+                                        <i class="fas fa-clock me-1" style="color: #64748b !important;"></i>In Progress
+                                    </span>
+                                }
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted small fw-bold"><i class="fas fa-graduation-cap text-success me-1"></i> Stage 2</span>
+                                @if (proj.Status == "Completed" || !string.IsNullOrEmpty(proj.FinalGrade))
+                                {
+                                    <span class="badge bg-success text-white rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #ffffff !important; background-color: #50cd89 !important;">
+                                        <i class="fas fa-trophy me-1 text-white"></i>@(string.IsNullOrEmpty(proj.FinalGrade) ? "Completed" : $"Graded ({proj.FinalGrade})")
+                                    </span>
+                                }
+                                else if (proj.Stage1Grade == "Pass")
+                                {
+                                    <span class="badge bg-primary text-white rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #ffffff !important; background-color: #009ef7 !important;">
+                                        <i class="fas fa-arrow-right me-1 text-white"></i>In Progress
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #64748b !important; background-color: #e2e8f0 !important;">
+                                        <i class="fas fa-lock me-1" style="color: #64748b !important;"></i>Locked
+                                    </span>
+                                }
+                            </div>
                         </div>
                         <a href="/Supervisor/ProjectDetails/@proj.Id" class="btn btn-outline-primary w-100 fw-bold rounded-pill">
                             View Details
@@ -209,319 +231,145 @@
     }
 </div>
 
-<!-- Bulk Add Milestone Modal -->
-<div class="modal fade" id="bulkAddMilestoneModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered mw-1000px">
-        <div class="modal-content">
-            <form asp-action="BulkAddMilestone" asp-controller="Supervisor" method="post" id="bulkAddForm" onsubmit="return validateBulkAdd()" novalidate>
-                <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSession" />
-                <div class="modal-header">
-                    <h2 class="fw-bolder">Add Milestone</h2>
-                    <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
-                        <i class="fas fa-times fs-1"></i>
+<!-- View Session Milestones Modal -->
+<div class="modal fade" id="viewSessionMilestonesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-bottom px-4 py-3">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle">
+                        <i class="fas fa-calendar-check fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold text-dark mb-0">Official Academic Session Milestones</h5>
+                        <small class="text-muted">Authoritative Institutional Submission Deadlines</small>
                     </div>
                 </div>
-                <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
-                    @if (TempData["AddModalError"] != null)
-                    {
-                        <div class="alert alert-danger bg-light-danger border-danger d-flex align-items-center p-5 mb-7">
-                            <i class="fas fa-exclamation-triangle text-danger fs-1 me-4"></i>
-                            <div class="d-flex flex-column text-danger pe-0 pe-sm-10">
-                                <h4 class="mb-1 text-danger">Validation Error</h4>
-                                <span>@TempData["AddModalError"]</span>
-                            </div>
-                        </div>
-                    }
-
-                    <!-- Current Timeline Visualization -->
-                    <div class="mb-8 p-5 rounded border border-light shadow-sm" style="background-color: #fafbfc;">
-                        <h4 class="fw-bolder text-dark mb-4 text-center">Current Project Timeline</h4>
-                        
-                        <!-- Stage 1 Row -->
-                        <div class="mb-6">
-                            <h6 class="text-primary fw-bold mb-3"><i class="fas fa-flag me-2"></i>Stage 1</h6>
-                            <div class="timeline-stepper pb-2">
-                                @if(stage1Templates.Any()) {
-                                    @foreach(var m in stage1Templates) {
-                                        <div class="stepper-item">
-                                            <div class="stepper-icon"></div>
-                                            <div class="stepper-content">
-                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
-                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
-                                            </div>
-                                        </div>
-                                    }
-                                } else {
-                                    <div class="text-muted fs-8 fst-italic">No Stage 1 milestones.</div>
-                                }
-                            </div>
-                        </div>
-
-                        <!-- Stage 2 Row -->
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-primary bg-primary bg-opacity-10 border-0 rounded-3 mb-4">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="fas fa-info-circle text-primary mt-1"></i>
                         <div>
-                            <h6 class="text-success fw-bold mb-3"><i class="fas fa-graduation-cap me-2"></i>Stage 2</h6>
-                            <div class="timeline-stepper pb-2">
-                                @if(stage2Templates.Any()) {
-                                    @foreach(var m in stage2Templates) {
-                                        <div class="stepper-item stage2">
-                                            <div class="stepper-icon"></div>
-                                            <div class="stepper-content">
-                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
-                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
-                                            </div>
-                                        </div>
-                                    }
-                                } else {
-                                    <div class="text-muted fs-8 fst-italic">No Stage 2 milestones.</div>
+                            <strong>Academic Session: @(ViewBag.EffectiveSessionName ?? ViewBag.CurrentSession ?? "Current Session")</strong>
+                            <div class="small mt-1">
+                                All students enrolled in this Academic Session share identical official submission deadlines. Official deadlines are centrally administered and cannot be changed by Supervisors.
+                            </div>
+                            <div class="small text-muted mt-1">
+                                <i class="fas fa-lightbulb text-warning me-1"></i>To assign optional individual student progress tasks, open that student's <strong>Project Details</strong> and select <strong>+ Add Progress Task</strong>.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stage 1 Official Milestones -->
+                <div class="mb-4">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <h6 class="fw-bold text-primary mb-0">
+                            <i class="fas fa-flag me-2"></i>Stage 1 Official Milestones
+                        </h6>
+                        <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill small">Official Academic Milestones</span>
+                    </div>
+                    <div class="table-responsive border rounded-3 bg-white">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr class="text-muted small text-uppercase">
+                                    <th class="ps-3">Milestone Title</th>
+                                    <th>Code / Type</th>
+                                    <th>Status / Rule</th>
+                                    <th class="text-end pe-3">Official Due Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{
+                                    var officialStage1 = (ViewBag.OfficialSessionMilestones as List<DefaultMilestoneTemplate>)?.Where(t => t.Stage == 1).ToList() 
+                                                         ?? stage1Templates.Where(m => m.MilestoneSource == "Default").Select(m => new DefaultMilestoneTemplate { Title = m.Title, MilestoneCode = m.MilestoneCode, DueDate = m.DueDate, IsRequired = m.IsRequired }).ToList();
                                 }
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row mb-7">
-                        <div class="col-md-4 fv-row">
-                            <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
-                                <span class="required">Stage</span>
-                            </label>
-                            <select class="form-select form-select-solid" id="addStage" name="stageSelection" onchange="updateTitlePreview()">
-                                <option value="1">Stage 1</option>
-                                <option value="2">Stage 2</option>
-                            </select>
-                        </div>
-                        <div class="col-md-8 fv-row">
-                            <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
-                                <span class="required">Custom Title</span>
-                            </label>
-                            <input type="text" class="form-control form-control-solid" placeholder="e.g. Demonstration Video" name="title" id="addTitle" oninput="updateTitlePreview()" />
-                            <div id="addTitleError" class="text-danger fw-bold small mt-1 d-none">Title must be at least 3 characters long.</div>
-                        </div>
-                    </div>
-                    <div class="mb-7 fv-row">
-                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
-                            <span>Final Title Preview</span>
-                        </label>
-                        <input type="text" class="form-control form-control-solid bg-light text-primary fw-bolder fs-6 border-primary border-dashed" style="background-color: #f8fbfd !important;" id="addTitlePreview" readonly />
-                        <small class="text-muted mt-2 d-block"><i class="fas fa-info-circle me-1"></i> The system will automatically add the correct prefix to place it in the correct stage.</small>
-                    </div>
-
-                    <div class="d-flex flex-column mb-7 fv-row">
-                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
-                            <span class="required">Due Date</span>
-                        </label>
-                        <input type="date" class="form-control form-control-solid" name="dueDate" id="addDueDate" onchange="validateBulkAddRealtime()" />
-                        <div id="addDueDateError" class="text-danger fw-bold small mt-1 d-none">Please select a valid due date.</div>
-                    </div>
-
-                    <div class="d-flex flex-column mb-7 fv-row">
-                        <label class="fs-6 fw-bold form-label mb-2">Description</label>
-                        <textarea class="form-control form-control-solid" rows="3" name="description" id="addDescription" placeholder="Instructions for students..." oninput="validateBulkAddRealtime()"></textarea>
-                        <div id="addDescriptionError" class="text-danger fw-bold small mt-1 d-none">Description must be at least 10 characters long.</div>
-                    </div>
-                </div>
-                <div class="modal-footer flex-center">
-                    <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <span class="indicator-label">Submit</span>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Bulk Edit Milestone Modal -->
-<div class="modal fade" id="bulkEditMilestoneModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered mw-1000px">
-        <div class="modal-content">
-            <form asp-action="BulkEditMilestone" asp-controller="Supervisor" method="post" id="bulkEditForm" onsubmit="return validateBulkEdit()" novalidate>
-                <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSession" />
-                <div class="modal-header">
-                    <h2 class="fw-bolder">Edit Milestone</h2>
-                    <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
-                        <i class="fas fa-times fs-1"></i>
-                    </div>
-                </div>
-                <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
-                    @if (TempData["EditModalError"] != null)
-                    {
-                        <div class="alert alert-danger bg-light-danger border-danger d-flex align-items-center p-5 mb-7">
-                            <i class="fas fa-exclamation-triangle text-danger fs-1 me-4"></i>
-                            <div class="d-flex flex-column text-danger pe-0 pe-sm-10">
-                                <h4 class="mb-1 text-danger">Validation Error</h4>
-                                <span>@TempData["EditModalError"]</span>
-                            </div>
-                        </div>
-                    }
-
-                    <!-- Current Timeline Visualization -->
-                    <div class="mb-8 p-5 rounded border border-light shadow-sm" style="background-color: #fafbfc;">
-                        <h4 class="fw-bolder text-dark mb-4 text-center">Current Project Timeline</h4>
-                        
-                        <!-- Stage 1 Row -->
-                        <div class="mb-6">
-                            <h6 class="text-primary fw-bold mb-3"><i class="fas fa-flag me-2"></i>Stage 1</h6>
-                            <div class="timeline-stepper pb-2">
-                                @if(stage1Templates.Any()) {
-                                    @foreach(var m in stage1Templates) {
-                                        <div class="stepper-item">
-                                            <div class="stepper-icon"></div>
-                                            <div class="stepper-content">
-                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
-                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
-                                            </div>
-                                        </div>
+                                @if (officialStage1 != null && officialStage1.Any())
+                                {
+                                    @foreach (var t in officialStage1)
+                                    {
+                                        <tr>
+                                            <td class="ps-3 fw-semibold text-dark">@t.Title</td>
+                                            <td><span class="badge bg-light text-secondary border">@(string.IsNullOrEmpty(t.MilestoneCode) ? "DEFAULT" : t.MilestoneCode)</span></td>
+                                            <td>
+                                                @if (t.IsRequired)
+                                                {
+                                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Required</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary bg-opacity-10 text-secondary">Optional</span>
+                                                }
+                                            </td>
+                                            <td class="text-end pe-3 fw-bold text-dark">
+                                                @(t.DueDate?.ToString("dd MMMM yyyy") ?? "No deadline set")
+                                            </td>
+                                        </tr>
                                     }
-                                } else {
-                                    <div class="text-muted fs-8 fst-italic">No Stage 1 milestones.</div>
                                 }
-                            </div>
-                        </div>
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="4" class="text-center py-3 text-muted">No Stage 1 official milestone templates found for this session.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-                        <!-- Stage 2 Row -->
-                        <div>
-                            <h6 class="text-success fw-bold mb-3"><i class="fas fa-graduation-cap me-2"></i>Stage 2</h6>
-                            <div class="timeline-stepper pb-2">
-                                @if(stage2Templates.Any()) {
-                                    @foreach(var m in stage2Templates) {
-                                        <div class="stepper-item stage2">
-                                            <div class="stepper-icon"></div>
-                                            <div class="stepper-content">
-                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
-                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
-                                            </div>
-                                        </div>
+                <!-- Stage 2 Official Deadlines -->
+                <div>
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <h6 class="fw-bold text-success mb-0">
+                            <i class="fas fa-graduation-cap me-2"></i>Stage 2 Official Milestones
+                        </h6>
+                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill small">Official Academic Milestones</span>
+                    </div>
+                    <div class="table-responsive border rounded-3 bg-white">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr class="text-muted small text-uppercase">
+                                    <th class="ps-3">Milestone Title</th>
+                                    <th>Stage</th>
+                                    <th>Status / Rule</th>
+                                    <th class="text-end pe-3">Official Due Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{
+                                    var officialStage2 = stage2Templates.Where(m => (m.Stage == 2 || m.Title.StartsWith("Step")) && !FYPTracker.Utils.GradingHelper.IsObsoleteOrRetiredStage2Milestone(m)).ToList();
+                                }
+                                @if (officialStage2.Any())
+                                {
+                                    @foreach (var s2 in officialStage2)
+                                    {
+                                        <tr>
+                                            <td class="ps-3 fw-semibold text-dark">@s2.Title</td>
+                                            <td><span class="badge bg-light text-secondary border">Stage 2</span></td>
+                                            <td><span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Required</span></td>
+                                            <td class="text-end pe-3 fw-bold text-dark">
+                                                @(s2.DueDate?.ToString("dd MMMM yyyy") ?? "No deadline set")
+                                            </td>
+                                        </tr>
                                     }
-                                } else {
-                                    <div class="text-muted fs-8 fst-italic">No Stage 2 milestones.</div>
                                 }
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="d-flex flex-column mb-7 fv-row">
-                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
-                            <span class="required">Target Milestone to Edit</span>
-                        </label>
-                        <select name="targetTitle" class="form-select form-select-solid" id="editTargetTitle" onchange="validateBulkEditRealtime()" required>
-                            <option value="">-- Select Milestone --</option>
-                            @foreach(var t in supervisorMilestoneTitles)
-                            {
-                                <option value="@t">@t</option>
-                            }
-                        </select>
-                        <div id="editTargetError" class="text-danger fw-bold small mt-1 d-none">Please select a milestone to edit.</div>
-                    </div>
-
-                    <div class="d-flex flex-column mb-7 fv-row">
-                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
-                            <span>New Title (Optional)</span>
-                        </label>
-                        <input type="text" class="form-control form-control-solid" placeholder="Leave blank to keep same" name="newTitle" id="bulkNewTitle" oninput="validateBulkEditRealtime()" />
-                        <div id="editTitleError" class="text-danger fw-bold small mt-1 d-none">New title must be at least 5 characters long.</div>
-                        <small id="bulkTitleWarning" class="text-danger mt-1 fw-bold" style="display: none;"><i class="fas fa-lock me-1"></i>Core system milestone titles cannot be renamed.</small>
-                    </div>
-
-                    <div class="d-flex flex-column mb-7 fv-row">
-                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
-                            <span>New Due Date (Optional)</span>
-                        </label>
-                        <input type="date" class="form-control form-control-solid" name="newDueDate" id="bulkNewDueDate" onchange="validateBulkEditRealtime()" />
-                        <small id="bulkDateWarning" class="text-danger mt-1 fw-bold" style="display: none;"><i class="fas fa-lock me-1"></i>The IAF deadline is centrally managed by the Admin.</small>
-                    </div>
-
-                    <div class="d-flex flex-column mb-7 fv-row">
-                        <label class="fs-6 fw-bold form-label mb-2">New Description (Optional)</label>
-                        <textarea class="form-control form-control-solid" rows="3" name="newDescription" id="bulkNewDescription" placeholder="Leave blank to keep same..." oninput="validateBulkEditRealtime()"></textarea>
-                        <div id="editDescriptionError" class="text-danger fw-bold small mt-1 d-none">New description must be at least 10 characters long.</div>
-                    </div>
-                </div>
-                <div class="modal-footer flex-center">
-                    <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Submit</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Bulk Delete Milestone Modal -->
-<div class="modal fade" id="bulkDeleteMilestoneModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered mw-1000px">
-        <div class="modal-content">
-            <form asp-action="BulkDeleteMilestone" asp-controller="Supervisor" method="post" id="bulkDeleteForm" onsubmit="return validateBulkDelete()" novalidate>
-                <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSession" />
-                <div class="modal-header">
-                    <h2 class="fw-bolder">Delete Milestone</h2>
-                    <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
-                        <i class="fas fa-times fs-1"></i>
-                    </div>
-                </div>
-                <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
-                    
-                    <!-- Current Timeline Visualization -->
-                    <div class="mb-8 p-5 rounded border border-light shadow-sm" style="background-color: #fafbfc;">
-                        <h4 class="fw-bolder text-dark mb-4 text-center">Current Project Timeline</h4>
-                        
-                        <!-- Stage 1 Row -->
-                        <div class="mb-6">
-                            <h6 class="text-primary fw-bold mb-3"><i class="fas fa-flag me-2"></i>Stage 1</h6>
-                            <div class="timeline-stepper pb-2">
-                                @if(stage1Templates.Any()) {
-                                    @foreach(var m in stage1Templates) {
-                                        <div class="stepper-item">
-                                            <div class="stepper-icon"></div>
-                                            <div class="stepper-content">
-                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
-                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
-                                            </div>
-                                        </div>
-                                    }
-                                } else {
-                                    <div class="text-muted fs-8 fst-italic">No Stage 1 milestones.</div>
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="4" class="text-center py-3 text-muted">No Stage 2 official milestones recorded for this session.</td>
+                                    </tr>
                                 }
-                            </div>
-                        </div>
-
-                        <!-- Stage 2 Row -->
-                        <div>
-                            <h6 class="text-success fw-bold mb-3"><i class="fas fa-graduation-cap me-2"></i>Stage 2</h6>
-                            <div class="timeline-stepper pb-2">
-                                @if(stage2Templates.Any()) {
-                                    @foreach(var m in stage2Templates) {
-                                        <div class="stepper-item stage2">
-                                            <div class="stepper-icon"></div>
-                                            <div class="stepper-content">
-                                                <div class="fw-bolder text-dark fs-7" style="margin: 0 auto;" title="@m.Title">@m.Title</div>
-                                                <div class="text-muted fs-8 mt-1">@(m.DueDate?.ToString("dd MMM yyyy") ?? "No Date")</div>
-                                            </div>
-                                        </div>
-                                    }
-                                } else {
-                                    <div class="text-muted fs-8 fst-italic">No Stage 2 milestones.</div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="d-flex flex-column mb-7 fv-row">
-                        <label class="d-flex align-items-center fs-6 fw-bold form-label mb-2">
-                            <span class="required text-danger">Target Milestone to Delete</span>
-                        </label>
-                        <select name="targetTitle" class="form-select form-select-solid" id="deleteTargetTitle" onchange="validateBulkDeleteRealtime()" required>
-                            <option value="">-- Select Milestone --</option>
-                            @foreach(var t in supervisorMilestoneTitles)
-                            {
-                                <option value="@t">@t</option>
-                            }
-                        </select>
-                        <div id="deleteTargetError" class="text-danger fw-bold small mt-1 d-none">Please select a milestone to delete.</div>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-                <div class="modal-footer flex-center">
-                    <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger">Confirm Delete</button>
-                </div>
-            </form>
+            </div>
+            <div class="modal-footer border-top px-4 py-3">
+                <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>

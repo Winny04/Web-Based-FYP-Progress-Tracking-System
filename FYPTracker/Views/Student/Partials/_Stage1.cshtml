@@ -340,9 +340,37 @@
                                     int propMilestoneId = propMilestone?.Id ?? 0;
                                     bool isStage1PassedNow = Model?.Stage1Grade == "Pass";
                                     bool isPropLocked = FYPTracker.Utils.GradingHelper.IsStage1ProposalLocked(propMilestone, Model?.Stage1Grade);
+                                    bool canProgressToDpp = FYPTracker.Utils.GradingHelper.CanProgressToStage1Dpp(iafMilestone, ViewBag.ScheduledIafBooking as IAFDefenseBooking);
                                 }
                                 
-                                @if (propMilestone != null && propMilestone.Status == "Rejected" && !isStage1PassedNow)
+                                @if (!canProgressToDpp)
+                                {
+                                    <div class="alert alert-warning d-flex align-items-start mt-3 border-warning shadow-sm mb-4">
+                                        <i class="fas fa-lock fs-2 me-3 text-warning mt-1"></i>
+                                        <div class="w-100">
+                                            <h5 class="fw-bold text-dark mb-1">Stage 1 DPP Submission Locked — IAF Prerequisite Pending</h5>
+                                            <p class="mb-0 text-muted">
+                                                @if (iafMilestone?.Status == "DefenseScheduled")
+                                                {
+                                                    <span>Your IAF Defense session is currently scheduled and awaiting assessment. You cannot submit your Detailed Project Proposal (DPP) until your IAF Defense has been conducted and passed.</span>
+                                                }
+                                                else if (iafMilestone?.Status == "DefenseRequired")
+                                                {
+                                                    <span>An IAF Defense is required and awaiting scheduling by the administrator. Stage 1 DPP submission will unlock once your IAF Defense is scheduled, conducted, and marked as Passed.</span>
+                                                }
+                                                else if (iafMilestone?.Status == "ChangeOfTopicRequired")
+                                                {
+                                                    <span>Your IAF defense was unsuccessful. You must submit a revised IAF with a change of topic before proceeding with Stage 1 submissions.</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>Your Initial Project Allocation Form (IAF) has not yet been approved. Stage 1 DPP submission will unlock once your IAF is fully approved.</span>
+                                                }
+                                            </p>
+                                        </div>
+                                    </div>
+                                }
+                                else if (propMilestone != null && propMilestone.Status == "Rejected" && !isStage1PassedNow)
                                 {
                                     <div class="alert alert-danger d-flex align-items-center mt-3 border-danger shadow-sm">
                                         <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
@@ -480,7 +508,7 @@
                                     </div>
                                 }
 
-                                @if (!isPropLocked)
+                                @if (canProgressToDpp && !isPropLocked)
                                 {
                                 <form id="proposalForm" asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
                                     <input type="hidden" name="formType" value="Proposal Form" />
@@ -506,18 +534,26 @@
                                     <input type="text" name="title" class="form-control bg-light" value="@Model.Title" readonly required />
                                 </div>
 
-                                <div class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1;">
-                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                                <div class="mb-4 p-4 rounded-3 border" style="background: #f8fafc; border-color: #e2e8f0 !important;">
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3 pb-3 border-bottom">
                                         <div>
-                                            <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>Stage 1 Final Submission Template</div>
-                                            <div class="text-muted small">Download the official Word template pre-filled with your student & project info. Complete it and upload as PDF below.</div>
+                                            <div class="fw-bold text-dark fs-6 mb-1"><i class="fas fa-file-word text-primary me-2"></i>Official Thesis Cover Page</div>
+                                            <div class="text-muted small">Download the official editable Microsoft Word (.docx) cover page pre-populated with your student and project details.</div>
                                         </div>
-                                        <a href="@Url.Action("DownloadProposalTemplate", "Student")"
-                                           class="btn btn-outline-dark fw-semibold rounded-3 px-4 py-2 text-decoration-none d-flex align-items-center gap-2"
+                                        <a href="@Url.Action("DownloadThesisCoverPage", "Student")"
+                                           class="btn btn-outline-primary fw-bold rounded-3 px-3 py-2 text-decoration-none d-flex align-items-center gap-2 shadow-sm"
                                            style="white-space: nowrap;">
-                                            <i class="fas fa-download"></i> Download Template (.docx)
+                                            <i class="fas fa-download"></i> Download Official Thesis Cover Page (.docx)
                                         </a>
                                     </div>
+                                    <div class="fw-bold text-dark mb-1"><i class="fas fa-list-ol text-primary me-2"></i>Stage 1 Final DPP Submission Workflow:</div>
+                                    <ol class="small text-dark mb-0 ps-3" style="line-height: 1.7;">
+                                        <li>Download the official DOCX Cover Page.</li>
+                                        <li>Combine Cover Page, Chapter 1, Chapter 2, Chapter 3, References, and Appendices where applicable.</li>
+                                        <li>Export the complete combined document as ONE PDF.</li>
+                                        <li>Upload the final PDF below. (PDF ONLY - Word documents are rejected).</li>
+                                        <li>Submit Stage 1 Final DPP.</li>
+                                    </ol>
                                 </div>
 
                                 <div class="form-section-title">Part 2: Document Attachment</div>

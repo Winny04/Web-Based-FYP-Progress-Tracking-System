@@ -85,35 +85,35 @@ if (builder.Environment.IsDevelopment())
     }
 }
 
-// Testing must use ONLY the local Test database.
-if (builder.Environment.IsEnvironment("Testing"))
-{
-    if (!string.Equals(
-        dbName,
-        "FYPTracker_Test",
-        StringComparison.OrdinalIgnoreCase))
+    // Testing must use ONLY the local Test database.
+    if (builder.Environment.IsEnvironment("Testing"))
     {
-        throw new InvalidOperationException(
-            "SAFETY STOP: Testing must use FYPTracker_Test.");
-    }
+        if (!string.Equals(
+            dbName,
+            "FYPTracker_Test",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "SAFETY STOP: Testing must use FYPTracker_Test.");
+        }
 
-    if (!string.Equals(
-        serverName,
-        @"Boon\SQLEXPRESS",
-        StringComparison.OrdinalIgnoreCase))
-    {
-        throw new InvalidOperationException(
-            "SAFETY STOP: Testing must use " +
-            @"Boon\SQLEXPRESS.");
-    }
+        if (!string.Equals(
+            serverName,
+            @"Winny\SQLEXPRESS",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "SAFETY STOP: Testing must use " +
+                @"Winny\SQLEXPRESS.");
+        }
 
-    if (!builder.Configuration.GetValue<bool>(
-        "SmtpSettings:Offline"))
-    {
-        throw new InvalidOperationException(
-            "SAFETY STOP: Testing requires Offline SMTP.");
+        if (!builder.Configuration.GetValue<bool>(
+            "SmtpSettings:Offline"))
+        {
+            throw new InvalidOperationException(
+                "SAFETY STOP: Testing requires Offline SMTP.");
+        }
     }
-}
 
 Console.WriteLine("====================================");
 Console.WriteLine($"FYPTracker Environment: {environment}");
@@ -166,10 +166,19 @@ builder.Services.AddTransient<IFileWriter, FileWriter>();
 
 // Existing background services.
 // Keep original workflow unchanged.
-builder.Services.AddHostedService<MeetingReminderService>();
+// Disable automatic background processing during
+// controlled Chapter 5 manual testing.
+//
+// Development retains the existing background services.
+// Testing data must not change automatically.
 
-builder.Services.AddHostedService<
-    SupervisorRequestTimeoutService>();
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddHostedService<MeetingReminderService>();
+
+    builder.Services.AddHostedService<
+        SupervisorRequestTimeoutService>();
+}
 
 // =====================================================
 // 5. SMTP CONFIGURATION
@@ -274,6 +283,30 @@ builder.Services
 
             options.AccessDeniedPath =
                 AuthenticationDefaults.AccessDeniedPath;
+
+            options.Events.OnRedirectToLogin = ctx =>
+            {
+                if (ctx.Request.Headers["X-Requested-With"] == "XMLHttpRequest" ||
+                    ctx.Request.Headers["Accept"].ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return Task.CompletedTask;
+                }
+                ctx.Response.Redirect(ctx.RedirectUri);
+                return Task.CompletedTask;
+            };
+
+            options.Events.OnRedirectToAccessDenied = ctx =>
+            {
+                if (ctx.Request.Headers["X-Requested-With"] == "XMLHttpRequest" ||
+                    ctx.Request.Headers["Accept"].ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
+                }
+                ctx.Response.Redirect(ctx.RedirectUri);
+                return Task.CompletedTask;
+            };
         });
 
 builder.Services.AddAuthorization(options =>
@@ -410,7 +443,32 @@ CommonHelpers.SetHttpContextAccessor(
 
 app.UseStatusCodePages(async context =>
 {
+    var request = context.HttpContext.Request;
     var response = context.HttpContext.Response;
+
+    bool isJsonOrAjax =
+        request.Headers["X-Requested-With"] == "XMLHttpRequest" ||
+        request.Headers["Accept"].ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase) ||
+        request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase) ||
+        request.Path.Value?.EndsWith("Feedback", StringComparison.OrdinalIgnoreCase) == true ||
+        (response.ContentType != null && response.ContentType.Contains("application/json", StringComparison.OrdinalIgnoreCase));
+
+    if (isJsonOrAjax)
+    {
+        if (!response.HasStarted && (response.ContentType == null || !response.ContentType.Contains("application/json", StringComparison.OrdinalIgnoreCase)))
+        {
+            response.ContentType = "application/json";
+            string msg = response.StatusCode switch
+            {
+                401 => "You must be logged in to perform this action.",
+                403 => "Access denied: insufficient permissions.",
+                404 => "The requested resource was not found.",
+                _ => "An error occurred processing your request."
+            };
+            await response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(new { success = false, message = msg }));
+        }
+        return;
+    }
 
     if (response.StatusCode ==
         (int)HttpStatusCode.NotFound)

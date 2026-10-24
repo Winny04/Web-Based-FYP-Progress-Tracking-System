@@ -221,8 +221,9 @@
                     @foreach (var proj in allStudentsList)
                     {
                         var s1 = proj.Milestones.Where(m => m.Stage == 1).OrderBy(m => m.DueDate).ToList();
-                        var s2 = proj.Milestones.Where(m => m.Stage == 2).OrderBy(m => m.DueDate).ToList();
+                        var s2 = proj.Milestones.Where(m => m.Stage == 2 && !FYPTracker.Utils.GradingHelper.IsObsoleteOrRetiredStage2Milestone(m)).OrderBy(m => m.DueDate).ToList();
                         int pendingCount = proj.Milestones.Count(m => m.Status == "Submitted" || m.Status == "PendingSupervisorReview" || m.Status == "UnderReview");
+                        bool isRubricPending = FYPTracker.Utils.GradingHelper.IsStage1SupervisorRubricPending(proj, proj.Milestones);
                         
                         <div class="accordion-item card border-0 shadow-sm rounded-4 mb-3 overflow-hidden">
                             <h2 class="accordion-header" id="heading-@proj.Id">
@@ -240,6 +241,10 @@
                                             @if (pendingCount > 0)
                                             {
                                                 <span class="badge bg-danger rounded-pill px-3 py-2 fw-bold"><i class="fas fa-bell me-1"></i>@pendingCount Pending</span>
+                                            }
+                                            @if (isRubricPending)
+                                            {
+                                                <span class="badge bg-warning text-dark rounded-pill px-3 py-2 fw-bold"><i class="fas fa-hourglass-start me-1"></i>Pending Marksheet</span>
                                             }
                                         </div>
                                     </div>
@@ -309,8 +314,10 @@
                                                 
                                                 @{
                                                     var s1FinalMilestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(s1);
-                                                    bool isS1Approved = s1FinalMilestone != null && (s1FinalMilestone.Status == "Approved" || s1FinalMilestone.Status == "Completed");
-                                                    bool isS1SupGraded = !string.IsNullOrEmpty(s1FinalMilestone?.SupervisorMarksheetData);
+                                                    bool isS1Approved = s1FinalMilestone != null && FYPTracker.Utils.GradingHelper.IsStage1DppApproved(s1FinalMilestone);
+                                                    string supMarks = s1FinalMilestone?.SupervisorMarksheetData ?? "";
+                                                    bool isS1SupDraft = FYPTracker.Utils.GradingHelper.IsMarksheetDraft(supMarks);
+                                                    bool isS1SupGraded = !string.IsNullOrEmpty(supMarks) && !isS1SupDraft;
                                                     if (isS1Approved)
                                                     {
                                                         <tr class="table-light border-top border-2 border-primary">
@@ -409,8 +416,7 @@
                                                     }
 
                                                     {
-                                                        var stage2MilestonesList = s2.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
-                                                        bool isStage2Eligible = stage2MilestonesList.Any() && stage2MilestonesList.All(m => m.Status == "Approved" || m.Status == "Completed");
+                                                        bool isStage2Eligible = FYPTracker.Utils.GradingHelper.AreStage2DeliverablesApproved(proj.Milestones);
                                                         bool isStage2SupDone = !string.IsNullOrEmpty(proj.Stage2SupervisorMarksheetData);
                                                     
                                                         if (isStage2Eligible)

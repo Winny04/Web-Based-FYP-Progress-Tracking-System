@@ -1,255 +1,1159 @@
 @model IEnumerable<FYPTracker.Models.FYPProject>
+@inject FYPTracker.Services.Time.ISystemClock SystemClock
 @{
     ViewData["Title"] = "Examiner Dashboard";
     var scheduledDefenses = ViewBag.ScheduledDefenses as List<FYPTracker.Models.IAFDefenseBooking> ?? new();
     string currentSession = ViewBag.CurrentSession as string ?? "All";
     var academicSessions = ViewBag.AcademicSessions as List<FYPTracker.Models.AcademicSession> ?? new();
+    var altRequests = ViewBag.AlternativeTimeRequests as List<FYPTracker.Models.IAFAlternativeTimeRequest> ?? new();
+    int defenseDurationMinutes = ViewBag.DefenseDurationMinutes ?? 15;
+    string workingHoursStart = ViewBag.WorkingHoursStart ?? "08:00";
+    string workingHoursEnd = ViewBag.WorkingHoursEnd ?? "17:00";
+
+    // Partition IAF Defenses into genuinely active vs concluded/completed
+    var activeDefenses = scheduledDefenses
+        .Where(b => b.BookingStatus != "Completed" && b.AcademicOutcome == "Pending")
+        .ToList();
+    var completedDefenses = scheduledDefenses
+        .Where(b => b.BookingStatus == "Completed" || b.AcademicOutcome != "Pending")
+        .ToList();
+
+    // Partition Alternative Time Requests into pending action vs resolved history
+    var pendingAltRequests = altRequests
+        .Where(r => r.Status == "Pending")
+        .ToList();
+    var resolvedAltRequests = altRequests
+        .Where(r => r.Status != "Pending")
+        .ToList();
+
+    // Compute project counts for tabs and evaluate actionable assessment items
+    int totalProjects = Model?.Count() ?? 0;
+    int pendingCount = 0;
+    int completedCount = 0;
+
+    var pendingAssessmentsList = new List<(FYPTracker.Models.FYPProject Project, string Type, string StatusText, string ActionText, string ActionClass, string ActionUrl)>();
+
+    if (Model != null)
+    {
+        foreach (var p in Model)
+        {
+            var s1M = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(p.Milestones);
+            bool isDppApproved = s1M != null && FYPTracker.Utils.GradingHelper.IsStage1DppApproved(s1M);
+            string exData = s1M?.ExaminerMarksheetData ?? "";
+            bool isDraft = FYPTracker.Utils.GradingHelper.IsMarksheetDraft(exData);
+            bool s1Done = !string.IsNullOrEmpty(p.Stage1ExaminerMarksheetPath) || (!string.IsNullOrEmpty(exData) && !isDraft);
+            bool s2Done = !string.IsNullOrEmpty(p.ExaminerMarksheetPath) || !string.IsNullOrEmpty(p.FinalGrade);
+            bool isStage2DeliverablesApproved = FYPTracker.Utils.GradingHelper.AreStage2DeliverablesApproved(p.Milestones);
+            bool isStage2Unlocked = (p.Stage1Grade == "Pass" || (s1Done && p.Stage1TotalScore >= 50)) && isStage2DeliverablesApproved;
+
+            bool isDone = (s1Done && s2Done) || (s1Done && p.Stage1Grade != "Pass");
+            if (isDone) { completedCount++; } else { pendingCount++; }
+
+            // Genuine actions requiring Examiner attention
+            if (isDraft)
+            {
+                pendingAssessmentsList.Add((p, "Stage 1 Proposal Assessment", "Draft Saved — Pending Final Submission", "Continue Draft", "btn-warning text-dark", Url.Action("GradeMarksheetStage1", "Examiner", new { id = p.Id }) ?? $"/Examiner/GradeMarksheetStage1/{p.Id}"));
+            }
+            else if (isDppApproved && !s1Done)
+            {
+                pendingAssessmentsList.Add((p, "Stage 1 Proposal Assessment", "DPP Approved — Ready for Grading", "Grade Stage 1", "btn-monochrome", Url.Action("GradeMarksheetStage1", "Examiner", new { id = p.Id }) ?? $"/Examiner/GradeMarksheetStage1/{p.Id}"));
+            }
+            else if (isStage2Unlocked && !s2Done)
+            {
+                pendingAssessmentsList.Add((p, "Stage 2 Final Report & Viva", "Stage 2 Unlocked — Ready for Grading", "Grade Stage 2", "btn-monochrome", Url.Action("GradeMarksheetStage2", "Examiner", new { id = p.Id }) ?? $"/Examiner/GradeMarksheetStage2/{p.Id}"));
+            }
+        }
+    }
+
+    var concludedDefensesNeedingOutcome = activeDefenses
+        .Where(d => d.DefenseDate.Date.Add(d.EndTime) <= SystemClock.Now)
+        .ToList();
+
+    bool hasActionRequired = pendingAssessmentsList.Any() || concludedDefensesNeedingOutcome.Any() || pendingAltRequests.Any();
+    int totalActionItems = pendingAssessmentsList.Count + concludedDefensesNeedingOutcome.Count + pendingAltRequests.Count;
 }
 
-<div class="d-flex justify-content-between align-items-center mb-5 flex-wrap gap-3">
-    <div>
-        <h2 class="fw-bolder text-dark mb-1">Examiner Dashboard</h2>
-        <span class="text-muted fw-bold fs-7">Manage your assigned project assessments and scheduled defense sessions.</span>
-    </div>
-    <form id="sessionFilterForm" method="get" action="@Url.Action("Index", "Examiner")" class="d-flex align-items-center gap-2">
-        <label class="text-muted fw-bold small mb-0 text-nowrap"><i class="fas fa-calendar-alt text-primary me-1"></i>Session:</label>
-        <select name="sessionFilter" class="form-select form-select-sm form-select-solid bg-white fw-bold border shadow-sm" style="min-width: 220px;" onchange="document.getElementById('sessionFilterForm').submit();">
-            <option value="All" selected="@(currentSession == "All")">All Academic Sessions</option>
-            @foreach (var s in academicSessions)
-            {
-                <option value="@s.Name" selected="@(currentSession == s.Name)">@s.Name</option>
-            }
-        </select>
-    </form>
-</div>
+<style>
+    :root {
+        --bg-body: #f8fafc;
+        --card-bg: #ffffff;
+        --text-main: #1e293b;
+        --text-muted: #64748b;
+        --border-color: #e2e8f0;
+        --accent-dark: #0f172a;
+        --accent-light: #334155;
+    }
 
-<!-- Scheduled IAF Defenses Section -->
-<div class="card mb-5 mb-xl-8 border-0 shadow-sm" style="border-left: 5px solid #2563eb !important;">
-    <div class="card-header border-0 pt-5 pb-2 d-flex justify-content-between align-items-center">
-        <h3 class="card-title align-items-start flex-column">
-            <span class="card-label fw-bolder fs-3 mb-1 text-dark">
-                <i class="fas fa-calendar-check text-primary me-2"></i>Scheduled IAF Defenses
-                @if (scheduledDefenses.Any())
-                {
-                    <span class="badge bg-primary text-white ms-2 fs-8 rounded-pill">@scheduledDefenses.Count Active</span>
-                }
-            </span>
-            <span class="text-muted mt-1 fw-bold fs-7">IAF Defense sessions where you are assigned as the Independent Examiner.</span>
-        </h3>
-    </div>
-    <div class="card-body py-3">
-        @if (!scheduledDefenses.Any())
-        {
-            <div class="text-center p-5 bg-light rounded-4">
-                <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 50px; height: 50px;">
-                    <i class="fas fa-calendar-times fs-3"></i>
-                </div>
-                <h6 class="fw-bold text-dark mb-1">No Scheduled IAF Defenses</h6>
-                <p class="text-muted small mx-auto mb-0" style="max-width: 480px;">
-                    You have no upcoming or pending IAF defense sessions scheduled in this academic session.
-                </p>
+    .taskbar {
+        background-color: var(--accent-dark);
+        border-radius: 16px;
+        color: white;
+        padding: 28px 36px;
+        box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25);
+        margin-bottom: 28px;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .taskbar::before {
+        content: '';
+        position: absolute;
+        top: 0; right: 0; bottom: 0; left: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 100%);
+        pointer-events: none;
+    }
+
+    .premium-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    }
+
+    .stat-card-clean {
+        background-color: #ffffff;
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 22px 24px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .stat-card-clean:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+        border-color: #cbd5e1;
+    }
+
+    .stat-icon-wrapper {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        background-color: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        flex-shrink: 0;
+    }
+
+    .action-alert {
+        border-left: 4px solid var(--accent-dark);
+        background-color: #f8fafc;
+        padding: 16px 20px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 12px;
+        border-top: 1px solid var(--border-color);
+        border-right: 1px solid var(--border-color);
+        border-bottom: 1px solid var(--border-color);
+        flex-wrap: wrap;
+    }
+    .action-alert-icon {
+        color: var(--accent-dark);
+        font-size: 1.25rem;
+    }
+
+    .btn-monochrome {
+        background-color: var(--accent-dark);
+        color: white;
+        border: none;
+        font-weight: 600;
+        transition: background-color 0.2s;
+    }
+    .btn-monochrome:hover {
+        background-color: var(--accent-light);
+        color: white;
+    }
+
+    .badge-status {
+        font-size: 0.75rem;
+        padding: 0.35rem 0.65rem;
+        font-weight: 600;
+        border-radius: 9999px;
+    }
+    .avatar-circle {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: 0.95rem;
+    }
+    .table-hover tbody tr:hover {
+        background-color: #f8fafc;
+    }
+    .table-row-dashed > tbody > tr > td {
+        border-bottom: 1px dashed #e2e8f0;
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+    .nav-line-tabs .nav-link {
+        color: #64748b;
+        border: none;
+        border-bottom: 3px solid transparent;
+        padding: 0.75rem 1.25rem;
+        font-weight: 600;
+        transition: all 0.2s ease;
+    }
+    .nav-line-tabs .nav-link:hover {
+        color: #2563eb;
+    }
+    .nav-line-tabs .nav-link.active {
+        color: #2563eb;
+        border-bottom-color: #2563eb;
+        background: transparent;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <!-- Taskbar / Header Section (Matching Supervisor Visual Hierarchy) -->
+    <div class="taskbar d-flex justify-content-between align-items-center flex-wrap gap-4">
+        <div>
+            <h1 class="display-6 fw-bold mb-2">Examiner Dashboard</h1>
+            <div class="d-flex align-items-center gap-3 flex-wrap opacity-75" style="font-size: 0.95rem;">
+                <span><strong>Role:</strong> Independent Examiner</span>
+                <span class="text-white-50">|</span>
+                <span><strong>Assigned:</strong> @totalProjects FYP Project@(totalProjects == 1 ? "" : "s")</span>
+                <span class="text-white-50">|</span>
+                <span><strong>IAF Defenses:</strong> @activeDefenses.Count Active</span>
             </div>
-        }
-        else
-        {
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <form id="sessionFilterForm" method="get" action="@Url.Action("Index", "Examiner")" class="d-flex align-items-center gap-2">
+                <label class="text-white fw-bold small mb-0 text-nowrap"><i class="fas fa-calendar-alt me-1"></i>Session:</label>
+                <select name="sessionFilter" class="form-select form-select-sm bg-white text-dark fw-bold border-0 shadow-sm" style="min-width: 220px;" onchange="document.getElementById('sessionFilterForm').submit();">
+                    <option value="All" selected="@(currentSession == "All")">All Academic Sessions</option>
+                    @foreach (var s in academicSessions)
+                    {
+                        <option value="@s.Name" selected="@(currentSession == s.Name)">@s.Name</option>
+                    }
+                </select>
+            </form>
+        </div>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 bg-success bg-opacity-10 text-dark p-3 rounded-3 mb-4 d-flex align-items-center shadow-sm">
+            <i class="fas fa-check-circle fs-3 text-success me-3"></i>
+            <div>
+                <strong class="d-block mb-1">Success:</strong>
+                <span>@TempData["Success"]</span>
+            </div>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-dark p-3 rounded-3 mb-4 d-flex align-items-center shadow-sm">
+            <i class="fas fa-times-circle fs-3 text-danger me-3"></i>
+            <div>
+                <strong class="d-block mb-1">Error:</strong>
+                <span>@TempData["Error"]</span>
+            </div>
+        </div>
+    }
+
+    <!-- Summary KPI Cards Row -->
+    <div class="row g-4 mb-4">
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card-clean shadow-sm">
+                <div class="stat-icon-wrapper text-primary bg-primary bg-opacity-10"><i class="fas fa-project-diagram"></i></div>
+                <div>
+                    <div class="text-muted fw-semibold" style="font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px;">Assigned Projects</div>
+                    <div class="fs-2 fw-bolder text-dark" style="line-height: 1;">@totalProjects</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card-clean shadow-sm">
+                <div class="stat-icon-wrapper text-warning bg-warning bg-opacity-10"><i class="fas fa-clipboard-check"></i></div>
+                <div>
+                    <div class="text-muted fw-semibold" style="font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px;">Pending Assessments</div>
+                    <div class="fs-2 fw-bolder @(pendingCount > 0 ? "text-warning" : "text-dark")" style="line-height: 1;">@pendingCount</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card-clean shadow-sm">
+                <div class="stat-icon-wrapper text-info bg-info bg-opacity-10"><i class="fas fa-calendar-check"></i></div>
+                <div>
+                    <div class="text-muted fw-semibold" style="font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px;">Active IAF Defenses</div>
+                    <div class="fs-2 fw-bolder @(activeDefenses.Count > 0 ? "text-info" : "text-dark")" style="line-height: 1;">@activeDefenses.Count</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="stat-card-clean shadow-sm">
+                <div class="stat-icon-wrapper text-success bg-success bg-opacity-10"><i class="fas fa-check-double"></i></div>
+                <div>
+                    <div class="text-muted fw-semibold" style="font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px;">Completed Assessments</div>
+                    <div class="fs-2 fw-bolder text-dark" style="line-height: 1;">@completedCount</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Priority Action Center (Action Required) -->
+    @if (hasActionRequired)
+    {
+        <div class="premium-card p-4 mb-4 border-0 shadow-sm" style="border-top: 4px solid var(--accent-dark) !important;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0 text-dark"><i class="fas fa-clipboard-list me-2"></i>Action Required</h5>
+                <span class="badge bg-danger text-white fw-bold px-3 py-1 rounded-pill">
+                    <i class="fas fa-exclamation-circle me-1 text-white"></i>@totalActionItems Item@(totalActionItems > 1 ? "s" : "") Need Attention
+                </span>
+            </div>
+            
+            <div class="d-flex flex-column gap-2">
+                @foreach (var item in pendingAssessmentsList)
+                {
+                    <div class="action-alert shadow-sm">
+                        <i class="fas fa-file-signature action-alert-icon"></i>
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <h6 class="fw-bold mb-0 text-dark">@(item.Project.Student?.FullName ?? "Unknown Student")</h6>
+                                <span class="badge bg-light text-muted border fs-9">ID: @(item.Project.Student?.CoventryId ?? item.Project.Student?.EmployeeId ?? "N/A")</span>
+                            </div>
+                            <div class="text-muted small mt-1">
+                                <strong>@item.Type:</strong> @item.Project.Title &bull; <span class="text-primary fw-semibold">@item.StatusText</span>
+                            </div>
+                        </div>
+                        <a href="@item.ActionUrl" class="btn btn-sm @item.ActionClass px-4 rounded-pill">
+                            @item.ActionText
+                        </a>
+                    </div>
+                }
+
+                @foreach (var def in concludedDefensesNeedingOutcome)
+                {
+                    <div class="action-alert shadow-sm">
+                        <i class="fas fa-gavel action-alert-icon text-warning"></i>
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <h6 class="fw-bold mb-0 text-dark">@(def.Milestone?.Project?.Student?.FullName ?? "Student") &mdash; IAF Attempt @def.AttemptNumber</h6>
+                                <span class="badge bg-warning text-dark fs-9">Session Concluded</span>
+                            </div>
+                            <div class="text-muted small mt-1">
+                                Physical IAF Defense concluded on @def.DefenseDate.ToString("dd MMM yyyy"). Official academic outcome pending record.
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-monochrome px-4 rounded-pill" data-bs-toggle="modal" data-bs-target="#assessmentModal_@def.Id">
+                            Record Result
+                        </button>
+                    </div>
+                }
+
+                @foreach (var req in pendingAltRequests)
+                {
+                    var reqStudent = req.Milestone?.Project?.Student;
+                    var reqProj = req.Milestone?.Project;
+                    var rowVerB64 = req.RowVersion != null ? Convert.ToBase64String(req.RowVersion) : "";
+                    <div class="action-alert shadow-sm">
+                        <i class="fas fa-clock action-alert-icon text-warning"></i>
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <h6 class="fw-bold mb-0 text-dark">@(reqStudent?.FullName ?? "Student") &mdash; IAF Attempt @req.AttemptNumber</h6>
+                                <span class="badge bg-warning text-dark fs-9">Alternative Time Requested</span>
+                            </div>
+                            <div class="text-muted small mt-1">
+                                Admin notes: @(string.IsNullOrEmpty(req.AdminNotes) ? "Alternative time requested by admin." : req.AdminNotes)
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-monochrome px-4 rounded-pill" onclick="openProposalModal(@req.Id, '@rowVerB64', '@(reqStudent?.FullName?.Replace("'", "\\'"))', '@(reqProj?.Title?.Replace("'", "\\'"))', '@(req.AdminNotes?.Replace("'", "\\'"))')">
+                            Propose Time
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- 1. ASSIGNED PROJECTS & ASSESSMENTS (PRIMARY WORKING SECTION) -->
+    <div class="card mb-4 border-0 shadow-sm" style="border-left: 5px solid #2563eb !important;">
+        <div class="card-header border-0 pt-4 pb-2 d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h3 class="card-title align-items-start flex-column mb-0">
+                    <span class="card-label fw-bolder fs-3 text-dark">
+                        <i class="fas fa-tasks text-primary me-2"></i>Assigned Projects &amp; Assessments
+                    </span>
+                    <span class="text-muted mt-1 fw-bold fs-7 d-block">Manage your assigned student assessments for Stage 1 (Proposal) and Stage 2 (Final Report &amp; Viva).</span>
+                </h3>
+            </div>
+            <div class="d-flex align-items-center position-relative">
+                <i class="fas fa-search position-absolute ms-3 text-muted"></i>
+                <input type="text" id="searchBar" class="form-control form-control-sm form-control-solid ps-5 py-2 border shadow-sm" style="min-width: 250px;" placeholder="Search student, project, supervisor..." />
+            </div>
+        </div>
+
+        <div class="card-body py-3">
+            <!-- Tabs -->
+            <ul class="nav nav-line-tabs mb-4 fs-6 fw-bold border-bottom" id="projectTabs">
+                <li class="nav-item">
+                    <a class="nav-link active text-primary" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, '')">
+                        All Assigned Projects
+                        <span class="badge bg-light text-primary border ms-1 rounded-pill">@totalProjects</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link text-muted" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, 'Pending Assessment')">
+                        Pending Assessment
+                        <span class="badge bg-warning text-dark ms-1 rounded-pill">@pendingCount</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link text-muted" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, 'Completed')">
+                        Completed Assessments
+                        <span class="badge bg-success text-white ms-1 rounded-pill">@completedCount</span>
+                    </a>
+                </li>
+            </ul>
+
             <div class="table-responsive">
-                <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
+                <table id="projectsTable" class="table table-hover table-row-dashed align-middle gs-0 gy-3">
                     <thead>
-                        <tr class="fw-bolder text-muted bg-light">
+                        <tr class="fw-bolder text-muted bg-light text-uppercase fs-8">
                             <th class="ps-4 min-w-180px rounded-start">Student</th>
                             <th class="min-w-220px">Project Title</th>
-                            <th class="min-w-140px">Date & Time</th>
-                            <th class="min-w-160px">Venue / Meeting Link</th>
-                            <th class="min-w-100px text-end pe-4 rounded-end">Status</th>
+                            <th class="min-w-160px">Supervisor</th>
+                            <th class="min-w-160px">Stage 1 Proposal</th>
+                            <th class="min-w-160px">Stage 2 Final &amp; Viva</th>
+                            <th class="min-w-130px text-end pe-4 rounded-end">Action</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var def in scheduledDefenses)
+                        @if (Model != null && Model.Any())
                         {
-                            var student = def.Milestone?.Project?.Student;
-                            var project = def.Milestone?.Project;
-                            var isRescheduled = def.BookingStatus == "Rescheduled";
-                            var startStr = new DateTime(def.StartTime.Ticks).ToString("hh:mm tt");
-                            var endStr = new DateTime(def.EndTime.Ticks).ToString("hh:mm tt");
+                            foreach (var project in Model)
+                            {
+                                var student = project.Student;
+                                var supervisor = project.Supervisor;
 
-                            <tr>
-                                <td class="ps-4">
-                                    <div class="d-flex align-items-center">
-                                        <div class="symbol symbol-circle symbol-35px me-3 bg-light-primary text-primary fw-bolder d-flex align-items-center justify-content-center" style="width:35px;height:35px;border-radius:50%;">
-                                            @(student?.FullName?.Substring(0, 1) ?? "S")
+                                // Milestone & Stage 1 evaluation status
+                                var s1Milestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(project.Milestones);
+                                bool isDppApproved = s1Milestone != null && FYPTracker.Utils.GradingHelper.IsStage1DppApproved(s1Milestone);
+                                string exData = s1Milestone?.ExaminerMarksheetData ?? "";
+                                bool isExStage1Draft = FYPTracker.Utils.GradingHelper.IsMarksheetDraft(exData);
+                                bool hasStage1Graded = !string.IsNullOrEmpty(project.Stage1ExaminerMarksheetPath) || (!string.IsNullOrEmpty(exData) && !isExStage1Draft);
+
+                                // Stage 2 evaluation status
+                                bool hasStage2Graded = !string.IsNullOrEmpty(project.ExaminerMarksheetPath) || !string.IsNullOrEmpty(project.FinalGrade);
+                                bool isStage2Unlocked = project.Stage1Grade == "Pass" || (hasStage1Graded && project.Stage1TotalScore >= 50);
+
+                                // Overall status string for filtering
+                                bool isProjectCompleted = (hasStage1Graded && hasStage2Graded) || (hasStage1Graded && project.Stage1Grade != "Pass");
+                                string overallStatus = isProjectCompleted ? "Completed Graded" : "Pending Assessment";
+
+                                <tr>
+                                    <td class="ps-4">
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-circle me-3 bg-light-primary text-primary d-flex align-items-center justify-content-center border border-primary border-opacity-25">
+                                                @(student?.FullName?.Substring(0, 1) ?? "S")
+                                            </div>
+                                            <div class="d-flex flex-column">
+                                                <span class="text-dark fw-bolder fs-6">@(student?.FullName ?? "Unknown Student")</span>
+                                                <span class="text-muted fw-bold fs-8">ID: @(student?.CoventryId ?? student?.EmployeeId ?? "N/A")</span>
+                                            </div>
                                         </div>
-                                        <div class="d-flex flex-column">
-                                            <span class="text-dark fw-bolder fs-6">@(student?.FullName ?? "Unknown")</span>
-                                            <span class="text-muted fw-bold fs-8">@(student?.CoventryId ?? student?.EmployeeId ?? "N/A")</span>
+                                    </td>
+                                    <td>
+                                        <span class="text-dark fw-bold d-block fs-6 mb-1">@project.Title</span>
+                                        <span class="badge bg-light text-muted border fs-9">@project.AcademicSession</span>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-user-tie text-secondary me-2"></i>
+                                            <span class="text-dark fw-semibold fs-7">@(supervisor?.FullName ?? "Unassigned")</span>
                                         </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="text-dark fw-bold d-block fs-6">@(project?.Title ?? def.Milestone?.Title ?? "N/A")</span>
-                                    <span class="text-muted fs-8">Supervisor: @(project?.Supervisor?.FullName ?? "Unassigned")</span>
-                                </td>
-                                <td>
-                                    <div class="text-dark fw-bold fs-7">
-                                        <i class="far fa-calendar-alt text-primary me-1"></i>@def.DefenseDate.ToString("dd MMM yyyy")
-                                    </div>
-                                    <div class="text-muted fs-8">
-                                        <i class="far fa-clock text-primary me-1"></i>@startStr - @endStr (@def.DurationMinutes mins)
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="text-dark fw-bold fs-7">
-                                        <i class="fas fa-map-marker-alt text-danger me-1"></i>
-                                        @if (!string.IsNullOrEmpty(def.Venue) && def.Venue.Contains("http"))
+                                    </td>
+                                    <td>
+                                        @if (hasStage1Graded)
                                         {
-                                            <a href="@def.Venue" target="_blank" class="text-primary text-decoration-underline">Join Online Defense</a>
+                                            <span class="badge bg-success text-white px-2 py-1 rounded-pill fw-bold fs-8 d-inline-flex align-items-center">
+                                                <i class="fas fa-check-circle me-1"></i> Graded
+                                            </span>
+                                            <div class="text-dark fw-bold fs-8 mt-1">
+                                                Score: <span class="text-primary">@(project.Stage1TotalScore?.ToString("0.0") ?? "-")</span>
+                                                @if (!string.IsNullOrEmpty(project.Stage1Grade))
+                                                {
+                                                    <span class="badge @(project.Stage1Grade == "Pass" ? "bg-light-success text-success border border-success" : "bg-light-danger text-danger border border-danger") ms-1 px-1">@project.Stage1Grade</span>
+                                                }
+                                            </div>
+                                        }
+                                        else if (isExStage1Draft)
+                                        {
+                                            <span class="badge bg-warning text-dark px-2 py-1 rounded-pill fw-bold fs-8 d-inline-flex align-items-center">
+                                                <i class="fas fa-edit me-1"></i> Draft Saved
+                                            </span>
+                                            <span class="text-muted d-block fs-8 mt-1">Pending submission</span>
+                                        }
+                                        else if (isDppApproved)
+                                        {
+                                            <span class="badge bg-warning text-dark px-2 py-1 rounded-pill fw-bold fs-8 d-inline-flex align-items-center">
+                                                <i class="fas fa-clock me-1"></i> Pending Assessment
+                                            </span>
+                                            <span class="text-success d-block fs-8 mt-1 fw-semibold"><i class="fas fa-check-circle me-1"></i>DPP Approved</span>
                                         }
                                         else
                                         {
-                                            @def.Venue
+                                            <span class="badge bg-light text-muted border px-2 py-1 rounded-pill fw-bold fs-8 d-inline-flex align-items-center">
+                                                <i class="fas fa-hourglass-half me-1"></i> Awaiting Approval
+                                            </span>
+                                            <span class="text-muted d-block fs-8 mt-1">Supervisor approval required</span>
                                         }
-                                    </div>
-                                </td>
-                                <td class="text-end pe-4">
-                                    <span class="badge @(isRescheduled ? "bg-info text-dark" : "bg-primary text-white") px-3 py-2 rounded-pill fw-bold fs-8">
-                                        @(isRescheduled ? $"Rescheduled (Att. {def.AttemptNumber})" : def.BookingStatus)
-                                    </span>
-                                </td>
-                            </tr>
+                                    </td>
+                                    <td>
+                                        @if (hasStage2Graded)
+                                        {
+                                            <span class="badge bg-success text-white px-2 py-1 rounded-pill fw-bold fs-8 d-inline-flex align-items-center">
+                                                <i class="fas fa-check-circle me-1"></i> Graded
+                                            </span>
+                                            <div class="text-dark fw-bold fs-8 mt-1">
+                                                Final Grade: <span class="text-primary">@(project.FinalGrade ?? "-")</span>
+                                            </div>
+                                        }
+                                        else if (isStage2Unlocked)
+                                        {
+                                            <span class="badge bg-warning text-dark px-2 py-1 rounded-pill fw-bold fs-8 d-inline-flex align-items-center">
+                                                <i class="fas fa-clock me-1"></i> Pending Assessment
+                                            </span>
+                                            <span class="text-muted d-block fs-8 mt-1">Stage 2 unlocked</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-secondary border px-2 py-1 rounded-pill fw-semibold fs-8 d-inline-flex align-items-center" title="Stage 2 will unlock once Stage 1 proposal is evaluated and passed">
+                                                <i class="fas fa-lock text-muted me-1"></i> Locked
+                                            </span>
+                                            <span class="text-muted d-block fs-8 mt-1">Awaiting Stage 1 completion</span>
+                                        }
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <span class="d-none">@overallStatus</span>
+                                        @if (isProjectCompleted)
+                                        {
+                                            <a href="@Url.Action("StudentDetails", "Examiner", new { projectId = project.Id })" class="btn btn-sm btn-outline-primary fw-bold px-3 py-1 rounded-pill shadow-sm d-inline-flex align-items-center gap-1">
+                                                <i class="fas fa-eye"></i> View Details
+                                            </a>
+                                        }
+                                        else if (isExStage1Draft)
+                                        {
+                                            <a href="@Url.Action("StudentDetails", "Examiner", new { projectId = project.Id })" class="btn btn-sm btn-warning text-dark fw-bold px-3 py-1 rounded-pill shadow-sm d-inline-flex align-items-center gap-1">
+                                                <i class="fas fa-pencil-alt"></i> Continue Draft
+                                            </a>
+                                        }
+                                        else if (isDppApproved)
+                                        {
+                                            <a href="@Url.Action("StudentDetails", "Examiner", new { projectId = project.Id })" class="btn btn-sm btn-primary fw-bold px-3 py-1 rounded-pill shadow-sm d-inline-flex align-items-center gap-1">
+                                                <i class="fas fa-clipboard-check"></i> Evaluate
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <a href="@Url.Action("StudentDetails", "Examiner", new { projectId = project.Id })" class="btn btn-sm btn-light border fw-semibold px-3 py-1 rounded-pill text-muted d-inline-flex align-items-center gap-1" title="Proposal submission awaiting supervisor approval before evaluation">
+                                                <i class="fas fa-folder-open"></i> View Project
+                                            </a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
                         }
                     </tbody>
                 </table>
             </div>
-        }
-    </div>
-</div>
-
-<div class="card mb-5 mb-xl-8">
-    <div class="card-header border-0 pt-5 d-flex justify-content-between align-items-center">
-        <h3 class="card-title align-items-start flex-column">
-            <span class="card-label fw-bolder fs-3 mb-1">Assigned Projects & Assessments</span>
-            <span class="text-muted mt-1 fw-bold fs-7">Review assigned FYP projects, assess student submissions, and manage evaluation results.</span>
-        </h3>
-        <div class="d-flex align-items-center position-relative my-1">
-            <span class="svg-icon svg-icon-1 position-absolute ms-6">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <rect opacity="0.5" x="17.0365" y="15.1223" width="8.15546" height="2" rx="1" transform="rotate(45 17.0365 15.1223)" fill="black" />
-                    <path d="M11 19C6.55556 19 3 15.4444 3 11C3 6.55556 6.55556 3 11 3C15.4444 3 19 6.55556 19 11C19 15.4444 15.4444 19 11 19ZM11 5C7.53333 5 5 7.53333 5 11C5 14.4667 7.53333 17 11 17C14.4667 17 17 14.4667 17 11C17 7.53333 14.4667 5 11 5Z" fill="black" />
-                </svg>
-            </span>
-            <input type="text" id="searchBar" class="form-control form-control-solid w-250px ps-15" placeholder="Search projects" />
         </div>
     </div>
-    
-    <div class="card-body py-3">
-        <!-- Tabs -->
-        <ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x mb-5 fs-5 fw-bold" id="projectTabs">
-            <li class="nav-item">
-                <a class="nav-link active text-primary" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, '')">All Assigned Projects</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link text-muted" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, 'Pending Assessment')">Pending Assessment</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link text-muted" style="cursor:pointer;" data-bs-toggle="tab" onclick="filterTable(event, 'Graded')">Completed Assessments</a>
-            </li>
-        </ul>
 
-        <div class="table-responsive">
-            <table id="projectsTable" class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
-                <thead>
-                    <tr class="fw-bolder text-muted bg-light">
-                        <th class="ps-4 min-w-200px rounded-start">Project Title</th>
-                        <th class="min-w-150px">Student</th>
-                        <th class="min-w-125px">Stage 1 Assessment</th>
-                        <th class="min-w-125px">Stage 2 Assessment</th>
-                        <th class="min-w-100px text-end rounded-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (Model != null && Model.Any())
+    <!-- 2. INITIAL ASSESSMENT FORM (IAF) DEFENSE SECTION -->
+    <div class="card mb-5 border-0 shadow-sm" style="border-left: 5px solid #0284c7 !important;">
+        <div class="card-header border-0 pt-5 pb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h3 class="card-title align-items-start flex-column mb-0">
+                <span class="card-label fw-bolder fs-3 text-dark">
+                    <i class="fas fa-calendar-check text-info me-2"></i>Scheduled IAF Defenses
+                    @if (activeDefenses.Any())
                     {
-                        foreach (var project in Model)
-                        {
-                            var hasStage1Graded = !string.IsNullOrEmpty(project.Stage1ExaminerMarksheetPath);
-                            var hasStage2Graded = !string.IsNullOrEmpty(project.ExaminerMarksheetPath) || !string.IsNullOrEmpty(project.FinalGrade);
-                            
-                            string overallStatus = "Pending Assessment";
-                            if (hasStage1Graded && hasStage2Graded) {
-                                overallStatus = "Graded";
-                            } else if (hasStage1Graded && project.Stage1Grade != "Pass") {
-                                // Failed Stage 1, so no Stage 2 needed
-                                overallStatus = "Graded";
-                            }
-                            
-                            <tr>
-                                <td class="ps-4">
-                                    <span class="text-dark fw-bolder text-hover-primary mb-1 fs-6">@project.Title</span>
-                                    <span class="text-muted d-block fs-8 mt-1">Supervisor: @project.Supervisor?.FullName</span>
-                                </td>
-                                <td>
-                                    <span class="text-dark fw-bolder d-block mb-1 fs-6">@project.Student?.FullName</span>
-                                    <span class="text-muted fw-bold text-muted d-block fs-7">@(project.Student?.CoventryId ?? project.Student?.EmployeeId ?? "N/A")</span>
-                                </td>
-                                <td>
-                                    @if(hasStage1Graded) {
-                                        <span class="badge badge-light-success fs-7 fw-bold mb-1"><i class="fas fa-check-circle text-success me-1 fs-8"></i> Graded</span>
-                                        <span class="text-dark fw-bold d-block fs-8">Score: @(project.Stage1TotalScore?.ToString("0.0") ?? "-")</span>
-                                    } else {
-                                        <span class="badge badge-light-warning fs-7 fw-bold"><i class="fas fa-clock text-warning me-1 fs-8"></i> Pending Assessment</span>
-                                    }
-                                </td>
-                                <td>
-                                    @if(hasStage2Graded) {
-                                        <span class="badge badge-light-success fs-7 fw-bold mb-1"><i class="fas fa-check-circle text-success me-1 fs-8"></i> Graded</span>
-                                        <span class="text-dark fw-bold d-block fs-8">Grade: @(project.FinalGrade ?? "-")</span>
-                                    } else {
-                                        if (project.Stage1Grade == "Pass") {
-                                            <span class="badge badge-light-warning fs-7 fw-bold"><i class="fas fa-clock text-warning me-1 fs-8"></i> Pending Assessment</span>
-                                        } else {
-                                            <span class="badge badge-light-secondary text-muted fs-7 fw-bold"><i class="fas fa-lock fs-8 text-muted me-1"></i> Locked</span>
-                                        }
-                                    }
-                                </td>
-                                <td class="text-end">
-                                    <span class="d-none">@overallStatus</span>
-                                    <a href="/Examiner/StudentDetails?projectId=@project.Id" class="btn btn-bg-light btn-color-muted btn-active-color-primary btn-sm px-4">
-                                        Evaluate
-                                    </a>
-                                </td>
-                            </tr>
-                        }
+                        <span class="badge bg-primary text-white ms-2 fs-8 rounded-pill">@activeDefenses.Count Active</span>
                     }
-                </tbody>
-            </table>
+                    else
+                    {
+                        <span class="badge bg-light text-muted border ms-2 fs-8 rounded-pill">0 Active</span>
+                    }
+                </span>
+                <span class="text-muted mt-1 fw-bold fs-7 d-block">Physical Initial Assessment Form (IAF) topic defenses where you are the assigned Independent Examiner.</span>
+            </h3>
+        </div>
+
+        <div class="card-body py-3">
+            <!-- Active / Scheduled IAF Defenses -->
+            @if (!activeDefenses.Any())
+            {
+                <div class="d-flex align-items-center gap-3 p-3 bg-light rounded-3 mb-3 border">
+                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 38px; height: 38px;">
+                        <i class="fas fa-calendar-check fs-6"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <span class="text-dark fw-bold d-block fs-7">No Active or Upcoming IAF Defenses</span>
+                        <span class="text-muted small">You currently have no scheduled physical IAF topic defense sessions awaiting completion in this academic session.</span>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive mb-4">
+                    <table class="table table-hover table-row-dashed align-middle gs-0 gy-3">
+                        <thead>
+                            <tr class="fw-bolder text-muted bg-light text-uppercase fs-8">
+                                <th class="ps-4 min-w-180px rounded-start">Student</th>
+                                <th class="min-w-220px">Project Title</th>
+                                <th class="min-w-160px">Date &amp; Time</th>
+                                <th class="min-w-160px">Physical Venue</th>
+                                <th class="min-w-160px text-end pe-4 rounded-end">Action &amp; Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var def in activeDefenses)
+                            {
+                                var student = def.Milestone?.Project?.Student;
+                                var project = def.Milestone?.Project;
+                                var isRescheduled = def.BookingStatus == "Rescheduled";
+                                var startStr = new DateTime(def.StartTime.Ticks).ToString("hh:mm tt");
+                                var endStr = new DateTime(def.EndTime.Ticks).ToString("hh:mm tt");
+                                var defenseEndTime = def.DefenseDate.Date.Add(def.EndTime);
+                                bool isConcluded = defenseEndTime <= SystemClock.Now;
+                                bool hasAssessment = !string.IsNullOrWhiteSpace(def.OutcomeComments);
+
+                                <tr>
+                                    <td class="ps-4">
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-circle me-3 bg-light-primary text-primary d-flex align-items-center justify-content-center border border-primary border-opacity-25">
+                                                @(student?.FullName?.Substring(0, 1) ?? "S")
+                                            </div>
+                                            <div class="d-flex flex-column">
+                                                <span class="text-dark fw-bolder fs-6">@(student?.FullName ?? "Unknown")</span>
+                                                <span class="text-muted fw-bold fs-8">ID: @(student?.CoventryId ?? student?.EmployeeId ?? "N/A")</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="text-dark fw-bold d-block fs-6 mb-1">@(project?.Title ?? def.Milestone?.Title ?? "N/A")</span>
+                                        <span class="text-muted fs-8">Supervisor: @(project?.Supervisor?.FullName ?? "Unassigned")</span>
+                                    </td>
+                                    <td>
+                                        <div class="text-dark fw-bold fs-7">
+                                            <i class="far fa-calendar-alt text-primary me-1"></i>@def.DefenseDate.ToString("dd MMM yyyy")
+                                        </div>
+                                        <div class="text-muted fs-8">
+                                            <i class="far fa-clock text-primary me-1"></i>@startStr - @endStr (@def.DurationMinutes mins)
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="text-dark fw-bold fs-7">
+                                            <i class="fas fa-map-marker-alt text-danger me-1"></i>@def.Venue <span class="badge bg-light text-muted border ms-1 small">In-Person</span>
+                                        </div>
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <div class="d-flex flex-column align-items-end gap-1">
+                                            <span class="badge @(isRescheduled ? "bg-info text-dark" : "bg-primary text-white") px-3 py-1 rounded-pill fw-bold fs-8">
+                                                @(isRescheduled ? $"Rescheduled (Att. {def.AttemptNumber})" : def.BookingStatus)
+                                            </span>
+                                            @if (isConcluded)
+                                            {
+                                                <button type="button" class="btn btn-sm @(hasAssessment ? "btn-warning text-dark" : "btn-primary") px-3 py-1 rounded-pill fs-8 fw-bold shadow-sm"
+                                                        data-bs-toggle="modal" data-bs-target="#assessmentModal_@def.Id">
+                                                    <i class="fas fa-gavel me-1"></i>@(hasAssessment ? "Review & Finalize Result" : "Record Final Defense Result")
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted small fst-italic" style="font-size: 0.75rem;"><i class="far fa-clock me-1"></i>Awaiting physical session</span>
+                                            }
+                                        </div>
+
+                                        @if (isConcluded)
+                                        {
+                                            <!-- Final Result Recording Modal -->
+                                            <div class="modal fade" id="assessmentModal_@def.Id" tabindex="-1" aria-hidden="true">
+                                                <div class="modal-dialog modal-dialog-centered">
+                                                    <div class="modal-content border-0 shadow-lg rounded-4">
+                                                        <div class="modal-header bg-primary text-white py-3">
+                                                            <h5 class="modal-title fw-bold">
+                                                                <i class="fas fa-gavel me-2"></i>Record Final IAF Defense Result
+                                                            </h5>
+                                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body p-4 text-start">
+                                                            <div class="alert alert-light border small text-muted mb-3">
+                                                                <div><strong>Student:</strong> @(student?.FullName ?? "Unknown") (@(student?.CoventryId ?? "N/A"))</div>
+                                                                <div><strong>Project:</strong> @(project?.Title ?? "N/A")</div>
+                                                                <div><strong>IAF Attempt:</strong> Attempt @def.AttemptNumber</div>
+                                                                <div><strong>Session:</strong> @def.DefenseDate.ToString("dd MMM yyyy") (@startStr - @endStr)</div>
+                                                                <div><strong>Physical Venue:</strong> @def.Venue</div>
+                                                                <div><strong>Independent Examiner:</strong> @(User.Identity?.Name ?? "Assigned Examiner")</div>
+                                                            </div>
+
+                                                            @if (hasAssessment)
+                                                            {
+                                                                <div class="alert alert-warning border border-warning border-opacity-50 p-3 mb-3">
+                                                                    <strong class="d-block text-dark mb-1"><i class="fas fa-info-circle me-1"></i>Existing Recorded Assessment:</strong>
+                                                                    <div class="small text-dark p-2 bg-white rounded border mb-2">@def.OutcomeComments</div>
+                                                                    <form asp-action="FinalizeExistingDefenseAssessment" method="post" class="m-0">
+                                                                        @Html.AntiForgeryToken()
+                                                                        <input type="hidden" name="bookingId" value="@def.Id" />
+                                                                        <button type="submit" class="btn btn-sm btn-success fw-bold w-100 shadow-sm"
+                                                                                onclick="return confirm('Confirm finalizing the existing assessment as the official academic result? This will atomically complete the defense without requiring Admin approval.');">
+                                                                            <i class="fas fa-stamp me-1"></i> Finalize Existing Assessment as Official Result
+                                                                        </button>
+                                                                    </form>
+                                                                </div>
+                                                                <div class="text-center text-muted small my-3 fw-bold">— OR Submit Updated Final Result —</div>
+                                                            }
+
+                                                            <form asp-action="RecordDefenseAssessment" method="post">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="bookingId" value="@def.Id" />
+
+                                                                <div class="mb-3">
+                                                                    <label class="form-label fw-bold">Final Academic Defense Result <span class="text-danger">*</span></label>
+                                                                    <select name="result" class="form-select fw-semibold" id="resultSelect_@def.Id" required onchange="toggleConsequence_@(def.Id)()">
+                                                                        <option value="Pass" selected>Pass — Satisfactory physical defense, accept title</option>
+                                                                        <option value="Fail">Fail — Unsatisfactory physical defense</option>
+                                                                    </select>
+                                                                </div>
+
+                                                                <div class="alert alert-info border border-info border-opacity-25 small mb-3">
+                                                                    <div id="passNotice_@def.Id">
+                                                                        <i class="fas fa-check-circle text-success me-1"></i> <strong>Pass:</strong> Milestone is marked as <code>AdminApproved</code>. The student is authorized to proceed to Stage 1 DPP submissions.
+                                                                    </div>
+                                                                    <div id="failNotice_@def.Id" style="display:none;">
+                                                                        @if (def.AttemptNumber == 1)
+                                                                        {
+                                                                            <span><i class="fas fa-exclamation-triangle text-warning me-1"></i> <strong>Fail (Attempt 1):</strong> Milestone is marked as <code>PanelRevisionRequired</code>. The student must revise and resubmit their IAF under Attempt 2.</span>
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <span><i class="fas fa-times-circle text-danger me-1"></i> <strong>Fail (Attempt 2):</strong> Maximum defense attempts reached. Milestone is marked as <code>ChangeOfTopicRequired</code>.</span>
+                                                                        }
+                                                                    </div>
+                                                                </div>
+
+                                                                <div class="mb-3">
+                                                                    <label class="form-label fw-bold">Meaningful Academic Feedback <span class="text-danger">*</span></label>
+                                                                    <textarea name="feedback" class="form-control" rows="4" placeholder="Enter detailed face-to-face defense academic evaluation, strengths, and revision guidance..." required>@(def.OutcomeComments)</textarea>
+                                                                </div>
+
+                                                                <div class="modal-footer bg-light px-0 pb-0 pt-3">
+                                                                    <button type="button" class="btn btn-secondary fw-semibold" data-bs-dismiss="modal">Cancel</button>
+                                                                    <button type="submit" class="btn btn-primary fw-bold"
+                                                                            onclick="return confirm('Confirm submitting this FINAL defense result? This will atomically complete the defense and update the academic outcome without additional administrative approval.');">
+                                                                        <i class="fas fa-check-circle me-1"></i> Submit Final Defense Result
+                                                                    </button>
+                                                                </div>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <script>
+                                                function toggleConsequence_@(def.Id)() {
+                                                    var sel = document.getElementById('resultSelect_@def.Id');
+                                                    var isPass = sel && sel.value === 'Pass';
+                                                    var passEl = document.getElementById('passNotice_@def.Id');
+                                                    var failEl = document.getElementById('failNotice_@def.Id');
+                                                    if (passEl) passEl.style.display = isPass ? 'block' : 'none';
+                                                    if (failEl) failEl.style.display = isPass ? 'none' : 'block';
+                                                }
+                                            </script>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <!-- Concluded / Completed IAF Defenses History -->
+            @if (completedDefenses.Any())
+            {
+                <div class="border-top pt-3 mt-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold text-dark mb-0 d-flex align-items-center">
+                            <i class="fas fa-history text-secondary me-2"></i>Completed IAF Defense History
+                            <span class="badge bg-secondary text-white ms-2 fs-9 rounded-pill">@completedDefenses.Count Record@(completedDefenses.Count > 1 ? "s" : "")</span>
+                        </h6>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover table-row-dashed align-middle gs-0 gy-3">
+                            <thead>
+                                <tr class="fw-bolder text-muted bg-light text-uppercase fs-8">
+                                    <th class="ps-4 min-w-180px rounded-start">Student</th>
+                                    <th class="min-w-220px">Project Title</th>
+                                    <th class="min-w-160px">Date &amp; Attempt</th>
+                                    <th class="min-w-140px">Venue</th>
+                                    <th class="min-w-180px text-end pe-4 rounded-end">Outcome &amp; Assessment</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var def in completedDefenses)
+                                {
+                                    var student = def.Milestone?.Project?.Student;
+                                    var project = def.Milestone?.Project;
+                                    var startStr = new DateTime(def.StartTime.Ticks).ToString("hh:mm tt");
+                                    var endStr = new DateTime(def.EndTime.Ticks).ToString("hh:mm tt");
+                                    bool isPassOutcome = string.Equals(def.AcademicOutcome, "AdminApproved", StringComparison.OrdinalIgnoreCase) ||
+                                                         string.Equals(def.AcademicOutcome, "Pass", StringComparison.OrdinalIgnoreCase);
+
+                                    <tr>
+                                        <td class="ps-4">
+                                            <div class="d-flex align-items-center">
+                                                <div class="avatar-circle me-3 bg-light-secondary text-secondary d-flex align-items-center justify-content-center border">
+                                                    @(student?.FullName?.Substring(0, 1) ?? "S")
+                                                </div>
+                                                <div class="d-flex flex-column">
+                                                    <span class="text-dark fw-bolder fs-6">@(student?.FullName ?? "Unknown")</span>
+                                                    <span class="text-muted fw-bold fs-8">ID: @(student?.CoventryId ?? student?.EmployeeId ?? "N/A")</span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="text-dark fw-bold d-block fs-6 mb-1">@(project?.Title ?? def.Milestone?.Title ?? "N/A")</span>
+                                            <span class="text-muted fs-8">Supervisor: @(project?.Supervisor?.FullName ?? "Unassigned")</span>
+                                        </td>
+                                        <td>
+                                            <div class="text-dark fw-semibold fs-7">
+                                                <i class="far fa-calendar-alt text-primary me-1"></i>@def.DefenseDate.ToString("dd MMM yyyy")
+                                            </div>
+                                            <div class="text-muted fs-8">
+                                                Attempt @def.AttemptNumber &bull; @startStr - @endStr
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="text-dark fs-7">@def.Venue</span>
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            <div class="d-flex flex-column align-items-end gap-1">
+                                                <span class="badge @(isPassOutcome ? "bg-success" : "bg-danger") text-white px-3 py-1 rounded-pill fw-bold fs-8">
+                                                    <i class="fas @(isPassOutcome ? "fa-check-circle" : "fa-times-circle") me-1"></i>Completed: @(isPassOutcome ? "Passed" : (def.AcademicOutcome == "PanelRevisionRequired" ? "Revision Required" : "Change of Topic"))
+                                                </span>
+                                                <button type="button" class="btn btn-sm btn-outline-primary px-2 py-1 mt-1 fs-9 fw-bold rounded-pill"
+                                                        data-bs-toggle="modal" data-bs-target="#viewResultModal_@def.Id">
+                                                    <i class="fas fa-eye me-1"></i>View Final Result
+                                                </button>
+                                            </div>
+
+                                            <!-- Read-Only Result Modal -->
+                                            <div class="modal fade" id="viewResultModal_@def.Id" tabindex="-1" aria-hidden="true">
+                                                <div class="modal-dialog modal-dialog-centered">
+                                                    <div class="modal-content border-0 shadow-lg rounded-4">
+                                                        <div class="modal-header @(isPassOutcome ? "bg-success" : "bg-danger") text-white py-3">
+                                                            <h5 class="modal-title fw-bold">
+                                                                <i class="fas fa-certificate me-2"></i>Final IAF Defense Result (Official)
+                                                            </h5>
+                                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body p-4 text-start">
+                                                            <div class="alert alert-light border small text-muted mb-3">
+                                                                <div><strong>Student:</strong> @(student?.FullName ?? "Unknown") (@(student?.CoventryId ?? "N/A"))</div>
+                                                                <div><strong>Project:</strong> @(project?.Title ?? "N/A")</div>
+                                                                <div><strong>Attempt:</strong> Attempt @def.AttemptNumber</div>
+                                                                <div><strong>Session Concluded:</strong> @def.DefenseDate.ToString("dd MMM yyyy") (@startStr - @endStr)</div>
+                                                                <div><strong>Physical Venue:</strong> @def.Venue</div>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label fw-bold text-muted small d-block">Academic Outcome</label>
+                                                                <span class="badge @(isPassOutcome ? "bg-success" : "bg-danger") fs-6 px-3 py-2 fw-bold rounded-3">
+                                                                    @(isPassOutcome ? "Passed — Title Accepted (AdminApproved)" : (def.AcademicOutcome == "PanelRevisionRequired" ? "Failed (Attempt 1) — Revision Required" : "Failed (Attempt 2) — Change of Topic Required"))
+                                                                </span>
+                                                            </div>
+                                                            <div class="mb-2">
+                                                                <label class="form-label fw-bold text-muted small d-block">Documented Examiner Feedback &amp; Evaluation</label>
+                                                                <div class="p-3 bg-light rounded-3 text-dark small border">
+                                                                    @(string.IsNullOrWhiteSpace(def.OutcomeComments) ? "No comments recorded." : def.OutcomeComments)
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer bg-light py-2">
+                                                            <button type="button" class="btn btn-secondary fw-semibold rounded-pill px-3" data-bs-dismiss="modal">Close</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- 3. IAF DEFENSE ALTERNATIVE TIME REQUESTS -->
+    <div class="card mb-5 border-0 shadow-sm" style="border-left: 5px solid #f59e0b !important;">
+        <div class="card-header border-0 pt-5 pb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h3 class="card-title align-items-start flex-column mb-0">
+                <span class="card-label fw-bolder fs-3 text-dark">
+                    <i class="fas fa-clock text-warning me-2"></i>IAF Defense Alternative Time Requests
+                    @if (pendingAltRequests.Any())
+                    {
+                        <span class="badge bg-warning text-dark ms-2 fs-8 rounded-pill">@pendingAltRequests.Count Pending Action</span>
+                    }
+                </span>
+                <span class="text-muted mt-1 fw-bold fs-7 d-block">Administrative requests requiring your proposal for an alternative defense date and time.</span>
+            </h3>
+        </div>
+
+        <div class="card-body py-3">
+            @if (pendingAltRequests.Any())
+            {
+                <div class="table-responsive mb-4">
+                    <table class="table table-hover table-row-dashed align-middle gs-0 gy-3">
+                        <thead>
+                            <tr class="fw-bolder text-muted bg-light text-uppercase fs-8">
+                                <th class="ps-4 min-w-180px rounded-start">Student &amp; Project</th>
+                                <th class="min-w-140px">Requested By</th>
+                                <th class="min-w-200px">Admin Notes</th>
+                                <th class="min-w-160px">Proposal Details</th>
+                                <th class="min-w-120px text-center">Status</th>
+                                <th class="min-w-120px text-end pe-4 rounded-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var req in pendingAltRequests)
+                            {
+                                var student = req.Milestone?.Project?.Student;
+                                var project = req.Milestone?.Project;
+                                var rowVerBase64 = req.RowVersion != null ? Convert.ToBase64String(req.RowVersion) : "";
+
+                                <tr>
+                                    <td class="ps-4">
+                                        <div class="d-flex flex-column">
+                                            <span class="text-dark fw-bolder fs-6">@(student?.FullName ?? "Unknown")</span>
+                                            <span class="text-muted fw-bold fs-8">ID: @(student?.CoventryId ?? student?.EmployeeId ?? "N/A")</span>
+                                            <span class="text-dark fw-bold fs-7 mt-1">@(project?.Title ?? "N/A")</span>
+                                            <span class="text-muted fs-8">Attempt @req.AttemptNumber &bull; Supervisor: @(project?.Supervisor?.FullName ?? "N/A")</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex flex-column">
+                                            <span class="text-dark fw-bold fs-7">@(req.RequestedByAdmin?.FullName ?? "Administrator")</span>
+                                            <span class="text-muted fs-8">@req.CreatedAt.ToString("dd MMM yyyy, hh:mm tt")</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="text-dark fs-7">@(string.IsNullOrEmpty(req.AdminNotes) ? "—" : req.AdminNotes)</span>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted fs-8 fst-italic">Proposal required</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-warning text-dark px-3 py-1 rounded-pill fw-bold fs-8">Pending Proposal</span>
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <button type="button" class="btn btn-warning btn-sm fw-bold rounded-pill px-3 shadow-sm"
+                                                onclick="openProposalModal(@req.Id, '@rowVerBase64', '@(student?.FullName?.Replace("'", "\\'"))', '@(project?.Title?.Replace("'", "\\'"))', '@(req.AdminNotes?.Replace("'", "\\'"))')">
+                                            <i class="fas fa-edit me-1"></i> Propose Time
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="text-center p-3 bg-light rounded-3 mb-3">
+                    <span class="text-muted small fw-semibold">
+                        <i class="fas fa-check-circle text-success me-1"></i> No pending alternative time requests requiring your action.
+                    </span>
+                </div>
+            }
+
+            <!-- Collapsible Resolved Requests History -->
+            @if (resolvedAltRequests.Any())
+            {
+                <div class="accordion border-0" id="resolvedRequestsAccordion">
+                    <div class="accordion-item border rounded-3 overflow-hidden">
+                        <h2 class="accordion-header" id="headingResolved">
+                            <button class="accordion-button collapsed py-2 px-3 bg-light text-dark fw-bold fs-7" type="button" data-bs-toggle="collapse" data-bs-target="#collapseResolved" aria-expanded="false" aria-controls="collapseResolved">
+                                <i class="fas fa-history text-secondary me-2"></i>
+                                Alternative Time Request History (@resolvedAltRequests.Count Resolved)
+                            </button>
+                        </h2>
+                        <div id="collapseResolved" class="accordion-collapse collapse" aria-labelledby="headingResolved" data-bs-parent="#resolvedRequestsAccordion">
+                            <div class="accordion-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-row-dashed align-middle gs-0 gy-3 mb-0">
+                                        <thead>
+                                            <tr class="fw-bolder text-muted bg-light text-uppercase fs-8">
+                                                <th class="ps-4 min-w-180px rounded-start">Student &amp; Project</th>
+                                                <th class="min-w-140px">Requested By</th>
+                                                <th class="min-w-180px">Admin Notes</th>
+                                                <th class="min-w-160px">Proposal Details</th>
+                                                <th class="min-w-120px text-center">Status</th>
+                                                <th class="min-w-120px text-end pe-4 rounded-end">Resolution</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var req in resolvedAltRequests)
+                                            {
+                                                var student = req.Milestone?.Project?.Student;
+                                                var project = req.Milestone?.Project;
+                                                var isSuggested = req.Status == "Suggested";
+                                                var isAccepted = req.Status == "Accepted";
+                                                var isRejected = req.Status == "Rejected";
+                                                var isCancelled = req.Status == "Cancelled";
+
+                                                <tr>
+                                                    <td class="ps-4">
+                                                        <div class="d-flex flex-column">
+                                                            <span class="text-dark fw-bolder fs-6">@(student?.FullName ?? "Unknown")</span>
+                                                            <span class="text-muted fw-bold fs-8">ID: @(student?.CoventryId ?? student?.EmployeeId ?? "N/A")</span>
+                                                            <span class="text-dark fw-bold fs-7 mt-1">@(project?.Title ?? "N/A")</span>
+                                                            <span class="text-muted fs-8">Attempt @req.AttemptNumber &bull; Supervisor: @(project?.Supervisor?.FullName ?? "N/A")</span>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div class="d-flex flex-column">
+                                                            <span class="text-dark fw-bold fs-7">@(req.RequestedByAdmin?.FullName ?? "Administrator")</span>
+                                                            <span class="text-muted fs-8">@req.CreatedAt.ToString("dd MMM yyyy, hh:mm tt")</span>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span class="text-dark fs-7">@(string.IsNullOrEmpty(req.AdminNotes) ? "—" : req.AdminNotes)</span>
+                                                    </td>
+                                                    <td>
+                                                        @if (req.SuggestedDate.HasValue && req.SuggestedStartTime.HasValue)
+                                                        {
+                                                            <div class="text-dark fw-semibold fs-7">
+                                                                <i class="far fa-calendar-alt text-primary me-1"></i>@req.SuggestedDate.Value.ToString("dd MMM yyyy")
+                                                            </div>
+                                                            <div class="text-muted fs-8">
+                                                                <i class="far fa-clock text-primary me-1"></i>@(new DateTime(req.SuggestedStartTime.Value.Ticks).ToString("hh:mm tt")) - @(req.SuggestedEndTime.HasValue ? new DateTime(req.SuggestedEndTime.Value.Ticks).ToString("hh:mm tt") : "N/A") (@(req.SuggestedDurationMinutes ?? defenseDurationMinutes) mins)
+                                                            </div>
+                                                            @if (!string.IsNullOrEmpty(req.LecturerNotes))
+                                                            {
+                                                                <div class="text-muted fs-8 mt-1 text-truncate" style="max-width: 200px;" title="@req.LecturerNotes">
+                                                                    <strong>Note:</strong> @req.LecturerNotes
+                                                                </div>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted fs-8 fst-italic">No proposal details</span>
+                                                        }
+                                                    </td>
+                                                    <td class="text-center">
+                                                        @if (isSuggested)
+                                                        {
+                                                            <span class="badge bg-info text-dark px-3 py-1 rounded-pill fw-bold fs-8">Suggested</span>
+                                                        }
+                                                        else if (isAccepted)
+                                                        {
+                                                            <span class="badge bg-success text-white px-3 py-1 rounded-pill fw-bold fs-8">Accepted</span>
+                                                        }
+                                                        else if (isRejected)
+                                                        {
+                                                            <span class="badge bg-danger text-white px-3 py-1 rounded-pill fw-bold fs-8" title="@req.DecisionReason">Rejected</span>
+                                                        }
+                                                        else if (isCancelled)
+                                                        {
+                                                            <span class="badge bg-secondary text-white px-3 py-1 rounded-pill fw-bold fs-8" title="@req.DecisionReason">Cancelled</span>
+                                                        }
+                                                    </td>
+                                                    <td class="text-end pe-4">
+                                                        @if (isSuggested)
+                                                        {
+                                                            <span class="text-muted fs-8 fw-semibold"><i class="fas fa-hourglass-half text-info me-1"></i>Awaiting Admin Review</span>
+                                                        }
+                                                        else if (isAccepted)
+                                                        {
+                                                            <span class="text-success fs-8 fw-bold"><i class="fas fa-check-circle me-1"></i>Scheduled</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted fs-8">—</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
         </div>
     </div>
 </div>
 
-<!-- IAF Defense Alternative Time Requests (Phase B3.4 UI Foundation - Reusable Component) -->
-<div class="card mb-5 mb-xl-8">
-    <div class="card-header border-0 pt-5 d-flex justify-content-between align-items-center">
-        <h3 class="card-title align-items-start flex-column">
-            <span class="card-label fw-bolder fs-4 mb-1">
-                <i class="fas fa-clock text-warning me-2"></i>IAF Defense Alternative Time Requests
-            </span>
-            <span class="text-muted mt-1 fw-bold fs-7">Administrative requests to propose an alternative defense time when no mutual slots exist.</span>
-        </h3>
-        <span class="badge bg-secondary text-white px-3 py-2 rounded-pill fw-bold fs-8">
-            <i class="fas fa-lock me-1"></i> Standby Mode
-        </span>
-    </div>
-    <div class="card-body py-4">
-        <!-- Standby Alert: Preserves safety until database migration and backend endpoints are authorized -->
-        <div class="text-center p-5 bg-light rounded-4">
-            <div class="bg-warning bg-opacity-10 text-warning rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 54px; height: 54px;">
-                <i class="fas fa-calendar-alt fs-3"></i>
+<!-- Modal for Examiner to Propose Alternative Date & Time -->
+<div class="modal fade" id="proposeTimeModal" tabindex="-1" aria-labelledby="proposeTimeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header bg-dark text-white rounded-top-4 py-3">
+                <h5 class="modal-title fw-bold" id="proposeTimeModalLabel">
+                    <i class="fas fa-calendar-plus text-warning me-2"></i>Propose Alternative Defense Time
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <h6 class="fw-bold text-dark mb-1">Alternative Time Proposal Inbox</h6>
-            <p class="text-muted small mx-auto mb-3" style="max-width: 500px;">
-                No pending alternative time requests require your proposal at this time. Incoming requests from the administrator will appear here for you to propose a date and time.
-            </p>
-            <div class="badge bg-light text-muted border px-3 py-2 rounded-pill">
-                <i class="fas fa-shield-alt text-success me-1"></i> Authoritative Availability Engine Active
+            <div class="modal-body p-4">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="proposalRequestId" />
+                <input type="hidden" id="proposalRowVersion" />
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-muted small">Student &amp; Project</label>
+                    <input type="text" id="proposalProjectInfo" class="form-control bg-light border-0 fw-semibold" readonly />
+                </div>
+
+                <div class="mb-3" id="proposalAdminNotesContainer" style="display:none;">
+                    <label class="form-label fw-bold text-muted small">Admin Notes</label>
+                    <div id="proposalAdminNotes" class="p-2 bg-light rounded-2 border small text-dark"></div>
+                </div>
+
+                <div class="alert alert-info border-0 bg-info bg-opacity-10 text-dark p-3 rounded-3 mb-3">
+                    <div class="d-flex align-items-center mb-1">
+                        <i class="fas fa-info-circle text-info me-2"></i>
+                        <strong>Scheduling Rules:</strong>
+                    </div>
+                    <ul class="mb-0 small ps-3">
+                        <li>Duration: <strong>@defenseDurationMinutes minutes</strong> (authoritative policy).</li>
+                        <li>Working Hours: <strong>@workingHoursStart - @workingHoursEnd</strong> (weekdays only).</li>
+                        <li>Your proposal will be reviewed by the Administrator before defense confirmation.</li>
+                    </ul>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold text-dark">1. Suggested Date <span class="text-danger">*</span></label>
+                        <input type="date" id="proposalDate" class="form-control" min="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold text-dark">2. Suggested Start Time <span class="text-danger">*</span></label>
+                        <input type="time" id="proposalStartTime" class="form-control" required />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-dark">Examiner Notes (Optional)</label>
+                    <textarea id="proposalLecturerNotes" class="form-control" rows="3" placeholder="Provide notes regarding your availability or room preferences..."></textarea>
+                </div>
+
+                <div id="proposalError" class="alert alert-danger border-0 p-3 rounded-3 small fw-bold" style="display:none;"></div>
+            </div>
+            <div class="modal-footer border-0 p-4 pt-0">
+                <button type="button" class="btn btn-light fw-bold rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="btnSubmitProposal" class="btn btn-warning fw-bold rounded-pill px-4" onclick="submitTimeProposal()">
+                    <i class="fas fa-paper-plane me-2"></i>Submit Proposal
+                </button>
             </div>
         </div>
     </div>
@@ -264,7 +1168,11 @@
                 "pageLength": 10,
                 "lengthChange": false,
                 "dom": "<'row'<'col-sm-12'tr>>" +
-                       "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>", // custom DOM to hide default search box but keep pagination/info
+                       "<'row mt-3'<'col-sm-12 col-md-5 d-flex align-items-center'i><'col-sm-12 col-md-7 d-flex justify-content-end'p>>",
+                "language": {
+                    "emptyTable": "No assigned projects found for this academic session.",
+                    "zeroRecords": "No matching projects found."
+                }
             });
 
             $('#searchBar').on('keyup', function () {
@@ -275,13 +1183,87 @@
         function filterTable(e, type) {
             e.preventDefault();
             const table = $('#projectsTable').DataTable();
-            
-            // Filter by the Actions column (index 4) which contains the hidden status span.
-            table.column(4).search(type).draw();
-            
-            // Update active tab styling
+            table.column(5).search(type).draw();
             $('#projectTabs .nav-link').removeClass('active text-primary').addClass('text-muted');
-            $(e.target).removeClass('text-muted').addClass('active text-primary');
+            $(e.currentTarget || e.target).closest('.nav-link').removeClass('text-muted').addClass('active text-primary');
+        }
+
+        function openProposalModal(requestId, rowVersion, studentName, projectTitle, adminNotes) {
+            document.getElementById('proposalRequestId').value = requestId;
+            document.getElementById('proposalRowVersion').value = rowVersion || '';
+            document.getElementById('proposalProjectInfo').value = (studentName || 'Student') + ' — ' + (projectTitle || 'Project');
+            const notesContainer = document.getElementById('proposalAdminNotesContainer');
+            const notesDiv = document.getElementById('proposalAdminNotes');
+            if (adminNotes && adminNotes.trim() !== '') {
+                notesDiv.textContent = adminNotes;
+                notesContainer.style.display = 'block';
+            } else {
+                notesContainer.style.display = 'none';
+            }
+            document.getElementById('proposalDate').value = '';
+            document.getElementById('proposalStartTime').value = '';
+            document.getElementById('proposalLecturerNotes').value = '';
+            document.getElementById('proposalError').style.display = 'none';
+            const modal = new bootstrap.Modal(document.getElementById('proposeTimeModal'));
+            modal.show();
+        }
+
+        function submitTimeProposal() {
+            const requestId = document.getElementById('proposalRequestId').value;
+            const rowVersion = document.getElementById('proposalRowVersion').value;
+            const suggestedDate = document.getElementById('proposalDate').value;
+            const suggestedStartTime = document.getElementById('proposalStartTime').value;
+            const lecturerNotes = document.getElementById('proposalLecturerNotes').value;
+            const btn = document.getElementById('btnSubmitProposal');
+            const errDiv = document.getElementById('proposalError');
+
+            if (!suggestedDate) {
+                errDiv.textContent = 'Please pick a suggested date.';
+                errDiv.style.display = 'block';
+                return;
+            }
+
+            if (!suggestedStartTime) {
+                errDiv.textContent = 'Please pick a suggested start time.';
+                errDiv.style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Submitting...';
+            errDiv.style.display = 'none';
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            const formData = new URLSearchParams();
+            formData.append('requestId', requestId);
+            formData.append('suggestedDate', suggestedDate);
+            formData.append('suggestedStartTime', suggestedStartTime);
+            if (lecturerNotes) formData.append('lecturerNotes', lecturerNotes);
+            if (rowVersion) formData.append('rowVersion', rowVersion);
+            formData.append('__RequestVerificationToken', token);
+
+            fetch('/Examiner/SubmitIAFAlternativeTimeSuggestion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: formData.toString()
+            })
+            .then(r => r.json().then(data => ({ status: r.status, data })))
+            .then(res => {
+                if (res.data.success) {
+                    window.location.reload();
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Submit Proposal';
+                    errDiv.textContent = res.data.message || 'Failed to submit proposal.';
+                    errDiv.style.display = 'block';
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Submit Proposal';
+                errDiv.textContent = 'An unexpected network error occurred.';
+                errDiv.style.display = 'block';
+            });
         }
     </script>
 }

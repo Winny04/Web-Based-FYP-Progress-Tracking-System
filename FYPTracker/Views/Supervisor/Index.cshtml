@@ -11,8 +11,9 @@
     int pendingRequestsCount = ViewBag.PendingRequests ?? 0;
     int pendingReviewsCount = ViewBag.PendingReviews ?? 0;
     int pendingMeetingCount = pendingMeetingsList.Count;
+    int pendingStage1GradingCount = ViewBag.PendingStage1GradingCount ?? 0;
 
-    bool hasActionRequired = pendingRequestsCount > 0 || pendingReviewsCount > 0 || pendingMeetingCount > 0;
+    bool hasActionRequired = pendingRequestsCount > 0 || pendingReviewsCount > 0 || pendingMeetingCount > 0 || pendingStage1GradingCount > 0;
 }
 
 <style>
@@ -266,6 +267,20 @@
                             <p class="mb-0 text-muted" style="font-size: 0.9rem;">You have <strong>@pendingReviewsCount</strong> document(s) waiting for your feedback or approval.</p>
                         </div>
                         <a href="/Supervisor/ReviewSubmissions" class="btn btn-sm btn-monochrome px-4 rounded-pill">Review Submissions</a>
+                    </div>
+                }
+
+                @if (pendingStage1GradingCount > 0)
+                {
+                    <div class="action-alert shadow-sm">
+                        <i class="fas fa-clipboard-check action-alert-icon"></i>
+                        <div class="flex-grow-1">
+                            <h6 class="fw-bold mb-1">Stage 1 Rubric Grading Pending</h6>
+                            <p class="mb-0 text-muted" style="font-size: 0.9rem;">
+                                You have <strong>@pendingStage1GradingCount</strong> @(pendingStage1GradingCount == 1 ? "student" : "students") awaiting Stage 1 rubric grading.
+                            </p>
+                        </div>
+                        <a href="/Supervisor/ReviewSubmissions?tab=all" class="btn btn-sm btn-monochrome px-4 rounded-pill">Grade Rubric</a>
                     </div>
                 }
 

@@ -31,12 +31,33 @@ namespace FYPTracker.Services.Meetings
             if (project == null || string.IsNullOrWhiteSpace(project.AcademicSession)) 
                 return null;
 
-            var session = await _context.AcademicSessions
+            var originalSession = await _context.AcademicSessions
                 .FirstOrDefaultAsync(s => s.Name == project.AcademicSession);
 
-            if (session == null) return null;
+            if (originalSession == null) return null;
 
-            int? requiredCount = stage == 1 ? session.RequiredMeetingsStage1 : session.RequiredMeetingsStage2;
+            AcademicSession stageSession = originalSession;
+            if (stage == 2)
+            {
+                if (originalSession.StartDate.HasValue)
+                {
+                    stageSession = await _context.AcademicSessions
+                        .Where(s => s.IsActive && s.Id != originalSession.Id && s.StartDate != null && s.StartDate > originalSession.StartDate)
+                        .OrderBy(s => s.StartDate)
+                        .FirstOrDefaultAsync() ?? originalSession;
+                }
+                else
+                {
+                    stageSession = await _context.AcademicSessions
+                        .Where(s => s.IsActive && s.Id > originalSession.Id)
+                        .OrderBy(s => s.Id)
+                        .FirstOrDefaultAsync() ?? originalSession;
+                }
+            }
+
+            int? requiredCount = stage == 1
+                ? originalSession.RequiredMeetingsStage1
+                : (stageSession.RequiredMeetingsStage2 ?? originalSession.RequiredMeetingsStage2);
 
             var completedCount = await _context.MeetingBookings
                 .Include(m => m.MeetingLog)
@@ -45,8 +66,7 @@ namespace FYPTracker.Services.Meetings
                     m.Stage == stage &&
                     m.Status == "Approved" &&
                     m.MeetingLog != null &&
-                    m.MeetingLog.LogStatus == "Signed" &&
-                    (m.AcademicSessionId == session.Id || (m.AcademicSessionId == null && m.FYPProjectId == project.Id))
+                    m.MeetingLog.LogStatus == "Signed"
                 )
                 .Select(m => m.Id)
                 .Distinct()
@@ -56,7 +76,7 @@ namespace FYPTracker.Services.Meetings
             {
                 Required = requiredCount,
                 Completed = completedCount,
-                SessionName = session.Name,
+                SessionName = stageSession.Name,
                 Stage = stage
             };
         }

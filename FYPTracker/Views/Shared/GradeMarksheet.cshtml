@@ -256,6 +256,12 @@
             } catch(e) {}
         }
 
+        function formatScore(val) {
+            let rounded = Math.round(val * 100) / 100;
+            if (rounded % 1 === 0) return rounded.toString();
+            return (Math.round(rounded * 10) / 10 === rounded) ? rounded.toFixed(1) : rounded.toFixed(2);
+        }
+
         function updateScore(category, updateAvg = true) {
             let weight = parseInt(document.getElementById('score' + category).value) || 0;
             if (document.getElementById('weight' + category)) {
@@ -266,7 +272,7 @@
             let fullMark = (role === 'Supervisor') ? 20 : 25;
             let score = (weight / 4.0) * fullMark;
             
-            document.getElementById('val' + category).innerText = score.toFixed(1) + "/" + fullMark;
+            document.getElementById('val' + category).innerText = formatScore(score) + "/" + fullMark;
             
             if (updateAvg) calculateTotal();
         }
@@ -287,15 +293,14 @@
                 total = ((techW/4)*25) + ((litW/4)*25) + ((methW/4)*25) + ((presW/4)*25);
             }
             
-            let roundedTotal = Math.round(total);
-            document.getElementById('totalScore').innerText = roundedTotal;
+            document.getElementById('totalScore').innerText = formatScore(total);
             
             // Validation: Examiner cannot select Pass if score < 40
             let stage1GradeSelect = document.getElementById('stage1Grade');
             if (stage1GradeSelect) {
                 let passOption = stage1GradeSelect.querySelector('option[value="Pass"]');
                 if (passOption) {
-                    if (roundedTotal < 40) {
+                    if (total < 40) {
                         passOption.disabled = true;
                         if (stage1GradeSelect.value === 'Pass') {
                             stage1GradeSelect.value = ''; 

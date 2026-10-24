@@ -61,14 +61,14 @@ namespace FYPTracker.Utils
 <html>
 <head>
     <style>
-        body {{ font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10pt; line-height: 1.4; margin: 0; padding: 20px; color: #333; }}
-        h2.template-heading {{ text-align: center; margin-bottom: 20px; font-size: 16pt; font-weight: bold; text-transform: uppercase; }}
-        .meeting-field-label {{ font-size: 10pt; font-weight: bold; margin-bottom: 3px; color: #444; margin-top: 8px; }}
-        .meeting-single-line {{ min-height: 25px; border-bottom: 1px solid #777; padding-bottom: 2px; font-size: 10pt; }}
-        .meeting-writing-area {{ border: 1px solid #ccc; padding: 8px; font-size: 10pt; white-space: pre-wrap; }}
-        .meeting-signature-space {{ border-bottom: 1px solid #333; min-height: 60px; text-align: center; padding-top: 15px; font-size: 10pt; }}
-        table.grid {{ width: 100%; border-collapse: collapse; margin-bottom: 10px; }}
-        table.grid td {{ vertical-align: top; padding: 5px; }}
+        body {{ font-family: 'Helvetica', 'Arial', sans-serif; font-size: 9.5pt; line-height: 1.35; margin: 0; padding: 10mm 12mm; color: #333; }}
+        h2.template-heading {{ text-align: center; margin-bottom: 12px; font-size: 14pt; font-weight: bold; text-transform: uppercase; }}
+        .meeting-field-label {{ font-size: 8.5pt; font-weight: bold; margin-bottom: 2px; color: #363e4e; margin-top: 6px; }}
+        .meeting-single-line {{ min-height: 20px; border-bottom: 1px solid #a0aab9; padding-bottom: 2px; font-size: 9.5pt; }}
+        .meeting-writing-area {{ border: 1px solid #a0aab9; padding: 6px 8px; font-size: 9.5pt; white-space: pre-wrap; min-height: 16mm; }}
+        .meeting-signature-space {{ border-bottom: 1px solid #a0aab9; min-height: 14mm; text-align: center; padding-top: 4px; font-size: 9.5pt; }}
+        table.grid {{ width: 100%; border-collapse: collapse; margin-bottom: 6px; }}
+        table.grid td {{ vertical-align: top; padding: 3px 5px; }}
         .w-50 {{ width: 50%; }}
         .w-100 {{ width: 100%; }}
     </style>
@@ -84,7 +84,8 @@ namespace FYPTracker.Utils
             for (int i = 0; i < sortedFields.Count; i++)
             {
                 var field = sortedFields[i];
-                bool isHalf = (field.Columns == 6 || field.Columns == 4 || field.Columns == 3);
+                bool isSigField = field.Key == "SupervisorSignature" || field.Key == "SupervisorSignatureDate";
+                bool isHalf = isSigField || (field.Columns == 6 || field.Columns == 4 || field.Columns == 3);
                 
                 string contentHtml = "";
                 switch(field.Key)
@@ -103,8 +104,8 @@ namespace FYPTracker.Utils
                         else {
                             string sig = log.SupervisorSignature;
                             if (string.IsNullOrEmpty(sig)) contentHtml = "<em style='color:#777;'>Signed</em>";
-                            else if (sig.StartsWith("data:image/")) contentHtml = $"<img src='{WebUtility.HtmlEncode(sig)}' style='max-height: 50px;' />";
-                            else contentHtml = $"<span style='font-family: \"Times New Roman\", serif; font-size: 16pt; font-style: italic; color: #00008B;'>{WebUtility.HtmlEncode(sig)}</span>";
+                            else if (sig.StartsWith("data:image/")) contentHtml = $"<img src='{WebUtility.HtmlEncode(sig)}' style='max-height: 45px;' />";
+                            else contentHtml = $"<span style='font-family: \"Times New Roman\", serif; font-size: 14pt; font-style: italic; color: #00008B;'>{WebUtility.HtmlEncode(sig)}</span>";
                         }
                         break;
                     case "SupervisorSignatureDate": contentHtml = isSigned ? (log.SignatureDate?.ToString("dd MMM yyyy") ?? "TBD") : "TBD"; break;
@@ -115,9 +116,9 @@ namespace FYPTracker.Utils
                 // Render inner field HTML
                 string fieldHtml = $@"<div class=""meeting-field-label"">{WebUtility.HtmlEncode(field.Label)}</div>";
                 if (field.Type == "TextArea")
-                    fieldHtml += $@"<div class=""meeting-writing-area"" style=""min-height: {Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 35)}mm"">{contentHtml.Replace("\n", "<br/>")}</div>";
+                    fieldHtml += $@"<div class=""meeting-writing-area"" style=""min-height: 16mm"">{contentHtml.Replace("\n", "<br/>")}</div>";
                 else if (field.Type == "Signature")
-                    fieldHtml += $@"<div class=""meeting-signature-space"" style=""min-height: {Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 20)}mm"">{contentHtml}</div>";
+                    fieldHtml += $@"<div class=""meeting-signature-space"" style=""min-height: 14mm"">{contentHtml}</div>";
                 else
                     fieldHtml += $@"<div class=""meeting-single-line"">{contentHtml}</div>";
 
@@ -126,7 +127,12 @@ namespace FYPTracker.Utils
                     if (!inRow) { html.Append("<tr>"); inRow = true; }
                     html.Append($@"<td class=""w-50"">{fieldHtml}</td>");
                     // If next field is not half, or this is the last field, close the row
-                    if (i == sortedFields.Count - 1 || (sortedFields[i+1].Columns != 6 && sortedFields[i+1].Columns != 4 && sortedFields[i+1].Columns != 3))
+                    bool nextIsHalf = i + 1 < sortedFields.Count && (
+                        sortedFields[i+1].Key == "SupervisorSignature" ||
+                        sortedFields[i+1].Key == "SupervisorSignatureDate" ||
+                        sortedFields[i+1].Columns == 6 || sortedFields[i+1].Columns == 4 || sortedFields[i+1].Columns == 3
+                    );
+                    if (i == sortedFields.Count - 1 || !nextIsHalf)
                     {
                         html.Append("</tr>");
                         inRow = false;
@@ -167,19 +173,20 @@ namespace FYPTracker.Utils
             if (string.Equals(templateSnapshot.Page?.Orientation, "Landscape", StringComparison.OrdinalIgnoreCase))
                 paper = paper.Rotate();
 
-            // Admin A4 preview uses approximately 20 mm of paper padding.
-            float margin = MmToPoints(20);
+            // Compact, professional margins for A4 (10 mm vertical, 12 mm horizontal).
+            float marginH = MmToPoints(12f);
+            float marginV = MmToPoints(10f);
             using var output = new MemoryStream();
-            using (var document = new Document(paper, margin, margin, margin, margin))
+            using (var document = new Document(paper, marginH, marginH, marginV, marginV))
             {
                 PdfWriter.GetInstance(document, output).CloseStream = false;
                 document.Open();
 
-                var titleFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 15f, BaseColor.BLACK);
+                var titleFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 13f, BaseColor.BLACK);
                 var title = new Paragraph(templateSnapshot.Title ?? "Record of Supervisor Meeting", titleFont)
                 {
                     Alignment = Element.ALIGN_CENTER,
-                    SpacingAfter = 13f
+                    SpacingAfter = 6f
                 };
                 document.Add(title);
 
@@ -189,46 +196,50 @@ namespace FYPTracker.Utils
                 {
                     WidthPercentage = 100f,
                     SplitRows = true,
-                    SplitLate = false,
-                    SpacingBefore = 2f
+                    SplitLate = true, // Must be true so iText does not split a row mid-cell across pages!
+                    SpacingBefore = 0f
                 };
                 formTable.SetWidths(new float[] { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f });
 
-                // Keep a signed signature and its date together across PDF page breaks.
-                // Capture row indices in the 12-column grid (the Stage 1 fields use 6+6).
+                // Keep signature, signature date, and comments together across page breaks.
                 int? signatureRow = null;
                 int? signatureDateRow = null;
+                int? commentsRow = null;
                 int usedColumns = 0;
+
                 foreach (var field in templateSnapshot.Fields.OrderBy(f => f.Order))
                 {
-                    int span = field.Columns >= 3 && field.Columns <= 12 ? field.Columns : 12;
+                    // Always pair Supervisor Signature and Signature Date side-by-side (6 columns each)
+                    bool isSig = field.Key == "SupervisorSignature";
+                    bool isSigDate = field.Key == "SupervisorSignatureDate";
+                    int span = (isSig || isSigDate) ? 6 : (field.Columns >= 3 && field.Columns <= 12 ? field.Columns : 12);
+
                     if (usedColumns + span > 12)
                     {
-                        // Finish the current row so a 12-column field starts below.
+                        // Finish the current row so the next field starts below.
                         if (usedColumns > 0) formTable.AddCell(EmptyGridCell(12 - usedColumns));
                         usedColumns = 0;
                     }
 
-                    // Row count is still the current row before its final cell is added.
-                    // Record AFTER completing a previous partial row, if necessary.
-                    int rowIndex = formTable.Rows.Count;
-                    if (field.Key == "SupervisorSignature") signatureRow = rowIndex;
-                    if (field.Key == "SupervisorSignatureDate") signatureDateRow = rowIndex;
+                    int currentRowIndex = formTable.Rows.Count;
+                    if (isSig) signatureRow = currentRowIndex;
+                    if (isSigDate) signatureDateRow = currentRowIndex;
+                    if (field.Key == "SupervisorComments") commentsRow = currentRowIndex;
 
                     var outerCell = new PdfPCell
                     {
                         Colspan = span,
                         Border = Rectangle.NO_BORDER,
-                        PaddingLeft = 3f,
-                        PaddingRight = 7f,
-                        PaddingTop = 5f,
-                        PaddingBottom = 6f
+                        PaddingLeft = 2f,
+                        PaddingRight = 4f,
+                        PaddingTop = 2f,
+                        PaddingBottom = 2f
                     };
 
-                    var labelFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 9f, new BaseColor(54, 62, 78));
+                    var labelFont = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 8.5f, new BaseColor(54, 62, 78));
                     outerCell.AddElement(new Paragraph(field.Label ?? field.Key ?? "", labelFont)
                     {
-                        SpacingAfter = 5f
+                        SpacingAfter = 2f
                     });
 
                     var valueTable = new PdfPTable(1) { WidthPercentage = 100f };
@@ -244,23 +255,29 @@ namespace FYPTracker.Utils
                 if (usedColumns > 0)
                     formTable.AddCell(EmptyGridCell(12 - usedColumns));
 
-                // PdfPTable can otherwise split the signature image and its date
-                // across two pages (especially with SplitRows=true/SplitLate=false).
-                // Only protect the short signature row(s), not long TextArea rows:
-                // long meeting notes must remain allowed to paginate normally.
-                if (signatureRow.HasValue && signatureDateRow.HasValue &&
-                    Math.Abs(signatureRow.Value - signatureDateRow.Value) <= 1)
+                // Keep Supervisor Signature, Signature Date, and Supervisor Comments & Feedback together across page breaks:
+                int? startRow = null;
+                int? endRow = null;
+
+                if (signatureRow.HasValue)
                 {
-                    int firstRow = Math.Min(signatureRow.Value, signatureDateRow.Value);
-                    int endExclusive = Math.Max(signatureRow.Value, signatureDateRow.Value) + 1;
-                    formTable.KeepRowsTogether(firstRow, endExclusive);
+                    startRow = signatureRow.Value;
+                    endRow = signatureRow.Value;
                 }
-                else
+                if (signatureDateRow.HasValue)
                 {
-                    if (signatureRow.HasValue)
-                        formTable.KeepRowsTogether(signatureRow.Value, signatureRow.Value + 1);
-                    if (signatureDateRow.HasValue)
-                        formTable.KeepRowsTogether(signatureDateRow.Value, signatureDateRow.Value + 1);
+                    startRow = startRow.HasValue ? Math.Min(startRow.Value, signatureDateRow.Value) : signatureDateRow.Value;
+                    endRow = endRow.HasValue ? Math.Max(endRow.Value, signatureDateRow.Value) : signatureDateRow.Value;
+                }
+                if (commentsRow.HasValue)
+                {
+                    startRow = startRow.HasValue ? Math.Min(startRow.Value, commentsRow.Value) : commentsRow.Value;
+                    endRow = endRow.HasValue ? Math.Max(endRow.Value, commentsRow.Value) : commentsRow.Value;
+                }
+
+                if (startRow.HasValue && endRow.HasValue)
+                {
+                    formTable.KeepRowsTogether(startRow.Value, endRow.Value + 1);
                 }
 
                 document.Add(formTable);
@@ -280,24 +297,29 @@ namespace FYPTracker.Utils
         private static PdfPCell BuildValueCell(MeetingBooking meeting, TemplateField field, bool isSigned)
         {
             var log = meeting.MeetingLog!;
-            var valueFont = FontFactory.GetFont(FontFactory.HELVETICA, 10f, BaseColor.BLACK);
-            var mutedFont = FontFactory.GetFont(FontFactory.HELVETICA_OBLIQUE, 9f, BaseColor.GRAY);
+            var valueFont = FontFactory.GetFont(FontFactory.HELVETICA, 9.5f, BaseColor.BLACK);
+            var mutedFont = FontFactory.GetFont(FontFactory.HELVETICA_OBLIQUE, 8.5f, BaseColor.GRAY);
             bool isArea = string.Equals(field.Type, "TextArea", StringComparison.OrdinalIgnoreCase);
             bool isSignature = string.Equals(field.Type, "Signature", StringComparison.OrdinalIgnoreCase);
+
+            // Set compact minimum heights that allow standard content to fit on a single A4 page
+            // while expanding naturally without clipping or overlapping when text is longer:
+            float minHeightPoints = isArea
+                ? MmToPoints(16f)
+                : isSignature
+                    ? MmToPoints(14f)
+                    : MmToPoints(6.5f);
+
             var cell = new PdfPCell
             {
                 Border = isArea ? Rectangle.BOX : Rectangle.BOTTOM_BORDER,
-                BorderColor = new BaseColor(145, 155, 170),
-                BorderWidth = 0.65f,
-                PaddingLeft = isArea ? 8f : 2f,
-                PaddingRight = isArea ? 8f : 2f,
-                PaddingTop = isArea ? 8f : 5f,
-                PaddingBottom = isArea ? 8f : 5f,
-                MinimumHeight = isArea
-                    ? MmToPoints(Math.Max(15, Math.Min(100, field.MinHeightMm > 0 ? field.MinHeightMm : 35)))
-                    : isSignature
-                        ? MmToPoints(Math.Max(15, Math.Min(100, field.MinHeightMm > 0 ? field.MinHeightMm : 20)))
-                        : MmToPoints(9)
+                BorderColor = new BaseColor(160, 170, 185),
+                BorderWidth = 0.5f,
+                PaddingLeft = isArea ? 6f : 2f,
+                PaddingRight = isArea ? 6f : 2f,
+                PaddingTop = isArea ? 4f : 2f,
+                PaddingBottom = isArea ? 4f : 2f,
+                MinimumHeight = minHeightPoints
             };
 
             // Preserve the original signature image instead of encoding its data URL as text.
@@ -310,10 +332,24 @@ namespace FYPTracker.Utils
                 if (separator < 0) throw new InvalidDataException("Invalid supervisor signature data URL.");
                 var signature = iTextSharp.text.Image.GetInstance(
                     Convert.FromBase64String(dataUrl.Substring(separator + 1)));
-                // PDF point dimensions. ScaleToFit retains the natural aspect ratio.
-                signature.ScaleToFit(180f, MmToPoints(16));
+                // PDF point dimensions. ScaleToFit retains natural aspect ratio within max 160pt width and 13mm height
+                signature.ScaleToFit(160f, MmToPoints(13f));
                 signature.Alignment = Element.ALIGN_CENTER;
                 cell.AddElement(signature);
+                return cell;
+            }
+
+            if (field.Key == "SupervisorSignature" && isSigned &&
+                !string.IsNullOrWhiteSpace(log.SupervisorSignature) &&
+                !log.SupervisorSignature.StartsWith("data:image/"))
+            {
+                var sigFont = FontFactory.GetFont("Times-Roman", 13f, Font.ITALIC, new BaseColor(0, 0, 139));
+                var sigPara = new Paragraph(log.SupervisorSignature, sigFont)
+                {
+                    Alignment = Element.ALIGN_CENTER,
+                    Leading = 13f
+                };
+                cell.AddElement(sigPara);
                 return cell;
             }
 
@@ -329,14 +365,14 @@ namespace FYPTracker.Utils
                 "ActionsCompleted" => log.CompletedActionsAndNotes ?? "",
                 "NextMeetingDate" => log.NextMeetingDate?.ToString("dd MMM yyyy") ?? "TBD",
                 "SupervisorSignature" => isSigned ? (log.SupervisorSignature ?? "Signed") : "Pending Signature",
-                "SupervisorSignatureDate" => isSigned ? log.SignatureDate?.ToString("dd MMM yyyy") ?? "TBD" : "TBD",
-                "SupervisorComments" => isSigned ? log.DisplayComments ?? "" : "Pending Review",
+                "SupervisorSignatureDate" => isSigned ? (log.SignatureDate?.ToString("dd MMM yyyy") ?? "TBD") : "TBD",
+                "SupervisorComments" => isSigned ? (log.DisplayComments ?? "") : "Pending Review",
                 _ => ""
             };
             bool isPending = !isSigned && (field.Key == "SupervisorSignature" || field.Key == "SupervisorComments");
-            cell.AddElement(new Paragraph(value, isPending ? mutedFont : valueFont)
+            cell.AddElement(new Paragraph((value ?? "").Replace("\r\n", "\n").Replace("\r", "\n"), isPending ? mutedFont : valueFont)
             {
-                Leading = 14f
+                Leading = 12f
             });
             return cell;
         }

@@ -238,18 +238,23 @@ namespace FYPTracker.Services.Meetings
                 return (0, 0, string.Empty);
             }
 
-            var session = await _sessionResolver.GetStudentSessionAsync(studentId);
+            int stage = initialMeeting.Stage ?? 1;
+            var session = await _sessionResolver.GetStageSessionAsync(studentId, stage) ?? await _sessionResolver.GetStudentSessionAsync(studentId);
             if (session == null)
             {
                 return (0, 0, "No active academic session found for student.");
             }
 
-            int stage = initialMeeting.Stage ?? 1;
             int? requiredMeetingsOpt = stage == 1 ? session.RequiredMeetingsStage1 : session.RequiredMeetingsStage2;
+            if (!requiredMeetingsOpt.HasValue && stage == 2)
+            {
+                var originalSession = await _sessionResolver.GetStudentSessionAsync(studentId);
+                requiredMeetingsOpt = originalSession?.RequiredMeetingsStage2;
+            }
             
             if (!requiredMeetingsOpt.HasValue)
             {
-                return (0, 0, "Required Meetings setting is not configured for this Academic Session and Stage. Please contact Admin.");
+                return (0, 0, $"Required Meetings setting is not configured for Stage {stage}. Please contact Admin.");
             }
 
             int requiredMeetings = requiredMeetingsOpt.Value;

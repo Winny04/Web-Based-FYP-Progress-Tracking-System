@@ -220,6 +220,7 @@
                         "MeetingUpdate"      => "fas fa-calendar-check",
                         "MeetingRequest"     => "fas fa-calendar-plus",
                         "Submission"         => "fas fa-file-upload",
+                        "VivaScheduled"      => "fas fa-graduation-cap",
                         _                   => "fas fa-bell"
                     };
                     var iconBg = n.Type switch {
@@ -227,6 +228,7 @@
                         "MeetingUpdate"      => "#eff6ff",
                         "MeetingRequest"     => "#eff6ff",
                         "Submission"         => "#f5f3ff",
+                        "VivaScheduled"      => "#eff6ff",
                         _                   => "#f9fafb"
                     };
                     var iconColor = n.Type switch {
@@ -234,6 +236,7 @@
                         "MeetingUpdate"      => "#2563eb",
                         "MeetingRequest"     => "#2563eb",
                         "Submission"         => "#7c3aed",
+                        "VivaScheduled"      => "#2563eb",
                         _                   => "#6b7280"
                     };
                     var catLabel = n.Type switch {
@@ -241,6 +244,7 @@
                         "MeetingUpdate"      => "Meeting",
                         "MeetingRequest"     => "Meeting",
                         "Submission"         => "Submission",
+                        "VivaScheduled"      => "Viva",
                         _                   => "System"
                     };
                     var catLabelBg = n.Type switch {
@@ -248,6 +252,7 @@
                         "MeetingUpdate"      => "#dbeafe;color:#1d4ed8",
                         "MeetingRequest"     => "#dbeafe;color:#1d4ed8",
                         "Submission"         => "#ede9fe;color:#6d28d9",
+                        "VivaScheduled"      => "#dbeafe;color:#1d4ed8",
                         _                   => "#f3f4f6;color:#374151"
                     };
                     var diff = DateTime.Now - n.CreatedDate;

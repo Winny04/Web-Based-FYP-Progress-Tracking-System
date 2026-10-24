@@ -380,7 +380,7 @@
         </li>
     </ul>
 
-   <form asp-action="SaveFormTemplate" method="post" id="templateForm">
+   <form asp-action="SaveFormTemplate" method="post" id="templateForm" enctype="multipart/form-data">
     @Html.AntiForgeryToken()
     <input type="hidden"
            name="templateId"
@@ -403,6 +403,37 @@
                         </div>
                     </div>
                     <div class="card-body">
+                        @if (selectedTemplateId == "thesis-cover")
+                        {
+                            <div class="alert alert-light border rounded-3 p-3 mb-4 shadow-sm">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                    <div>
+                                        <div class="fw-bold text-dark"><i class="fas fa-file-word text-primary me-2"></i>Official Thesis Cover Page Template (.docx)</div>
+                                        <div class="small text-muted">
+                                            @if (ViewBag.HasCustomDocxTemplate == true)
+                                            {
+                                                <span class="text-success fw-semibold"><i class="fas fa-check-circle me-1"></i>Custom official DOCX source file is active.</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-primary"><i class="fas fa-info-circle me-1"></i>Official template dynamically generated from published field settings and System Settings DPP deadline.</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <a href="@Url.Action("DownloadActiveCoverPageDocx", "Admin")" class="btn btn-sm btn-outline-primary fw-bold px-3">
+                                        <i class="fas fa-download me-1"></i>Download Active DOCX Template
+                                    </a>
+                                </div>
+                                <div class="pt-2 border-top">
+                                    <label class="form-label small fw-bold text-secondary mb-1"><i class="fas fa-upload me-1"></i>Upload Official DOCX Template File (Optional):</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="file" name="docxTemplateFile" accept=".docx" class="form-control" />
+                                    </div>
+                                    <div class="form-text small text-muted">Supported placeholders: <code>{{ThesisTitle}}</code>, <code>{{StudentName}}</code>, <code>{{CoventryStudentId}}</code>, <code>{{SupervisorName}}</code>, <code>{{ProgrammeName}}</code>, <code>{{DocumentDate}}</code>.</div>
+                                </div>
+                            </div>
+                        }
+
                         <div class="table-responsive">
                             <table class="table table-hover align-middle mb-0">
                                 <thead class="table-light">

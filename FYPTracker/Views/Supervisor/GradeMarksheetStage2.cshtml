@@ -3,7 +3,7 @@
     ViewData["Title"] = "Stage 2 Final Evaluation";
     Layout = "~/Views/Shared/_Layout.cshtml";
 
-    var dppFile = Model.Milestones.FirstOrDefault(m => m.Title.StartsWith("Step 2"))?.SubmissionFiles?.Where(f => !f.IsDeleted).OrderByDescending(f => f.UploadedDate).FirstOrDefault();
+    var dppFile = FYPTracker.Utils.GradingHelper.GetStage2FinalReportFile(Model.Milestones);
     var existingMarks = Model.Stage2SupervisorMarksheetData;
 }
 
@@ -258,6 +258,12 @@
 
         const fullMarks = { Crit1: 10, Crit2: 20, Crit3: 10, Crit4: 20, Crit5: 5, Crit6: 5, Crit7: 30 };
 
+        function formatScore(val) {
+            let rounded = Math.round(val * 100) / 100;
+            if (rounded % 1 === 0) return rounded.toString();
+            return (Math.round(rounded * 10) / 10 === rounded) ? rounded.toFixed(1) : rounded.toFixed(2);
+        }
+
         function updateScore(category, updateAvg = true) {
             let weight = parseInt(document.getElementById('score' + category).value) || 0;
             if (document.getElementById('weight' + category)) {
@@ -267,7 +273,7 @@
             let fullMark = fullMarks[category];
             let score = (weight / 4.0) * fullMark;
             
-            document.getElementById('val' + category).innerText = score.toFixed(1) + "/" + fullMark;
+            document.getElementById('val' + category).innerText = formatScore(score) + "/" + fullMark;
             
             if (updateAvg) calculateTotal();
         }
@@ -279,7 +285,7 @@
                 total += (weight / 4.0) * fullMarks[cat];
             });
             
-            document.getElementById('totalScore').innerText = Math.round(total);
+            document.getElementById('totalScore').innerText = formatScore(total);
         }
 
         function confirmSubmission() {

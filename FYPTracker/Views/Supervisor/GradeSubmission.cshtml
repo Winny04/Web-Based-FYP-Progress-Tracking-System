@@ -1018,7 +1018,7 @@
                     @if (Model.MilestoneSource == "Supervisor" && (Model.Stage == 1 || Model.Stage == 2))
                     {
                         <div class="mb-3">
-                            <span class="badge bg-info-subtle text-info-emphasis rounded-pill px-3 py-2"><i class="fas fa-tasks me-1"></i>@(Model.Stage == 2 ? "Stage 2 Progress Milestone (not a formal submission)" : "DPP Work & Progress (not a formal submission)")</span>
+                            <span class="badge rounded-pill px-3 py-2 fw-semibold" style="color: #009ef7 !important; background-color: #f1faff !important; border: 1px solid rgba(0, 158, 247, 0.3) !important;"><i class="fas fa-tasks me-1"></i>@(Model.Stage == 2 ? "Stage 2 Progress Milestone (not a formal submission)" : "DPP Work & Progress (not a formal submission)")</span>
                             <div class="small text-muted mt-2">Current status: <strong>@(Model.Status == "PendingSupervisorReview" ? "Pending Supervisor Review" : Model.Status == "ReturnedForChanges" ? "Returned for Changes" : Model.Status)</strong></div>
                         </div>
                         @if (Model.Status == "PendingSupervisorReview")

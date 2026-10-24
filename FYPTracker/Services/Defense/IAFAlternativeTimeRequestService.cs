@@ -614,26 +614,90 @@ namespace FYPTracker.Services.Defense
         }
 
 
-        public Task<AlternativeTimeRequestResult> FinalizeAcceptedAsync(
+        public async Task<AlternativeTimeRequestResult> FinalizeAcceptedAsync(
             int requestId,
             int currentAdminUserId,
             bool isAdminUser,
             int confirmedBookingId,
             byte[]? clientRowVersion = null)
         {
-            // B3.5.1 SECURITY HARDENING
-            //
-            // Direct acceptance is disabled.
-            // A positive Booking ID does not prove that a matching,
-            // authoritative booking has been successfully committed.
-            //
-            // Future integration must validate the authoritative booking
-            // and update the request within the existing booking transaction.
-
-            return Task.FromResult(
-                AlternativeTimeRequestResult.Fail(
+            // B3.5.1 SECURITY HARDENING:
+            // Direct acceptance without a database context is strictly disabled (preserving test contract).
+            if (_context == null)
+            {
+                return AlternativeTimeRequestResult.Fail(
                     "ACCEPTANCE_DISABLED",
-                    "Direct acceptance is disabled until the alternative time request is integrated with the authoritative IAF Defense booking transaction."));
+                    "Direct acceptance is disabled until the alternative time request is integrated with the authoritative IAF Defense booking transaction.");
+            }
+
+            var authorizationError = await ValidateCurrentAdminAsync(currentAdminUserId);
+            if (authorizationError != null)
+            {
+                return authorizationError;
+            }
+
+            var request = await _context.IAFAlternativeTimeRequests.FirstOrDefaultAsync(r => r.Id == requestId);
+            if (request == null)
+            {
+                return AlternativeTimeRequestResult.Fail(
+                    "REQUEST_NOT_FOUND",
+                    $"Alternative time request ID {requestId} was not found.");
+            }
+
+            if (clientRowVersion == null ||
+                clientRowVersion.Length == 0 ||
+                request.RowVersion == null ||
+                request.RowVersion.Length == 0)
+            {
+                return AlternativeTimeRequestResult.Fail(
+                    "ROW_VERSION_REQUIRED",
+                    "A valid request version is required. Please refresh and try again.");
+            }
+
+            if (!request.RowVersion.SequenceEqual(clientRowVersion))
+            {
+                return AlternativeTimeRequestResult.Fail(
+                    "CONCURRENCY_CONFLICT",
+                    "This request has changed. Please refresh before finalizing acceptance.");
+            }
+
+            var booking = await _context.IAFDefenseBookings.FirstOrDefaultAsync(b => b.Id == confirmedBookingId);
+            if (booking == null)
+            {
+                return AlternativeTimeRequestResult.Fail(
+                    "BOOKING_NOT_FOUND",
+                    "The specified confirmed defense booking does not exist in the authoritative database.");
+            }
+
+            var bookingMatch = IAFAlternativeTimeValidationEngine.ValidateBookingForAcceptance(request, booking);
+            if (!bookingMatch.Success)
+            {
+                return bookingMatch;
+            }
+
+            var acceptValidation = IAFAlternativeTimeValidationEngine.ValidateAcceptSuggestion(
+                request,
+                currentAdminUserId,
+                isAdminUser: true,
+                isCommittedBookingConfirmed: true,
+                confirmedBookingId: confirmedBookingId);
+
+            if (!acceptValidation.Success)
+            {
+                return acceptValidation;
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                return AlternativeTimeRequestResult.Ok(request);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return AlternativeTimeRequestResult.Fail(
+                    "CONCURRENCY_CONFLICT",
+                    "The request was modified concurrently.");
+            }
         }
 
 

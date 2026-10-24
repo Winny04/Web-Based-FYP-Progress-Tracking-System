@@ -5,7 +5,7 @@
     string currentSession = ViewBag.CurrentSession as string ?? "2024/2025 Semester 1";
 
     var upcoming = Model.Where(m => m.Status == "DefenseRequired" || m.Status == "DefenseScheduled").ToList();
-    var completed = Model.Where(m => m.Status == "AdminApproved" || m.Status == "ChangeOfTopicRequired").ToList();
+    var completed = Model.Where(m => m.Status == "AdminApproved" || m.Status == "ChangeOfTopicRequired" || m.Status == "PanelRevisionRequired").ToList();
     var cancelled = Model.Where(m => m.Status == "DefenseCancelled").ToList();
 }
 
@@ -79,6 +79,9 @@
             <p class="mb-0 text-white-50 fs-6">View upcoming, scheduled, completed, and cancelled defenses.</p>
         </div>
         <div class="d-flex gap-3 align-items-center">
+            <a asp-controller="Admin" asp-action="ApprovedIafList" class="btn btn-sm btn-outline-light rounded-pill px-3 shadow-sm fw-bold">
+                <i class="fas fa-arrow-left me-1"></i> Back to IAF Review &amp; Approval
+            </a>
             <form id="sessionForm" method="get" action="@Url.Action("ManageDefenses", "Admin")">
                 <select name="sessionFilter" class="form-select bg-white text-dark fw-bold border-0 shadow-sm" style="width: 220px;" onchange="document.getElementById('sessionForm').submit();">
                     @if (ViewBag.AcademicSessions != null)
@@ -208,8 +211,11 @@
                                     <div class="dropdown">
                                         <button class="btn btn-sm btn-light rounded-circle" type="button" data-bs-toggle="dropdown"><i class="fas fa-ellipsis-v"></i></button>
                                         <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
-                                            <li><a class="dropdown-item fw-bold text-primary" href="javascript:void(0)" onclick="openDefenseDetailsModal(@item.Id)"><i class="fas fa-eye me-2"></i>View Details</a></li>
+                                            <li><a class="dropdown-item fw-bold text-primary" href="javascript:void(0)" onclick="openDefenseDetailsModal(@item.Id)"><i class="fas fa-eye me-2"></i>View Defense Details</a></li>
+                                            <li><a class="dropdown-item fw-bold text-info" href="@Url.Action("ViewDigitalForm", "Admin", new { milestoneId = item.Id, attemptNumber = booking?.AttemptNumber ?? 1 })" target="_blank"><i class="fas fa-file-alt me-2"></i>View Signed IAF</a></li>
                                             <li><a class="dropdown-item fw-bold" href="@Url.Action("SmartScheduleDefense", "Admin", new { milestoneId = item.Id })"><i class="fas fa-calendar-alt me-2 text-warning"></i>Schedule / Reschedule</a></li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li><a class="dropdown-item text-muted small" href="@Url.Action("ApprovedIafList", "Admin")"><i class="fas fa-arrow-left me-2"></i>Back to IAF Review</a></li>
                                         </ul>
                                     </div>
                                 </div>
@@ -279,24 +285,48 @@
                     }
                     @foreach (var item in completed)
                     {
+                        var bookingsDict = ViewBag.DefenseBookings as Dictionary<int, FYPTracker.Models.IAFDefenseBooking>;
+                        var booking = (bookingsDict != null && bookingsDict.ContainsKey(item.Id)) ? bookingsDict[item.Id] : null;
+                        var defenseExaminerName = booking?.Examiner?.FullName;
+                        var projectExaminerName = item.Project?.AssignedExaminers?.FirstOrDefault()?.Examiner?.FullName;
+                        var examinerDisplay = defenseExaminerName ?? projectExaminerName ?? "Unassigned";
+
                         <div class="col-xl-4 col-lg-6">
                             <div class="defense-card p-4 h-100 d-flex flex-column border-success border-opacity-50">
                                 <div class="d-flex justify-content-between align-items-start mb-3">
                                     <div>
-                                        <span class="badge bg-success bg-opacity-10 text-success mb-2 border border-success border-opacity-25">@item.Status</span>
+                                        @{
+                                            var isPass = item.Status == "AdminApproved";
+                                            var isRev = item.Status == "PanelRevisionRequired";
+                                            var badgeClass = isPass ? "bg-success bg-opacity-10 text-success border-success" : (isRev ? "bg-warning bg-opacity-10 text-dark border-warning" : "bg-danger bg-opacity-10 text-danger border-danger");
+                                            var statusDisplay = isPass ? "Passed" : (isRev ? "Failed (Revision Required)" : "Failed (Change of Topic)");
+                                        }
+                                        <span class="badge @badgeClass mb-2 border border-opacity-25">@statusDisplay</span>
                                         <h5 class="fw-bold mb-1">@(item.Project?.Student?.FullName ?? "Unknown")</h5>
+                                        <p class="text-muted small mb-0">Project: @(item.Project?.Title ?? "No Title")</p>
                                     </div>
                                     <div class="dropdown">
                                         <button class="btn btn-sm btn-light rounded-circle" type="button" data-bs-toggle="dropdown"><i class="fas fa-ellipsis-v"></i></button>
                                         <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
-                                            <li><a class="dropdown-item fw-bold text-primary" href="javascript:void(0)" onclick="openDefenseDetailsModal(@item.Id)"><i class="fas fa-eye me-2"></i>View Details</a></li>
+                                            <li><a class="dropdown-item fw-bold text-primary" href="javascript:void(0)" onclick="openDefenseDetailsModal(@item.Id)"><i class="fas fa-eye me-2"></i>View Final Result</a></li>
+                                            <li><a class="dropdown-item fw-bold text-info" href="@Url.Action("ViewDigitalForm", "Admin", new { milestoneId = item.Id, attemptNumber = booking?.AttemptNumber ?? 1 })" target="_blank"><i class="fas fa-file-alt me-2"></i>View Signed IAF</a></li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li><a class="dropdown-item text-muted small" href="@Url.Action("ApprovedIafList", "Admin")"><i class="fas fa-arrow-left me-2"></i>Back to IAF Review</a></li>
                                         </ul>
                                     </div>
                                 </div>
                                 <div class="bg-light rounded-3 p-3 mb-3 flex-grow-1">
-                                    <div class="mb-2"><i class="far fa-calendar text-primary me-2 fw-bold"></i> @(item.DefenseDate?.ToString("dd MMM yyyy") ?? "N/A")</div>
-                                    <div><i class="fas fa-map-marker-alt text-primary me-2 fw-bold"></i> @(item.DefenseVenue ?? "N/A")</div>
+                                    <div class="mb-2"><i class="far fa-calendar text-primary me-2 fw-bold"></i> @(booking != null ? booking.DefenseDate.ToString("dd MMM yyyy") : (item.DefenseDate?.ToString("dd MMM yyyy") ?? "N/A"))</div>
+                                    <div class="mb-2"><i class="fas fa-map-marker-alt text-primary me-2 fw-bold"></i> @(booking != null ? booking.Venue : (item.DefenseVenue ?? "N/A")) <span class="badge bg-light text-muted border ms-1 small">In-Person</span></div>
+                                    <div class="small text-muted"><i class="fas fa-user-check text-success me-1"></i> Examiner: <strong class="text-dark">@examinerDisplay</strong></div>
                                 </div>
+                                @if (booking != null && !string.IsNullOrWhiteSpace(booking.OutcomeComments))
+                                {
+                                    <div class="border-top pt-2 small text-muted">
+                                        <strong class="d-block text-dark mb-1"><i class="fas fa-comment-dots text-primary me-1"></i>Feedback:</strong>
+                                        <div class="p-2 bg-light rounded text-truncate" style="max-height: 48px;">@booking.OutcomeComments</div>
+                                    </div>
+                                }
                             </div>
                         </div>
                     }
@@ -504,7 +534,10 @@
                     </div>
                 </div>
                 <div class="modal-footer bg-light py-2 px-4 d-flex justify-content-between">
-                    <div>
+                    <div class="d-flex gap-2">
+                        <a href="@Url.Action("ViewDigitalForm", "Admin", new { milestoneId = item.Id, attemptNumber = attemptNumber })" target="_blank" class="btn btn-sm btn-outline-primary fw-semibold">
+                            <i class="fas fa-file-alt me-1"></i>View Signed IAF
+                        </a>
                         @if (item.Status == "DefenseRequired" || item.Status == "DefenseScheduled")
                         {
                             <a href="@Url.Action("SmartScheduleDefense", "Admin", new { milestoneId = item.Id })" class="btn btn-sm btn-outline-warning fw-bold">

@@ -396,6 +396,20 @@ namespace FYPTracker.Controllers
                 .Select(s => s.Name)
                 .ToListAsync();
 
+            int DayOrder(string? day) => day?.Trim().ToLowerInvariant() switch
+            {
+                "monday" => 1,
+                "tuesday" => 2,
+                "wednesday" => 3,
+                "thursday" => 4,
+                "friday" => 5,
+                "saturday" => 6,
+                "sunday" => 7,
+                _ => 99
+            };
+
+            entries = entries.OrderBy(e => DayOrder(e.DayOfWeek)).ThenBy(e => e.StartTime).ToList();
+
             return View("~/Views/Supervisor/ManageTimetable.cshtml", entries);
         }
 
@@ -539,6 +553,20 @@ namespace FYPTracker.Controllers
                 TempData["Error"] = "No valid timetable entries found in the file.";
                 return RedirectToAction(nameof(ManageTimetable), new { sessionFilter = activeSessionName });
             }
+
+            int PreviewDayOrder(string? day) => day?.Trim().ToLowerInvariant() switch
+            {
+                "monday" => 1,
+                "tuesday" => 2,
+                "wednesday" => 3,
+                "thursday" => 4,
+                "friday" => 5,
+                "saturday" => 6,
+                "sunday" => 7,
+                _ => 99
+            };
+
+            entries = entries.OrderBy(e => PreviewDayOrder(e.DayOfWeek)).ThenBy(e => e.StartTime).ToList();
 
             TempData["TimetablePreview"] = System.Text.Json.JsonSerializer.Serialize(entries);
             TempData["TimetablePreviewSession"] = activeSessionName;

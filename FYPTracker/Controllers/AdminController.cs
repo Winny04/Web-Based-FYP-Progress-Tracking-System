@@ -19,6 +19,8 @@ using Microsoft.AspNetCore.SignalR;
 using FYPTracker.Hubs;
 using FYPTracker.Services;
 using FYPTracker.Services.Defense;
+using FYPTracker.Services.Time;
+using System.Security.Claims;
 
 namespace FYPTracker.Controllers
 {
@@ -31,20 +33,34 @@ namespace FYPTracker.Controllers
         private readonly IEmailService _emailService;
         private readonly IHubContext<NotificationHub> _hubContext;
 
-        // B3.9: Prepared dependency. Do not invoke while feature is disabled.
+        // B3.9: Prepared dependency.
         private readonly IIAFAlternativeTimeRequestService?
             _alternativeTimeRequestService;
+        private readonly IWebHostEnvironment? _env;
+        private readonly IConfiguration? _configuration;
+        private readonly IIAFDefenseBookingService? _defenseBookingService;
 
         public AdminController(
             FYPTrackerContext context,
             IEmailService emailService,
             IHubContext<NotificationHub> hubContext,
-            IIAFAlternativeTimeRequestService? alternativeTimeRequestService = null)
+            IIAFAlternativeTimeRequestService? alternativeTimeRequestService = null,
+            IWebHostEnvironment? env = null,
+            IConfiguration? configuration = null,
+            IIAFDefenseBookingService? defenseBookingService = null)
         {
             _context = context;
             _emailService = emailService;
             _hubContext = hubContext;
             _alternativeTimeRequestService = alternativeTimeRequestService;
+            _env = env;
+            _configuration = configuration;
+            _defenseBookingService = defenseBookingService;
+        }
+
+        private bool IsAlternativeTimeFeatureEnabled()
+        {
+            return IAFAlternativeTimeFeatureGate.IsFeatureEnabled(_configuration, _env, _context) && _alternativeTimeRequestService != null;
         }
 
         #region B3.7 - IAF Alternative Time Request
@@ -57,22 +73,166 @@ namespace FYPTracker.Controllers
             int examinerId,
             string? adminNotes)
         {
-            // B3.7: Endpoint foundation only.
-            // Request creation remains disabled until the database
-            // table, authorization, and workflow are approved.
+            if (!IsAlternativeTimeFeatureEnabled())
+            {
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new
+                    {
+                        success = false,
+                        code = "ALTERNATIVE_TIME_REQUEST_DISABLED",
+                        message = "IAF Alternative Time Request is not yet available."
+                    });
+            }
 
-            // Do not call CreateRequestAsync.
-            // Do not execute SaveChanges or create a booking.
-            // Do not send notifications.
+            return CreateIAFAlternativeTimeRequestCoreAsync(milestoneId, examinerId, adminNotes).GetAwaiter().GetResult();
+        }
 
-            return StatusCode(
-                StatusCodes.Status503ServiceUnavailable,
-                new
+        private async Task<IActionResult> CreateIAFAlternativeTimeRequestCoreAsync(
+            int milestoneId,
+            int examinerId,
+            string? adminNotes)
+        {
+            if (milestoneId <= 0 || examinerId <= 0)
+            {
+                return BadRequest(new
                 {
                     success = false,
-                    code = "ALTERNATIVE_TIME_REQUEST_DISABLED",
-                    message = "IAF Alternative Time Request is not yet available."
+                    code = "INVALID_PARAMETERS",
+                    message = "Valid Milestone ID and Examiner ID are required."
                 });
+            }
+
+            // Derive Admin ID from authenticated server-side claims
+            if (!int.TryParse(User.FindFirst("Id")?.Value, out int currentAdminUserId) || currentAdminUserId <= 0)
+            {
+                var userName = User.Identity?.Name;
+                var u = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
+                if (u != null) currentAdminUserId = u.Id;
+            }
+
+            if (currentAdminUserId <= 0)
+            {
+                return Unauthorized(new
+                {
+                    success = false,
+                    code = "UNAUTHORIZED_ACCESS",
+                    message = "A valid authenticated administrator identity is required."
+                });
+            }
+
+            // Derive attempt, academic session, supervisor from authoritative database records
+            var milestone = await _context.FYPMilestones
+                .AsNoTracking()
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestone == null || milestone.Project == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "MILESTONE_NOT_FOUND",
+                    message = "The selected IAF milestone or project does not exist."
+                });
+            }
+
+            var attemptResult = IAFDefenseBookingService.ResolveAuthoritativeAttemptNumber(milestone.Remarks);
+            if (!attemptResult.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_ATTEMPT_HISTORY",
+                    message = attemptResult.ErrorMessage ?? "Unable to determine the authoritative IAF attempt."
+                });
+            }
+
+            int attemptNumber = attemptResult.AttemptNumber;
+            int supervisorId = milestone.Project.SupervisorId ?? 0;
+
+            string? sessionName = milestone.Project.AcademicSession;
+            if (string.IsNullOrWhiteSpace(sessionName))
+            {
+                sessionName = await _context.ApplicationUsers
+                    .AsNoTracking()
+                    .Where(u => u.Id == milestone.Project.StudentId)
+                    .Select(u => u.AcademicSession)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (string.IsNullOrWhiteSpace(sessionName))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "SESSION_NOT_FOUND",
+                    message = "No academic session is configured for this project or student."
+                });
+            }
+
+            var session = await _context.AcademicSessions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Name == sessionName.Trim());
+
+            if (session == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "SESSION_NOT_FOUND",
+                    message = "The project's academic session could not be resolved."
+                });
+            }
+
+            int academicSessionId = session.Id;
+
+            var result = await _alternativeTimeRequestService!.CreateRequestAsync(
+                milestoneId: milestoneId,
+                attemptNumber: attemptNumber,
+                academicSessionId: academicSessionId,
+                requestedLecturerId: examinerId,
+                requestedLecturerRole: "Examiner",
+                currentAdminUserId: currentAdminUserId,
+                isAdminUser: true,
+                supervisorId: supervisorId,
+                adminNotes: adminNotes);
+
+            if (!result.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = result.ErrorCode,
+                    message = result.ErrorMessage
+                });
+            }
+
+            try
+            {
+                var examinerNotification = new FYPNotification
+                {
+                    RecipientId = examinerId,
+                    Type = "IAFAlternativeTimeRequested",
+                    Title = "IAF Defense Alternative Time Requested",
+                    Message = $"An alternative time proposal has been requested for an IAF Defense session (Project: {milestone.Project.Title}). Please review and submit your available date and time.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                };
+                _context.FYPNotifications.Add(examinerNotification);
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CreateIAFAlternativeTimeRequest] Notification warning: {ex.Message}");
+            }
+
+            return Json(new
+            {
+                success = true,
+                message = "Alternative time request sent successfully.",
+                requestId = result.Request?.Id
+            });
         }
 
 
@@ -81,11 +241,9 @@ namespace FYPTracker.Controllers
         [Authorize(Roles = "Admin,SuperAdmin")]
         public IActionResult RejectIAFAlternativeTimeSuggestion(
             int requestId,
-            string? reason)
+            string? reason,
+            string? rowVersion = null)
         {
-            // B3.7.4A: Disabled Admin Reject endpoint.
-            // No database access or Service calls are permitted.
-
             if (requestId <= 0)
             {
                 return BadRequest(new
@@ -107,19 +265,83 @@ namespace FYPTracker.Controllers
                 });
             }
 
-            // SECURITY: Feature remains disabled.
-            // Do not call RejectSuggestionAsync().
-            // Do not read or write the database.
-            // Do not send notifications.
+            if (!IsAlternativeTimeFeatureEnabled())
+            {
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new
+                    {
+                        success = false,
+                        code = "ALTERNATIVE_TIME_REJECTION_DISABLED",
+                        message = "IAF Alternative Time Request rejection is not yet available."
+                    });
+            }
 
-            return StatusCode(
-                StatusCodes.Status503ServiceUnavailable,
-                new
+            return RejectIAFAlternativeTimeSuggestionCoreAsync(requestId, reason, rowVersion).GetAwaiter().GetResult();
+        }
+
+        private async Task<IActionResult> RejectIAFAlternativeTimeSuggestionCoreAsync(
+            int requestId,
+            string? reason,
+            string? rowVersion = null)
+        {
+            if (!int.TryParse(User.FindFirst("Id")?.Value, out int currentAdminUserId) || currentAdminUserId <= 0)
+            {
+                var userName = User.Identity?.Name;
+                var u = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
+                if (u != null) currentAdminUserId = u.Id;
+            }
+
+            if (currentAdminUserId <= 0)
+            {
+                return Unauthorized(new
                 {
                     success = false,
-                    code = "ALTERNATIVE_TIME_REJECTION_DISABLED",
-                    message = "IAF Alternative Time Request rejection is not yet available."
+                    code = "UNAUTHORIZED_ACCESS",
+                    message = "A valid authenticated administrator identity is required."
                 });
+            }
+
+            byte[]? clientRowVersion = null;
+            if (!string.IsNullOrEmpty(rowVersion))
+            {
+                try
+                {
+                    clientRowVersion = Convert.FromBase64String(rowVersion);
+                }
+                catch
+                {
+                    return BadRequest(new { success = false, code = "INVALID_ROW_VERSION", message = "Invalid concurrency token format." });
+                }
+            }
+            else
+            {
+                var req = await _context.IAFAlternativeTimeRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == requestId);
+                clientRowVersion = req?.RowVersion;
+            }
+
+            var result = await _alternativeTimeRequestService!.RejectSuggestionAsync(
+                requestId,
+                currentAdminUserId,
+                true,
+                reason!,
+                clientRowVersion);
+
+            if (!result.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = result.ErrorCode,
+                    message = result.ErrorMessage
+                });
+            }
+
+            return Json(new
+            {
+                success = true,
+                message = "Alternative time suggestion rejected successfully."
+            });
         }
 
 
@@ -128,11 +350,9 @@ namespace FYPTracker.Controllers
         [Authorize(Roles = "Admin,SuperAdmin")]
         public IActionResult CancelIAFAlternativeTimeRequest(
             int requestId,
-            string? reason)
+            string? reason,
+            string? rowVersion = null)
         {
-            // B3.7.4B: Disabled Admin Cancel Request endpoint.
-            // No database access or Service calls are permitted.
-
             if (requestId <= 0)
             {
                 return BadRequest(new
@@ -154,26 +374,454 @@ namespace FYPTracker.Controllers
                 });
             }
 
-            // SECURITY: Cancellation remains disabled.
-            // Do not call CancelRequestAsync().
-            // Do not read or write the database.
-            // Do not create bookings or send notifications.
+            if (!IsAlternativeTimeFeatureEnabled())
+            {
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new
+                    {
+                        success = false,
+                        code = "ALTERNATIVE_TIME_CANCELLATION_DISABLED",
+                        message = "IAF Alternative Time Request cancellation is not yet available."
+                    });
+            }
 
-            return StatusCode(
-                StatusCodes.Status503ServiceUnavailable,
-                new
-                {
-                    success = false,
-                    code = "ALTERNATIVE_TIME_CANCELLATION_DISABLED",
-                    message = "IAF Alternative Time Request cancellation is not yet available."
-                });
+            return CancelIAFAlternativeTimeRequestCoreAsync(requestId, reason, rowVersion).GetAwaiter().GetResult();
         }
 
+        private async Task<IActionResult> CancelIAFAlternativeTimeRequestCoreAsync(
+            int requestId,
+            string? reason,
+            string? rowVersion = null)
+        {
+            if (!int.TryParse(User.FindFirst("Id")?.Value, out int currentAdminUserId) || currentAdminUserId <= 0)
+            {
+                var userName = User.Identity?.Name;
+                var u = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
+                if (u != null) currentAdminUserId = u.Id;
+            }
 
+            if (currentAdminUserId <= 0)
+            {
+                return Unauthorized(new
+                {
+                    success = false,
+                    code = "UNAUTHORIZED_ACCESS",
+                    message = "A valid authenticated administrator identity is required."
+                });
+            }
 
+            byte[]? clientRowVersion = null;
+            if (!string.IsNullOrEmpty(rowVersion))
+            {
+                try
+                {
+                    clientRowVersion = Convert.FromBase64String(rowVersion);
+                }
+                catch
+                {
+                    return BadRequest(new { success = false, code = "INVALID_ROW_VERSION", message = "Invalid concurrency token format." });
+                }
+            }
+            else
+            {
+                var req = await _context.IAFAlternativeTimeRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == requestId);
+                clientRowVersion = req?.RowVersion;
+            }
+
+            var result = await _alternativeTimeRequestService!.CancelRequestAsync(
+                requestId,
+                currentAdminUserId,
+                true,
+                reason!,
+                clientRowVersion);
+
+            if (!result.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = result.ErrorCode,
+                    message = result.ErrorMessage
+                });
+            }
+
+            return Json(new
+            {
+                success = true,
+                message = "Alternative time request cancelled successfully."
+            });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public async Task<IActionResult> ConfirmIAFAlternativeTimeBooking(
+            int requestId,
+            string venue,
+            string? rowVersion = null)
+        {
+            if (requestId <= 0)
+            {
+                return BadRequest(new { success = false, code = "INVALID_REQUEST_ID", message = "A valid request ID is required." });
+            }
+
+            if (string.IsNullOrWhiteSpace(venue) || venue.Trim().Length > 200)
+            {
+                return BadRequest(new { success = false, code = "INVALID_VENUE", message = "A valid venue is required (maximum 200 characters)." });
+            }
+
+            if (!IsAlternativeTimeFeatureEnabled())
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    success = false,
+                    code = "ALTERNATIVE_TIME_CONFIRMATION_DISABLED",
+                    message = "IAF Alternative Time Request confirmation is not yet available."
+                });
+            }
+
+            if (_defenseBookingService == null)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    success = false,
+                    code = "BOOKING_SERVICE_UNAVAILABLE",
+                    message = "Authoritative IAF defense booking service is unavailable."
+                });
+            }
+
+            if (_alternativeTimeRequestService == null)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    success = false,
+                    code = "SERVICE_UNAVAILABLE",
+                    message = "Alternative time request service is unavailable."
+                });
+            }
+
+            // Require client-supplied concurrency token before any booking operation
+            if (string.IsNullOrWhiteSpace(rowVersion))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "ROW_VERSION_REQUIRED",
+                    message = "A concurrency token (rowVersion) is required."
+                });
+            }
+
+            byte[] clientRowVersion;
+            try
+            {
+                clientRowVersion = Convert.FromBase64String(rowVersion);
+            }
+            catch
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_ROW_VERSION",
+                    message = "Invalid concurrency token format."
+                });
+            }
+
+            // Verify authenticated Admin identity
+            if (!int.TryParse(User.FindFirst("Id")?.Value, out int currentAdminUserId) || currentAdminUserId <= 0)
+            {
+                var userName = User.Identity?.Name;
+                if (!string.IsNullOrEmpty(userName))
+                {
+                    var u = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
+                    if (u != null) currentAdminUserId = u.Id;
+                }
+            }
+
+            if (currentAdminUserId <= 0)
+            {
+                return Unauthorized(new
+                {
+                    success = false,
+                    code = "UNAUTHORIZED_ACCESS",
+                    message = "A valid authenticated administrator identity is required."
+                });
+            }
+
+            // Verify ActiveRole in session
+            string? activeRole = HttpContext.Session?.GetString("ActiveRole");
+            if (!string.Equals(activeRole, "Admin", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(activeRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_WORKSPACE",
+                    message = "Switch to the Admin workspace before performing this action."
+                });
+            }
+
+            // Verify Admin role claim
+            bool hasAdminClaim = User.Claims.Any(c =>
+                c.Type == ClaimTypes.Role &&
+                (string.Equals(c.Value, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase)));
+
+            if (!hasAdminClaim)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "UNAUTHORIZED_ROLE",
+                    message = "The authenticated user does not own an administrative role."
+                });
+            }
+
+            // Verify active admin authorization in database
+            bool isAuthorizedAdmin = await _context.ApplicationUsers
+                .AsNoTracking()
+                .AnyAsync(u =>
+                    u.Id == currentAdminUserId &&
+                    !u.IsResign &&
+                    u.UserRoles.Any(ur =>
+                        ur.Role.Name == "Admin" ||
+                        ur.Role.Name == "SuperAdmin"));
+
+            if (!isAuthorizedAdmin)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "ADMIN_NOT_AUTHORIZED",
+                    message = "The account is inactive or no longer has administrative privileges."
+                });
+            }
+
+            var request = await _context.IAFAlternativeTimeRequests
+                .AsNoTracking()
+                .Include(r => r.Milestone)
+                    .ThenInclude(m => m.Project)
+                .FirstOrDefaultAsync(r => r.Id == requestId);
+
+            if (request == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "REQUEST_NOT_FOUND",
+                    message = "Alternative time request not found."
+                });
+            }
+
+            // Reject stale token before any booking operation
+            if (request.RowVersion == null || !request.RowVersion.SequenceEqual(clientRowVersion))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "CONCURRENCY_CONFLICT",
+                    message = "This request has changed. Please refresh before confirming booking."
+                });
+            }
+
+            // Idempotent retry protection: if already Accepted, return success without duplicate booking
+            if (string.Equals(request.Status, IAFAlternativeTimeRequest.StatusAccepted, StringComparison.OrdinalIgnoreCase))
+            {
+                int? confirmedBookingId = null;
+                if (!string.IsNullOrEmpty(request.DecisionReason) && request.DecisionReason.StartsWith("Accepted with Booking #"))
+                {
+                    var idStr = request.DecisionReason.Substring("Accepted with Booking #".Length).Trim();
+                    if (int.TryParse(idStr, out int parsedId))
+                    {
+                        confirmedBookingId = parsedId;
+                    }
+                }
+
+                IAFDefenseBooking? existingConfirmedBooking = null;
+                if (confirmedBookingId.HasValue)
+                {
+                    existingConfirmedBooking = await _context.IAFDefenseBookings
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(b => b.Id == confirmedBookingId.Value);
+                }
+                else if (request.SuggestedDate.HasValue && request.SuggestedStartTime.HasValue)
+                {
+                    existingConfirmedBooking = await _context.IAFDefenseBookings
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(b =>
+                            b.MilestoneId == request.MilestoneId &&
+                            b.ExaminerId == request.RequestedLecturerId &&
+                            b.DefenseDate.Date == request.SuggestedDate.Value.Date &&
+                            b.StartTime == request.SuggestedStartTime.Value &&
+                            b.BookingStatus != "Cancelled");
+                }
+
+                if (existingConfirmedBooking != null &&
+                    !string.Equals(existingConfirmedBooking.BookingStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Json(new
+                    {
+                        success = true,
+                        alreadyAccepted = true,
+                        message = "IAF Defense booking was already confirmed for this request.",
+                        bookingId = existingConfirmedBooking.Id
+                    });
+                }
+
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_STATUS",
+                    message = "Cannot confirm a request that has already been accepted without an active booking."
+                });
+            }
+
+            if (!string.Equals(request.Status, IAFAlternativeTimeRequest.StatusSuggested, StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_STATUS",
+                    message = $"Cannot confirm a request in '{request.Status}' status (expected 'Suggested')."
+                });
+            }
+
+            if (!request.SuggestedDate.HasValue || !request.SuggestedStartTime.HasValue || !request.SuggestedDurationMinutes.HasValue)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INCOMPLETE_SUGGESTION",
+                    message = "The suggestion does not contain a complete date, time, and duration."
+                });
+            }
+
+            if (request.Milestone == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "MILESTONE_NOT_FOUND",
+                    message = "The associated milestone does not exist."
+                });
+            }
+
+            if (!string.Equals(request.Milestone.Status, "DefenseRequired", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INELIGIBLE_MILESTONE",
+                    message = "Milestone is not in DefenseRequired status."
+                });
+            }
+
+            if (request.Milestone.Project == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "PROJECT_NOT_FOUND",
+                    message = "The associated project does not exist."
+                });
+            }
+
+            // Independent examiner check: Supervisor cannot examine their own student's project
+            if (request.Milestone.Project.SupervisorId == request.RequestedLecturerId)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "SUPERVISOR_CANNOT_EXAMINE",
+                    message = "Supervisor cannot examine their own student's project."
+                });
+            }
+
+            // Partial-success recovery / reconciliation:
+            // If a matching active booking already exists from prior disconnected execution,
+            // reconcile by finalizing the request to Accepted instead of creating duplicate booking.
+            var matchingBooking = await _context.IAFDefenseBookings.FirstOrDefaultAsync(b =>
+                b.MilestoneId == request.MilestoneId &&
+                b.ExaminerId == request.RequestedLecturerId &&
+                b.DefenseDate.Date == request.SuggestedDate.Value.Date &&
+                b.StartTime == request.SuggestedStartTime.Value &&
+                b.BookingStatus != "Cancelled");
+
+            if (matchingBooking != null)
+            {
+                var reconcileResult = await _alternativeTimeRequestService.FinalizeAcceptedAsync(
+                    requestId: request.Id,
+                    currentAdminUserId: currentAdminUserId,
+                    isAdminUser: true,
+                    confirmedBookingId: matchingBooking.Id,
+                    clientRowVersion: clientRowVersion);
+
+                if (!reconcileResult.Success)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        code = reconcileResult.ErrorCode ?? "FINALIZE_FAILED",
+                        message = reconcileResult.ErrorMessage ?? "Existing matching booking found, but Alternative Time Request could not be finalized."
+                    });
+                }
+
+                return Json(new
+                {
+                    success = true,
+                    reconciled = true,
+                    message = "IAF Defense booking reconciled and suggestion marked as Accepted.",
+                    bookingId = matchingBooking.Id
+                });
+            }
+
+            // Atomic execution: finalize Alternative Time Request inside the booking transaction before commit
+            Func<IAFDefenseBooking, Task<AlternativeTimeRequestResult?>> onBeforeCommit = async (booking) =>
+            {
+                var finalizeResult = await _alternativeTimeRequestService.FinalizeAcceptedAsync(
+                    requestId: request.Id,
+                    currentAdminUserId: currentAdminUserId,
+                    isAdminUser: true,
+                    confirmedBookingId: booking.Id,
+                    clientRowVersion: clientRowVersion);
+
+                if (!finalizeResult.Success)
+                {
+                    return finalizeResult;
+                }
+
+                return null;
+            };
+
+            var bookingResult = await _defenseBookingService.ScheduleOrRescheduleDefenseAsync(
+                milestoneId: request.MilestoneId,
+                examinerId: request.RequestedLecturerId,
+                defenseDate: request.SuggestedDate.Value,
+                startTime: request.SuggestedStartTime.Value,
+                venue: venue.Trim(),
+                currentUserId: currentAdminUserId,
+                changeReason: $"Scheduled via accepted Alternative Time Request #{request.Id}",
+                onBeforeCommit: onBeforeCommit);
+
+            if (!bookingResult.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = bookingResult.ErrorCode ?? "BOOKING_FAILED",
+                    message = bookingResult.ErrorMessage ?? "Failed to commit authoritative defense booking."
+                });
+            }
+
+            return Json(new
+            {
+                success = true,
+                message = "IAF Defense successfully booked and suggestion marked as Accepted.",
+                bookingId = bookingResult.Booking!.Id
+            });
+        }
 
         #endregion
-
 
         private void RemoveImage(ApplicationUser model)
         {
@@ -418,18 +1066,38 @@ namespace FYPTracker.Controllers
             return View(viewModels);
         }
 
-        // ── Admin: View project details & schedule Viva ──────────────
-        public async Task<IActionResult> ProjectDetails(int id)
+        // ── Admin: Dynamically fetch Project Milestones Modal (Read-only) ──
+        [HttpGet]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> GetProjectMilestones(int id)
         {
             var project = await _context.FYPProjects
                 .Include(p => p.Student)
+                    .ThenInclude(s => s.EmpDepartment)
                 .Include(p => p.Supervisor)
+                .Include(p => p.AssignedExaminers)
+                    .ThenInclude(ae => ae.Examiner)
                 .Include(p => p.Milestones)
-                .Include(p => p.AssignedExaminers).ThenInclude(ae => ae.Examiner)
+                    .ThenInclude(m => m.SubmissionFiles)
+                .Include(p => p.Milestones)
+                    .ThenInclude(m => m.Feedbacks)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
-            if (project == null) return NotFound();
-            return View(project);
+            if (project == null)
+            {
+                return NotFound("<div class='alert alert-danger m-3'><i class='fas fa-exclamation-circle me-2'></i>Project not found.</div>");
+            }
+
+            return PartialView("_ProjectMilestonesModal", project);
+        }
+
+        // ── Admin: Legacy ProjectDetails link support -> Redirects to ManageProjects ──
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        public IActionResult ProjectDetails(int id)
+        {
+            return RedirectToAction(nameof(ManageProjects), new { openProjectId = id });
         }
 
         [HttpPost]
@@ -454,6 +1122,35 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(ManageProjects));
             }
 
+            // ── Change Detection: Prevent duplicate notifications / emails if unchanged ──
+            string cleanNewVenue = vivaVenue?.Trim() ?? "";
+            string cleanOldVenue = project.VivaVenue?.Trim() ?? "";
+
+            bool isDateUnchanged = project.VivaDate.HasValue
+                && project.VivaDate.Value.Year == vivaDate.Year
+                && project.VivaDate.Value.Month == vivaDate.Month
+                && project.VivaDate.Value.Day == vivaDate.Day
+                && project.VivaDate.Value.Hour == vivaDate.Hour
+                && project.VivaDate.Value.Minute == vivaDate.Minute;
+
+            bool isVenueUnchanged = string.Equals(cleanOldVenue, cleanNewVenue, StringComparison.OrdinalIgnoreCase);
+
+            if (isDateUnchanged && isVenueUnchanged)
+            {
+                TempData["Success"] = "The Viva schedule is already up to date with these details. No duplicate notifications were created.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // ── Server-side validation: prevent scheduling past dates ──
+            if (vivaDate <= DateTime.Now)
+            {
+                TempData["Error"] = "Viva examination date and time cannot be scheduled in the past. Please select an upcoming date and time.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            bool isReschedule = project.VivaDate.HasValue;
+            string notifTitle = isReschedule ? "Viva Schedule Updated" : "Viva Scheduled";
+
             project.VivaDate = vivaDate;
             project.VivaVenue = vivaVenue;
             await _context.SaveChangesAsync();
@@ -468,8 +1165,8 @@ namespace FYPTracker.Controllers
                 {
                     RecipientId = project.StudentId,
                     Type = "VivaScheduled",
-                    Title = "Viva Scheduled",
-                    Message = $"Your Viva Oral Examination has been scheduled for {formattedDate} at {venueDisplay}.",
+                    Title = notifTitle,
+                    Message = $"Your Viva Oral Examination {(isReschedule ? "schedule has been updated to" : "has been scheduled for")} {formattedDate} at {venueDisplay}.",
                     IsRead = false,
                     CreatedDate = DateTime.Now
                 });
@@ -482,26 +1179,48 @@ namespace FYPTracker.Controllers
                 {
                     RecipientId = project.SupervisorId.Value,
                     Type = "VivaScheduled",
-                    Title = "Viva Scheduled",
-                    Message = $"Viva for {project.Student?.FullName} has been scheduled for {formattedDate} at {venueDisplay}.",
+                    Title = notifTitle,
+                    Message = $"Viva for {project.Student?.FullName} has been {(isReschedule ? "rescheduled to" : "scheduled for")} {formattedDate} at {venueDisplay}.",
                     IsRead = false,
                     CreatedDate = DateTime.Now
                 });
             }
 
-            // ── In-app notification: Examiner ────────────────────────
-            var examiner = project.AssignedExaminers?.FirstOrDefault()?.Examiner;
-            if (examiner != null)
+            // ── In-app notification & Email: Examiner(s) ─────────────
+            var assignedExaminers = project.AssignedExaminers?
+                .Where(ae => ae.Examiner != null)
+                .Select(ae => ae.Examiner!)
+                .DistinctBy(e => e.Id)
+                .ToList() ?? new List<ApplicationUser>();
+
+            foreach (var examiner in assignedExaminers)
             {
                 _context.FYPNotifications.Add(new FYPNotification
                 {
                     RecipientId = examiner.Id,
                     Type = "VivaScheduled",
-                    Title = "Viva Scheduled",
-                    Message = $"Viva for {project.Student?.FullName} has been scheduled for {formattedDate} at {venueDisplay}.",
+                    Title = notifTitle,
+                    Message = $"Viva for {project.Student?.FullName} has been {(isReschedule ? "rescheduled to" : "scheduled for")} {formattedDate} at {venueDisplay}.",
                     IsRead = false,
                     CreatedDate = DateTime.Now
                 });
+
+                if (!string.IsNullOrEmpty(examiner.Email))
+                {
+                    string subject = isReschedule ? "FYP Viva Rescheduled – Examiner Notification" : "FYP Viva Scheduled – Examiner Notification";
+                    string message = $@"<p>Dear <strong>{examiner.FullName}</strong>,</p><br/>
+                        <p>The Admin has {(isReschedule ? "updated the" : "scheduled the")} Viva Oral Examination for a student you are examining.</p>
+                        <ul>
+                            <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
+                            <li><strong>Project Title:</strong> {project.Title}</li>
+                            <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
+                            <li><strong>Venue:</strong> {venueDisplay}</li>
+                        </ul>";
+                    var request = HttpContext.Request;
+                    string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                    string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
+                    try { _emailService.Send(examiner.Email, subject, body); } catch { }
+                }
             }
 
             await _context.SaveChangesAsync();
@@ -509,9 +1228,9 @@ namespace FYPTracker.Controllers
             // ── Email: Student ───────────────────────────────────────
             if (project.Student != null && !string.IsNullOrEmpty(project.Student.Email))
             {
-                string subject = "FYP Viva Oral Examination Scheduled";
+                string subject = isReschedule ? "FYP Viva Oral Examination Schedule Updated" : "FYP Viva Oral Examination Scheduled";
                 string message = $@"<p>Dear <strong>{project.Student.FullName}</strong>,</p><br/>
-                    <p>Your Final Year Project Viva Oral Examination has been scheduled by the Admin.</p>
+                    <p>Your Final Year Project Viva Oral Examination has been {(isReschedule ? "rescheduled" : "scheduled")} by the Admin.</p>
                     <ul>
                         <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
                         <li><strong>Venue:</strong> {venueDisplay}</li>
@@ -527,9 +1246,9 @@ namespace FYPTracker.Controllers
             // ── Email: Supervisor ────────────────────────────────────
             if (project.Supervisor != null && !string.IsNullOrEmpty(project.Supervisor.Email))
             {
-                string subject = "FYP Viva Scheduled – Student Notification";
+                string subject = isReschedule ? "FYP Viva Rescheduled – Student Notification" : "FYP Viva Scheduled – Student Notification";
                 string message = $@"<p>Dear <strong>{project.Supervisor.FullName}</strong>,</p><br/>
-                    <p>The Admin has scheduled the Viva Oral Examination for your student.</p>
+                    <p>The Admin has {(isReschedule ? "updated the schedule for" : "scheduled")} the Viva Oral Examination for your student.</p>
                     <ul>
                         <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
                         <li><strong>Project Title:</strong> {project.Title}</li>
@@ -542,29 +1261,11 @@ namespace FYPTracker.Controllers
                 try { _emailService.Send(project.Supervisor.Email, subject, body); } catch { }
             }
 
-            // ── Email: Examiner ──────────────────────────────────────
-            if (examiner != null && !string.IsNullOrEmpty(examiner.Email))
-            {
-                string subject = "FYP Viva Scheduled – Examiner Notification";
-                string message = $@"<p>Dear <strong>{examiner.FullName}</strong>,</p><br/>
-                    <p>The Admin has scheduled the Viva Oral Examination for a student you are examining.</p>
-                    <ul>
-                        <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
-                        <li><strong>Project Title:</strong> {project.Title}</li>
-                        <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
-                        <li><strong>Venue:</strong> {venueDisplay}</li>
-                    </ul>";
-                var request = HttpContext.Request;
-                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
-                string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
-                try { _emailService.Send(examiner.Email, subject, body); } catch { }
-            }
-
             // ── SignalR real-time push to Student ────────────────────
-            var payload = new { Type = "VivaScheduled", Message = $"Your Viva has been scheduled for {formattedDate} at {venueDisplay}." };
+            var payload = new { Type = "VivaScheduled", Message = $"Your Viva has been {(isReschedule ? "rescheduled to" : "scheduled for")} {formattedDate} at {venueDisplay}." };
             await _hubContext.Clients.Group($"User_{project.StudentId}").SendAsync("ReceiveMilestoneUpdate", payload);
 
-            TempData["Success"] = $"Viva date set to {formattedDate}. The student, supervisor, and examiner have been notified.";
+            TempData["Success"] = $"Viva {(isReschedule ? "schedule updated to" : "date set to")} {formattedDate}. The student, supervisor, and examiner have been notified.";
             
             string referer = Request.Headers["Referer"].ToString();
             if (!string.IsNullOrEmpty(referer) && referer.Contains("ManageProjects", StringComparison.OrdinalIgnoreCase))
@@ -572,7 +1273,7 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(ManageProjects));
             }
             
-            return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+            return RedirectToAction(nameof(ManageProjects));
         }
 
         [HttpPost]
@@ -634,20 +1335,10 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(ManageProjects));
             }
 
-            // Academic Guard 4: Stage 2 milestones must exist and ALL must be Approved or Completed
-            var stage2Milestones = project.Milestones
-                .Where(m => m.Stage == 2 || m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            if (!stage2Milestones.Any())
+            // Academic Guard 4: All required Stage 2 deliverables (Turnitin, Final Report, Presentation Slides) must be Approved or Completed
+            if (!FYPTracker.Utils.GradingHelper.AreStage2DeliverablesApproved(project.Milestones))
             {
-                TempData["Error"] = "Cannot complete project: Stage 2 milestones have not been initialized or approved.";
-                return RedirectToAction(nameof(ManageProjects));
-            }
-
-            if (!stage2Milestones.All(m => m.Status == "Approved" || m.Status == "Completed"))
-            {
-                TempData["Error"] = "Cannot complete project: All Stage 2 milestones (Final Report, Turnitin, Presentation) must be Approved or Completed.";
+                TempData["Error"] = "Cannot complete project: All required Stage 2 deliverables (Turnitin Verification, Final Report, Presentation Slides) must be Approved or Completed.";
                 return RedirectToAction(nameof(ManageProjects));
             }
 
@@ -2089,6 +2780,9 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                                 "MMMM yyyy",
                                 System.Globalization.CultureInfo.InvariantCulture);
                     }
+
+                    string customDocx = Path.Combine(baseDir, "ThesisCoverPage.template.docx");
+                    ViewBag.HasCustomDocxTemplate = System.IO.File.Exists(customDocx);
                 }
 
                 return View(vm);
@@ -2113,7 +2807,8 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         public async Task<IActionResult> SaveFormTemplate(
             string templateId,
             MeetingRecordTemplateVM model,
-            string actionType = "publish")
+            string actionType = "publish",
+            IFormFile? docxTemplateFile = null)
         {
             if (string.IsNullOrWhiteSpace(templateId) ||
                 !_formTemplateFiles.TryGetValue(
@@ -2317,6 +3012,35 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     existingField.Columns = submitted.Columns;
                 }
 
+                byte[]? uploadedDocxBytes = null;
+                if (templateId == "thesis-cover" && docxTemplateFile != null && docxTemplateFile.Length > 0)
+                {
+                    var docxExt = Path.GetExtension(docxTemplateFile.FileName).ToLowerInvariant();
+                    if (docxExt != ".docx")
+                    {
+                        TempData["ErrorMessage"] = "Only valid Microsoft Word (.docx) files can be uploaded as official template.";
+                        return RedirectToAction(nameof(FormTemplateSettings), new { templateId });
+                    }
+
+                    using var readMs = new MemoryStream();
+                    await docxTemplateFile.CopyToAsync(readMs);
+                    uploadedDocxBytes = readMs.ToArray();
+
+                    if (!FYPTracker.Utils.CoverPageDocxHelper.IsValidDocx(uploadedDocxBytes))
+                    {
+                        TempData["ErrorMessage"] = "The uploaded file is not a valid DOCX document or is corrupted.";
+                        return RedirectToAction(nameof(FormTemplateSettings), new { templateId });
+                    }
+
+                    changes.Add(new TemplateFieldChange
+                    {
+                        FieldKey = "DocxTemplate",
+                        PropertyName = "SourceFile",
+                        PreviousValue = "Active Template",
+                        NewValue = docxTemplateFile.FileName
+                    });
+                }
+
                 if (changes.Count == 0 && actionType != "draft")
                 {
                     TempData["SuccessMessage"] =
@@ -2456,6 +3180,21 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     {
                         System.IO.File.Delete(draftPath);
                     }
+
+                    if (uploadedDocxBytes != null)
+                    {
+                        string customDocxPath = Path.Combine(baseDir, "ThesisCoverPage.template.docx");
+                        await System.IO.File.WriteAllBytesAsync(customDocxPath, uploadedDocxBytes);
+
+                        if (actionType == "publish")
+                        {
+                            string snapshotDocxPath = Path.Combine(versionsDir, $"version-{newVersion}.template.docx");
+                            if (!System.IO.File.Exists(snapshotDocxPath))
+                            {
+                                await System.IO.File.WriteAllBytesAsync(snapshotDocxPath, uploadedDocxBytes);
+                            }
+                        }
+                    }
                 }
                 finally
                 {
@@ -2490,6 +3229,61 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         }
 
         // ============================================================
+        // GET - DOWNLOAD ACTIVE COVER PAGE DOCX TEMPLATE
+        // ============================================================
+
+        [HttpGet]
+        public async Task<IActionResult> DownloadActiveCoverPageDocx()
+        {
+            var loginName = HttpContext.User.Identity?.Name;
+            var currentUser = await _context.ApplicationUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserName == loginName || u.Email == loginName);
+
+            if (currentUser == null) return RedirectToAction("Login", "User");
+
+            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "FormTemplates");
+            string customDocxPath = Path.Combine(baseDir, "ThesisCoverPage.template.docx");
+
+            string templateJsonPath = Path.Combine(baseDir, "ThesisCoverPage.default.json");
+            FYPTracker.ViewModels.MeetingRecordTemplateVM? template = null;
+            if (System.IO.File.Exists(templateJsonPath))
+            {
+                string json = await System.IO.File.ReadAllTextAsync(templateJsonPath);
+                template = System.Text.Json.JsonSerializer.Deserialize<FYPTracker.ViewModels.MeetingRecordTemplateVM>(
+                    json, _formTemplateJsonOptions);
+            }
+
+            string? deadlineValue = await _context.FYPSettings
+                .AsNoTracking()
+                .Where(s => s.Key == "DPPDeadline")
+                .Select(s => s.Value)
+                .FirstOrDefaultAsync();
+
+            string documentDateDisplay = "";
+            string[] acceptedFormats = { "yyyy-MM-dd", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-ddTHH:mm:ss.fff" };
+            if (DateTime.TryParseExact(deadlineValue?.Trim(), acceptedFormats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime dueDate))
+            {
+                int day = dueDate.Day;
+                string suffix = day % 100 >= 11 && day % 100 <= 13 ? "th" : (day % 10) switch { 1 => "st", 2 => "nd", 3 => "rd", _ => "th" };
+                documentDateDisplay = $"{day}{suffix} {dueDate:MMMM yyyy}";
+            }
+
+            byte[] bytes = FYPTracker.Utils.CoverPageDocxHelper.GenerateCoverPageDocx(
+                template: template,
+                thesisTitle: "[PROJECT TITLE]",
+                studentName: "[STUDENT NAME]",
+                coventryId: "[COVENTRY STUDENT ID]",
+                supervisorName: "[SUPERVISOR NAME]",
+                programmeName: "[PROGRAM NAME]",
+                documentDate: documentDateDisplay,
+                customDocxTemplatePath: System.IO.File.Exists(customDocxPath) ? customDocxPath : null
+            );
+
+            return File(bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "Thesis_Cover_Page_Official_Template.docx");
+        }
+
+        // ============================================================
         // LEGACY HISTORY ENDPOINTS
         // Disabled in the UI. Historical JSON files are preserved.
         // ============================================================
@@ -2514,8 +3308,8 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             ViewBag.CurrentUser = user;
 
             // Determine if running in Testing with FYPTracker_Test
-            var hostEnv = HttpContext.RequestServices.GetService(typeof(Microsoft.AspNetCore.Hosting.IWebHostEnvironment)) as Microsoft.AspNetCore.Hosting.IWebHostEnvironment;
-            var config = HttpContext.RequestServices.GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration)) as Microsoft.Extensions.Configuration.IConfiguration;
+            var hostEnv = (HttpContext?.RequestServices?.GetService(typeof(Microsoft.AspNetCore.Hosting.IWebHostEnvironment)) as Microsoft.AspNetCore.Hosting.IWebHostEnvironment) ?? _env;
+            var config = (HttpContext?.RequestServices?.GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration)) as Microsoft.Extensions.Configuration.IConfiguration) ?? _configuration;
             bool isTestingWithTestDb = FYPTracker.Helpers.TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(hostEnv, config);
 
             List<string> distinctSessions;
@@ -2565,16 +3359,36 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             ViewBag.CurrentSessionFilter = sessionFilter;
             
             var currentSessionObj = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == sessionFilter);
+            ViewBag.CurrentSessionObj = currentSessionObj;
             if (currentSessionObj != null)
             {
                 ViewBag.DefaultMilestoneTemplates = await _context.DefaultMilestoneTemplates
-                    .Where(t => t.AcademicSessionId == currentSessionObj.Id && t.Stage == 1)
-                    .OrderBy(t => t.DisplayOrder)
+                    .Where(t => t.AcademicSessionId == currentSessionObj.Id)
+                    .OrderBy(t => t.Stage).ThenBy(t => t.DisplayOrder)
                     .ToListAsync();
             }
             else
             {
                 ViewBag.DefaultMilestoneTemplates = new List<DefaultMilestoneTemplate>();
+            }
+
+            DateTime? authoritativeIafDueDate = null;
+            DateTime? authoritativeProposalDueDate = null;
+            if (currentSessionObj != null)
+            {
+                var iafTemplate = await _context.DefaultMilestoneTemplates
+                    .FirstOrDefaultAsync(t => t.AcademicSessionId == currentSessionObj.Id && t.MilestoneCode == "IAF" && t.DueDate != null);
+                if (iafTemplate != null)
+                {
+                    authoritativeIafDueDate = iafTemplate.DueDate;
+                }
+
+                var proposalTemplate = await _context.DefaultMilestoneTemplates
+                    .FirstOrDefaultAsync(t => t.AcademicSessionId == currentSessionObj.Id && (t.MilestoneCode == "STAGE1_FINAL" || t.Title.Contains("Proposal") || t.Title.Contains("Stage 1 Final")) && t.DueDate != null);
+                if (proposalTemplate != null)
+                {
+                    authoritativeProposalDueDate = proposalTemplate.DueDate;
+                }
             }
 
             var existingIaf = await _context.FYPMilestones
@@ -2583,14 +3397,24 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 .OrderByDescending(m => m.DueDate)
                 .FirstOrDefaultAsync();
                 
-            if (existingIaf != null && existingIaf.DueDate.HasValue)
+            var effectiveIafDueDate = authoritativeIafDueDate ?? existingIaf?.DueDate;
+            if (effectiveIafDueDate.HasValue)
             {
-                ViewBag.IAFDeadline = existingIaf.DueDate.Value.ToString("yyyy-MM-dd");
+                ViewBag.IAFDeadline = effectiveIafDueDate.Value.ToString("yyyy-MM-dd");
             }
             else
             {
                 ViewBag.IAFDeadline = "";
             }
+
+            var existingProposal = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .Where(m => m.Project.AcademicSession == sessionFilter && (m.MilestoneCode == "STAGE1_FINAL" || m.Title.Contains("Proposal") || m.Title.Contains("Stage 1 Final")) && m.DueDate != null)
+                .OrderByDescending(m => m.DueDate)
+                .FirstOrDefaultAsync();
+
+            var effectiveProposalDueDate = authoritativeProposalDueDate ?? existingProposal?.DueDate;
+            ViewBag.ProposalDeadline = effectiveProposalDueDate?.ToString("yyyy-MM-dd") ?? "";
 
             var existingStep1 = await _context.FYPMilestones
                 .Include(m => m.Project)
@@ -2661,9 +3485,25 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 // Set the time to 11:59:59 PM of the selected date
                 var endOfDayDeadline = new DateTime(deadline.Value.Year, deadline.Value.Month, deadline.Value.Day, 23, 59, 59);
 
+                // 1. Authoritative Session Template update
+                var sessionObj = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == sessionFilter);
+                if (sessionObj != null)
+                {
+                    var iafTemplates = await _context.DefaultMilestoneTemplates
+                        .Where(t => t.AcademicSessionId == sessionObj.Id && t.MilestoneCode == "IAF")
+                        .ToListAsync();
+                    foreach (var t in iafTemplates)
+                    {
+                        t.DueDate = endOfDayDeadline;
+                    }
+                }
+
+                // 2. Synchronize student IAF milestones in this session (never touch supervisor progress tasks)
                 var milestones = await _context.FYPMilestones
                     .Include(m => m.Project)
-                    .Where(m => m.Project.AcademicSession == sessionFilter && (m.Title == "Initial Project Allocation Form (IAF)" || m.Title.Contains("IAF")))
+                    .Where(m => m.Project.AcademicSession == sessionFilter &&
+                               m.MilestoneSource != "Supervisor" &&
+                               (m.MilestoneCode == "IAF" || m.Title == "Initial Project Allocation Form (IAF)" || m.Title.Contains("IAF")))
                     .ToListAsync();
 
                 int count = 0;
@@ -2673,15 +3513,8 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     count++;
                 }
 
-                if (count > 0)
-                {
-                    await _context.SaveChangesAsync();
-                    TempData["Success"] = $"Successfully updated the IAF deadline for {count} student project(s) in {sessionFilter}.";
-                }
-                else
-                {
-                    TempData["Info"] = $"No IAF milestones found in {sessionFilter} to update.";
-                }
+                await _context.SaveChangesAsync();
+                TempData["Success"] = $"Successfully updated the official IAF deadline for session {sessionFilter} (synchronized {count} student project(s)).";
 
                 return RedirectToAction(nameof(Settings), new { sessionFilter });
             }
@@ -2719,9 +3552,33 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 // Set the time to 11:59:59 PM of the selected date
                 var endOfDayDeadline = new DateTime(deadline.Value.Year, deadline.Value.Month, deadline.Value.Day, 23, 59, 59);
 
+                // 1. Authoritative Session Template update
+                var sessionObj = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == sessionFilter);
+                if (sessionObj != null)
+                {
+                    var templates = await _context.DefaultMilestoneTemplates
+                        .Where(t => t.AcademicSessionId == sessionObj.Id &&
+                                   (t.Title.Contains(milestoneTitle) ||
+                                    (milestoneTitle == "IAF" && t.MilestoneCode == "IAF") ||
+                                    (milestoneTitle == "Proposal" && (t.MilestoneCode == "STAGE1_FINAL" || t.Title.Contains("Proposal") || t.Title.Contains("Stage 1 Final"))) ||
+                                    (milestoneTitle == "Presentation" && (t.MilestoneCode == "STAGE2_PRESENTATION" || t.Title.Contains("Presentation") || t.Title.Contains("Step 5") || t.Title.Contains("Step 3")))))
+                        .ToListAsync();
+
+                    foreach (var t in templates)
+                    {
+                        t.DueDate = endOfDayDeadline;
+                    }
+                }
+
+                // 2. Synchronize student milestones for this session (never modify supervisor progress tasks)
                 var milestones = await _context.FYPMilestones
                     .Include(m => m.Project)
-                    .Where(m => m.Project.AcademicSession == sessionFilter && m.Title.Contains(milestoneTitle))
+                    .Where(m => m.Project.AcademicSession == sessionFilter &&
+                               m.MilestoneSource != "Supervisor" &&
+                               (m.Title.Contains(milestoneTitle) ||
+                                (milestoneTitle == "IAF" && (m.MilestoneCode == "IAF" || m.Title.Contains("IAF"))) ||
+                                (milestoneTitle == "Proposal" && (m.MilestoneCode == "STAGE1_FINAL" || m.Title.Contains("Proposal") || m.Title.Contains("Stage 1 Final"))) ||
+                                (milestoneTitle == "Presentation" && (m.MilestoneCode == "STAGE2_PRESENTATION" || m.Title.Contains("Presentation") || m.Title.Contains("Step 5") || m.Title.Contains("Step 3")))))
                     .ToListAsync();
 
                 int count = 0;
@@ -2731,15 +3588,8 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     count++;
                 }
 
-                if (count > 0)
-                {
-                    await _context.SaveChangesAsync();
-                    TempData["BulkUpdateSuccess"] = $"Successfully updated the deadline for '{milestoneTitle}' for {count} student project(s) in {sessionFilter}.";
-                }
-                else
-                {
-                    TempData["BulkUpdateInfo"] = $"No '{milestoneTitle}' milestones found in {sessionFilter} to update.";
-                }
+                await _context.SaveChangesAsync();
+                TempData["BulkUpdateSuccess"] = $"Successfully updated official deadline for '{milestoneTitle}' for session {sessionFilter} (synchronized {count} student project(s)).";
 
                 return RedirectToAction(nameof(Settings), new { sessionFilter });
             }
@@ -2778,11 +3628,9 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                     {
                         toAdd.AddRange(new[]
                         {
-                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 1: Turnitin", Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 2: DPP report full", Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 3: Marksheet Submission", Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 4: Record of Supervisor Meeting Form Submission", Status = "Pending" },
-                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 5: Presentation Slides Submission", Status = "Pending" },
+                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 1: Turnitin Checking", MilestoneCode = "STAGE2_TURNITIN", Status = "Pending", Stage = 2, IsRequired = true },
+                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 2: Final Report Submission", MilestoneCode = "STAGE2_FINAL", Status = "Pending", Stage = 2, IsRequired = true },
+                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 3: Presentation Slides Submission", MilestoneCode = "STAGE2_PRESENTATION", Status = "Pending", Stage = 2, IsRequired = true },
                         });
                         count++;
                     }
@@ -2837,11 +3685,11 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 int count = 0;
                 foreach(var m in milestones)
                 {
-                    if (m.Title.Contains("Step 5"))
+                    if (m.MilestoneCode == "STAGE2_PRESENTATION" || m.Title.Contains("Presentation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Step 5"))
                     {
                         m.DueDate = endOfDay5;
                     }
-                    else if (m.Title.Contains("Step 1") || m.Title.Contains("Step 2") || m.Title.Contains("Step 3") || m.Title.Contains("Step 4"))
+                    else if (m.MilestoneCode == "STAGE2_TURNITIN" || m.MilestoneCode == "STAGE2_FINAL" || m.Title.Contains("Step 1") || m.Title.Contains("Step 2") || m.Title.Contains("Step 3") || m.Title.Contains("Step 4"))
                     {
                         m.DueDate = endOfDay1to4;
                     }
@@ -3029,6 +3877,44 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             await _context.SaveChangesAsync();
 
             TempData["Success"] = "Supervisor meeting duration setting saved successfully.";
+            return RedirectToAction(nameof(Settings), new { sessionFilter });
+        }
+
+        // ============================================================
+        // POST - SAVE FINAL VIVA SETTINGS ONLY
+        // ============================================================
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateFinalVivaSettings(
+            int? vivaDurationMinutes,
+            string? sessionFilter)
+        {
+            if (!vivaDurationMinutes.HasValue ||
+                vivaDurationMinutes.Value < 15 ||
+                vivaDurationMinutes.Value > 180)
+            {
+                TempData["Error"] = "Final Viva duration must be between 15 and 180 minutes.";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+
+            try
+            {
+                await SetGlobalSettingAsync(
+                    "VivaDurationMinutes",
+                    vivaDurationMinutes.Value.ToString(),
+                    "Final Viva Duration (Minutes)");
+
+                await _context.SaveChangesAsync();
+
+                TempData["Success"] = "Final Viva settings saved successfully.";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+                TempData["Error"] = "Unable to save Final Viva settings.";
+            }
+
             return RedirectToAction(nameof(Settings), new { sessionFilter });
         }
 
@@ -3483,7 +4369,7 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             var defenseMilestones = await query
                 .Where(m => m.Status == "DefenseRequired" || 
                             m.Status == "DefenseScheduled" || 
-                            ((m.Status == "AdminApproved" || m.Status == "ChangeOfTopicRequired") && m.DefenseDate != null && m.Remarks != null && m.Remarks.Contains("JSON: ")))
+                            ((m.Status == "AdminApproved" || m.Status == "ChangeOfTopicRequired" || m.Status == "PanelRevisionRequired") && m.DefenseDate != null && m.Remarks != null && m.Remarks.Contains("JSON: ")))
                 .ToListAsync();
 
             bool isTableAvailable = await IsIAFDefenseTableAvailableAsync();
@@ -3873,6 +4759,23 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 ViewBag.ExistingBooking = await defenseBookingService.GetActiveBookingAsync(milestoneId);
             }
 
+            if (IsAlternativeTimeFeatureEnabled())
+            {
+                var attemptRes = IAFDefenseBookingService.ResolveAuthoritativeAttemptNumber(milestone.Remarks);
+                if (attemptRes.Success)
+                {
+                    ViewBag.ActiveAlternativeTimeRequest = await _context.IAFAlternativeTimeRequests
+                        .AsNoTracking()
+                        .Include(r => r.RequestedLecturer)
+                        .Where(r => r.MilestoneId == milestoneId &&
+                                    r.AttemptNumber == attemptRes.AttemptNumber &&
+                                    (r.Status == IAFAlternativeTimeRequest.StatusPending ||
+                                     r.Status == IAFAlternativeTimeRequest.StatusSuggested))
+                        .OrderByDescending(r => r.Id)
+                        .FirstOrDefaultAsync();
+                }
+            }
+
             return View(milestone);
         }
 
@@ -4242,133 +5145,11 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AdminPassDefense(
             [FromServices] FYPTracker.Services.Defense.IIAFDefenseBookingService defenseBookingService,
-            [FromServices] Microsoft.AspNetCore.Hosting.IWebHostEnvironment hostEnv,
-            [FromServices] Microsoft.Extensions.Configuration.IConfiguration config,
-            int milestoneId)
+            [FromServices] FYPTracker.Services.Time.ISystemClock clock,
+            int milestoneId,
+            string? outcomeComments = null)
         {
-            var milestone = await _context.FYPMilestones
-                .Include(m => m.Project)
-                    .ThenInclude(p => p.Student)
-                .FirstOrDefaultAsync(m => m.Id == milestoneId);
-
-            if (milestone == null)
-            {
-                TempData["Error"] = "Milestone not found.";
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            if (milestone.Status != "DefenseScheduled")
-            {
-                TempData["Error"] = $"Cannot record defense pass: milestone is in '{milestone.Status}' status (expected 'DefenseScheduled').";
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            var userName = User.Identity?.Name;
-            if (string.IsNullOrWhiteSpace(userName))
-            {
-                TempData["Error"] = "Unable to determine authenticated user identity.";
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            var adminUser = await _context.ApplicationUsers
-                .FirstOrDefaultAsync(u => u.UserName == userName || u.Email == userName);
-
-            if (adminUser == null)
-            {
-                TempData["Error"] = "Authenticated user account could not be found in the database.";
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            int currentUserId = adminUser.Id;
-
-            bool isTableAvailable = await IsIAFDefenseTableAvailableAsync();
-            if (!isTableAvailable)
-            {
-                TempData["Error"] = "Cannot record defense pass: The IAF Defense Booking schema (migration 20261011194333_AddIAFDefenseBookingAndAudit) has not been applied to this database. Academic outcomes cannot be modified without an authoritative booking and immutable audit record.";
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            // Check if Early Outcome Testing is enabled and applies to this target record
-            bool isEarlyOutcomeTestOverride = false;
-            bool isEarlyTestingApproved = config.GetValue<bool>("IAFDefense:EarlyOutcomeTestingApproved", false);
-            if (isEarlyTestingApproved)
-            {
-                // Strict server-side verification: Development environment only
-                if (!hostEnv.IsDevelopment())
-                {
-                    TempData["Error"] = "SAFETY ABORT: Early defense outcome test override is strictly forbidden in non-Development environments.";
-                    return RedirectToAction(nameof(ApprovedIafList));
-                }
-
-                // Strict database and server identity check directly on SQL connection
-                var conn = _context.Database.GetDbConnection();
-                if (conn.State != System.Data.ConnectionState.Open)
-                {
-                    await conn.OpenAsync();
-                }
-                using (var cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = "SELECT @@SERVERNAME AS ServerName, DB_NAME() AS DatabaseName;";
-                    using var reader = await cmd.ExecuteReaderAsync();
-                    if (await reader.ReadAsync())
-                    {
-                        string currentDb = reader["DatabaseName"]?.ToString() ?? string.Empty;
-                        string currentServer = reader["ServerName"]?.ToString() ?? string.Empty;
-
-                        if (!string.Equals(currentDb, "FYPTracker_Development", StringComparison.OrdinalIgnoreCase))
-                        {
-                            TempData["Error"] = $"SAFETY ABORT: Early outcome test override is strictly restricted to 'FYPTracker_Development'. Current connection is '{currentDb}'.";
-                            return RedirectToAction(nameof(ApprovedIafList));
-                        }
-
-                        if (!currentServer.Contains("Boon\\SQLEXPRESS", StringComparison.OrdinalIgnoreCase) &&
-                            !currentServer.Contains("SQLEXPRESS", StringComparison.OrdinalIgnoreCase))
-                        {
-                            TempData["Error"] = $"SAFETY ABORT: Early outcome test override is restricted to SQL Server 'Boon\\SQLEXPRESS'. Current server is '{currentServer}'.";
-                            return RedirectToAction(nameof(ApprovedIafList));
-                        }
-                    }
-                }
-
-                // Target restriction: Student p22014691 and Milestone 1 ONLY
-                var studentUsername = milestone.Project?.Student?.UserName;
-                if (milestoneId == 1 && string.Equals(studentUsername, "p22014691", StringComparison.OrdinalIgnoreCase))
-                {
-                    isEarlyOutcomeTestOverride = true;
-                }
-            }
-
-            string outcomeComments = isEarlyOutcomeTestOverride
-                ? "Controlled Development early-outcome test — defense not actually conducted."
-                : "Passed Defense Session. Title accepted.";
-
-            var outcomeResult = await defenseBookingService.RecordDefenseOutcomeAsync(
-                milestoneId,
-                "AdminApproved",
-                outcomeComments,
-                currentUserId,
-                isEarlyOutcomeTestOverride);
-
-            if (!outcomeResult.Success)
-            {
-                TempData["Error"] = outcomeResult.ErrorMessage;
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            _context.FYPNotifications.Add(new FYPNotification
-            {
-                RecipientId = milestone.Project.StudentId,
-                Type = "MilestoneCompleted",
-                Title = "IAF Defense Passed",
-                Message = "Congratulations! Your IAF defense was successful and your title is accepted. You may now proceed to the next stage.",
-                IsRead = false,
-                CreatedDate = DateTime.Now
-            });
-
-            await _context.SaveChangesAsync();
-            TempData["Success"] = isEarlyOutcomeTestOverride
-                ? "Successfully recorded defense pass (Development early-outcome test). Project title accepted."
-                : "Successfully recorded defense pass. Project title accepted.";
+            TempData["Error"] = "Direct Admin defense outcome recording has been retired. Defense outcomes must be finalized directly by the assigned Independent Examiner following the face-to-face defense session.";
             return RedirectToAction(nameof(ApprovedIafList));
         }
 
@@ -4376,128 +5157,11 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AdminFailDefense(
             [FromServices] FYPTracker.Services.Defense.IIAFDefenseBookingService defenseBookingService,
-            [FromServices] Microsoft.AspNetCore.Hosting.IWebHostEnvironment hostEnv,
-            [FromServices] Microsoft.Extensions.Configuration.IConfiguration config,
-            int milestoneId)
+            [FromServices] FYPTracker.Services.Time.ISystemClock clock,
+            int milestoneId,
+            string? outcomeComments = null)
         {
-            var milestone = await _context.FYPMilestones
-                .Include(m => m.Project)
-                    .ThenInclude(p => p.Student)
-                .FirstOrDefaultAsync(m => m.Id == milestoneId);
-
-            if (milestone == null)
-            {
-                TempData["Error"] = "Milestone not found.";
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            if (milestone.Status != "DefenseScheduled")
-            {
-                TempData["Error"] = $"Cannot record defense failure: milestone is in '{milestone.Status}' status (expected 'DefenseScheduled').";
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            var userName = User.Identity?.Name;
-            if (string.IsNullOrWhiteSpace(userName))
-            {
-                TempData["Error"] = "Unable to determine authenticated user identity.";
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            var adminUser = await _context.ApplicationUsers
-                .FirstOrDefaultAsync(u => u.UserName == userName || u.Email == userName);
-
-            if (adminUser == null)
-            {
-                TempData["Error"] = "Authenticated user account could not be found in the database.";
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            int currentUserId = adminUser.Id;
-
-            bool isTableAvailable = await IsIAFDefenseTableAvailableAsync();
-            if (!isTableAvailable)
-            {
-                TempData["Error"] = "Cannot record defense failure: The IAF Defense Booking schema (migration 20261011194333_AddIAFDefenseBookingAndAudit) has not been applied to this database. Academic outcomes cannot be modified without an authoritative booking and immutable audit record.";
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            // Check if Early Outcome Testing is enabled and applies to this target record
-            bool isEarlyOutcomeTestOverride = false;
-            bool isEarlyTestingApproved = config.GetValue<bool>("IAFDefense:EarlyOutcomeTestingApproved", false);
-            if (isEarlyTestingApproved)
-            {
-                if (!hostEnv.IsDevelopment())
-                {
-                    TempData["Error"] = "SAFETY ABORT: Early defense outcome test override is strictly forbidden in non-Development environments.";
-                    return RedirectToAction(nameof(ApprovedIafList));
-                }
-
-                var conn = _context.Database.GetDbConnection();
-                if (conn.State != System.Data.ConnectionState.Open)
-                {
-                    await conn.OpenAsync();
-                }
-                using (var cmd = conn.CreateCommand())
-                {
-                    cmd.CommandText = "SELECT @@SERVERNAME AS ServerName, DB_NAME() AS DatabaseName;";
-                    using var reader = await cmd.ExecuteReaderAsync();
-                    if (await reader.ReadAsync())
-                    {
-                        string currentDb = reader["DatabaseName"]?.ToString() ?? string.Empty;
-                        string currentServer = reader["ServerName"]?.ToString() ?? string.Empty;
-
-                        if (!string.Equals(currentDb, "FYPTracker_Development", StringComparison.OrdinalIgnoreCase))
-                        {
-                            TempData["Error"] = $"SAFETY ABORT: Early outcome test override is strictly restricted to 'FYPTracker_Development'. Current connection is '{currentDb}'.";
-                            return RedirectToAction(nameof(ApprovedIafList));
-                        }
-
-                        if (!currentServer.Contains("Boon\\SQLEXPRESS", StringComparison.OrdinalIgnoreCase) &&
-                            !currentServer.Contains("SQLEXPRESS", StringComparison.OrdinalIgnoreCase))
-                        {
-                            TempData["Error"] = $"SAFETY ABORT: Early outcome test override is restricted to SQL Server 'Boon\\SQLEXPRESS'. Current server is '{currentServer}'.";
-                            return RedirectToAction(nameof(ApprovedIafList));
-                        }
-                    }
-                }
-
-                var studentUsername = milestone.Project?.Student?.UserName;
-                if (milestoneId == 1 && string.Equals(studentUsername, "p22014691", StringComparison.OrdinalIgnoreCase))
-                {
-                    isEarlyOutcomeTestOverride = true;
-                }
-            }
-
-            string outcomeComments = isEarlyOutcomeTestOverride
-                ? "Controlled Development early-outcome test — defense not actually conducted."
-                : "Defense Failed. Please submit a new Initial Allocation Form with a change of topic.";
-
-            var outcomeResult = await defenseBookingService.RecordDefenseOutcomeAsync(
-                milestoneId,
-                "ChangeOfTopicRequired",
-                outcomeComments,
-                currentUserId,
-                isEarlyOutcomeTestOverride);
-
-            if (!outcomeResult.Success)
-            {
-                TempData["Error"] = outcomeResult.ErrorMessage;
-                return RedirectToAction(nameof(ApprovedIafList));
-            }
-
-            _context.FYPNotifications.Add(new FYPNotification
-            {
-                RecipientId = milestone.Project.StudentId,
-                Type = "RevisionRequest",
-                Title = "IAF Defense Failed",
-                Message = "Your IAF defense was unsuccessful. You are required to submit a new Initial Allocation Form with a change of topic.",
-                IsRead = false,
-                CreatedDate = DateTime.Now
-            });
-
-            await _context.SaveChangesAsync();
-            TempData["Success"] = "Successfully recorded defense failure. The student must now submit a new IAF topic.";
+            TempData["Error"] = "Direct Admin defense outcome recording has been retired. Defense outcomes must be finalized directly by the assigned Independent Examiner following the face-to-face defense session.";
             return RedirectToAction(nameof(ApprovedIafList));
         }
 
@@ -5382,7 +6046,10 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> EditDefaultMilestoneTemplate(int id, DefaultMilestoneTemplate model, string sessionFilter)
         {
-            var existing = await _context.DefaultMilestoneTemplates.FindAsync(id);
+            var existing = await _context.DefaultMilestoneTemplates
+                .Include(t => t.Session)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
             if (existing != null)
             {
                 existing.Title = model.Title;
@@ -5391,8 +6058,31 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
                 existing.IsRequired = model.IsRequired;
                 existing.DueDate = model.DueDate;
                 existing.DisplayOrder = model.DisplayOrder;
+
+                // Synchronize all official student FYPMilestones linked to this template or session
+                var targetSessionName = existing.Session?.Name ?? sessionFilter;
+                var studentMilestones = await _context.FYPMilestones
+                    .Include(m => m.Project)
+                    .Where(m => m.DefaultMilestoneTemplateId == existing.Id || 
+                               (m.Project.AcademicSession == targetSessionName && m.MilestoneSource == "Default" && 
+                                ((existing.MilestoneCode != null && m.MilestoneCode == existing.MilestoneCode) || m.Title == existing.Title)))
+                    .ToListAsync();
+
+                foreach (var sm in studentMilestones)
+                {
+                    sm.Title = existing.Title;
+                    sm.MilestoneCode = existing.MilestoneCode;
+                    sm.Stage = existing.Stage;
+                    sm.IsRequired = existing.IsRequired;
+                    sm.DueDate = existing.DueDate;
+                    if (sm.DefaultMilestoneTemplateId == null)
+                    {
+                        sm.DefaultMilestoneTemplateId = existing.Id;
+                    }
+                }
+
                 await _context.SaveChangesAsync();
-                TempData["Success"] = "Template updated successfully.";
+                TempData["Success"] = $"Template and {studentMilestones.Count} linked student milestone(s) updated successfully.";
             }
             return RedirectToAction(nameof(Settings), new { sessionFilter });
         }

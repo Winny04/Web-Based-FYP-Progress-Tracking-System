@@ -22,8 +22,9 @@ namespace FYPTracker.Controllers
         private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _env;
         private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;
         private readonly FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService _weeklyMeetingSchedulingService;
+        private readonly FYPTracker.Services.Meetings.IMeetingRequirementService? _meetingRequirementService;
 
-        public SupervisorController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext, Microsoft.AspNetCore.Hosting.IWebHostEnvironment env, Microsoft.Extensions.Configuration.IConfiguration configuration, FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService weeklyMeetingSchedulingService)
+        public SupervisorController(FYPTrackerContext context, IEmailService emailService, IHubContext<NotificationHub> hubContext, Microsoft.AspNetCore.Hosting.IWebHostEnvironment env, Microsoft.Extensions.Configuration.IConfiguration configuration, FYPTracker.Services.Meetings.IWeeklyMeetingSchedulingService weeklyMeetingSchedulingService, FYPTracker.Services.Meetings.IMeetingRequirementService? meetingRequirementService = null)
         {
             _context = context;
             _emailService = emailService;
@@ -31,6 +32,7 @@ namespace FYPTracker.Controllers
             _env = env;
             _configuration = configuration;
             _weeklyMeetingSchedulingService = weeklyMeetingSchedulingService;
+            _meetingRequirementService = meetingRequirementService;
         }
 
         private async Task<ApplicationUser?> GetCurrentUserAsync()
@@ -144,6 +146,20 @@ namespace FYPTracker.Controllers
             ViewBag.PendingReviews    = await _context.FYPMilestones.CountAsync(m => m.Project.SupervisorId == user.Id && m.Status == "Submitted" && (activeSession == null || m.Project.AcademicSession == activeSession));
             ViewBag.UpcomingMeetings  = await _context.MeetingBookings.CountAsync(m => m.SupervisorId == user.Id && m.MeetingDate >= DateTime.Today && m.Status == "Approved" && (activeSession == null || m.Student.AcademicSession == activeSession));
             ViewBag.PendingExaminers  = await _context.FYPProjects.CountAsync(p => p.SupervisorId == user.Id && !p.AssignedExaminers.Any() && p.Status != "Failed" && (activeSession == null || p.AcademicSession == activeSession));
+
+            // Stage 1 Supervisor Rubric Grading Reminder count (unique eligible assigned students)
+            var supervisorProjectsForRubric = await _context.FYPProjects
+                .AsNoTracking()
+                .Include(p => p.Student)
+                .Include(p => p.Milestones)
+                .Where(p => p.SupervisorId == user.Id
+                         && (p.Student == null || !p.Student.IsResign)
+                         && p.Status != "Completed" && p.Status != "Archived" && p.Status != "RepeatRequested" && p.Status != "Failed"
+                         && (activeSession == null || p.AcademicSession == activeSession))
+                .ToListAsync();
+
+            ViewBag.PendingStage1GradingCount = supervisorProjectsForRubric
+                .Count(p => FYPTracker.Utils.GradingHelper.IsStage1SupervisorRubricPending(p, p.Milestones));
 
             // Recent Requests (Top 5)
             var recentRequests = await _context.SupervisorRequests
@@ -329,12 +345,10 @@ namespace FYPTracker.Controllers
 
                         milestones.AddRange(new List<FYPMilestone>
                         {
-                            // Stage 2 Milestones
-                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 1: Turnitin Checking", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
-                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 2: Final Report Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
-                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 3: Marksheet Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
-                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 4: Record of Supervisor Meeting Form Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
-                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 5: Presentation Slides Submission", DueDate = DateTime.Now.AddMonths(6), Status = "Pending", Stage = 2 }
+                            // Stage 2 Required Student Uploads (Turnitin, Final Report, Presentation Slides)
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 1: Turnitin Checking", MilestoneCode = "STAGE2_TURNITIN", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2, IsRequired = true },
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 2: Final Report Submission", MilestoneCode = "STAGE2_FINAL", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2, IsRequired = true },
+                            new FYPMilestone { FYPProjectId = repeatProj.Id, Title = "Step 3: Presentation Slides Submission", MilestoneCode = "STAGE2_PRESENTATION", DueDate = DateTime.Now.AddMonths(6), Status = "Pending", Stage = 2, IsRequired = true }
                         });
                         _context.FYPMilestones.AddRange(milestones);
                     }
@@ -381,11 +395,9 @@ namespace FYPTracker.Controllers
 
                         milestones.AddRange(new List<FYPMilestone>
                         {
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 1: Turnitin Checking", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 2: Final Report Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 3: Marksheet Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 4: Record of Supervisor Meeting Form Submission", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2 },
-                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 5: Presentation Slides Submission", DueDate = DateTime.Now.AddMonths(6), Status = "Pending", Stage = 2 }
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 1: Turnitin Checking", MilestoneCode = "STAGE2_TURNITIN", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2, IsRequired = true },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 2: Final Report Submission", MilestoneCode = "STAGE2_FINAL", DueDate = DateTime.Now.AddMonths(5), Status = "Pending", Stage = 2, IsRequired = true },
+                            new FYPMilestone { FYPProjectId = proj.Id, Title = "Step 3: Presentation Slides Submission", MilestoneCode = "STAGE2_PRESENTATION", DueDate = DateTime.Now.AddMonths(6), Status = "Pending", Stage = 2, IsRequired = true }
                         });
                         _context.FYPMilestones.AddRange(milestones);
                     }
@@ -477,6 +489,20 @@ namespace FYPTracker.Controllers
                 .OrderByDescending(p => p.CreatedDate)
                 .ToListAsync();
 
+            string effectiveSessionName = activeSession ?? projects.FirstOrDefault()?.AcademicSession ?? "";
+            var sessionObj = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == effectiveSessionName);
+            var officialTemplates = new List<DefaultMilestoneTemplate>();
+            if (sessionObj != null)
+            {
+                officialTemplates = await _context.DefaultMilestoneTemplates
+                    .Where(t => t.AcademicSessionId == sessionObj.Id && t.IsActive)
+                    .OrderBy(t => t.Stage)
+                    .ThenBy(t => t.DisplayOrder)
+                    .ToListAsync();
+            }
+            ViewBag.OfficialSessionMilestones = officialTemplates;
+            ViewBag.EffectiveSessionName = effectiveSessionName;
+
             return View(projects);
         }
 
@@ -508,45 +534,50 @@ namespace FYPTracker.Controllers
         public async Task<IActionResult> AddMilestone(int projectId, string title, string description, DateTime? dueDate, int stage = 1)
         {
             var user = await GetCurrentUserAsync();
-            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user!.Id);
-            
-            if (project != null)
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user.Id);
+            if (project == null)
             {
-                if (string.IsNullOrWhiteSpace(title))
-                {
-                    TempData["Error"] = "Milestone title cannot be empty.";
-                    return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
-                }
-
-                if (stage == 2 && project.Stage1Grade != "Pass")
-                {
-                    TempData["Error"] = "Cannot create Stage 2 milestones until Stage 1 has been passed.";
-                    return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
-                }
-
-                int effectiveStage = (stage == 2) ? 2 : 1;
-
-                var milestone = new FYPMilestone
-                {
-                    FYPProjectId = projectId,
-                    Title = title.Trim(),
-                    Description = description,
-                    DueDate = dueDate,
-                    Status = "Draft",
-                    MilestoneSource = "Supervisor",
-                    IsRequired = false,
-                    Stage = effectiveStage,
-                    CreatedDate = DateTime.Now
-                };
-                _context.FYPMilestones.Add(milestone);
-                await _context.SaveChangesAsync();
-                
-                // --- SignalR Real-Time Notification ---
-                var assignPayload = new { Type = "AssignMilestone", MilestoneId = milestone.Id, Title = milestone.Title, Message = $"You have been assigned a new milestone: {milestone.Title}" };
-                await _hubContext.Clients.Group($"User_{project.StudentId}").SendAsync("ReceiveMilestoneUpdate", assignPayload);
-
-                TempData["Success"] = $"Stage {effectiveStage} milestone added successfully.";
+                TempData["Error"] = "Project not found or you are not authorized to assign progress tasks to this student.";
+                return RedirectToAction(nameof(MyProjects));
             }
+
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                TempData["Error"] = "Progress task title cannot be empty.";
+                return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+            }
+
+            if (stage == 2 && project.Stage1Grade != "Pass")
+            {
+                TempData["Error"] = "Cannot create Stage 2 progress tasks until Stage 1 has been passed.";
+                return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
+            }
+
+            int effectiveStage = (stage == 2) ? 2 : 1;
+
+            var milestone = new FYPMilestone
+            {
+                FYPProjectId = projectId,
+                Title = title.Trim(),
+                Description = description,
+                DueDate = dueDate,
+                Status = "Draft",
+                MilestoneSource = "Supervisor",
+                DefaultMilestoneTemplateId = null,
+                IsRequired = false,
+                Stage = effectiveStage,
+                CreatedDate = DateTime.Now
+            };
+            _context.FYPMilestones.Add(milestone);
+            await _context.SaveChangesAsync();
+            
+            // --- SignalR Real-Time Notification ---
+            var assignPayload = new { Type = "AssignMilestone", MilestoneId = milestone.Id, Title = milestone.Title, Message = $"You have been assigned a new progress task: {milestone.Title}" };
+            await _hubContext.Clients.Group($"User_{project.StudentId}").SendAsync("ReceiveMilestoneUpdate", assignPayload);
+
+            TempData["Success"] = $"Student progress task '{milestone.Title}' added successfully for Stage {effectiveStage}.";
             return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
         }
 
@@ -750,6 +781,12 @@ namespace FYPTracker.Controllers
 
             if (milestones.Any())
             {
+                if (milestones.Any(m => m.MilestoneSource != "Supervisor"))
+                {
+                    TempData["Error"] = "Official academic milestones are centrally managed by the Administrator and cannot be modified by supervisors.";
+                    return RedirectToAction(nameof(MyProjects), new { sessionFilter });
+                }
+
                 int successCount = 0;
                 int errorCount = 0;
 
@@ -891,7 +928,7 @@ namespace FYPTracker.Controllers
             {
                 if (milestone.MilestoneSource != "Supervisor")
                 {
-                    TempData["Error"] = "Only custom supervisor-created milestones can be edited.";
+                    TempData["Error"] = "Official academic session milestones cannot be modified by supervisors. Only student progress tasks can be edited.";
                     return RedirectToAction(nameof(ProjectDetails), new { id = milestone.FYPProjectId });
                 }
 
@@ -1285,12 +1322,26 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var stage2Milestones = project.Milestones.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
-            bool isAllStage2Approved = stage2Milestones.Any() && stage2Milestones.All(m => m.Status == "Approved" || m.Status == "Completed");
-
-            if (!isAllStage2Approved)
+            int completedMeetings = 0;
+            int? requiredMeetings = null;
+            if (_meetingRequirementService != null)
             {
-                TempData["Error"] = "You must approve ALL Stage 2 milestones (including the Final Report and Turnitin Score) before you can submit the final marksheet.";
+                var progress = await _meetingRequirementService.GetStudentProgressAsync(project.StudentId, 2);
+                completedMeetings = progress?.Completed ?? 0;
+                requiredMeetings = progress?.Required;
+            }
+            else
+            {
+                completedMeetings = await _context.MeetingBookings
+                    .Include(m => m.MeetingLog)
+                    .Where(m => m.StudentId == project.StudentId && m.Stage == 2 && m.Status == "Approved" && m.MeetingLog != null && m.MeetingLog.LogStatus == "Signed")
+                    .CountAsync();
+            }
+
+            var unlockStatus = FYPTracker.Utils.GradingHelper.CanUnlockStage2Grading(project, completedMeetings, requiredMeetings);
+            if (!unlockStatus.IsUnlocked)
+            {
+                TempData["Error"] = unlockStatus.Reason;
                 return RedirectToAction(nameof(ProjectDetails), new { id = id });
             }
 
@@ -1306,12 +1357,36 @@ namespace FYPTracker.Controllers
             if (!user.UserRoles.Any(r => r.Role.Name == "Supervisor")) return RedirectToAction("AccessDenied", "Home");
 
             var project = await _context.FYPProjects
+                .Include(p => p.Milestones)
                 .FirstOrDefaultAsync(p => p.Id == projectId && p.SupervisorId == user.Id);
                 
             if (project == null)
             {
                 TempData["Error"] = "Project not found or unauthorized.";
                 return RedirectToAction(nameof(Index));
+            }
+
+            int completedMeetingsPost = 0;
+            int? requiredMeetingsPost = null;
+            if (_meetingRequirementService != null)
+            {
+                var progress = await _meetingRequirementService.GetStudentProgressAsync(project.StudentId, 2);
+                completedMeetingsPost = progress?.Completed ?? 0;
+                requiredMeetingsPost = progress?.Required;
+            }
+            else
+            {
+                completedMeetingsPost = await _context.MeetingBookings
+                    .Include(m => m.MeetingLog)
+                    .Where(m => m.StudentId == project.StudentId && m.Stage == 2 && m.Status == "Approved" && m.MeetingLog != null && m.MeetingLog.LogStatus == "Signed")
+                    .CountAsync();
+            }
+
+            var unlockStatusPost = FYPTracker.Utils.GradingHelper.CanUnlockStage2Grading(project, completedMeetingsPost, requiredMeetingsPost);
+            if (!unlockStatusPost.IsUnlocked)
+            {
+                TempData["Error"] = unlockStatusPost.Reason;
+                return RedirectToAction(nameof(ProjectDetails), new { id = projectId });
             }
 
             project.Stage2SupervisorMarksheetData = marksheetData;
@@ -1906,11 +1981,9 @@ namespace FYPTracker.Controllers
                         {
                             var stepMilestones = new List<FYPMilestone>
                             {
-                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 1: Turnitin", Status = "Pending" },
-                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 2: DPP report full", Status = "Pending" },
-                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 3: Marksheet Submission", Status = "Pending" },
-                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 4: Record of Supervisor Meeting Form Submission", Status = "Pending" },
-                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 5: Presentation Slides Submission", Status = "Pending" }
+                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 1: Turnitin Checking", MilestoneCode = "STAGE2_TURNITIN", Status = "Pending", Stage = 2, IsRequired = true },
+                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 2: Final Report Submission", MilestoneCode = "STAGE2_FINAL", Status = "Pending", Stage = 2, IsRequired = true },
+                                new FYPMilestone { FYPProjectId = milestone.FYPProjectId, Title = "Step 3: Presentation Slides Submission", MilestoneCode = "STAGE2_PRESENTATION", Status = "Pending", Stage = 2, IsRequired = true }
                             };
                             _context.FYPMilestones.AddRange(stepMilestones);
                             await _context.SaveChangesAsync();
@@ -2720,6 +2793,28 @@ namespace FYPTracker.Controllers
                     "Signing has been cancelled to protect the original record. " +
                     "Please restore the draft template snapshot before trying again.";
                 return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            // If NextMeetingDate in the log was not set at draft time (e.g. next meeting was booked/approved after the draft was created),
+            // safely resolve it from the student's next approved meeting in the same stage before generating the signed PDF snapshot.
+            if (!log.NextMeetingDate.HasValue)
+            {
+                var nextApprovedMeeting = await _context.MeetingBookings
+                    .AsNoTracking()
+                    .Where(n =>
+                        n.StudentId == meeting.StudentId &&
+                        n.SupervisorId == meeting.SupervisorId &&
+                        n.Stage == meeting.Stage &&
+                        n.Status == "Approved" &&
+                        n.MeetingDate > meeting.MeetingDate)
+                    .OrderBy(n => n.MeetingDate)
+                    .ThenBy(n => n.MeetingTime)
+                    .FirstOrDefaultAsync();
+
+                if (nextApprovedMeeting != null)
+                {
+                    log.NextMeetingDate = nextApprovedMeeting.MeetingDate;
+                }
             }
 
             // The MeetingLog model stores the signature after |||SIG|||.

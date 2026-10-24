@@ -445,14 +445,16 @@
         var proposalMilestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(milestones);
         bool isProposalApproved = proposalMilestone != null && FYPTracker.Utils.GradingHelper.IsStage1DppApproved(proposalMilestone);
         
-        var stage2Milestones = milestones.Where(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)).ToList();
+        var stage2Milestones = milestones.Where(m => (m.Stage == 2 || m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)) && !FYPTracker.Utils.GradingHelper.IsObsoleteOrRetiredStage2Milestone(m)).ToList();
 
         // DPP Work & Progress: ONLY Supervisor-added Stage 1 milestones (persistent DB classification)
         var allProgressMilestones = milestones.Where(m => m.MilestoneSource == "Supervisor" && m.Stage == 1).ToList();
             
-        // Must have at least one supervisor milestone AND all must be completed
-        bool hasProgressMilestones = allProgressMilestones.Any();
-        bool isAllProgressCompleted = hasProgressMilestones && allProgressMilestones.All(m => m.Status == "Completed");
+        var stage1Booking = ViewBag.ScheduledIafBooking as IAFDefenseBooking;
+        var stage1DppPrereq = FYPTracker.Utils.GradingHelper.CanSubmitStage1FinalDpp(milestones, iafMilestone, stage1Booking);
+        bool hasProgressMilestones = stage1DppPrereq.HasTasks;
+        bool isAllProgressCompleted = stage1DppPrereq.AllApproved;
+        bool canSubmitStage1FinalDpp = stage1DppPrereq.Allowed;
 
         // NEW: Stage 2 unlock logic depends on Stage1Grade == "Pass"
         bool isStage2Unlocked = Model?.Stage1Grade == "Pass";
@@ -462,14 +464,18 @@
         
         string progressTooltip = "";
         if (!isIafApproved) progressTooltip = "data-toggle=\"tooltip\" title=\"Requires IAF Approval first\"";
-        else if (isAllProgressCompleted && allProgressMilestones.Any()) progressTooltip = "data-toggle=\"tooltip\" title=\"All DPP progress milestones are completed\"";
+        else if (!hasProgressMilestones) progressTooltip = "data-toggle=\"tooltip\" title=\"Waiting for your Supervisor to assign Stage 1 DPP progress tasks\"";
+        else if (isAllProgressCompleted) progressTooltip = "data-toggle=\"tooltip\" title=\"All DPP progress milestones are completed and approved\"";
+        else progressTooltip = "data-toggle=\"tooltip\" title=\"Waiting for Supervisor approval of all required Stage 1 progress tasks\"";
 
         string proposalTooltip = "";
-        if (!isIafApproved || !isAllProgressCompleted) proposalTooltip = "data-toggle=\"tooltip\" title=\"Requires IAF approval and all DPP progress milestones to be completed first\"";
+        if (!isIafApproved) proposalTooltip = "data-toggle=\"tooltip\" title=\"Requires IAF approval first\"";
+        else if (!hasProgressMilestones) proposalTooltip = "data-toggle=\"tooltip\" title=\"Waiting for your Supervisor to assign Stage 1 DPP progress tasks\"";
+        else if (!isAllProgressCompleted) proposalTooltip = "data-toggle=\"tooltip\" title=\"Waiting for Supervisor approval of all required Stage 1 progress tasks\"";
         else if (isProposalApproved) proposalTooltip = "data-toggle=\"tooltip\" title=\"Proposal Form has been approved and locked\"";
 
         string finalTooltip = "";
-        if (!isAllProgressCompleted) finalTooltip = "data-toggle=\"tooltip\" title=\"Requires all DPP progress milestones to be completed by Supervisor\"";
+        if (!isAllProgressCompleted) finalTooltip = "data-toggle=\"tooltip\" title=\"Requires all assigned DPP progress tasks to be completed and approved by Supervisor\"";
 
         <div class="row g-4">
             
@@ -592,9 +598,9 @@
 
             @* -- WIZARD STEPPER (Navigation) ------------------ *@
             @{
-                bool isPropTabActive = isStage2Unlocked || (isIafApproved && isAllProgressCompleted);
-                bool isProgressTabActive = !isStage2Unlocked && isIafApproved && !isAllProgressCompleted;
-                bool isIafTabActive = !isStage2Unlocked && !isIafApproved && !isProposalApproved && !isAllProgressCompleted;
+                bool isPropTabActive = isStage2Unlocked || (isIafApproved && canSubmitStage1FinalDpp);
+                bool isProgressTabActive = !isStage2Unlocked && isIafApproved && !canSubmitStage1FinalDpp;
+                bool isIafTabActive = !isStage2Unlocked && !isIafApproved && !isProposalApproved;
             }
             <div class="col-12" id="stage1HistorySection">
                 <ul class="wizard-stepper nav nav-pills m-0 p-0" style="list-style: none;" id="forms-tab" role="tablist">
@@ -611,7 +617,7 @@
                         </button>
                     </li>
                     <li class="stepper-item nav-item" role="presentation" tabindex="0" @Html.Raw(proposalTooltip)>
-                        <button class="stepper-btn nav-link @(isPropTabActive ? "active" : "")" id="proposal-form-tab" data-toggle="pill" data-target="#proposal-form-pane" type="button" role="tab" @(!isIafApproved || (!isAllProgressCompleted && !isStage2Unlocked) ? "disabled" : "") style="@(!isIafApproved || (!isAllProgressCompleted && !isStage2Unlocked) ? "pointer-events: none;" : "")">
+                        <button class="stepper-btn nav-link @(isPropTabActive ? "active" : "")" id="proposal-form-tab" data-toggle="pill" data-target="#proposal-form-pane" type="button" role="tab" @(!isIafApproved ? "disabled" : "") style="@(!isIafApproved ? "pointer-events: none;" : "")">
                             <div class="step-icon"><i class="fas fa-feather-alt"></i></div>
                             <div class="step-text">B. Stage 1 Required Submissions</div>
                         </button>
@@ -712,27 +718,44 @@
                                 }
                                 else if (iafMilestone?.Status == "DefenseScheduled")
                                 {
-                                    <div class="alert alert-danger d-flex align-items-center mt-3 border-danger mb-4">
-                                        <i class="fas fa-gavel fs-2 me-3 text-danger"></i>
-                                        <div>
-                                            <h5 class="fw-bold text-dark mb-1">IAF Rejected by Admin (Defense Required)</h5>
-                                            <p class="mb-0 text-muted">The administrator has rejected your approved IAF and mandated a defense session.</p>
+                                    var scheduledBooking = ViewBag.ScheduledIafBooking as IAFDefenseBooking;
+                                    var displayDefenseDate = scheduledBooking != null ? (DateTime?)scheduledBooking.DefenseDate : iafMilestone.DefenseDate;
+                                    var displayDefenseVenue = scheduledBooking != null ? scheduledBooking.Venue : iafMilestone.DefenseVenue;
+                                    string displayDefenseTime = "";
+                                    if (scheduledBooking != null)
+                                    {
+                                        string sAmPm = DateTime.Today.Add(scheduledBooking.StartTime).ToString("tt");
+                                        string eAmPm = DateTime.Today.Add(scheduledBooking.EndTime).ToString("tt");
+                                        displayDefenseTime = sAmPm == eAmPm
+                                            ? $"{DateTime.Today.Add(scheduledBooking.StartTime):hh:mm}–{DateTime.Today.Add(scheduledBooking.EndTime):hh:mm tt}"
+                                            : $"{DateTime.Today.Add(scheduledBooking.StartTime):hh:mm tt}–{DateTime.Today.Add(scheduledBooking.EndTime):hh:mm tt}";
+                                    }
+                                    else if (!string.IsNullOrEmpty(iafMilestone.DefenseTime))
+                                    {
+                                        displayDefenseTime = iafMilestone.DefenseTime;
+                                    }
+
+                                    <div class="alert alert-info d-flex align-items-start mt-3 border-info mb-4">
+                                        <i class="fas fa-calendar-check fs-2 me-3 text-info mt-1"></i>
+                                        <div class="w-100">
+                                            <h5 class="fw-bold text-dark mb-1">IAF Defense Scheduled</h5>
+                                            <p class="mb-0 text-muted">Your IAF Defense session is scheduled and awaiting assessment. Your signed IAF is locked until the defense outcome is recorded.</p>
                                             
-                                            @if (iafMilestone.DefenseDate.HasValue)
+                                            @if (displayDefenseDate.HasValue)
                                             {
-                                                <div class="mt-3 p-3 bg-white rounded border border-danger">
-                                                    <h6 class="fw-bold text-danger mb-2">Your Scheduled Session:</h6>
+                                                <div class="mt-3 p-3 bg-white rounded border border-info">
+                                                    <h6 class="fw-bold text-info mb-2"><i class="fas fa-calendar-alt me-1"></i> Your Scheduled Session:</h6>
                                                     <ul class="mb-0 text-dark fw-bold ps-3">
-                                                        <li>Date: @iafMilestone.DefenseDate.Value.ToString("dd MMM yyyy")</li>
-                                                        <li>Time: @iafMilestone.DefenseTime</li>
+                                                        <li>Date: @displayDefenseDate.Value.ToString("dd MMMM yyyy")</li>
+                                                        <li>Time: @displayDefenseTime</li>
                                                         <li>Venue: 
-                                                            @if (!string.IsNullOrEmpty(iafMilestone.DefenseVenue) && iafMilestone.DefenseVenue.Contains("http"))
+                                                            @if (!string.IsNullOrEmpty(displayDefenseVenue) && displayDefenseVenue.Contains("http"))
                                                             {
-                                                                <a href="@iafMilestone.DefenseVenue.Substring(iafMilestone.DefenseVenue.IndexOf("http"))" target="_blank" class="text-primary text-decoration-underline">Join Online Defense Meeting</a>
+                                                                <a href="@displayDefenseVenue.Substring(displayDefenseVenue.IndexOf("http"))" target="_blank" class="text-primary text-decoration-underline">Join Online Defense Meeting</a>
                                                             }
                                                             else
                                                             {
-                                                                @iafMilestone.DefenseVenue
+                                                                @displayDefenseVenue
                                                             }
                                                         </li>
                                                     </ul>
@@ -1264,9 +1287,60 @@
                                     int propMilestoneId = propMilestone?.Id ?? 0;
                                     bool isStage1PassedNow = Model?.Stage1Grade == "Pass";
                                     bool isPropLocked = FYPTracker.Utils.GradingHelper.IsStage1ProposalLocked(propMilestone, Model?.Stage1Grade);
+                                    bool canProgressToDpp = FYPTracker.Utils.GradingHelper.CanProgressToStage1Dpp(iafMilestone, ViewBag.ScheduledIafBooking as IAFDefenseBooking);
                                 }
                                 
-                                @if (propMilestone != null && propMilestone.Status == "Rejected" && !isStage1PassedNow)
+                                @if (!canProgressToDpp)
+                                {
+                                    <div class="alert alert-warning d-flex align-items-start mt-3 border-warning shadow-sm mb-4">
+                                        <i class="fas fa-lock fs-2 me-3 text-warning mt-1"></i>
+                                        <div class="w-100">
+                                            <h5 class="fw-bold text-dark mb-1">Stage 1 DPP Submission Locked — IAF Prerequisite Pending</h5>
+                                            <p class="mb-0 text-muted">
+                                                @if (iafMilestone?.Status == "DefenseScheduled")
+                                                {
+                                                    <span>Your IAF Defense session is currently scheduled and awaiting assessment. You cannot submit your Detailed Project Proposal (DPP) until your IAF Defense has been conducted and passed.</span>
+                                                }
+                                                else if (iafMilestone?.Status == "DefenseRequired")
+                                                {
+                                                    <span>An IAF Defense is required and awaiting scheduling by the administrator. Stage 1 DPP submission will unlock once your IAF Defense is scheduled, conducted, and marked as Passed.</span>
+                                                }
+                                                else if (iafMilestone?.Status == "ChangeOfTopicRequired")
+                                                {
+                                                    <span>Your IAF defense was unsuccessful. You must submit a revised IAF with a change of topic before proceeding with Stage 1 submissions.</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>Your Initial Project Allocation Form (IAF) has not yet been approved. Stage 1 DPP submission will unlock once your IAF is fully approved.</span>
+                                                }
+                                            </p>
+                                        </div>
+                                    </div>
+                                }
+                                else if (!canSubmitStage1FinalDpp && !isPropLocked)
+                                {
+                                    @if (!hasProgressMilestones)
+                                    {
+                                        <div class="alert alert-warning d-flex align-items-start mt-3 border-warning shadow-sm mb-4">
+                                            <i class="fas fa-lock fs-2 me-3 text-warning mt-1"></i>
+                                            <div class="w-100">
+                                                <h5 class="fw-bold text-dark mb-1">DPP Submission Locked — Waiting for your Supervisor to assign Stage 1 DPP progress tasks.</h5>
+                                                <p class="mb-0 text-muted">Supervisor-assigned Stage 1 DPP progress milestone tasks are mandatory. You may review the submission guidelines below and save your DPP draft, but formal submission cannot be made until your supervisor assigns and approves all required progress tasks.</p>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="alert alert-warning d-flex align-items-start mt-3 border-warning shadow-sm mb-4">
+                                            <i class="fas fa-lock fs-2 me-3 text-warning mt-1"></i>
+                                            <div class="w-100">
+                                                <h5 class="fw-bold text-dark mb-1">DPP Submission Locked — Waiting for Supervisor approval of all required Stage 1 progress tasks.</h5>
+                                                <p class="mb-0 text-muted">All mandatory Stage 1 DPP progress tasks must be completed and approved by your assigned Supervisor before final DPP submission is allowed. You can save your draft proposal while waiting for approval.</p>
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                                else if (propMilestone != null && propMilestone.Status == "Rejected" && !isStage1PassedNow)
                                 {
                                     <div class="alert alert-danger d-flex align-items-center mt-3 border-danger shadow-sm">
                                         <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
@@ -1404,60 +1478,60 @@
                                     </div>
                                 }
 
-                                @if (!isPropLocked)
+                                @if (canProgressToDpp && !isPropLocked)
                                 {
                                 <form id="proposalForm" asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" asp-antiforgery="true">
                                     <input type="hidden" name="formType" value="Proposal Form" />
                                     <input type="hidden" name="milestoneId" value="@propMilestoneId" />
 
-                                    @* Stage 1 Submission Guide *@
-                                    <div class="alert alert-info border-0 rounded-3 shadow-sm mb-4">
-                                        <h6 class="fw-bold text-dark mb-2"><i class="fas fa-list-check me-2"></i>Detailed Project Proposal Submission</h6>
-                                        <p class="small text-dark mb-2">Please ensure you have completed the following before the deadline. Each submission requires the correct template:</p>
-                                        <ul class="small text-dark mb-0 ps-3" style="line-height: 1.6;">
-                                            <li><strong>Submission of Detail Project Proposal (DPP)</strong> - Complete the word template below and upload.</li>
-                                            <li><strong>Turnitin Checking</strong> - Ensure similarity is below the accepted threshold.</li>
-                                            <li><strong>Submission of Marksheet</strong></li>
-                                        </ul>
-                                    </div>
-
-                                <div class="form-section-title">Part 1: Proposal Details</div>
+                                    <div class="form-section-title">Part 1: Proposal Details</div>
                                 <div class="mb-4">
                                     <label class="form-label fw-semibold">Project Title</label>
                                     <input type="text" name="title" class="form-control bg-light" value="@Model.Title" readonly required />
                                 </div>
 
-                                <div class="mb-4 p-3 rounded-3"
-                                    style="background: #f8fafc; border: 1px solid #e2e8f0;">
+                                <div class="mb-4 p-4 rounded-3 border" style="background: #f8fafc; border-color: #e2e8f0 !important;">
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3 pb-3 border-bottom">
+                                        <div>
+                                            <div class="fw-bold text-dark fs-6 mb-1">
+                                                <i class="fas fa-file-word text-primary me-2"></i>Official Thesis Cover Page
+                                            </div>
+                                            <div class="text-muted small">
+                                                Download the official editable Microsoft Word (.docx) cover page pre-populated with your student and project details.
+                                            </div>
+                                        </div>
+                                        <a href="@Url.Action("DownloadThesisCoverPage", "Student")"
+                                           class="btn btn-outline-primary fw-bold rounded-3 px-3 py-2 d-inline-flex align-items-center gap-2 shadow-sm text-decoration-none">
+                                            <i class="fas fa-download"></i> Download Official Thesis Cover Page (.docx)
+                                        </a>
+                                    </div>
 
                                     <div class="fw-bold text-dark mb-2">
-                                        <i class="fas fa-file-pdf text-danger me-2"></i>
-                                        Detailed Project Proposal (DPP) Submission
+                                        <i class="fas fa-list-ol text-primary me-2"></i>Stage 1 Final DPP Submission Workflow
                                     </div>
-
                                     <div class="text-muted small mb-3">
-                                        Combine your completed Part 1 work into <strong>ONE PDF</strong> before submitting.
+                                        Please follow these 5 steps to prepare and complete your Stage 1 Detailed Project Proposal submission:
                                     </div>
 
-                                    <ul class="small text-dark mb-3 ps-3" style="line-height: 1.7;">
-                                        <li>Cover Page</li>
-                                        <li>Chapter 1: Introduction</li>
-                                        <li>Chapter 2: Literature Review</li>
-                                        <li>Chapter 3: Software Methodology</li>
-                                        <li>References</li>
-                                        <li>Appendices (if applicable)</li>
-                                    </ul>
-                                    <div class="small text-muted">
-                                        Upload the final combined PDF using the document upload section below.
+                                    <ol class="small text-dark mb-3 ps-3" style="line-height: 1.8;">
+                                        <li><strong>Download the official DOCX Cover Page</strong> using the button above.</li>
+                                        <li><strong>Combine</strong> the Cover Page, Chapter 1 (Introduction), Chapter 2 (Literature Review), Chapter 3 (Methodology), References, and Appendices where applicable.</li>
+                                        <li><strong>Export</strong> the complete combined document as <strong>ONE PDF</strong>.</li>
+                                        <li><strong>Upload the final PDF</strong> in Part 2 below. (Only valid PDF documents are accepted).</li>
+                                        <li><strong>Submit Stage 1 Final DPP</strong> for supervisor and examiner evaluation.</li>
+                                    </ol>
+
+                                    <div class="alert alert-secondary py-2 px-3 rounded-2 small text-muted mb-0 d-flex align-items-center gap-2">
+                                        <i class="fas fa-info-circle text-primary"></i>
+                                        <span><strong>Note:</strong> Downloading the cover page does not complete your milestone. You can save your draft at any time. Formal submission unlocks once your supervisor approves all assigned Stage 1 progress tasks.</span>
                                     </div>
-                                    
                                 </div>
 
                                 <div class="form-section-title">Part 2: Document Attachment</div>
                                 <div class="mb-4">
                                     <label for="proposalDocument" class="form-label fw-semibold">Upload Final Proposal <span class="text-danger">*</span></label>
                                     <input class="form-control" type="file" id="proposalDocument" name="attachedFile" accept=".pdf" required />
-                                    <div class="form-text">Accepted formats: PDF only.</div>
+                                    <div class="form-text text-muted">Accepted formats: <strong>PDF only</strong>. Word documents (.docx) and other non-PDF file formats are strictly rejected by the server.</div>
                                 </div>
 
                                 @if (proposalMilestone?.Status == "Rejected")
@@ -1470,9 +1544,18 @@
                                     </div>
                                 }
 
-                                <div class="d-flex gap-3 justify-content-end">
-                                    <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
-                                    <button type="submit" class="btn-submit" onclick="return validateProposalForm()">Submit Stage 1 Final Submission</button>
+                                <div class="d-flex gap-3 justify-content-end align-items-center">
+                                    <button type="submit" name="isDraft" value="true" class="btn-draft" formnovalidate onclick="saveDraftAlert()">Save Draft</button>
+                                    @if (canSubmitStage1FinalDpp)
+                                    {
+                                        <button type="submit" name="isDraft" value="false" class="btn-submit" onclick="return validateProposalForm()">Submit Stage 1 Final Submission</button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn-submit" disabled title="@stage1DppPrereq.Reason" style="opacity: 0.6; cursor: not-allowed;">
+                                            <i class="fas fa-lock me-1"></i> Submit Stage 1 Final Submission (Locked)
+                                        </button>
+                                    }
                                 </div>
                             </form>
                             }
@@ -1497,31 +1580,42 @@
                                     x.Status == "PendingSupervisorReview" || x.Status == "Completed").ToList();
                             }
                             
-                            @if (!allProgressMilestones.Any())
+                            @if (!hasProgressMilestones)
                             {
-                                <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
-                                    <i class="fas fa-lock fs-2 me-3 text-info"></i>
+                                <div class="alert alert-warning d-flex align-items-start mt-3 border-warning shadow-sm">
+                                    <i class="fas fa-lock fs-2 me-3 text-warning mt-1"></i>
                                     <div>
-                                        <h5 class="fw-bold text-dark mb-1">DPP Work & Progress Locked</h5>
-                                        <p class="mb-0 text-muted">Waiting for your supervisor to add DPP work milestones.</p>
+                                        <h5 class="fw-bold text-dark mb-1">DPP Submission Locked — Waiting for your Supervisor to assign Stage 1 DPP progress tasks.</h5>
+                                        <p class="mb-0 text-muted">Supervisor-assigned Stage 1 DPP progress milestone tasks are mandatory. Your supervisor must create your Stage 1 progress tasks before you can proceed with final DPP submission.</p>
                                     </div>
                                 </div>
                             }
-                            else if (!progressMilestones.Any())
+                            else if (!progressMilestones.Any() && !isAllProgressCompleted)
                             {
-                                <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
-                                    <i class="fas fa-clock fs-2 me-3 text-info"></i>
+                                <div class="alert alert-info d-flex align-items-start mt-3 border-info shadow-sm">
+                                    <i class="fas fa-clock fs-2 me-3 text-info mt-1"></i>
                                     <div>
-                                        <h5 class="fw-bold text-dark mb-1">Awaiting Supervisor Review</h5>
-                                        <p class="mb-0 text-muted">You have no editable Stage 1 progress milestones to submit. They are all pending supervisor review or already completed.</p>
+                                        <h5 class="fw-bold text-dark mb-1">DPP Submission Locked — Waiting for Supervisor approval of all required Stage 1 progress tasks.</h5>
+                                        <p class="mb-0 text-muted">All assigned Stage 1 progress tasks have been submitted and are awaiting supervisor review. Final DPP submission will unlock once your supervisor approves all tasks.</p>
                                     </div>
                                 </div>
                             }
+                            else if (isAllProgressCompleted)
+                            {
+                                <div class="alert alert-success d-flex align-items-start mt-3 border-success shadow-sm">
+                                    <i class="fas fa-check-circle fs-2 me-3 text-success mt-1"></i>
+                                    <div>
+                                        <h5 class="fw-bold text-dark mb-1">All Required Stage 1 Progress Tasks Approved</h5>
+                                        <p class="mb-0 text-muted">All assigned Stage 1 progress tasks have been completed and approved by your supervisor. Your Stage 1 Final DPP submission is now unlocked!</p>
+                                    </div>
+                                </div>
+                            }
+
                             else
                             {
                                 @if (progressMilestones.Any())
                                 {
-                                    <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate id="progressForm">
+                                    <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate id="progressForm" data-student-id="@(currentUser?.Id ?? Model?.StudentId ?? 0)" data-project-id="@(Model?.Id ?? 0)">
                                         <input type="hidden" name="formType" value="DPP Work & Progress" />
 
                                         <div class="mb-4">
@@ -1530,7 +1624,35 @@
                                                 <option value="">-- Choose a Milestone --</option>
                                                 @foreach (var m in progressMilestones)
                                                 {
-                                                    <option value="@m.Id" data-status="@m.Status" data-feedback="@(m.SupervisorFeedback ?? "")">@m.Title</option>
+                                                    string mStartDate = "";
+                                                    string mEndDate = "";
+                                                    if (!string.IsNullOrEmpty(m.Remarks) && m.Remarks.Contains("JSON: "))
+                                                    {
+                                                        try
+                                                        {
+                                                            var jsonPart = m.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+                                                            var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(jsonPart);
+                                                            if (dict != null)
+                                                            {
+                                                                if (dict.TryGetValue("Start Period", out var s) && !string.IsNullOrWhiteSpace(s))
+                                                                {
+                                                                    if (DateTime.TryParse(s, out var dtStart))
+                                                                        mStartDate = dtStart.ToString("yyyy-MM-dd");
+                                                                    else if (System.Text.RegularExpressions.Regex.IsMatch(s, @"^\d{4}-\d{2}-\d{2}$"))
+                                                                        mStartDate = s;
+                                                                }
+                                                                if (dict.TryGetValue("End Period", out var e) && !string.IsNullOrWhiteSpace(e))
+                                                                {
+                                                                    if (DateTime.TryParse(e, out var dtEnd))
+                                                                        mEndDate = dtEnd.ToString("yyyy-MM-dd");
+                                                                    else if (System.Text.RegularExpressions.Regex.IsMatch(e, @"^\d{4}-\d{2}-\d{2}$"))
+                                                                        mEndDate = e;
+                                                                }
+                                                            }
+                                                        }
+                                                        catch {}
+                                                    }
+                                                    <option value="@m.Id" data-status="@m.Status" data-feedback="@(m.SupervisorFeedback ?? "")" data-start-date="@mStartDate" data-end-date="@mEndDate">@m.Title</option>
                                                 }
                                             </select>
                                             <div class="invalid-feedback">Please select a milestone.</div>
@@ -1580,11 +1702,11 @@
                                                 <div class="row ms-4 mt-2 g-3">
                                                     <div class="col-md-6">
                                                         <label class="form-label text-dark small fw-semibold">Start Period</label>
-                                                        <input type="date" name="startDate" id="progressStartDate" class="form-control saas-input" required oninput="validateProgressSubmitBtn()" />
+                                                        <input type="date" name="startDate" id="progressStartDate" class="form-control saas-input" required oninput="validateProgressSubmitBtn(); if(typeof saveCurrentProgressDraft === 'function') saveCurrentProgressDraft();" onchange="validateProgressSubmitBtn(); if(typeof saveCurrentProgressDraft === 'function') saveCurrentProgressDraft();" />
                                                     </div>
                                                     <div class="col-md-6">
                                                         <label class="form-label text-dark small fw-semibold">End Period</label>
-                                                        <input type="date" name="endDate" id="progressEndDate" class="form-control saas-input" value="@DateTime.Today.ToString("yyyy-MM-dd")" required oninput="validateProgressSubmitBtn()" />
+                                                        <input type="date" name="endDate" id="progressEndDate" class="form-control saas-input" value="@DateTime.Today.ToString("yyyy-MM-dd")" required oninput="validateProgressSubmitBtn(); if(typeof saveCurrentProgressDraft === 'function') saveCurrentProgressDraft();" onchange="validateProgressSubmitBtn(); if(typeof saveCurrentProgressDraft === 'function') saveCurrentProgressDraft();" />
                                                     </div>
                                                     <div class="col-12 mt-1">
                                                         <div id="progressDateError" class="text-danger fw-bold small d-none"><i class="fas fa-exclamation-triangle me-1"></i>End Period must be equal to or after the Start Period.</div>
@@ -1604,8 +1726,9 @@
                                                 <div class="ms-4 mt-2">
                                                     <div class="mb-3">
                                                         <label for="progressFiles" class="form-label fw-semibold">Upload Supporting Documents</label>
-                                                        <input class="form-control" type="file" id="progressFiles" name="attachedFiles" accept=".pdf" multiple />
+                                                        <input class="form-control" type="file" id="progressFiles" name="attachedFiles" accept=".pdf" multiple onchange="validateProgressSubmitBtn();" oninput="validateProgressSubmitBtn();" />
                                                         <div class="form-text">Accepted formats: PDF only. You can select multiple files.</div>
+                                                        <div id="progressFileError" class="text-danger fw-bold small d-none mt-1"><i class="fas fa-exclamation-triangle me-1"></i>Please upload a valid PDF document.</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1620,7 +1743,7 @@
                                                         <h6 class="fw-bold text-dark mb-0">Revision Details</h6>
                                                     </div>
                                                     <div class="ms-4 mt-2">
-                                                        <textarea name="revisionNotes" id="progressRevisionNotes" class="form-control saas-input" rows="2" placeholder="Briefly explain your changes based on feedback..." oninput="validateProgressSubmitBtn()"></textarea>
+                                                        <textarea name="revisionNotes" id="progressRevisionNotes" class="form-control saas-input" rows="2" placeholder="Briefly explain your changes based on feedback..." oninput="validateProgressSubmitBtn(); if(typeof saveCurrentProgressDraft === 'function') saveCurrentProgressDraft();" onchange="validateProgressSubmitBtn(); if(typeof saveCurrentProgressDraft === 'function') saveCurrentProgressDraft();"></textarea>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1630,7 +1753,7 @@
                                         <div class="d-flex flex-wrap align-items-center justify-content-between mt-4 p-3 saas-card bg-white position-sticky bottom-0 shadow-sm" style="z-index:100; border-radius: 8px;">
                                             <div class="text-muted small fw-medium"><i class="fas fa-save me-1"></i>Your work can be saved as a draft locally.</div>
                                             <div class="d-flex gap-2 mt-2 mt-md-0">
-                                                <button type="submit" name="isDraft" value="true" class="btn-saas-secondary" formnovalidate>Save Draft</button>
+                                                <button type="submit" name="isDraft" value="true" class="btn-saas-secondary" formnovalidate onclick="if(typeof saveCurrentProgressDraft === 'function') saveCurrentProgressDraft();">Save Draft</button>
                                                 <button type="submit" class="btn-saas-primary" id="btnProgressSubmit" onclick="return validateProgressForm(event)" disabled>Send for Supervisor Review</button>
                                             </div>
                                         </div>
@@ -1951,6 +2074,11 @@
 
                 const formTypeInput = form.querySelector('input[name="formType"]');
                 if(!formTypeInput) return;
+
+                if (form.id === 'progressForm') {
+                    // Handled by dedicated milestone-scoped progress draft logic
+                    return;
+                }
                 
                 const storageKey = 'fyp_draft_' + formTypeInput.value.replace(/\s+/g, '_');
                 
@@ -1988,12 +2116,11 @@
                 // 3. Clear Draft only for a valid, non-draft submission
                 form.addEventListener('submit', function(e) {
 
-                    const isIafDraft =
-                        form.id === 'iafFormElement' &&
-                        e.submitter?.name === 'iafAction' &&
-                        e.submitter?.value === 'draft';
+                    const isDraftSubmit =
+                        (form.id === 'iafFormElement' && e.submitter?.name === 'iafAction' && e.submitter?.value === 'draft') ||
+                        (e.submitter?.name === 'isDraft' && e.submitter?.value === 'true');
 
-                    if (isIafDraft || e.defaultPrevented) {
+                    if (isDraftSubmit || e.defaultPrevented) {
                         return;
                     }
 
@@ -2150,6 +2277,92 @@
 
         });
 
+        function getProgressDraftKey(milestoneId) {
+            const form = document.getElementById('progressForm');
+            const studentId = form?.dataset.studentId || '@(currentUser?.Id ?? Model?.StudentId ?? 0)';
+            const projectId = form?.dataset.projectId || '@(Model?.Id ?? 0)';
+            return `fyp_draft_progress_${studentId}_${projectId}_${milestoneId}`;
+        }
+
+        function saveCurrentProgressDraft() {
+            const selectObj = document.getElementById('progressMilestoneSelect');
+            if (!selectObj || !selectObj.value) return;
+            const milestoneId = selectObj.value;
+            const key = getProgressDraftKey(milestoneId);
+            const startDateInput = document.getElementById('progressStartDate');
+            const endDateInput = document.getElementById('progressEndDate');
+            const revisionNotesInput = document.getElementById('progressRevisionNotes');
+
+            const data = {
+                milestoneId: milestoneId,
+                startDate: startDateInput ? startDateInput.value : '',
+                endDate: endDateInput ? endDateInput.value : '',
+                revisionNotes: revisionNotesInput ? revisionNotesInput.value : ''
+            };
+            try {
+                localStorage.setItem(key, JSON.stringify(data));
+                const form = document.getElementById('progressForm');
+                const studentId = form?.dataset.studentId || '@(currentUser?.Id ?? Model?.StudentId ?? 0)';
+                const projectId = form?.dataset.projectId || '@(Model?.Id ?? 0)';
+                localStorage.setItem(`fyp_last_progress_milestone_${studentId}_${projectId}`, milestoneId);
+            } catch (e) {}
+        }
+
+        function restoreProgressMilestoneDraft(milestoneId) {
+            const startDateInput = document.getElementById('progressStartDate');
+            const endDateInput = document.getElementById('progressEndDate');
+            const revisionNotesInput = document.getElementById('progressRevisionNotes');
+            const selectObj = document.getElementById('progressMilestoneSelect');
+            if (!startDateInput || !endDateInput) return;
+
+            if (!milestoneId) {
+                startDateInput.value = '';
+                endDateInput.value = '@DateTime.Today.ToString("yyyy-MM-dd")';
+                if (revisionNotesInput) revisionNotesInput.value = '';
+                return;
+            }
+
+            const key = getProgressDraftKey(milestoneId);
+            let restoredStart = false;
+            let restoredEnd = false;
+
+            // 1. Try local storage first
+            try {
+                const saved = localStorage.getItem(key);
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    if (data) {
+                        if (data.startDate) {
+                            startDateInput.value = data.startDate;
+                            restoredStart = true;
+                        }
+                        if (data.endDate) {
+                            endDateInput.value = data.endDate;
+                            restoredEnd = true;
+                        }
+                        if (data.revisionNotes && revisionNotesInput) {
+                            revisionNotesInput.value = data.revisionNotes;
+                        }
+                    }
+                }
+            } catch (e) {}
+
+            // 2. Fall back to server-persisted data attributes
+            if (selectObj && selectObj.selectedIndex >= 0) {
+                const option = selectObj.options[selectObj.selectedIndex];
+                const serverStart = option.getAttribute('data-start-date');
+                const serverEnd = option.getAttribute('data-end-date');
+
+                if (!restoredStart) {
+                    startDateInput.value = serverStart || '';
+                }
+                if (!restoredEnd) {
+                    endDateInput.value = serverEnd || '@DateTime.Today.ToString("yyyy-MM-dd")';
+                }
+            }
+            if (typeof validateProgressSubmitBtn === 'function') validateProgressSubmitBtn();
+        }
+
         function toggleProgressTemplate(selectObj) {
             const statusInfo = document.getElementById('progressStatusInfo');
             const statusTitle = document.getElementById('progressStatusTitle');
@@ -2191,6 +2404,8 @@
                     revisionNotes.removeAttribute('required');
                     if (submitBtn) submitBtn.innerText = 'Send for Supervisor Review';
                 }
+
+                restoreProgressMilestoneDraft(selectObj.value);
             } else {
                 downloadBtn.removeAttribute('href');
                 downloadBtn.classList.add('disabled');
@@ -2199,9 +2414,64 @@
                 revisionSection.classList.add('d-none');
                 revisionNotes.removeAttribute('required');
                 if (submitBtn) submitBtn.innerText = 'Send for Supervisor Review';
+
+                restoreProgressMilestoneDraft('');
             }
             if (typeof validateProgressSubmitBtn === 'function') validateProgressSubmitBtn();
         }
+
+        // Initialize progress draft submit listener and restore last selected milestone on refresh
+        (function() {
+            const progressForm = document.getElementById('progressForm');
+            if (progressForm) {
+                progressForm.addEventListener('submit', function(e) {
+                    const isDraft = e.submitter?.name === 'isDraft' && e.submitter?.value === 'true';
+                    if (isDraft || e.defaultPrevented) {
+                        saveCurrentProgressDraft();
+                        return;
+                    }
+
+                    if (progressForm.checkValidity()) {
+                        const selectObj = document.getElementById('progressMilestoneSelect');
+                        if (selectObj && selectObj.value) {
+                            try {
+                                localStorage.removeItem(getProgressDraftKey(selectObj.value));
+                            } catch(e) {}
+                        }
+                    }
+                });
+            }
+
+            const progressSelect = document.getElementById('progressMilestoneSelect');
+            if (progressSelect && !progressSelect.value) {
+                const form = document.getElementById('progressForm');
+                const studentId = form?.dataset.studentId || '@(currentUser?.Id ?? Model?.StudentId ?? 0)';
+                const projectId = form?.dataset.projectId || '@(Model?.Id ?? 0)';
+                const lastMilestoneKey = `fyp_last_progress_milestone_${studentId}_${projectId}`;
+                try {
+                    const lastMilestoneId = localStorage.getItem(lastMilestoneKey);
+                    if (lastMilestoneId) {
+                        const opt = progressSelect.querySelector(`option[value="${lastMilestoneId}"]`);
+                        if (opt) {
+                            progressSelect.value = lastMilestoneId;
+                            toggleProgressTemplate(progressSelect);
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            // Bind change and input event listeners on all relevant inputs to recalculate submit button state immediately
+            ['change', 'input'].forEach(function(evt) {
+                document.getElementById('progressMilestoneSelect')?.addEventListener(evt, validateProgressSubmitBtn);
+                document.getElementById('progressStartDate')?.addEventListener(evt, validateProgressSubmitBtn);
+                document.getElementById('progressEndDate')?.addEventListener(evt, validateProgressSubmitBtn);
+                document.getElementById('progressFiles')?.addEventListener(evt, validateProgressSubmitBtn);
+                document.getElementById('progressRevisionNotes')?.addEventListener(evt, validateProgressSubmitBtn);
+            });
+
+            // Initial button state evaluation
+            validateProgressSubmitBtn();
+        })();
 
         function validateProgressSubmitBtn() {
             const milestoneSelect = document.getElementById('progressMilestoneSelect');
@@ -2211,20 +2481,67 @@
             const submitBtn = document.getElementById('btnProgressSubmit');
             const revisionNotes = document.getElementById('progressRevisionNotes');
             const revisionSection = document.getElementById('progressRevisionSection');
+            const dateErrorDiv = document.getElementById('progressDateError');
+            const fileErrorDiv = document.getElementById('progressFileError');
             
             if (!submitBtn) return;
             
             let isValid = true;
-            if (!milestoneSelect || !milestoneSelect.value) isValid = false;
-            if (!startDate || !startDate.value) isValid = false;
-            if (!endDate || !endDate.value) isValid = false;
-            if (startDate && endDate && startDate.value && endDate.value) {
-                if (new Date(endDate.value) < new Date(startDate.value)) isValid = false;
+
+            // 1. Milestone selection required
+            if (!milestoneSelect || !milestoneSelect.value) {
+                isValid = false;
             }
-            if (!fileInput || fileInput.files.length === 0) isValid = false;
+
+            // 2. Reporting period required: both startDate and endDate must be filled
+            if (!startDate || !startDate.value || !endDate || !endDate.value) {
+                isValid = false;
+                if (dateErrorDiv) dateErrorDiv.classList.add('d-none');
+            } else {
+                // End period must be equal to or after Start period.
+                // String comparison works reliably for YYYY-MM-DD format. Same-day & future dates are accepted.
+                if (endDate.value < startDate.value) {
+                    isValid = false;
+                    if (dateErrorDiv) dateErrorDiv.classList.remove('d-none');
+                } else {
+                    if (dateErrorDiv) dateErrorDiv.classList.add('d-none');
+                }
+            }
+
+            // 3. PDF file selection required
+            let hasValidPdf = false;
+            if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                const files = Array.from(fileInput.files);
+                const allPdf = files.every(function(f) {
+                    const name = f.name ? f.name.toLowerCase() : '';
+                    return name.endsWith('.pdf') || f.type === 'application/pdf';
+                });
+                if (allPdf) {
+                    hasValidPdf = true;
+                    if (fileErrorDiv) fileErrorDiv.classList.add('d-none');
+                } else {
+                    if (fileErrorDiv) {
+                        fileErrorDiv.textContent = 'Please select PDF files only.';
+                        fileErrorDiv.classList.remove('d-none');
+                    }
+                }
+            } else {
+                if (fileErrorDiv) fileErrorDiv.classList.add('d-none');
+            }
+
+            if (!hasValidPdf) {
+                isValid = false;
+            }
             
-            if (revisionSection && !revisionSection.classList.contains('d-none')) {
-                if (revisionNotes && !revisionNotes.value.trim()) isValid = false;
+            // 4. For ReturnedForChanges, require non-empty Revision Details
+            const selectedOption = milestoneSelect && milestoneSelect.selectedIndex >= 0 ? milestoneSelect.options[milestoneSelect.selectedIndex] : null;
+            const isReturned = (selectedOption && selectedOption.getAttribute('data-status') === 'ReturnedForChanges') ||
+                               (revisionSection && !revisionSection.classList.contains('d-none'));
+
+            if (isReturned) {
+                if (!revisionNotes || !revisionNotes.value.trim()) {
+                    isValid = false;
+                }
             }
 
             if (isValid) {
@@ -2251,11 +2568,21 @@
             // Validate File
             var fileInput = document.getElementById('progressFiles');
             var fileErrorDiv = document.getElementById('progressFileError');
-            if (fileInput && fileInput.files.length === 0) {
-                fileErrorDiv.classList.remove('d-none');
+            var hasValidPdf = false;
+            if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                hasValidPdf = Array.from(fileInput.files).every(function(f) {
+                    var name = f.name ? f.name.toLowerCase() : '';
+                    return name.endsWith('.pdf') || f.type === 'application/pdf';
+                });
+            }
+            if (!hasValidPdf) {
+                if (fileErrorDiv) {
+                    fileErrorDiv.textContent = 'Please upload a valid PDF document.';
+                    fileErrorDiv.classList.remove('d-none');
+                }
                 isValid = false;
             } else {
-                fileErrorDiv.classList.add('d-none');
+                if (fileErrorDiv) fileErrorDiv.classList.add('d-none');
             }
             
             // Validate Dates
@@ -2264,16 +2591,31 @@
             var dateErrorDiv = document.getElementById('progressDateError');
             
             if (startDateInput && endDateInput && startDateInput.value && endDateInput.value) {
-                var start = new Date(startDateInput.value);
-                var end = new Date(endDateInput.value);
-                if (end < start) {
-                    dateErrorDiv.classList.remove('d-none');
+                if (endDateInput.value < startDateInput.value) {
+                    if (dateErrorDiv) dateErrorDiv.classList.remove('d-none');
                     isValid = false;
                 } else {
-                    dateErrorDiv.classList.add('d-none');
+                    if (dateErrorDiv) dateErrorDiv.classList.add('d-none');
                 }
             } else {
-                dateErrorDiv.classList.add('d-none');
+                if (dateErrorDiv) dateErrorDiv.classList.add('d-none');
+                if (!startDateInput?.value || !endDateInput?.value) isValid = false;
+            }
+
+            // Validate Revision Details if ReturnedForChanges
+            var selectObj = document.getElementById('progressMilestoneSelect');
+            var selectedOpt = selectObj && selectObj.selectedIndex >= 0 ? selectObj.options[selectObj.selectedIndex] : null;
+            var revSection = document.getElementById('progressRevisionSection');
+            var revNotes = document.getElementById('progressRevisionNotes');
+            var isReturned = (selectedOpt && selectedOpt.getAttribute('data-status') === 'ReturnedForChanges') ||
+                             (revSection && !revSection.classList.contains('d-none'));
+            if (isReturned && (!revNotes || !revNotes.value.trim())) {
+                isValid = false;
+            }
+
+            if (!isValid) {
+                if (event) event.preventDefault();
+                return false;
             }
 
             // Turnitin Mock Scan
