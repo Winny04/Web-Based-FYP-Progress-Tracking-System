@@ -151,9 +151,16 @@ namespace FYPTracker.Controllers
                             if (isAjax) return Json(new { success = true, message = "Password reset link has been sent to your email!" });
                             TempData["Success"] = "Password reset link has been sent to your email!";
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
-                            if (isAjax) return Json(new { success = false, message = "Failed to send reset link due to email server error." });
+                            if (Environment.IsDevelopment())
+                            {
+                                Console.WriteLine($"[UserController] ❌ ForgotPassword failed: [{ex.GetType().Name}] {ex.Message}");
+                            }
+
+                            if (isAjax)
+                                return Json(new { success = false, message = "Failed to send reset link due to email server error." });
+
                             TempData["error"] = "Failed to send reset link due to email server error. Please check configuration.";
                         }
                     }

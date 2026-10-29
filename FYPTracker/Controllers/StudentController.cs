@@ -1117,6 +1117,12 @@ namespace FYPTracker.Controllers
                     return milestone.Stage == 2 ? RedirectToAction("Stage2") : RedirectToAction("Forms");
                 }
 
+                if (milestone.DueDate.HasValue && endDate.HasValue && endDate.Value.Date > milestone.DueDate.Value.Date)
+                {
+                    TempData["Error"] = $"End Period cannot exceed the Milestone Due Date ({milestone.DueDate.Value:dd MMM yyyy}).";
+                    return milestone.Stage == 2 ? RedirectToAction("Stage2") : RedirectToAction("Forms");
+                }
+
                 if (!isDraft)
                 {
                     if (!startDate.HasValue || !endDate.HasValue)
@@ -1389,6 +1395,17 @@ namespace FYPTracker.Controllers
                         currentFormData["Supervisor Signature"] = existingSignature;
                     }
                     
+                    // Validate References Listing if configured for this project in Development/Testing
+                    if (iafAction != "draft" && DemoUiOverrideHelper.ShouldEnforceIafReferencesValidationForProject(milestone.FYPProjectId, _env, _configuration))
+                    {
+                        string refError = DemoUiOverrideHelper.ValidateIafReferences(references);
+                        if (!string.IsNullOrEmpty(refError))
+                        {
+                            TempData["Error"] = $"References Listing Validation Error: {refError}";
+                            return RedirectToAction("Forms");
+                        }
+                    }
+
                     bool isFormalSubmit = iafAction == "submit" || iafAction == "submit_new";
                     if (!isFormalSubmit)
                     {

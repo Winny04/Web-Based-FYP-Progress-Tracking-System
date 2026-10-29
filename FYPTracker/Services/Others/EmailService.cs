@@ -161,13 +161,25 @@ namespace FYPTracker.Services.Others
                 email.Body = multiPart;
 
                 // send email (using standard platform certificate validation)
-                using (var smtp = new SmtpSubscribeSingleton())
+                using (var smtp = new SmtpClient())
                 {
-                    smtp.Connect(smtpSettings.SmtpHost, smtpSettings.SmtpPort, SecureSocketOptions.SslOnConnect);
-                    smtp.Authenticate(smtpSettings.SmtpUser, smtpSettings.SmtpPass);
-                    smtp.Send(email);
-                    smtp.Disconnect(true);
-                    smtp.Dispose();
+                    try
+                    {
+                        smtp.Connect(smtpSettings.SmtpHost, smtpSettings.SmtpPort, SecureSocketOptions.SslOnConnect);
+                        smtp.Authenticate(smtpSettings.SmtpUser, smtpSettings.SmtpPass);
+                        smtp.Send(email);
+                        smtp.Disconnect(true);
+                    }
+                    catch (SmtpCommandException ex)
+                    {
+                        Console.WriteLine($"[EmailService] ❌ SMTP command error: {ex.Message} (StatusCode: {ex.StatusCode})");
+                        throw;
+                    }
+                    catch (SmtpProtocolException ex)
+                    {
+                        Console.WriteLine($"[EmailService] ❌ SMTP protocol error: {ex.Message}");
+                        throw;
+                    }
                 }
 
                 if (_env.IsDevelopment())
@@ -176,7 +188,7 @@ namespace FYPTracker.Services.Others
             catch (Exception ex)
             {
                 string safeTarget = _env.IsDevelopment() ? MaskEmailList(to) : to;
-                Console.WriteLine($"[EmailService] ❌ Email sending failed to \"{safeTarget}\": {ex.Message}");
+                Console.WriteLine($"[EmailService] ❌ Email sending failed to \"{safeTarget}\": [{ex.GetType().Name}] {ex.Message}" + (ex.InnerException != null ? $" (Inner: [{ex.InnerException.GetType().Name}] {ex.InnerException.Message})" : ""));
                 throw;
             }
         }
@@ -262,16 +274,15 @@ namespace FYPTracker.Services.Others
                         await smtp.AuthenticateAsync(smtpSettings.SmtpUser, smtpSettings.SmtpPass);
                         await smtp.SendAsync(email);
                         await smtp.DisconnectAsync(true);
-                        smtp.Dispose();
                     }
                     catch (SmtpCommandException ex)
                     {
-                        Console.WriteLine("[EmailService] ❌ SMTP error: {0} (StatusCode: {1})", ex.Message, ex.StatusCode);
+                        Console.WriteLine($"[EmailService] ❌ SMTP command error: {ex.Message} (StatusCode: {ex.StatusCode})");
                         throw;
                     }
                     catch (SmtpProtocolException ex)
                     {
-                        Console.WriteLine("[EmailService] ❌ Protocol error: {0}", ex.Message);
+                        Console.WriteLine($"[EmailService] ❌ SMTP protocol error: {ex.Message}");
                         throw;
                     }
                 }
@@ -282,7 +293,7 @@ namespace FYPTracker.Services.Others
             catch (Exception ex)
             {
                 string safeTarget = _env.IsDevelopment() ? string.Join("; ", to.Select(MaskEmail)) : string.Join("; ", to);
-                Console.WriteLine($"[EmailService] ❌ Email sending failed to \"{safeTarget}\": {ex.Message}");
+                Console.WriteLine($"[EmailService] ❌ Email sending failed to \"{safeTarget}\": [{ex.GetType().Name}] {ex.Message}" + (ex.InnerException != null ? $" (Inner: [{ex.InnerException.GetType().Name}] {ex.InnerException.Message})" : ""));
                 throw;
             }
         }

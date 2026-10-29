@@ -1,5 +1,7 @@
 @using FYPTracker.Models
 @inject FYPTrackerContext _context
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment _env
+@inject Microsoft.Extensions.Configuration.IConfiguration _configuration
 @model FYPProject?
 @inject FYPTracker.Services.Forms.IafFormTemplateService IafTemplateService
 @{
@@ -57,6 +59,41 @@
     .form-control:focus, .form-select:focus {
         border-color: #334155;
         box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.15);
+    }
+
+    /* Scoped styling for Progress Milestone Select Dropdown */
+    .progress-milestone-field-group,
+    #progressMilestoneSelect {
+        width: 100%;
+        max-width: 680px;
+    }
+
+    #progressMilestoneSelect {
+        background-color: #ffffff;
+        color: #1e293b;
+        font-size: 0.95rem;
+        font-weight: 500;
+        line-height: 1.5;
+        padding: 9px 36px 9px 12px;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 8px;
+        cursor: pointer;
+        display: block;
+        box-sizing: border-box;
+    }
+
+    #progressMilestoneSelect:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        background-color: #ffffff;
+        outline: none;
+    }
+
+    @@media (max-width: 767.98px) {
+        .progress-milestone-field-group,
+        #progressMilestoneSelect {
+            max-width: 100%;
+        }
     }
 
 
@@ -866,7 +903,10 @@
                                 }
                             }
                                 
-                                <form id="iafFormElement" asp-action="SubmitDigitalForm" method="post" class="needs-validation" novalidate data-is-locked="@(isIafLocked.ToString().ToLower())">
+                                @{
+                                    bool enforceReferencesValidation = Model != null && FYPTracker.Helpers.DemoUiOverrideHelper.ShouldEnforceIafReferencesValidationForProject(Model.Id, _env, _configuration);
+                                }
+                                <form id="iafFormElement" asp-action="SubmitDigitalForm" method="post" class="needs-validation" novalidate data-is-locked="@(isIafLocked.ToString().ToLower())" data-enforce-references="@(enforceReferencesValidation.ToString().ToLower())">
                                     <input type="hidden" name="formType" value="Initial Project Allocation Form (IAF)" />
                                     <input type="hidden" name="milestoneId" value="@iafMilestoneId" />
                                     
@@ -1573,11 +1613,8 @@
                             <h4 class="fw-bold text-dark mb-4"><i class="fas fa-chart-line text-orange me-2"></i>A. DPP Work & Progress</h4>
                             
                             @{
-                                var progressMilestones = allProgressMilestones.Where(x => 
+                                var activeProgressMilestones = allProgressMilestones.Where(x =>
                                     x.Status == "Draft" || x.Status == "ReturnedForChanges").ToList();
-                                    
-                                var submittedProgress = allProgressMilestones.Where(x => 
-                                    x.Status == "PendingSupervisorReview" || x.Status == "Completed").ToList();
                             }
                             
                             @if (!hasProgressMilestones)
@@ -1590,7 +1627,7 @@
                                     </div>
                                 </div>
                             }
-                            else if (!progressMilestones.Any() && !isAllProgressCompleted)
+                            else if (!activeProgressMilestones.Any() && !isAllProgressCompleted)
                             {
                                 <div class="alert alert-info d-flex align-items-start mt-3 border-info shadow-sm">
                                     <i class="fas fa-clock fs-2 me-3 text-info mt-1"></i>
@@ -1611,60 +1648,76 @@
                                 </div>
                             }
 
-                            else
+                            @if (activeProgressMilestones.Any())
                             {
-                                @if (progressMilestones.Any())
-                                {
-                                    <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate id="progressForm" data-student-id="@(currentUser?.Id ?? Model?.StudentId ?? 0)" data-project-id="@(Model?.Id ?? 0)">
-                                        <input type="hidden" name="formType" value="DPP Work & Progress" />
+                                <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate id="progressForm" data-student-id="@(currentUser?.Id ?? Model?.StudentId ?? 0)" data-project-id="@(Model?.Id ?? 0)">
+                                    <input type="hidden" name="formType" value="DPP Work & Progress" />
 
-                                        <div class="mb-4">
-                                            <label class="form-label fw-bold text-dark fs-6 mb-2">Select Progress Milestone</label>
-                                            <select name="milestoneId" id="progressMilestoneSelect" class="form-select form-select-lg form-select-solid bg-light" required onchange="toggleProgressTemplate(this)">
-                                                <option value="">-- Choose a Milestone --</option>
-                                                @foreach (var m in progressMilestones)
+                                    <div class="mb-4 progress-milestone-field-group">
+                                        <label class="form-label fw-bold text-dark fs-6 mb-2">Select Progress Milestone</label>
+                                        <select name="milestoneId" id="progressMilestoneSelect" class="form-select" required onchange="toggleProgressTemplate(this)">
+                                            <option value="">-- Choose a Milestone --</option>
+                                            @foreach (var m in activeProgressMilestones.OrderBy(x => x.Id))
+                                            {
+                                                string mStartDate = "";
+                                                string mEndDate = "";
+                                                if (!string.IsNullOrEmpty(m.Remarks) && m.Remarks.Contains("JSON: "))
                                                 {
-                                                    string mStartDate = "";
-                                                    string mEndDate = "";
-                                                    if (!string.IsNullOrEmpty(m.Remarks) && m.Remarks.Contains("JSON: "))
+                                                    try
                                                     {
-                                                        try
+                                                        var jsonPart = m.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+                                                        var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(jsonPart);
+                                                        if (dict != null)
                                                         {
-                                                            var jsonPart = m.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
-                                                            var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(jsonPart);
-                                                            if (dict != null)
+                                                            if (dict.TryGetValue("Start Period", out var s) && !string.IsNullOrWhiteSpace(s))
                                                             {
-                                                                if (dict.TryGetValue("Start Period", out var s) && !string.IsNullOrWhiteSpace(s))
-                                                                {
-                                                                    if (DateTime.TryParse(s, out var dtStart))
-                                                                        mStartDate = dtStart.ToString("yyyy-MM-dd");
-                                                                    else if (System.Text.RegularExpressions.Regex.IsMatch(s, @"^\d{4}-\d{2}-\d{2}$"))
-                                                                        mStartDate = s;
-                                                                }
-                                                                if (dict.TryGetValue("End Period", out var e) && !string.IsNullOrWhiteSpace(e))
-                                                                {
-                                                                    if (DateTime.TryParse(e, out var dtEnd))
-                                                                        mEndDate = dtEnd.ToString("yyyy-MM-dd");
-                                                                    else if (System.Text.RegularExpressions.Regex.IsMatch(e, @"^\d{4}-\d{2}-\d{2}$"))
-                                                                        mEndDate = e;
-                                                                }
+                                                                if (DateTime.TryParse(s, out var dtStart))
+                                                                    mStartDate = dtStart.ToString("yyyy-MM-dd");
+                                                                else if (System.Text.RegularExpressions.Regex.IsMatch(s, @"^\d{4}-\d{2}-\d{2}$"))
+                                                                    mStartDate = s;
+                                                            }
+                                                            if (dict.TryGetValue("End Period", out var e) && !string.IsNullOrWhiteSpace(e))
+                                                            {
+                                                                if (DateTime.TryParse(e, out var dtEnd))
+                                                                    mEndDate = dtEnd.ToString("yyyy-MM-dd");
+                                                                else if (System.Text.RegularExpressions.Regex.IsMatch(e, @"^\d{4}-\d{2}-\d{2}$"))
+                                                                    mEndDate = e;
                                                             }
                                                         }
-                                                        catch {}
                                                     }
-                                                    <option value="@m.Id" data-status="@m.Status" data-feedback="@(m.SupervisorFeedback ?? "")" data-start-date="@mStartDate" data-end-date="@mEndDate">@m.Title</option>
+                                                    catch {}
                                                 }
-                                            </select>
-                                            <div class="invalid-feedback">Please select a milestone.</div>
-                                        </div>
+                                                string mDueDate = m.DueDate?.ToString("yyyy-MM-dd") ?? "";
+                                                string mDueDateDisplay = m.DueDate.HasValue ? m.DueDate.Value.ToString("dd MMM yyyy") : "";
+                                                
+                                                string statusBadgeText = m.Status switch
+                                                {
+                                                    "ReturnedForChanges" => " [Needs Revision]",
+                                                    _ => ""
+                                                };
+                                                
+                                                <option value="@m.Id" 
+                                                        data-status="@m.Status" 
+                                                        data-feedback="@(m.SupervisorFeedback ?? "")" 
+                                                        data-start-date="@mStartDate" 
+                                                        data-end-date="@mEndDate" 
+                                                        data-due-date="@mDueDate" 
+                                                        data-due-date-display="@mDueDateDisplay">
+                                                    @m.Title@statusBadgeText@(m.DueDate.HasValue ? $" (Due: {mDueDateDisplay})" : "")
+                                                </option>
+                                            }
+                                        </select>
+                                        <div class="invalid-feedback">Please select a milestone.</div>
+                                    </div>
 
                                         <div id="progressStatusInfo" class="d-none mb-4">
                                             <div class="card border border-primary border-opacity-25 shadow-sm rounded-4 overflow-hidden" style="background: #f4f8ff;">
                                                 <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
                                                     <div>
-                                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                                        <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
                                                             <h5 class="fw-bolder text-dark mb-0" id="progressStatusTitle">Milestone Title</h5>
                                                             <span class="badge bg-primary text-white px-2 py-1 rounded-pill small" id="progressStatusBadge">Draft</span>
+                                                            <span class="badge bg-light text-dark border border-secondary border-opacity-25 px-2 py-1 rounded-pill small d-none" id="progressDueDateBadge"><i class="fas fa-calendar-alt text-primary me-1"></i>Due: <span id="progressDueDateText"></span></span>
                                                         </div>
                                                         <p class="text-muted small mb-0 fw-semibold">DPP Work & Progress</p>
                                                         <p class="text-muted small mb-0 mt-2">Complete and submit this work for review.</p>
@@ -1710,6 +1763,7 @@
                                                     </div>
                                                     <div class="col-12 mt-1">
                                                         <div id="progressDateError" class="text-danger fw-bold small d-none"><i class="fas fa-exclamation-triangle me-1"></i>End Period must be equal to or after the Start Period.</div>
+                                                        <div id="progressDueDateError" class="text-danger fw-bold small d-none mt-1"><i class="fas fa-exclamation-circle me-1"></i>End Period cannot exceed the Milestone Due Date (<span id="progressDueDateErrorText"></span>).</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1759,7 +1813,6 @@
                                         </div>
                                     </form>
                                 }
-                            }
                         </div>
                     </div>
 
@@ -2381,10 +2434,24 @@
                 const selectedOption = selectObj.options[selectObj.selectedIndex];
                 const status = selectedOption.getAttribute('data-status');
                 const feedback = selectedOption.getAttribute('data-feedback');
+                const dueDate = selectedOption.getAttribute('data-due-date');
+                const dueDateDisplay = selectedOption.getAttribute('data-due-date-display');
                 let title = selectedOption.text;
-                
+
                 statusInfo.classList.remove('d-none');
                 statusTitle.innerText = title;
+
+                const dueDateBadge = document.getElementById('progressDueDateBadge');
+                const dueDateText = document.getElementById('progressDueDateText');
+                const endDateInput = document.getElementById('progressEndDate');
+                if (dueDate && dueDateDisplay) {
+                    if (dueDateBadge) dueDateBadge.classList.remove('d-none');
+                    if (dueDateText) dueDateText.innerText = dueDateDisplay;
+                    if (endDateInput) endDateInput.setAttribute('max', dueDate);
+                } else {
+                    if (dueDateBadge) dueDateBadge.classList.add('d-none');
+                    if (endDateInput) endDateInput.removeAttribute('max');
+                }
                 
                 if (status === 'ReturnedForChanges') {
                     statusBadge.innerText = 'Returned for Changes';
@@ -2413,6 +2480,10 @@
                 feedbackInfo.classList.add('d-none');
                 revisionSection.classList.add('d-none');
                 revisionNotes.removeAttribute('required');
+                const dueDateBadge = document.getElementById('progressDueDateBadge');
+                if (dueDateBadge) dueDateBadge.classList.add('d-none');
+                const endDateInput = document.getElementById('progressEndDate');
+                if (endDateInput) endDateInput.removeAttribute('max');
                 if (submitBtn) submitBtn.innerText = 'Send for Supervisor Review';
 
                 restoreProgressMilestoneDraft('');
@@ -2482,6 +2553,8 @@
             const revisionNotes = document.getElementById('progressRevisionNotes');
             const revisionSection = document.getElementById('progressRevisionSection');
             const dateErrorDiv = document.getElementById('progressDateError');
+            const dueDateErrorDiv = document.getElementById('progressDueDateError');
+            const dueDateErrorText = document.getElementById('progressDueDateErrorText');
             const fileErrorDiv = document.getElementById('progressFileError');
             
             if (!submitBtn) return;
@@ -2497,14 +2570,28 @@
             if (!startDate || !startDate.value || !endDate || !endDate.value) {
                 isValid = false;
                 if (dateErrorDiv) dateErrorDiv.classList.add('d-none');
+                if (dueDateErrorDiv) dueDateErrorDiv.classList.add('d-none');
             } else {
                 // End period must be equal to or after Start period.
-                // String comparison works reliably for YYYY-MM-DD format. Same-day & future dates are accepted.
                 if (endDate.value < startDate.value) {
                     isValid = false;
                     if (dateErrorDiv) dateErrorDiv.classList.remove('d-none');
                 } else {
                     if (dateErrorDiv) dateErrorDiv.classList.add('d-none');
+                }
+
+                // Check Due Date constraint: End Period cannot exceed Milestone Due Date
+                const selectedOpt = milestoneSelect && milestoneSelect.selectedIndex >= 0 ? milestoneSelect.options[milestoneSelect.selectedIndex] : null;
+                const dueDate = selectedOpt?.getAttribute('data-due-date');
+                const dueDateDisplay = selectedOpt?.getAttribute('data-due-date-display');
+                if (dueDate && endDate.value > dueDate) {
+                    isValid = false;
+                    if (dueDateErrorDiv) {
+                        if (dueDateErrorText) dueDateErrorText.innerText = dueDateDisplay || dueDate;
+                        dueDateErrorDiv.classList.remove('d-none');
+                    }
+                } else {
+                    if (dueDateErrorDiv) dueDateErrorDiv.classList.add('d-none');
                 }
             }
 
@@ -2589,6 +2676,10 @@
             var startDateInput = document.getElementById('progressStartDate');
             var endDateInput = document.getElementById('progressEndDate');
             var dateErrorDiv = document.getElementById('progressDateError');
+            var dueDateErrorDiv = document.getElementById('progressDueDateError');
+            var dueDateErrorText = document.getElementById('progressDueDateErrorText');
+            var selectObj = document.getElementById('progressMilestoneSelect');
+            var selectedOpt = selectObj && selectObj.selectedIndex >= 0 ? selectObj.options[selectObj.selectedIndex] : null;
             
             if (startDateInput && endDateInput && startDateInput.value && endDateInput.value) {
                 if (endDateInput.value < startDateInput.value) {
@@ -2597,8 +2688,22 @@
                 } else {
                     if (dateErrorDiv) dateErrorDiv.classList.add('d-none');
                 }
+
+                // Check Due Date
+                var dueDate = selectedOpt?.getAttribute('data-due-date');
+                var dueDateDisplay = selectedOpt?.getAttribute('data-due-date-display');
+                if (dueDate && endDateInput.value > dueDate) {
+                    if (dueDateErrorDiv) {
+                        if (dueDateErrorText) dueDateErrorText.innerText = dueDateDisplay || dueDate;
+                        dueDateErrorDiv.classList.remove('d-none');
+                    }
+                    isValid = false;
+                } else {
+                    if (dueDateErrorDiv) dueDateErrorDiv.classList.add('d-none');
+                }
             } else {
                 if (dateErrorDiv) dateErrorDiv.classList.add('d-none');
+                if (dueDateErrorDiv) dueDateErrorDiv.classList.add('d-none');
                 if (!startDateInput?.value || !endDateInput?.value) isValid = false;
             }
 
@@ -2816,6 +2921,59 @@
                     }
                     return '';
                 }
+            },
+            {
+                selector: '#iafReferences',
+                label: 'References Listing',
+                errorId: 'iafReferencesError',
+                check: v => {
+                    const shouldEnforce = form.getAttribute('data-enforce-references') === 'true';
+                    if (!shouldEnforce) return '';
+
+                    if (!v) {
+                        return 'At least one academic reference is required.';
+                    }
+
+                    const lines = v.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+                    if (lines.length === 0) {
+                        return 'At least one academic reference is required.';
+                    }
+
+                    const yearRegex = /(?:^|\D)(20\d{2})(?:\D|$)/;
+                    let validCount = 0;
+
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i];
+                        if (line.toLowerCase() === 'references' || line.toLowerCase() === 'references:' || line.toLowerCase() === 'reference:' || line.length < 10) {
+                            continue;
+                        }
+
+                        const match = line.match(yearRegex);
+                        if (!match) {
+                            const snippet = line.length > 35 ? line.substring(0, 32) + '...' : line;
+                            return `Reference "${snippet}" is missing a publication year.`;
+                        }
+
+                        const year = parseInt(match[1], 10);
+                        if (year < 2021 || year > 2026) {
+                            return `Publication year ${year} is outside the allowed 2021–2026 range. Academic references must be published between 2021 and 2026.`;
+                        }
+
+                        const stripped = line.replace(yearRegex, ' ').trim();
+                        const words = stripped.split(/[\s,\.;:\(\)\[\]"“”]+/).filter(w => w.length > 0);
+                        if (words.length < 3 || stripped.length < 15) {
+                            return 'Each reference must include identifiable author/organization and title details.';
+                        }
+
+                        validCount++;
+                    }
+
+                    if (validCount === 0) {
+                        return 'At least one complete academic reference with author, title, and publication year (2021–2026) is required.';
+                    }
+
+                    return '';
+                }
             }
         ];
 
@@ -2943,16 +3101,3 @@
 
     </script>
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

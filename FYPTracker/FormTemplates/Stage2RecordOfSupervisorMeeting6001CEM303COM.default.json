@@ -12,7 +12,7 @@
       "key": "Supervisor",
       "label": "Supervisor",
       "order": 1,
-      "columns": 12,
+      "columns": 6,
       "type": "Text",
       "minHeightMm": 0
     },
@@ -20,7 +20,7 @@
       "key": "Student",
       "label": "Student",
       "order": 2,
-      "columns": 12,
+      "columns": 6,
       "type": "Text",
       "minHeightMm": 0
     },
@@ -34,11 +34,11 @@
     },
     {
       "key": "TopicsDiscussed",
-      "label": "Key topics Discussed & Screenshot of the Task Done",
+      "label": "Key Topics Discussed & Tasks Completed",
       "order": 4,
       "columns": 12,
       "type": "TextArea",
-      "minHeightMm": 45
+      "minHeightMm": 40
     },
     {
       "key": "ActionPoints",
@@ -68,7 +68,7 @@
       "key": "SupervisorSignature",
       "label": "Supervisor Signature",
       "order": 8,
-      "columns": 12,
+      "columns": 6,
       "type": "Signature",
       "minHeightMm": 20
     },
@@ -76,7 +76,7 @@
       "key": "SupervisorSignatureDate",
       "label": "Supervisor Signature Date",
       "order": 9,
-      "columns": 12,
+      "columns": 6,
       "type": "Date",
       "minHeightMm": 0
     },
@@ -86,7 +86,7 @@
       "order": 10,
       "columns": 12,
       "type": "TextArea",
-      "minHeightMm": 35
+      "minHeightMm": 40
     }
   ]
 }

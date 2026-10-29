@@ -209,7 +209,8 @@
                     else if (field.Key == "References") {
                         var refVal = Model.FormData.ContainsKey("references") ? Model.FormData["references"] : "";
                         if (isStudentEdit) {
-                            <textarea id="iafReferences" name="references" class="form-control" rows="4" style="min-height: @(Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 30))mm;" @(Model.IsLocked ? "readonly" : "")>@refVal</textarea>
+                            <textarea id="iafReferences" name="references" class="form-control" rows="4" style="min-height: @(Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 30))mm;" @(Model.IsLocked ? "readonly" : "") placeholder="e.g. Smith, J. (2023). Deep Learning Approaches in Progress Tracking. IEEE Transactions on Software Engineering.">@refVal</textarea>
+                            <div id="iafReferencesError" class="text-danger small mt-1 d-none" role="status"></div>
                         } else {
                             <div class="iaf-readonly-val" style="min-height: @(Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 30))mm; white-space: pre-wrap;">@refVal</div>
                         }
