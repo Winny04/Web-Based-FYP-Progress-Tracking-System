@@ -58,7 +58,7 @@
 
     bool canProgressStage1 = FYPTracker.Utils.GradingHelper.CanProgressToStage1Dpp(iafMilestone, scheduledBooking);
     var stage2Eligibility = FYPTracker.Utils.GradingHelper.CheckStage2AcademicEligibility(Model, milestones, scheduledBooking);
-    bool hideStage2Override = Model != null && FYPTracker.Helpers.DemoUiOverrideHelper.ShouldHideStage2ForProject(Model.Id, stage2Eligibility.IsEligible, WebHostEnv, AppConfig);
+    bool hideStage2Override = !stage2Eligibility.IsEligible;
 
     if (iafMilestone != null && !canProgressStage1)
     {
@@ -506,6 +506,8 @@
         </div>
 
         <!-- Final Viva Schedule Card -->
+        @if (!hideStage2Override)
+        {
         <div class="card border-0 shadow-sm rounded-3 mb-4" id="vivaScheduleCard">
             <div class="card-header bg-white border-bottom pt-3 pb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h6 class="fw-bolder text-dark mb-0">
@@ -628,6 +630,7 @@
                 }
             </div>
         </div>
+        }
 
         <div class="row g-4">
             <!-- Upcoming Deadlines (col-lg-7) -->

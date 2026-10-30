@@ -97,6 +97,10 @@ namespace FYPTracker.Controllers
 
             if (!allSessions.Any()) return null;
 
+            // Fetch current active academic session set by Admin (same as TimetableController)
+            var currentActiveSession = await _context.AcademicSessions
+                .FirstOrDefaultAsync(s => s.IsCurrent == true && s.IsActive);
+
             string selectedSession;
             var sessionCookie = HttpContext.Request.Cookies["SupervisorSessionFilter"];
 
@@ -108,6 +112,12 @@ namespace FYPTracker.Controllers
             else if (!string.IsNullOrEmpty(sessionCookie) && allSessions.Contains(sessionCookie))
             {
                 selectedSession = sessionCookie;
+            }
+            else if (currentActiveSession != null && allSessions.Contains(currentActiveSession.Name))
+            {
+                // Default to current academic session set by admin
+                selectedSession = currentActiveSession.Name;
+                HttpContext.Response.Cookies.Append("SupervisorSessionFilter", selectedSession, new Microsoft.AspNetCore.Http.CookieOptions { Expires = DateTime.Now.AddDays(7) });
             }
             else
             {

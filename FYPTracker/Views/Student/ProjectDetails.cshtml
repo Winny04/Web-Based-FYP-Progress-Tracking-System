@@ -33,7 +33,7 @@
 
     var stage2EligibilityInDetails = FYPTracker.Utils.GradingHelper.CheckStage2AcademicEligibility(Model, Model?.Milestones);
     bool isStage2UnlockedInDetails = stage2EligibilityInDetails.IsEligible;
-    bool hideStage2Override = Model != null && FYPTracker.Helpers.DemoUiOverrideHelper.ShouldHideStage2ForProject(Model.Id, isStage2UnlockedInDetails, WebHostEnv, AppConfig);
+    bool hideStage2Override = !isStage2UnlockedInDetails;
 
     var assignedExaminerNames = Model?.AssignedExaminers?
         .Where(e => !string.IsNullOrWhiteSpace(e.Examiner?.FullName))

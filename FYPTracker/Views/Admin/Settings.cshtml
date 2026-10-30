@@ -108,23 +108,98 @@
         box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
     }
     .form-label-custom {
-        font-size: 0.825rem;
+        font-size: 0.8rem;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        color: #6c757d;
+        color: #4b5563;
         margin-bottom: 0.4rem;
     }
 
     /* Badges */
     .badge-session {
-        background-color: #e0e7ff;
-        color: #3730a3;
+        background: linear-gradient(135deg, #e0e7ff 0%, #ede9fe 100%);
+        color: #4338ca;
         font-weight: 700;
-        padding: 0.4rem 0.85rem;
+        padding: 0.35rem 0.85rem;
         border-radius: 2rem;
-        font-size: 0.85rem;
+        font-size: 0.825rem;
         border: 1px solid #c7d2fe;
+        letter-spacing: 0.2px;
+    }
+
+    /* Table visual refinements */
+    .table-milestones th {
+        font-size: 0.75rem;
+        letter-spacing: 0.6px;
+        color: #64748b;
+        font-weight: 700;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    .table-milestones td {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .table-milestones tbody tr:hover {
+        background-color: #f8fafc;
+    }
+    .code-badge {
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.78rem;
+        padding: 0.25rem 0.55rem;
+        border-radius: 0.375rem;
+        background-color: #f1f5f9;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+    }
+    .date-badge {
+        font-family: 'SFMono-Regular', Consolas, monospace;
+        font-size: 0.875rem;
+        font-weight: 600;
+        padding: 0.35rem 0.75rem;
+        border-radius: 0.5rem;
+        background-color: #ffffff;
+        color: #1e293b;
+        border: 1px solid #cbd5e1;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    /* Fix badge text visibility against theme overrides */
+    .badge.bg-primary,
+    .badge.badge-primary {
+        background-color: #0d6efd !important;
+        color: #ffffff !important;
+    }
+    .badge.bg-primary.bg-opacity-10 {
+        background-color: #e0edff !important;
+        color: #0b5ed7 !important;
+    }
+    .badge.bg-info.bg-opacity-10 {
+        background-color: #e8f4fd !important;
+        color: #0284c7 !important;
+    }
+    .badge.bg-warning.bg-opacity-10 {
+        background-color: #fef9c3 !important;
+        color: #a16207 !important;
+    }
+    .badge.bg-secondary.bg-opacity-10 {
+        background-color: #f1f5f9 !important;
+        color: #475569 !important;
+    }
+    .badge.border-primary {
+        border-color: #0d6efd !important;
+    }
+
+    /* Fix alert box contrast */
+    .alert-info.bg-info.bg-opacity-10 {
+        background-color: #f0f9ff !important;
+        border: 1px solid #bae6fd !important;
+        color: #0369a1 !important;
+    }
+    .alert-info.bg-info.bg-opacity-10 .text-dark {
+        color: #0f172a !important;
     }
 </style>
 
@@ -300,10 +375,12 @@
             </div>
 
             <!-- Single Source of Truth Notice -->
-            <div class="alert alert-primary bg-primary bg-opacity-10 border-0 d-flex align-items-start gap-3 p-3 mb-4 rounded-3">
-                <i class="fas fa-info-circle fs-5 text-primary mt-1"></i>
-                <div class="small text-dark">
-                    <strong>Authoritative Session Rule:</strong> Official academic deadlines are centrally managed per Academic Session. All students belonging to <strong>@currentSession</strong> share identical official due dates. Supervisors cannot modify official session deadlines. Optional supervisor-assigned DPP tasks have separate dates and are never overwritten.
+            <div class="alert alert-light border border-primary border-opacity-20 d-flex align-items-start gap-3 p-3 mb-4 rounded-3 shadow-sm bg-white">
+                <div class="rounded-circle bg-primary bg-opacity-10 p-2 text-primary d-flex align-items-center justify-content-center flex-shrink-0" style="width: 32px; height: 32px;">
+                    <i class="fas fa-info-circle fs-6"></i>
+                </div>
+                <div class="small text-secondary" style="line-height: 1.5;">
+                    <strong class="text-dark">Authoritative Session Rule:</strong> Official academic deadlines are centrally managed per Academic Session. All students belonging to <strong class="text-primary">@currentSession</strong> share identical official due dates. Supervisors cannot modify official session deadlines. Optional supervisor-assigned DPP tasks have separate dates and are never overwritten.
                 </div>
             </div>
 
@@ -324,28 +401,28 @@
                         </div>
                         <div class="settings-card-body p-0">
                             <div class="table-responsive">
-                                <table class="table table-hover align-middle mb-0">
+                                <table class="table table-hover table-milestones align-middle mb-0">
                                     <thead class="bg-light text-muted small text-uppercase">
                                         <tr>
-                                            <th class="ps-3 py-3">Stage</th>
-                                            <th class="py-3">Milestone Name</th>
-                                            <th class="py-3">Code</th>
-                                            <th class="py-3 text-end pe-3">Official Due Date</th>
+                                            <th class="ps-4 py-3" style="width: 15%;">Stage</th>
+                                            <th class="py-3" style="width: 45%;">Milestone Name</th>
+                                            <th class="py-3" style="width: 20%;">Code</th>
+                                            <th class="py-3 text-end pe-4" style="width: 20%;">Official Due Date</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <!-- IAF Milestone -->
                                         <tr>
-                                            <td class="ps-3"><span class="badge bg-primary bg-opacity-10 text-primary fw-bold">Stage 1</span></td>
+                                            <td class="ps-4"><span class="badge bg-primary bg-opacity-10 text-primary fw-bold px-2 py-1">Stage 1</span></td>
                                             <td>
                                                 <div class="fw-bold text-dark">Initial Project Allocation Form (IAF)</div>
                                                 <small class="text-muted">Supervisor assignment & project scope</small>
                                             </td>
-                                            <td><code class="text-primary fw-bold">IAF</code></td>
-                                            <td class="text-end pe-3">
+                                            <td><span class="code-badge text-primary fw-bold">IAF</span></td>
+                                            <td class="text-end pe-4">
                                                 @if (!string.IsNullOrEmpty(ViewBag.IAFDeadline))
                                                 {
-                                                    <span class="badge bg-light text-dark border px-2 py-1 fs-6 fw-bold">@ViewBag.IAFDeadline</span>
+                                                    <span class="date-badge">@ViewBag.IAFDeadline</span>
                                                 }
                                                 else
                                                 {
@@ -355,16 +432,16 @@
                                         </tr>
                                         <!-- Stage 1 Proposal -->
                                         <tr>
-                                            <td class="ps-3"><span class="badge bg-primary bg-opacity-10 text-primary fw-bold">Stage 1</span></td>
+                                            <td class="ps-4"><span class="badge bg-primary bg-opacity-10 text-primary fw-bold px-2 py-1">Stage 1</span></td>
                                             <td>
                                                 <div class="fw-bold text-dark">Stage 1 Final / DPP Proposal</div>
                                                 <small class="text-muted">Detailed project proposal submission</small>
                                             </td>
-                                            <td><code class="text-primary fw-bold">STAGE1_FINAL</code></td>
-                                            <td class="text-end pe-3">
+                                            <td><span class="code-badge text-primary fw-bold">STAGE1_FINAL</span></td>
+                                            <td class="text-end pe-4">
                                                 @if (!string.IsNullOrEmpty(ViewBag.ProposalDeadline))
                                                 {
-                                                    <span class="badge bg-light text-dark border px-2 py-1 fs-6 fw-bold">@ViewBag.ProposalDeadline</span>
+                                                    <span class="date-badge">@ViewBag.ProposalDeadline</span>
                                                 }
                                                 else
                                                 {
@@ -374,16 +451,16 @@
                                         </tr>
                                         <!-- Stage 2 Step 1 to 4 -->
                                         <tr>
-                                            <td class="ps-3"><span class="badge bg-info bg-opacity-10 text-info fw-bold">Stage 2</span></td>
+                                            <td class="ps-4"><span class="badge bg-info bg-opacity-10 text-info fw-bold px-2 py-1">Stage 2</span></td>
                                             <td>
                                                 <div class="fw-bold text-dark">Steps 1–4: Reports & Marksheet</div>
                                                 <small class="text-muted">Turnitin, final report, marksheet, meeting records</small>
                                             </td>
-                                            <td><code class="text-info fw-bold">STAGE2_STEP1-4</code></td>
-                                            <td class="text-end pe-3">
+                                            <td><span class="code-badge text-info fw-bold">STAGE2_STEP1-4</span></td>
+                                            <td class="text-end pe-4">
                                                 @if (!string.IsNullOrEmpty(ViewBag.Step1to4Deadline))
                                                 {
-                                                    <span class="badge bg-light text-dark border px-2 py-1 fs-6 fw-bold">@ViewBag.Step1to4Deadline</span>
+                                                    <span class="date-badge">@ViewBag.Step1to4Deadline</span>
                                                 }
                                                 else
                                                 {
@@ -393,16 +470,16 @@
                                         </tr>
                                         <!-- Stage 2 Step 5 -->
                                         <tr>
-                                            <td class="ps-3"><span class="badge bg-info bg-opacity-10 text-info fw-bold">Stage 2</span></td>
+                                            <td class="ps-4"><span class="badge bg-info bg-opacity-10 text-info fw-bold px-2 py-1">Stage 2</span></td>
                                             <td>
                                                 <div class="fw-bold text-dark">Step 5: Presentation Slides</div>
                                                 <small class="text-muted">Final Viva presentation slides</small>
                                             </td>
-                                            <td><code class="text-info fw-bold">STAGE2_STEP5</code></td>
-                                            <td class="text-end pe-3">
+                                            <td><span class="code-badge text-info fw-bold">STAGE2_STEP5</span></td>
+                                            <td class="text-end pe-4">
                                                 @if (!string.IsNullOrEmpty(ViewBag.Step5Deadline))
                                                 {
-                                                    <span class="badge bg-light text-dark border px-2 py-1 fs-6 fw-bold">@ViewBag.Step5Deadline</span>
+                                                    <span class="date-badge">@ViewBag.Step5Deadline</span>
                                                 }
                                                 else
                                                 {
