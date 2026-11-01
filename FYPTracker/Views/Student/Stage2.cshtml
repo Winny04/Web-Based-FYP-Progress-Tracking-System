@@ -15,9 +15,10 @@
     int? requiredMeetings = meetingProgressStage2?.Required;
     bool isMeetingRequirementMet = FYPTracker.Utils.GradingHelper.IsStage2MeetingRequirementSatisfied(completedMeetings, requiredMeetings);
 
-    // Overall completion check: all required deliverables submitted/approved AND signed meeting requirement satisfied
+    bool isProjectCompleted = Model.Status == "Completed" || Model.IsGradingLocked;
+    // Overall completion check: all required deliverables submitted/approved AND signed meeting requirement satisfied (or project already marked Completed)
     bool isAllDeliverablesSubmitted = stage2Milestones.Any() && stage2Milestones.All(m => m.Status == "Submitted" || m.Status == "Approved" || m.Status == "Completed");
-    bool isStage2Completed = isAllDeliverablesSubmitted && isMeetingRequirementMet;
+    bool isStage2Completed = isProjectCompleted || (isAllDeliverablesSubmitted && isMeetingRequirementMet);
 
     double? supStage2Score = FYPTracker.Utils.GradingHelper.CalculateStage2Score(Model.Stage2SupervisorMarksheetData, "Supervisor");
     double? exStage2Score = FYPTracker.Utils.GradingHelper.CalculateStage2Score(Model.Stage2ExaminerMarksheetData, "Examiner");
@@ -26,25 +27,49 @@
     bool isReleased = isBothGraded && !string.IsNullOrEmpty(Model.FinalGrade);
 
     string supervisorFeedback = "";
-    if (!string.IsNullOrEmpty(Model.Stage2SupervisorMarksheetData))
+    if (!string.IsNullOrEmpty(Model.Stage2SupervisorMarksheetData) && !FYPTracker.Utils.GradingHelper.IsMarksheetDraft(Model.Stage2SupervisorMarksheetData))
     {
         try
         {
             using var supDoc = System.Text.Json.JsonDocument.Parse(Model.Stage2SupervisorMarksheetData);
-            if (supDoc.RootElement.TryGetProperty("Feedback", out var fb)) supervisorFeedback = fb.GetString() ?? "";
+            var root = supDoc.RootElement;
+            var parts = new List<string>();
+            if (root.TryGetProperty("Strengths", out var s) && !string.IsNullOrWhiteSpace(s.GetString())) parts.Add($"Strengths: {s.GetString()!.Trim()}");
+            if (root.TryGetProperty("Improvements", out var imp) && !string.IsNullOrWhiteSpace(imp.GetString())) parts.Add($"Improvements: {imp.GetString()!.Trim()}");
+            if (root.TryGetProperty("Comments", out var c) && !string.IsNullOrWhiteSpace(c.GetString())) parts.Add($"Comments: {c.GetString()!.Trim()}");
+            if (root.TryGetProperty("Feedback", out var fb) && !string.IsNullOrWhiteSpace(fb.GetString())) parts.Add(fb.GetString()!.Trim());
+            
+            if (parts.Any())
+            {
+                supervisorFeedback = string.Join("\n\n", parts);
+            }
         }
         catch { }
     }
 
-    string examinerFeedback = Model.ExaminerComments ?? "";
-    if (string.IsNullOrEmpty(examinerFeedback) && !string.IsNullOrEmpty(Model.Stage2ExaminerMarksheetData))
+    string examinerFeedback = "";
+    if (!string.IsNullOrEmpty(Model.Stage2ExaminerMarksheetData) && !FYPTracker.Utils.GradingHelper.IsMarksheetDraft(Model.Stage2ExaminerMarksheetData))
     {
         try
         {
             using var exDoc = System.Text.Json.JsonDocument.Parse(Model.Stage2ExaminerMarksheetData);
-            if (exDoc.RootElement.TryGetProperty("Feedback", out var fb)) examinerFeedback = fb.GetString() ?? "";
+            var root = exDoc.RootElement;
+            var parts = new List<string>();
+            if (root.TryGetProperty("Strengths", out var s) && !string.IsNullOrWhiteSpace(s.GetString())) parts.Add($"Strengths: {s.GetString()!.Trim()}");
+            if (root.TryGetProperty("Improvements", out var imp) && !string.IsNullOrWhiteSpace(imp.GetString())) parts.Add($"Improvements: {imp.GetString()!.Trim()}");
+            if (root.TryGetProperty("Comments", out var c) && !string.IsNullOrWhiteSpace(c.GetString())) parts.Add($"Comments: {c.GetString()!.Trim()}");
+            if (root.TryGetProperty("Feedback", out var fb) && !string.IsNullOrWhiteSpace(fb.GetString())) parts.Add(fb.GetString()!.Trim());
+            
+            if (parts.Any())
+            {
+                examinerFeedback = string.Join("\n\n", parts);
+            }
         }
         catch { }
+    }
+    if (string.IsNullOrEmpty(examinerFeedback) && !string.IsNullOrWhiteSpace(Model.ExaminerComments))
+    {
+        examinerFeedback = Model.ExaminerComments.Trim();
     }
 }
 
@@ -114,13 +139,13 @@
                         <div class="col-md-6">
                             <div class="p-3 bg-light rounded-3 border h-100">
                                 <span class="d-block text-muted fs-8 text-uppercase fw-bold mb-2"><i class="fas fa-user-tie me-1 text-primary"></i> Supervisor Feedback</span>
-                                <p class="mb-0 fs-7 text-dark">@(string.IsNullOrWhiteSpace(supervisorFeedback) ? "No written feedback recorded." : supervisorFeedback)</p>
+                                <p class="mb-0 fs-7 text-dark">@(string.IsNullOrWhiteSpace(supervisorFeedback) ? "Feedback not available" : supervisorFeedback)</p>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="p-3 bg-light rounded-3 border h-100">
                                 <span class="d-block text-muted fs-8 text-uppercase fw-bold mb-2"><i class="fas fa-chalkboard-teacher me-1 text-primary"></i> Examiner Feedback</span>
-                                <p class="mb-0 fs-7 text-dark">@(string.IsNullOrWhiteSpace(examinerFeedback) ? "No written feedback recorded." : examinerFeedback)</p>
+                                <p class="mb-0 fs-7 text-dark">@(string.IsNullOrWhiteSpace(examinerFeedback) ? "Feedback not available" : examinerFeedback)</p>
                             </div>
                         </div>
                     </div>
@@ -227,7 +252,7 @@
                 <div class="d-flex flex-column gap-3">
                     @foreach (var cm in stage2CustomMilestones)
                     {
-                        bool isEditable = cm.Status == "Draft" || cm.Status == "Pending" || cm.Status == "ReturnedForChanges";
+                        bool isEditable = !isProjectCompleted && (cm.Status == "Draft" || cm.Status == "Pending" || cm.Status == "ReturnedForChanges");
                         var cmFiles = cm.SubmissionFiles?.Where(f => !f.IsDeleted).OrderByDescending(f => f.UploadedDate).ToList() ?? new List<FYPTracker.Models.FYPSubmissionFile>();
                         var latestFile = cmFiles.FirstOrDefault();
 
@@ -401,22 +426,22 @@
                         string stepDisplayTitle = step.Title;
                         if (isTurnitinStep)
                         {
-                            stepDisplayTitle = $"Step {stepNumber}: Turnitin Similarity Verification";
+                            stepDisplayTitle = "FYP 2: Turnitin Similarity Verification";
                         }
                         else if (step.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase) || step.Title.Contains("Final Report", StringComparison.OrdinalIgnoreCase) || step.MilestoneCode == "STAGE2_FINAL")
                         {
-                            stepDisplayTitle = $"Step {stepNumber}: Final Report Submission";
+                            stepDisplayTitle = "FYP 2: Final Report Submission";
                         }
                         else if (step.Title.Contains("Presentation", StringComparison.OrdinalIgnoreCase) || step.MilestoneCode == "STAGE2_PRESENTATION")
                         {
-                            stepDisplayTitle = $"Step {stepNumber}: Presentation Slides Submission";
+                            stepDisplayTitle = "FYP 2: Presentation Slides Submission";
                         }
                         else
                         {
-                            // Strip any existing "Step X: " prefix to renumber cleanly
+                            // Strip any existing "Step X: " prefix to display cleanly
                             var colonIdx = step.Title.IndexOf(':');
                             var cleanName = colonIdx >= 0 ? step.Title.Substring(colonIdx + 1).Trim() : step.Title;
-                            stepDisplayTitle = $"Step {stepNumber}: {cleanName}";
+                            stepDisplayTitle = $"FYP 2: {cleanName}";
                         }
 
                         string labelText = "Upload your document (PDF format only, max 50MB):";
@@ -566,7 +591,7 @@
                                                             <i class="fas fa-info-circle text-primary fs-5 me-2 mt-1"></i>
                                                             <div>
                                                                 <span class="fw-bold text-primary d-block mb-1">Awaiting Supervisor Verification</span>
-                                                                <span class="text-muted">Your document has been securely uploaded and submitted. Your supervisor will review the report and verify whether it meets university requirements. Once reviewed and approved, your submission is locked and Step 2 will unlock automatically.</span>
+                                                                <span class="text-muted">Your document has been securely uploaded and submitted. Your supervisor will review the report and verify whether it meets university requirements. Once reviewed and approved, your submission is locked and the next deliverable will unlock automatically.</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -585,27 +610,37 @@
                                                     </div>
                                                 }
                                             } else {
-                                                @if (isRejected || isUnderReview) {
-                                                    <div class="alert @(isRejected ? "alert-danger" : "alert-warning") shadow-sm p-3 mb-3 border-0 rounded-3" style="border-left: 4px solid @(isRejected ? "#dc3545" : "#ffc107") !important;">
-                                                        <h6 class="fw-bold mb-1 fs-7"><i class="fas fa-exclamation-triangle me-2"></i>@(isRejected ? "Revision Required" : "Needs Attention")</h6>
-                                                        <p class="mb-2 text-dark fs-8">@(string.IsNullOrEmpty(step.SupervisorFeedback) ? "Please review your document and submit a revised version." : step.SupervisorFeedback)</p>
-                                                        @if (latestFile != null && !string.IsNullOrEmpty(latestFile.FilePath)) {
-                                                            <a href="@Url.Action("ViewFile", "Student", new { fileId = latestFile.Id })" target="_blank" class="btn btn-sm @(isRejected ? "btn-outline-danger" : "btn-outline-warning") mt-1 fw-bold fs-8 px-3 py-1"><i class="fas fa-eye me-1"></i> View Previous Submission</a>
-                                                        }
+                                                @if (isProjectCompleted)
+                                                {
+                                                    <div class="alert alert-secondary p-3 mb-2 rounded-3 text-dark fs-8 d-flex align-items-center">
+                                                        <i class="fas fa-lock text-secondary me-2 fs-6"></i>
+                                                        <span>Project is Completed and grading is finalized. All Stage 2 deliverables are read-only.</span>
                                                     </div>
                                                 }
+                                                else
+                                                {
+                                                    @if (isRejected || isUnderReview) {
+                                                        <div class="alert @(isRejected ? "alert-danger" : "alert-warning") shadow-sm p-3 mb-3 border-0 rounded-3" style="border-left: 4px solid @(isRejected ? "#dc3545" : "#ffc107") !important;">
+                                                            <h6 class="fw-bold mb-1 fs-7"><i class="fas fa-exclamation-triangle me-2"></i>@(isRejected ? "Revision Required" : "Needs Attention")</h6>
+                                                            <p class="mb-2 text-dark fs-8">@(string.IsNullOrEmpty(step.SupervisorFeedback) ? "Please review your document and submit a revised version." : step.SupervisorFeedback)</p>
+                                                            @if (latestFile != null && !string.IsNullOrEmpty(latestFile.FilePath)) {
+                                                                <a href="@Url.Action("ViewFile", "Student", new { fileId = latestFile.Id })" target="_blank" class="btn btn-sm @(isRejected ? "btn-outline-danger" : "btn-outline-warning") mt-1 fw-bold fs-8 px-3 py-1"><i class="fas fa-eye me-1"></i> View Previous Submission</a>
+                                                            }
+                                                        </div>
+                                                    }
 
-                                                <div class="p-3 bg-light rounded-3 border mb-3">
-                                                    <label class="form-label text-dark fs-8 fw-bold mb-2">@labelText</label>
-                                                    <input class="form-control form-control-sm" type="file" name="file" accept=".pdf" required onchange="handleFileSelect(this, '@step.Id')">
-                                                    <div id="fileMeta_@step.Id" class="mt-2 fs-9 text-muted d-none">
-                                                        <i class="fas fa-file-pdf text-danger me-1"></i> Selected: <strong id="fileName_@step.Id" class="text-dark"></strong> (<span id="fileSize_@step.Id"></span>)
+                                                    <div class="p-3 bg-light rounded-3 border mb-3">
+                                                        <label class="form-label text-dark fs-8 fw-bold mb-2">@labelText</label>
+                                                        <input class="form-control form-control-sm" type="file" name="file" accept=".pdf" required onchange="handleFileSelect(this, '@step.Id')">
+                                                        <div id="fileMeta_@step.Id" class="mt-2 fs-9 text-muted d-none">
+                                                            <i class="fas fa-file-pdf text-danger me-1"></i> Selected: <strong id="fileName_@step.Id" class="text-dark"></strong> (<span id="fileSize_@step.Id"></span>)
+                                                        </div>
+                                                        <small class="text-muted fs-9 d-block mt-2">
+                                                            <i class="fas fa-check text-success me-1"></i> Accepted format: <strong>PDF (.pdf)</strong> &bull; Max file size: 50MB
+                                                        </small>
                                                     </div>
-                                                    <small class="text-muted fs-9 d-block mt-2">
-                                                        <i class="fas fa-check text-success me-1"></i> Accepted format: <strong>PDF (.pdf)</strong> &bull; Max file size: 50MB
-                                                    </small>
-                                                </div>
-                                                <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold shadow-sm"><i class="fas fa-paper-plane me-2"></i> @btnText</button>
+                                                    <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold shadow-sm"><i class="fas fa-paper-plane me-2"></i> @btnText</button>
+                                                }
                                             }
                                         </div>
                                     </form>

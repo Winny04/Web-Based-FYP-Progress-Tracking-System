@@ -9,6 +9,7 @@ using ClosedXML.Excel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using FYPTracker.Helpers;
+using FYPTracker.Utils;
 
 namespace FYPTracker.Controllers
 {
@@ -636,6 +637,18 @@ namespace FYPTracker.Controllers
             }
 
             milestone.SupervisorFeedback = feedback;
+
+            if (!string.IsNullOrWhiteSpace(feedback))
+            {
+                _context.FYPFeedbacks.Add(new FYPFeedback
+                {
+                    MilestoneId = milestone.Id,
+                    SupervisorId = user.Id,
+                    Comment = feedback.Trim(),
+                    CreatedDate = DateTime.Now
+                });
+            }
+
             await _context.SaveChangesAsync();
 
             string label = milestone.Status == "Completed" ? "marked as Completed" : "returned for changes";
@@ -1045,7 +1058,49 @@ namespace FYPTracker.Controllers
             else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
 
             var physicalPath = System.IO.Path.Combine(_env.WebRootPath, file.FilePath.TrimStart('/', '\\'));
-            if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+            if (!System.IO.File.Exists(physicalPath))
+            {
+                if ((file.FileName != null && file.FileName.StartsWith("Signed IAF")) || (file.Remarks != null && file.Remarks.Contains("IAF Rendering Engine")))
+                {
+                    try
+                    {
+                        var milestone = await _context.FYPMilestones
+                            .Include(m => m.Project)
+                                .ThenInclude(p => p.Student)
+                            .Include(m => m.SubmissionFiles)
+                            .FirstOrDefaultAsync(m => m.Id == file.MilestoneId);
+
+                        if (milestone != null && !string.IsNullOrEmpty(milestone.Remarks))
+                        {
+                            string parsedJson = milestone.Remarks;
+                            if (milestone.Remarks.Contains("JSON: ")) parsedJson = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+                            var history = IafAttemptHistory.ParseOrMigrate(parsedJson);
+                            var attempt = history.Attempts.FirstOrDefault(a => a.AttemptNumber == file.AttemptNumber);
+
+                            if (attempt != null && (!string.IsNullOrEmpty(attempt.SupervisorSignature) || attempt.Status == "Approved" || attempt.Status == "AdminApproved" || attempt.Status == "Rejected" || attempt.Status == "ChangeOfTopicRequired" || attempt.Status == "DefenseRequired" || attempt.Status == "PanelRevisionRequired"))
+                            {
+                                var adminUser = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserRoles.Any(r => r.Role.Name == "Admin"));
+                                string adminName = adminUser?.FullName ?? "Admin";
+
+                                var pdfBytes = IafPdfGenerator.GenerateIafPdf(milestone, attempt, milestone.Project?.Student, _env.WebRootPath, adminName);
+                                string folderPath = Path.Combine(_env.WebRootPath, "uploads", "submissions");
+                                if (!Directory.Exists(folderPath)) Directory.CreateDirectory(folderPath);
+                                
+                                string uniqueFileName = $"IAF_Snapshot_Attempt_{attempt.AttemptNumber}_{Guid.NewGuid().ToString().Substring(0, 8)}.pdf";
+                                physicalPath = Path.Combine(folderPath, uniqueFileName);
+                                await System.IO.File.WriteAllBytesAsync(physicalPath, pdfBytes);
+
+                                file.FilePath = $"/uploads/submissions/{uniqueFileName}";
+                                file.FileSize = pdfBytes.Length;
+                                await _context.SaveChangesAsync();
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+            }
 
             Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{file.FileName}{(string.IsNullOrEmpty(System.IO.Path.GetExtension(file.FileName)) ? ext : "")}\"");
             return PhysicalFile(physicalPath, mimeType);
@@ -1277,6 +1332,36 @@ namespace FYPTracker.Controllers
             }
 
             stage1Milestone.SupervisorMarksheetData = marksheetData;
+
+            if (!isDraft)
+            {
+                string? rubricComment = null;
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(marksheetData);
+                    var parts = new List<string>();
+                    if (doc.RootElement.TryGetProperty("Strengths", out var sProp) && !string.IsNullOrWhiteSpace(sProp.GetString()))
+                        parts.Add($"Strengths: {sProp.GetString()!.Trim()}");
+                    if (doc.RootElement.TryGetProperty("Improvements", out var iProp) && !string.IsNullOrWhiteSpace(iProp.GetString()))
+                        parts.Add($"Improvements: {iProp.GetString()!.Trim()}");
+                    if (doc.RootElement.TryGetProperty("Comments", out var cProp) && !string.IsNullOrWhiteSpace(cProp.GetString()))
+                        parts.Add($"Comments: {cProp.GetString()!.Trim()}");
+                    if (parts.Any()) rubricComment = string.Join(" | ", parts);
+                }
+                catch { }
+
+                if (!string.IsNullOrWhiteSpace(rubricComment))
+                {
+                    _context.FYPFeedbacks.Add(new FYPFeedback
+                    {
+                        MilestoneId = stage1Milestone.Id,
+                        SupervisorId = user.Id,
+                        Comment = rubricComment,
+                        Grade = stage1Milestone.Project?.Stage1Grade,
+                        CreatedDate = DateTime.Now
+                    });
+                }
+            }
 
             // Only calculate joint score if this submission is finalized and Examiner has also finalized
             bool exFinalized = !string.IsNullOrEmpty(stage1Milestone.ExaminerMarksheetData) && !FYPTracker.Utils.GradingHelper.IsMarksheetDraft(stage1Milestone.ExaminerMarksheetData);
@@ -1619,6 +1704,17 @@ namespace FYPTracker.Controllers
 
                 milestone.Status = status;
                 milestone.SupervisorFeedback = remarks;
+
+                if (!string.IsNullOrWhiteSpace(remarks))
+                {
+                    _context.FYPFeedbacks.Add(new FYPFeedback
+                    {
+                        MilestoneId = milestone.Id,
+                        SupervisorId = user.Id,
+                        Comment = remarks.Trim(),
+                        CreatedDate = DateTime.Now
+                    });
+                }
 
                 if (milestone.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || milestone.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase))
                 {
@@ -2069,7 +2165,7 @@ namespace FYPTracker.Controllers
 
             ViewBag.PendingReschedules = await _context.MeetingRescheduleRequests
                 .Include(r => r.Student)
-                .Where(r => r.SupervisorId == user.Id && r.Status == "Pending")
+                .Where(r => r.SupervisorId == user.Id && r.Status == "Pending" && (activeSession == null || r.Student.AcademicSession == activeSession))
                 .ToListAsync();
 
             ViewBag.MsAccountConnected = !string.IsNullOrEmpty(user.MsAccessToken);
@@ -2350,6 +2446,7 @@ namespace FYPTracker.Controllers
 
             var request = await _context.MeetingRescheduleRequests
                 .Include(r => r.MeetingBooking)
+                    .ThenInclude(b => b.MeetingLog)
                 .Include(r => r.Student)
                 .FirstOrDefaultAsync(r => r.Id == requestId && r.SupervisorId == user.Id && r.Status == "Pending");
 
@@ -2364,6 +2461,30 @@ namespace FYPTracker.Controllers
                 if (request.MeetingBooking == null || request.MeetingBooking.Status != "Approved")
                 {
                     TempData["Error"] = "Cannot approve reschedule: the original meeting is no longer in Approved status.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+
+                if (request.MeetingBooking.MeetingLog != null && request.MeetingBooking.MeetingLog.LogStatus == "Signed")
+                {
+                    TempData["Error"] = "Cannot approve reschedule: This meeting has already been completed with a signed logbook.";
+                    return RedirectToAction(nameof(ManageMeetings));
+                }
+
+                int diff = (7 + (request.ProposedDate.DayOfWeek - DayOfWeek.Monday)) % 7;
+                var startOfProposedWeek = request.ProposedDate.Date.AddDays(-1 * diff);
+                var endOfProposedWeek = startOfProposedWeek.AddDays(7);
+
+                var otherMeetingInProposedWeek = await _context.MeetingBookings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(m => m.StudentId == request.StudentId &&
+                                              m.Id != request.MeetingBookingId &&
+                                              m.MeetingDate >= startOfProposedWeek &&
+                                              m.MeetingDate < endOfProposedWeek &&
+                                              m.Status != "Rejected" && m.Status != "Cancelled" && m.Status != "Expired" && m.Status != "Postponed");
+
+                if (otherMeetingInProposedWeek != null)
+                {
+                    TempData["Error"] = $"Cannot approve reschedule: The student already has another meeting (Booking #{otherMeetingInProposedWeek.Id} on {otherMeetingInProposedWeek.MeetingDate:dd MMM yyyy}) scheduled for that week. FYP policy allows only one meeting per week.";
                     return RedirectToAction(nameof(ManageMeetings));
                 }
 
@@ -2502,11 +2623,18 @@ namespace FYPTracker.Controllers
 
             var meeting = await _context.MeetingBookings
                 .Include(m => m.Student)
+                .Include(m => m.MeetingLog)
                 .FirstOrDefaultAsync(m => m.Id == meetingId && m.SupervisorId == user.Id);
 
             if (meeting == null)
             {
                 TempData["Error"] = "Meeting not found or you are not authorized.";
+                return RedirectToAction(nameof(ManageMeetings));
+            }
+
+            if (meeting.MeetingLog != null && meeting.MeetingLog.LogStatus == "Signed")
+            {
+                TempData["Error"] = "Cannot propose reschedule: this meeting has already been completed with a signed logbook.";
                 return RedirectToAction(nameof(ManageMeetings));
             }
 

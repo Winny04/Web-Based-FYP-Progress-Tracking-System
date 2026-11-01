@@ -482,6 +482,18 @@
         var proposalMilestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(milestones);
         bool isProposalApproved = proposalMilestone != null && FYPTracker.Utils.GradingHelper.IsStage1DppApproved(proposalMilestone);
         
+        // Stage 1 Individual Scores (Supervisor and Examiner)
+        double? supStage1Score = null;
+        if (proposalMilestone != null && !string.IsNullOrWhiteSpace(proposalMilestone.SupervisorMarksheetData) && !FYPTracker.Utils.GradingHelper.IsMarksheetDraft(proposalMilestone.SupervisorMarksheetData))
+        {
+            supStage1Score = FYPTracker.Utils.GradingHelper.CalculateStage1Score(proposalMilestone.SupervisorMarksheetData, "Supervisor");
+        }
+        double? exStage1Score = null;
+        if (proposalMilestone != null && !string.IsNullOrWhiteSpace(proposalMilestone.ExaminerMarksheetData) && !FYPTracker.Utils.GradingHelper.IsMarksheetDraft(proposalMilestone.ExaminerMarksheetData))
+        {
+            exStage1Score = FYPTracker.Utils.GradingHelper.CalculateStage1Score(proposalMilestone.ExaminerMarksheetData, "Examiner");
+        }
+        
         var stage2Milestones = milestones.Where(m => (m.Stage == 2 || m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)) && !FYPTracker.Utils.GradingHelper.IsObsoleteOrRetiredStage2Milestone(m)).ToList();
 
         // DPP Work & Progress: ONLY Supervisor-added Stage 1 milestones (persistent DB classification)
@@ -598,20 +610,39 @@
 
                             <!-- Stage 1 Results Summary Cards -->
                             <div class="row g-3" id="stage1ResultsSummary">
-                                <div class="col-md-6">
+                                <div class="col-md-3">
+                                    <div class="p-3 rounded-3 h-100 bg-light border border-light-subtle d-flex flex-column justify-content-between">
+                                        <span class="text-muted small fw-bold text-uppercase" style="letter-spacing: 0.5px;">Stage 1 Result</span>
+                                        <div class="d-flex align-items-baseline gap-2 mt-2">
+                                            <h3 class="fw-bolder @(Model?.Stage1Grade == "Pass" ? "text-success" : (Model?.Stage1Grade == "Fail" ? "text-danger" : "text-dark")) mb-0">@(Model?.Stage1Grade ?? "N/A")</h3>
+                                            <small class="text-muted">Official Status</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
                                     <div class="p-3 rounded-3 h-100 bg-light border border-light-subtle d-flex flex-column justify-content-between">
                                         <span class="text-muted small fw-bold text-uppercase" style="letter-spacing: 0.5px;">Stage 1 Total Score</span>
                                         <div class="d-flex align-items-baseline gap-2 mt-2">
-                                            <h3 class="fw-bolder text-dark mb-0">@(Model?.Stage1TotalScore.HasValue == true ? $"{Model.Stage1TotalScore.Value:0.00}%" : "N/A")</h3>
+                                            <h3 class="fw-bolder text-primary mb-0">@(Model?.Stage1TotalScore.HasValue == true ? $"{Model.Stage1TotalScore.Value:0.00}%" : "N/A")</h3>
                                             <small class="text-muted">Combined Evaluation</small>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-3">
                                     <div class="p-3 rounded-3 h-100 bg-light border border-light-subtle d-flex flex-column justify-content-between">
-                                        <span class="text-muted small fw-bold text-uppercase" style="letter-spacing: 0.5px;">Submissions & Marksheets</span>
-                                        <div class="d-flex align-items-center gap-2 mt-2">
-                                            <span class="text-dark small fw-semibold"><i class="fas fa-folder-open text-primary me-1"></i> Read-Only History Active</span>
+                                        <span class="text-muted small fw-bold text-uppercase" style="letter-spacing: 0.5px;">Supervisor Score</span>
+                                        <div class="d-flex align-items-baseline gap-2 mt-2">
+                                            <h3 class="fw-bolder text-dark mb-0">@(supStage1Score.HasValue ? $"{supStage1Score.Value:0.00}%" : "N/A")</h3>
+                                            <small class="text-muted">Rubric (0–4 Scale)</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="p-3 rounded-3 h-100 bg-light border border-light-subtle d-flex flex-column justify-content-between">
+                                        <span class="text-muted small fw-bold text-uppercase" style="letter-spacing: 0.5px;">Examiner Score</span>
+                                        <div class="d-flex align-items-baseline gap-2 mt-2">
+                                            <h3 class="fw-bolder text-dark mb-0">@(exStage1Score.HasValue ? $"{exStage1Score.Value:0.00}%" : "N/A")</h3>
+                                            <small class="text-muted">Rubric (0–4 Scale)</small>
                                         </div>
                                     </div>
                                 </div>
@@ -1455,10 +1486,62 @@
                                                 </div>
                                             }
 
-                                            @if (!string.IsNullOrEmpty(propMilestone?.SupervisorFeedback))
+                                            @* Supervisor Feedback / Evaluation Marksheet *@
+                                            <hr class="my-3 border-info opacity-25">
+                                            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-user-tie me-2"></i>Supervisor Evaluation &amp; Feedback</h6>
+                                            @{
+                                                string supStrengths = "", supImprovements = "", supComments = "";
+                                                if (propMilestone != null && !string.IsNullOrWhiteSpace(propMilestone.SupervisorMarksheetData) && !FYPTracker.Utils.GradingHelper.IsMarksheetDraft(propMilestone.SupervisorMarksheetData))
+                                                {
+                                                    try
+                                                    {
+                                                        using var sDoc = System.Text.Json.JsonDocument.Parse(propMilestone.SupervisorMarksheetData);
+                                                        if (sDoc.RootElement.TryGetProperty("Strengths", out var sp) && !string.IsNullOrWhiteSpace(sp.GetString())) supStrengths = sp.GetString()!.Trim();
+                                                        if (sDoc.RootElement.TryGetProperty("Improvements", out var ip) && !string.IsNullOrWhiteSpace(ip.GetString())) supImprovements = ip.GetString()!.Trim();
+                                                        if (sDoc.RootElement.TryGetProperty("Comments", out var cp) && !string.IsNullOrWhiteSpace(cp.GetString())) supComments = cp.GetString()!.Trim();
+                                                    }
+                                                    catch { }
+                                                }
+                                                bool hasSupRubricText = !string.IsNullOrEmpty(supStrengths) || !string.IsNullOrEmpty(supImprovements) || !string.IsNullOrEmpty(supComments);
+                                                string directSupFeedback = propMilestone?.SupervisorFeedback?.Trim() ?? "";
+                                            }
+
+                                            @if (hasSupRubricText)
                                             {
-                                                <hr class="my-2 border-info opacity-25">
-                                                <p class="mb-0 text-dark"><strong>Supervisor Feedback:</strong> @propMilestone.SupervisorFeedback</p>
+                                                <div class="d-flex flex-column gap-2 mb-3">
+                                                    @if (!string.IsNullOrEmpty(supStrengths))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Strengths of Proposal:</small>
+                                                            <span>@supStrengths</span>
+                                                        </div>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(supImprovements))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Areas for Improvement:</small>
+                                                            <span>@supImprovements</span>
+                                                        </div>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(supComments))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Supervisor Comments:</small>
+                                                            <span>@supComments</span>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                            else if (!string.IsNullOrEmpty(directSupFeedback))
+                                            {
+                                                <div class="p-2 bg-light rounded text-dark fs-7 mb-3">
+                                                    <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Supervisor Remarks:</small>
+                                                    <span>@directSupFeedback</span>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <p class="mb-3 text-muted fst-italic fs-7">Feedback not available</p>
                                             }
 
                                             @* Supervisor Feedback / Graded Files *@
@@ -1493,25 +1576,74 @@
 
                                             @* Examiner Feedback / Marksheet *@
                                             <hr class="my-3 border-info opacity-25">
-                                            <h6 class="fw-bold text-success mb-2"><i class="fas fa-file-excel me-2"></i>Examiner Feedback / Marksheet</h6>
-                                            @if (!string.IsNullOrWhiteSpace(Model.Stage1ExaminerMarksheetPath))
+                                            <h6 class="fw-bold text-success mb-2"><i class="fas fa-user-graduate me-2"></i>Examiner Evaluation &amp; Feedback</h6>
+                                            @{
+                                                string exStrengths = "", exImprovements = "", exComments = "";
+                                                if (propMilestone != null && !string.IsNullOrWhiteSpace(propMilestone.ExaminerMarksheetData) && !FYPTracker.Utils.GradingHelper.IsMarksheetDraft(propMilestone.ExaminerMarksheetData))
+                                                {
+                                                    try
+                                                    {
+                                                        using var eDoc = System.Text.Json.JsonDocument.Parse(propMilestone.ExaminerMarksheetData);
+                                                        if (eDoc.RootElement.TryGetProperty("Strengths", out var esp) && !string.IsNullOrWhiteSpace(esp.GetString())) exStrengths = esp.GetString()!.Trim();
+                                                        if (eDoc.RootElement.TryGetProperty("Improvements", out var eip) && !string.IsNullOrWhiteSpace(eip.GetString())) exImprovements = eip.GetString()!.Trim();
+                                                        if (eDoc.RootElement.TryGetProperty("Comments", out var ecp) && !string.IsNullOrWhiteSpace(ecp.GetString())) exComments = ecp.GetString()!.Trim();
+                                                    }
+                                                    catch { }
+                                                }
+                                                bool hasExRubricText = !string.IsNullOrEmpty(exStrengths) || !string.IsNullOrEmpty(exImprovements) || !string.IsNullOrEmpty(exComments);
+                                                bool hasExMarksheetFile = !string.IsNullOrWhiteSpace(Model.Stage1ExaminerMarksheetPath);
+                                                bool isExGraded = exStage1Score.HasValue || hasExRubricText || hasExMarksheetFile || !string.IsNullOrEmpty(Model.Stage1Grade);
+                                            }
+
+                                            @if (hasExRubricText)
                                             {
-                                                <div class="d-flex flex-column gap-2">
-                                                    <a href="@Url.Action("DownloadStage1ExaminerMarksheet", "Student", new { projectId = Model.Id })" target="_blank" class="btn btn-outline-success text-start d-flex align-items-center rounded-3 p-2 text-decoration-none bg-white border-success border-opacity-25 shadow-sm">
-                                                        <i class="fas fa-file-excel text-success me-3"></i>
-                                                        <div class="d-flex flex-column flex-grow-1 text-truncate">
-                                                            <span class="text-dark fw-bold text-truncate">Stage 1 Examiner Marksheet</span>
-                                                            <small class="text-muted">Completed evaluation marksheet from assigned examiner</small>
+                                                <div class="d-flex flex-column gap-2 mb-3">
+                                                    @if (!string.IsNullOrEmpty(exStrengths))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Strengths of Proposal:</small>
+                                                            <span>@exStrengths</span>
                                                         </div>
-                                                        <i class="fas fa-download text-success ms-3"></i>
-                                                    </a>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(exImprovements))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Areas for Improvement:</small>
+                                                            <span>@exImprovements</span>
+                                                        </div>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(exComments))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Examiner Comments:</small>
+                                                            <span>@exComments</span>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                            else if (!isExGraded)
+                                            {
+                                                <div class="p-2 bg-light rounded text-muted small d-flex align-items-center mb-3">
+                                                    <i class="fas fa-clock text-warning me-2"></i>
+                                                    <span>Examiner evaluation is currently <strong>Pending / Not Released</strong>.</span>
                                                 </div>
                                             }
                                             else
                                             {
-                                                <div class="p-2 bg-light rounded text-muted small d-flex align-items-center">
-                                                    <i class="fas fa-clock text-warning me-2"></i>
-                                                    <span>Examiner evaluation is currently <strong>Pending / Not Released</strong>.</span>
+                                                <p class="mb-3 text-muted fst-italic fs-7">Feedback not available</p>
+                                            }
+
+                                            @if (hasExMarksheetFile)
+                                            {
+                                                <div class="d-flex flex-column gap-2 mb-2">
+                                                    <a href="@Url.Action("DownloadStage1ExaminerMarksheet", "Student", new { projectId = Model.Id })" target="_blank" class="btn btn-outline-success text-start d-flex align-items-center rounded-3 p-2 text-decoration-none bg-white border-success border-opacity-25 shadow-sm">
+                                                        <i class="fas fa-file-excel text-success me-3"></i>
+                                                        <div class="d-flex flex-column flex-grow-1 text-truncate">
+                                                            <span class="text-dark fw-bold text-truncate">Stage 1 Examiner Marksheet</span>
+                                                            <small class="text-muted">Completed evaluation marksheet file</small>
+                                                        </div>
+                                                        <i class="fas fa-download text-success ms-3"></i>
+                                                    </a>
                                                 </div>
                                             }
                                         </div>

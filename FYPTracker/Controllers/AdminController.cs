@@ -21,6 +21,7 @@ using FYPTracker.Services;
 using FYPTracker.Services.Defense;
 using FYPTracker.Services.Time;
 using System.Security.Claims;
+using FYPTracker.Utils;
 
 namespace FYPTracker.Controllers
 {
@@ -4200,7 +4201,50 @@ private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.V
             else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
 
             var physicalPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", file.FilePath.TrimStart('/', '\\'));
-            if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+            if (!System.IO.File.Exists(physicalPath))
+            {
+                if ((file.FileName != null && file.FileName.StartsWith("Signed IAF")) || (file.Remarks != null && file.Remarks.Contains("IAF Rendering Engine")))
+                {
+                    try
+                    {
+                        var milestone = await _context.FYPMilestones
+                            .Include(m => m.Project)
+                                .ThenInclude(p => p.Student)
+                            .Include(m => m.SubmissionFiles)
+                            .FirstOrDefaultAsync(m => m.Id == file.MilestoneId);
+
+                        if (milestone != null && !string.IsNullOrEmpty(milestone.Remarks))
+                        {
+                            string parsedJson = milestone.Remarks;
+                            if (milestone.Remarks.Contains("JSON: ")) parsedJson = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+                            var history = IafAttemptHistory.ParseOrMigrate(parsedJson);
+                            var attempt = history.Attempts.FirstOrDefault(a => a.AttemptNumber == file.AttemptNumber);
+
+                            if (attempt != null && (!string.IsNullOrEmpty(attempt.SupervisorSignature) || attempt.Status == "Approved" || attempt.Status == "AdminApproved" || attempt.Status == "Rejected" || attempt.Status == "ChangeOfTopicRequired" || attempt.Status == "DefenseRequired" || attempt.Status == "PanelRevisionRequired"))
+                            {
+                                var webRoot = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot");
+                                var adminUser = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserRoles.Any(r => r.Role.Name == "Admin"));
+                                string adminName = adminUser?.FullName ?? "Admin";
+
+                                var pdfBytes = IafPdfGenerator.GenerateIafPdf(milestone, attempt, milestone.Project?.Student, webRoot, adminName);
+                                string folderPath = Path.Combine(webRoot, "uploads", "submissions");
+                                if (!Directory.Exists(folderPath)) Directory.CreateDirectory(folderPath);
+                                
+                                string uniqueFileName = $"IAF_Snapshot_Attempt_{attempt.AttemptNumber}_{Guid.NewGuid().ToString().Substring(0, 8)}.pdf";
+                                physicalPath = Path.Combine(folderPath, uniqueFileName);
+                                await System.IO.File.WriteAllBytesAsync(physicalPath, pdfBytes);
+
+                                file.FilePath = $"/uploads/submissions/{uniqueFileName}";
+                                file.FileSize = pdfBytes.Length;
+                                await _context.SaveChangesAsync();
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+            }
 
             Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{file.FileName}{(string.IsNullOrEmpty(System.IO.Path.GetExtension(file.FileName)) ? ext : "")}\"");
             return PhysicalFile(physicalPath, mimeType);

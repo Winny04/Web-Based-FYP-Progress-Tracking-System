@@ -257,8 +257,10 @@ namespace FYPTracker.Utils
             {
                 if (attempt.Status == "Approved" || attempt.Status == "Rejected" || milestone.Status == "Approved" || milestone.Status == "AdminApproved" || milestone.Status == "ChangeOfTopicRequired" || milestone.Status == "DefenseRequired" || milestone.Status == "PanelRevisionRequired")
                 {
-                    bool hasPdf = milestone.SubmissionFiles?.Any(f => f.AttemptNumber == attempt.AttemptNumber && f.FileName.StartsWith("Signed IAF")) == true;
-                    if (!hasPdf)
+                    var existingFile = milestone.SubmissionFiles?.FirstOrDefault(f => f.AttemptNumber == attempt.AttemptNumber && f.FileName.StartsWith("Signed IAF"));
+                    bool hasPhysicalFile = existingFile != null && !string.IsNullOrEmpty(existingFile.FilePath) && File.Exists(Path.Combine(webRootPath, existingFile.FilePath.TrimStart('/', '\\')));
+                    
+                    if (!hasPhysicalFile)
                     {
                         try
                         {
@@ -266,22 +268,32 @@ namespace FYPTracker.Utils
                             string uniqueFileName = $"IAF_Snapshot_Attempt_{attempt.AttemptNumber}_{Guid.NewGuid().ToString().Substring(0, 8)}.pdf";
                             string folderPath = Path.Combine(webRootPath, "uploads", "submissions");
                             if (!Directory.Exists(folderPath)) Directory.CreateDirectory(folderPath);
-                            File.WriteAllBytes(Path.Combine(folderPath, uniqueFileName), pdfBytes);
+                            string savedPhysicalPath = Path.Combine(folderPath, uniqueFileName);
+                            File.WriteAllBytes(savedPhysicalPath, pdfBytes);
                             
-                            var subFile = new FYPSubmissionFile
+                            if (existingFile != null)
                             {
-                                MilestoneId = milestone.Id,
-                                FileName = $"Signed IAF (Attempt {attempt.AttemptNumber}).pdf",
-                                FilePath = $"/uploads/submissions/{uniqueFileName}",
-                                FileSize = pdfBytes.Length,
-                                UploadedBy = milestone.Project?.SupervisorId,
-                                UploadedDate = attempt.SupervisorReviewedAt ?? DateTime.Now,
-                                AttemptNumber = attempt.AttemptNumber,
-                                Remarks = "System Generated Snapshot (IAF Rendering Engine)"
-                            };
-                            context.FYPSubmissionFiles.Add(subFile);
-                            if (milestone.SubmissionFiles == null) milestone.SubmissionFiles = new List<FYPSubmissionFile>();
-                            milestone.SubmissionFiles.Add(subFile);
+                                existingFile.FilePath = $"/uploads/submissions/{uniqueFileName}";
+                                existingFile.FileSize = pdfBytes.Length;
+                                existingFile.UploadedDate = attempt.SupervisorReviewedAt ?? DateTime.Now;
+                            }
+                            else
+                            {
+                                var subFile = new FYPSubmissionFile
+                                {
+                                    MilestoneId = milestone.Id,
+                                    FileName = $"Signed IAF (Attempt {attempt.AttemptNumber}).pdf",
+                                    FilePath = $"/uploads/submissions/{uniqueFileName}",
+                                    FileSize = pdfBytes.Length,
+                                    UploadedBy = milestone.Project?.SupervisorId,
+                                    UploadedDate = attempt.SupervisorReviewedAt ?? DateTime.Now,
+                                    AttemptNumber = attempt.AttemptNumber,
+                                    Remarks = "System Generated Snapshot (IAF Rendering Engine)"
+                                };
+                                context.FYPSubmissionFiles.Add(subFile);
+                                if (milestone.SubmissionFiles == null) milestone.SubmissionFiles = new List<FYPSubmissionFile>();
+                                milestone.SubmissionFiles.Add(subFile);
+                            }
                         }
                         catch {}
                     }

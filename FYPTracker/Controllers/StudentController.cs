@@ -7,6 +7,7 @@ using NPOI.XWPF.UserModel;
 using Microsoft.AspNetCore.SignalR;
 using FYPTracker.Hubs;
 using FYPTracker.Helpers;
+using FYPTracker.Utils;
 
 namespace FYPTracker.Controllers
 {
@@ -177,8 +178,9 @@ namespace FYPTracker.Controllers
                 .OrderByDescending(p => p.CreatedDate)
                 .FirstOrDefaultAsync();
 
+            var isCompleted = string.Equals(project?.Status, "Completed", StringComparison.OrdinalIgnoreCase);
             var stage2Eligibility = FYPTracker.Utils.GradingHelper.CheckStage2AcademicEligibility(project, project?.Milestones);
-            if (!stage2Eligibility.IsEligible)
+            if (!stage2Eligibility.IsEligible && !isCompleted)
             {
                 TempData["Error"] = stage2Eligibility.Reason;
                 return RedirectToAction("Forms");
@@ -566,7 +568,9 @@ namespace FYPTracker.Controllers
 
             // If student already has a confirmed supervisor, redirect to dashboard
             var hasApproved = await _context.SupervisorRequests
-                .AnyAsync(r => r.StudentId == user.Id && r.Status == "Approved");
+                .AnyAsync(r => r.StudentId == user.Id && r.Status == "Approved")
+                || await _context.FYPProjects
+                .AnyAsync(p => p.StudentId == user.Id && p.SupervisorId != null && p.Status == "Approved");
             if (hasApproved)
             {
                 TempData["Info"] = "You already have a confirmed supervisor.";
@@ -2761,6 +2765,25 @@ namespace FYPTracker.Controllers
                 return RedirectToAction(nameof(BookMeeting));
             }
 
+            // Validate one meeting per week policy (excluding this meeting)
+            int diff = (7 + (parsedDate.DayOfWeek - DayOfWeek.Monday)) % 7;
+            var startOfProposedWeek = parsedDate.Date.AddDays(-1 * diff);
+            var endOfProposedWeek = startOfProposedWeek.AddDays(7);
+
+            var otherMeetingInProposedWeek = await _context.MeetingBookings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.StudentId == user.Id &&
+                                          m.Id != meeting.Id &&
+                                          m.MeetingDate >= startOfProposedWeek &&
+                                          m.MeetingDate < endOfProposedWeek &&
+                                          m.Status != "Rejected" && m.Status != "Cancelled" && m.Status != "Expired" && m.Status != "Postponed");
+
+            if (otherMeetingInProposedWeek != null)
+            {
+                TempData["Error"] = $"Cannot reschedule meeting to this date: You already have another meeting (Booking #{otherMeetingInProposedWeek.Id} on {otherMeetingInProposedWeek.MeetingDate:dd MMM yyyy}) in that week. FYP policy allows only one meeting per week.";
+                return RedirectToAction(nameof(BookMeeting));
+            }
+
             // Prevent multiple active reschedule requests
             var existingRequest = await _context.MeetingRescheduleRequests
                 .AnyAsync(r => r.MeetingBookingId == meeting.Id && (r.Status == "Pending" || r.Status == "CounterProposed"));
@@ -3379,12 +3402,14 @@ namespace FYPTracker.Controllers
             var user = await GetCurrentUserAsync();
             if (user == null) return RedirectToAction("Login", "User");
 
-            var file = await _context.FYPSubmissionFiles.FindAsync(fileId);
+            var file = await _context.FYPSubmissionFiles
+                .Include(f => f.Milestone)
+                .FirstOrDefaultAsync(f => f.Id == fileId);
             if (file == null || string.IsNullOrEmpty(file.FilePath)) return NotFound();
 
             // Security check: ensure the file belongs to this student's project
             var project = await _context.FYPProjects.OrderByDescending(p => p.CreatedDate).FirstOrDefaultAsync(p => p.StudentId == user.Id);
-            if (project == null) return Unauthorized();
+            if (project == null || (file.Milestone != null && file.Milestone.FYPProjectId != project.Id)) return Unauthorized();
             
             var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
             if (string.IsNullOrEmpty(ext)) ext = System.IO.Path.GetExtension(file.FilePath).ToLowerInvariant();
@@ -3398,7 +3423,51 @@ namespace FYPTracker.Controllers
             else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
 
             var physicalPath = System.IO.Path.Combine(_env.WebRootPath, file.FilePath.TrimStart('/', '\\'));
-            if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+            if (!System.IO.File.Exists(physicalPath))
+            {
+                // Self-healing fallback: If this is an IAF signed snapshot, regenerate it on-demand
+                if ((file.FileName != null && file.FileName.StartsWith("Signed IAF")) || (file.Remarks != null && file.Remarks.Contains("IAF Rendering Engine")))
+                {
+                    try
+                    {
+                        var milestone = await _context.FYPMilestones
+                            .Include(m => m.Project)
+                                .ThenInclude(p => p.Student)
+                            .Include(m => m.SubmissionFiles)
+                            .FirstOrDefaultAsync(m => m.Id == file.MilestoneId);
+
+                        if (milestone != null && !string.IsNullOrEmpty(milestone.Remarks))
+                        {
+                            string parsedJson = milestone.Remarks;
+                            if (milestone.Remarks.Contains("JSON: ")) parsedJson = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+                            var history = IafAttemptHistory.ParseOrMigrate(parsedJson);
+                            // Strictly ensure the attempt exists in recorded history and is officially signed/approved
+                            var attempt = history.Attempts.FirstOrDefault(a => a.AttemptNumber == file.AttemptNumber);
+
+                            if (attempt != null && (!string.IsNullOrEmpty(attempt.SupervisorSignature) || attempt.Status == "Approved" || attempt.Status == "AdminApproved" || attempt.Status == "Rejected" || attempt.Status == "ChangeOfTopicRequired" || attempt.Status == "DefenseRequired" || attempt.Status == "PanelRevisionRequired"))
+                            {
+                                var adminUser = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserRoles.Any(r => r.Role.Name == "Admin"));
+                                string adminName = adminUser?.FullName ?? "Admin";
+
+                                var pdfBytes = IafPdfGenerator.GenerateIafPdf(milestone, attempt, milestone.Project?.Student, _env.WebRootPath, adminName);
+                                string folderPath = Path.Combine(_env.WebRootPath, "uploads", "submissions");
+                                if (!Directory.Exists(folderPath)) Directory.CreateDirectory(folderPath);
+                                
+                                string uniqueFileName = $"IAF_Snapshot_Attempt_{attempt.AttemptNumber}_{Guid.NewGuid().ToString().Substring(0, 8)}.pdf";
+                                physicalPath = Path.Combine(folderPath, uniqueFileName);
+                                await System.IO.File.WriteAllBytesAsync(physicalPath, pdfBytes);
+
+                                file.FilePath = $"/uploads/submissions/{uniqueFileName}";
+                                file.FileSize = pdfBytes.Length;
+                                await _context.SaveChangesAsync();
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+            }
 
             Response.Headers.Add("Content-Disposition", $"inline; filename=\"{file.FileName}{(string.IsNullOrEmpty(System.IO.Path.GetExtension(file.FileName)) ? ext : "")}\"");
             return PhysicalFile(physicalPath, mimeType);

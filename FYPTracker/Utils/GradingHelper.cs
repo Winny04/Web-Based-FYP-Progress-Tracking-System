@@ -722,9 +722,9 @@ namespace FYPTracker.Utils
         public static string GetStage2DisplayTitle(Models.FYPMilestone? m)
         {
             if (m == null || string.IsNullOrWhiteSpace(m.Title)) return string.Empty;
-            if (IsStage2TurnitinMilestone(m)) return "Step 1: Turnitin Similarity Verification";
-            if (IsStage2FinalReportMilestone(m)) return "Step 2: Final Report Submission";
-            if (IsStage2PresentationMilestone(m)) return "Step 3: Presentation Slides Submission";
+            if (IsStage2TurnitinMilestone(m)) return "FYP 2: Turnitin Similarity Verification";
+            if (IsStage2FinalReportMilestone(m)) return "FYP 2: Final Report Submission";
+            if (IsStage2PresentationMilestone(m)) return "FYP 2: Presentation Slides Submission";
 
             return m.Title;
         }

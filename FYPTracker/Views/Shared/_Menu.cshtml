@@ -20,7 +20,9 @@
     if (userType == "Student" && currentUser != null)
     {
         hasSupervisor = await _context.SupervisorRequests
-            .AnyAsync(r => r.StudentId == currentUser.Id && r.Status == "Approved");
+            .AnyAsync(r => r.StudentId == currentUser.Id && r.Status == "Approved")
+            || await _context.FYPProjects
+            .AnyAsync(p => p.StudentId == currentUser.Id && p.SupervisorId != null && p.Status == "Approved");
     }
 
     var currentPath = HttpContextAccessor.HttpContext?.Request.Path.Value ?? "";

@@ -494,6 +494,7 @@
     <script>
         const partnerId = @(partnerId.HasValue ? partnerId.Value.ToString() : "0");
         const activeGroupId = @(activeGroupId.HasValue ? activeGroupId.Value.ToString() : "0");
+        const currentUserId = @(ViewBag.CurrentUserId != null ? ViewBag.CurrentUserId.ToString() : "0");
         const messagesContainer = document.getElementById('chat-messages');
         const chatInput = document.getElementById('chat-input');
         let lastMessageCount = 0;
@@ -1074,8 +1075,15 @@
             // Listen for incoming messages in real-time
             if (window.signalRConnection) {
                 window.signalRConnection.on("ReceiveChatMessage", function(msg) {
-                    // Check if the message is from the active partner
-                    if (msg.senderId == partnerId) {
+                    // Check if message belongs to the current active group chat
+                    if (activeGroupId && activeGroupId > 0 && msg.groupId == activeGroupId) {
+                        if (msg.senderId != currentUserId) {
+                            appendMessage(msg);
+                            lastMessageCount++;
+                        }
+                    }
+                    // Check if the message is from the active partner in direct chat
+                    else if (partnerId && partnerId > 0 && msg.senderId == partnerId && !msg.groupId) {
                         appendMessage(msg);
                         lastMessageCount++;
                         // Instantly mark as read since we are actively viewing this chat

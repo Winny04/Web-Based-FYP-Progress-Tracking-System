@@ -55,14 +55,25 @@ namespace FYPTracker.Controllers
             if (activeRole == "Student")
             {
                 // Student: chat with assigned supervisor or in groups
-                var req = await _context.SupervisorRequests
-                    .Include(r => r.Supervisor)
-                    .FirstOrDefaultAsync(r => r.StudentId == user.Id && r.Status == "Approved");
+                var studentProj = await _context.FYPProjects
+                    .Include(p => p.Supervisor)
+                    .OrderByDescending(p => p.CreatedDate)
+                    .FirstOrDefaultAsync(p => p.StudentId == user.Id && p.SupervisorId != null);
 
-                if (req?.Supervisor != null)
+                ApplicationUser? supervisor = studentProj?.Supervisor;
+
+                if (supervisor == null)
                 {
-                    ViewBag.DefaultPartnerId = req.SupervisorId;
-                    ViewBag.PartnerName = (string.IsNullOrEmpty(req.Supervisor.Title) ? "" : req.Supervisor.Title + " ") + req.Supervisor.FullName;
+                    var req = await _context.SupervisorRequests
+                        .Include(r => r.Supervisor)
+                        .FirstOrDefaultAsync(r => r.StudentId == user.Id && r.Status == "Approved");
+                    supervisor = req?.Supervisor;
+                }
+
+                if (supervisor != null)
+                {
+                    ViewBag.DefaultPartnerId = supervisor.Id;
+                    ViewBag.PartnerName = (string.IsNullOrEmpty(supervisor.Title) ? "" : supervisor.Title + " ") + supervisor.FullName;
                 }
                 else
                 {
@@ -83,27 +94,41 @@ namespace FYPTracker.Controllers
                     if (grp != null) 
                     {
                         ViewBag.GroupName = grp.Name;
-                        var supervisor = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == grp.SupervisorId);
+                        var groupSupervisor = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == grp.SupervisorId);
                         var members = await _context.ChatGroupMembers
                             .Include(m => m.Student)
                             .Where(m => m.GroupId == grp.Id)
                             .Select(m => new { Id = m.StudentId, Name = m.Student.FullName })
                             .ToListAsync();
                         
-                        if (supervisor != null)
+                        if (groupSupervisor != null)
                         {
-                            members.Add(new { Id = supervisor.Id, Name = supervisor.FullName });
+                            members.Add(new { Id = groupSupervisor.Id, Name = groupSupervisor.FullName });
                         }
                         
                         ViewBag.GroupMembers = members;
+                    }
+                    else
+                    {
+                        ViewBag.ActiveGroupId = null;
                     }
                 }
 
             }
             else if (activeRole.Contains("Supervisor"))
             {
-                // Supervisor: list of active assigned students and groups
-                var projectStudents = await _context.SupervisorRequests
+                // Supervisor: list of active assigned students (from FYPProjects or approved SupervisorRequests) and groups
+                var projectStudents = await _context.FYPProjects
+                    .Include(p => p.Student)
+                    .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign)
+                    .Select(p => new ChatStudentItem {
+                        Id = p.StudentId,
+                        Name = p.Student.FullName,
+                        Programme = p.Student.Programme
+                    })
+                    .ToListAsync();
+
+                var reqStudents = await _context.SupervisorRequests
                     .Include(r => r.Student)
                     .Where(r => r.SupervisorId == user.Id && r.Status == "Approved" && !r.Student.IsResign)
                     .Select(r => new ChatStudentItem {
@@ -112,6 +137,14 @@ namespace FYPTracker.Controllers
                         Programme = r.Student.Programme
                     })
                     .ToListAsync();
+
+                foreach (var rs in reqStudents)
+                {
+                    if (!projectStudents.Any(ps => ps.Id == rs.Id))
+                    {
+                        projectStudents.Add(rs);
+                    }
+                }
 
                 var studentIds = projectStudents.Select(s => s.Id).ToList();
                 var chatData = await _context.ChatMessages
@@ -166,6 +199,10 @@ namespace FYPTracker.Controllers
                         
                         ViewBag.GroupMembers = members;
                     }
+                    else
+                    {
+                        ViewBag.ActiveGroupId = null;
+                    }
                 }
 
                 else if (partnerId.HasValue && partnerId.Value > 0)
@@ -209,9 +246,24 @@ namespace FYPTracker.Controllers
                 CreatedAt = DateTime.Now
             };
 
-            foreach (var sId in memberIds)
+            var validMemberIds = new List<int>();
+            foreach (var sId in memberIds.Distinct())
             {
-                grp.Members.Add(new ChatGroupMember { StudentId = sId });
+                var isAssigned = await _context.FYPProjects
+                    .AnyAsync(p => p.SupervisorId == user.Id && p.StudentId == sId && !p.Student.IsResign)
+                    || await _context.SupervisorRequests
+                    .AnyAsync(ss => ss.SupervisorId == user.Id && ss.StudentId == sId && ss.Status == "Approved" && !ss.Student.IsResign);
+
+                if (isAssigned)
+                {
+                    validMemberIds.Add(sId);
+                    grp.Members.Add(new ChatGroupMember { StudentId = sId });
+                }
+            }
+
+            if (!validMemberIds.Any())
+            {
+                return BadRequest("No valid assigned students selected for the group.");
             }
 
             _context.ChatGroups.Add(grp);
@@ -257,7 +309,17 @@ namespace FYPTracker.Controllers
 
             var existingMemberIds = group.Members.Select(m => m.StudentId).ToList();
 
-            var availableStudents = await _context.SupervisorRequests
+            var projectStudents = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Where(p => p.SupervisorId == user.Id && !p.Student.IsResign && !existingMemberIds.Contains(p.StudentId))
+                .Select(p => new
+                {
+                    id = p.StudentId,
+                    name = p.Student.FullName
+                })
+                .ToListAsync();
+
+            var reqStudents = await _context.SupervisorRequests
                 .Include(ss => ss.Student)
                 .Where(ss => ss.SupervisorId == user.Id && ss.Status == "Approved" && !ss.Student.IsResign && !existingMemberIds.Contains(ss.StudentId))
                 .Select(ss => new
@@ -266,6 +328,11 @@ namespace FYPTracker.Controllers
                     name = ss.Student.FullName
                 })
                 .ToListAsync();
+
+            var availableStudents = projectStudents
+                .UnionBy(reqStudents, s => s.id)
+                .OrderBy(s => s.name)
+                .ToList();
 
             return Json(availableStudents);
         }
@@ -287,7 +354,10 @@ namespace FYPTracker.Controllers
                 return BadRequest("Student is already in the group.");
             }
 
-            var isAssigned = await _context.SupervisorRequests
+            var isAssigned = await _context.FYPProjects
+                .Include(p => p.Student)
+                .AnyAsync(p => p.SupervisorId == user.Id && p.StudentId == studentId && !p.Student.IsResign)
+                || await _context.SupervisorRequests
                 .Include(ss => ss.Student)
                 .AnyAsync(ss => ss.SupervisorId == user.Id && ss.StudentId == studentId && ss.Status == "Approved" && !ss.Student.IsResign);
 
@@ -351,6 +421,11 @@ namespace FYPTracker.Controllers
 
             if (groupId > 0)
             {
+                var isGroupMember = await _context.ChatGroups
+                    .AnyAsync(g => g.Id == groupId && (g.SupervisorId == user.Id || g.Members.Any(m => m.StudentId == user.Id)));
+
+                if (!isGroupMember) return Forbid();
+
                 query = _context.ChatMessages
                     .Include(m => m.Sender)
                     .Include(m => m.ReplyToMessage)
@@ -359,6 +434,24 @@ namespace FYPTracker.Controllers
             else
             {
                 if (partnerId <= 0) return BadRequest("Invalid partner ID");
+
+                var isAuthorized = await _context.FYPProjects.AnyAsync(p => 
+                    (p.SupervisorId == user.Id && p.StudentId == partnerId) || 
+                    (p.SupervisorId == partnerId && p.StudentId == user.Id))
+                    || await _context.SupervisorRequests.AnyAsync(r => 
+                    r.Status == "Approved" && 
+                    ((r.SupervisorId == user.Id && r.StudentId == partnerId) || 
+                     (r.SupervisorId == partnerId && r.StudentId == user.Id)));
+
+                if (!isAuthorized)
+                {
+                    isAuthorized = await _context.ChatGroups.AnyAsync(g => 
+                        (g.SupervisorId == user.Id && g.Members.Any(m => m.StudentId == partnerId)) ||
+                        (g.SupervisorId == partnerId && g.Members.Any(m => m.StudentId == user.Id)));
+                }
+
+                if (!isAuthorized) return Forbid();
+
                 query = _context.ChatMessages
                     .Include(m => m.Sender)
                     .Include(m => m.ReplyToMessage)
@@ -423,6 +516,32 @@ namespace FYPTracker.Controllers
 
             if (string.IsNullOrWhiteSpace(messageText) && attachment == null)
                 return BadRequest("Invalid input");
+
+            if (groupId.HasValue)
+            {
+                var isGroupMember = await _context.ChatGroups
+                    .AnyAsync(g => g.Id == groupId.Value && (g.SupervisorId == user.Id || g.Members.Any(m => m.StudentId == user.Id)));
+                if (!isGroupMember) return Forbid();
+            }
+            else
+            {
+                var isAuthorized = await _context.FYPProjects.AnyAsync(p => 
+                    (p.SupervisorId == user.Id && p.StudentId == receiverId) || 
+                    (p.SupervisorId == receiverId && p.StudentId == user.Id))
+                    || await _context.SupervisorRequests.AnyAsync(r => 
+                    r.Status == "Approved" && 
+                    ((r.SupervisorId == user.Id && r.StudentId == receiverId) || 
+                     (r.SupervisorId == receiverId && r.StudentId == user.Id)));
+
+                if (!isAuthorized)
+                {
+                    isAuthorized = await _context.ChatGroups.AnyAsync(g => 
+                        (g.SupervisorId == user.Id && g.Members.Any(m => m.StudentId == receiverId)) ||
+                        (g.SupervisorId == receiverId && g.Members.Any(m => m.StudentId == user.Id)));
+                }
+
+                if (!isAuthorized) return Forbid();
+            }
 
             string? attachmentUrl = null;
             string? attachmentName = null;
@@ -548,7 +667,16 @@ namespace FYPTracker.Controllers
             var msg = await _context.ChatMessages.FindAsync(messageId);
             if (msg == null) return NotFound();
 
-            if (msg.GroupId == null && msg.SenderId != user.Id && msg.ReceiverId != user.Id) return NotFound();
+            if (msg.GroupId.HasValue)
+            {
+                var isGroupMember = await _context.ChatGroups
+                    .AnyAsync(g => g.Id == msg.GroupId.Value && (g.SupervisorId == user.Id || g.Members.Any(m => m.StudentId == user.Id)));
+                if (!isGroupMember) return Forbid();
+            }
+            else if (msg.SenderId != user.Id && msg.ReceiverId != user.Id)
+            {
+                return Forbid();
+            }
 
             msg.IsPinned = !msg.IsPinned;
             await _context.SaveChangesAsync();
