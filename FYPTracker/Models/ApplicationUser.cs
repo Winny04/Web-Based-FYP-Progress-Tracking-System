@@ -10,11 +10,16 @@ namespace FYPTracker.Models
     {
         [Key]
         public int Id { get; set; }
+        [StringLength(100)]
         public string? FullName { get; set; }
+        [StringLength(50)]
         public string? UserName { get; set; }
 
+        [StringLength(255)]
         public string? PassCode { get; set; }
+        [StringLength(100)]
         public string? Email { get; set; }
+        [StringLength(20)]
         public string? Phone { get; set; } // Shared field
 
         [StringLength(255)]
@@ -33,7 +38,9 @@ namespace FYPTracker.Models
         
         public string? Image { get; set; }
 
+        [StringLength(50)]
         public string? EmployeeId { get; set; } // We keep this name for legacy data, but it acts as StudentId (INTI ID)
+        [StringLength(50)]
         public string? CoventryId { get; set; } // Added Coventry ID
         public int? DepartmentId { get; set; }
         public bool IsNotificationOn { get; set; }
@@ -44,16 +51,21 @@ namespace FYPTracker.Models
 
         // --- NEW FIELDS ---
         // Student Specific
+        [StringLength(100)]
         public string? Programme { get; set; }
+        [StringLength(100)]
         public string? Specialization { get; set; }
+        [StringLength(50)]
         public string? AcademicSession { get; set; }
 
         // Supervisor Specific
+        [StringLength(20)]
         public string? Title { get; set; } // e.g., Dr, Prof, Mr, Ms
 
         public int? MaxStudentSlots { get; set; }
 
         // --- Invite / Onboarding ---
+        [StringLength(255)]
         public string? TempPassword { get; set; }   // Stored for resend-invite scenarios
         public DateTime? AccountExpiry { get; set; } // Auto-calculated from AcademicSession
 

@@ -48,6 +48,7 @@ namespace FYPTracker.Models
         [StringLength(255)]
         public string? VivaVenue { get; set; }
 
+        [StringLength(50)]
         public string? AcademicSession { get; set; }
 
         [StringLength(50)]

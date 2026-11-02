@@ -33,6 +33,7 @@ namespace FYPTracker.Models
         public string? YearOfStudy { get; set; }
 
         // --- Part B: Project Info ---
+        [StringLength(255)]
         public string? ProjectTopic { get; set; }
         public string? RequestMessage { get; set; } // Serving as Description
 

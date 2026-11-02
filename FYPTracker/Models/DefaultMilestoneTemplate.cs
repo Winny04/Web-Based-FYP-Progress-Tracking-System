@@ -13,10 +13,12 @@ namespace FYPTracker.Models
         public virtual AcademicSession Session { get; set; }
 
         [Required]
+        [StringLength(255)]
         public string Title { get; set; } = string.Empty;
 
         public string? Description { get; set; }
 
+        [StringLength(50)]
         public string MilestoneCode { get; set; } = "GENERIC";
 
         public int Stage { get; set; } = 1;

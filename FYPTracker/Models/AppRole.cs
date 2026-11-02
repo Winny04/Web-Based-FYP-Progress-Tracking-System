@@ -13,6 +13,7 @@ namespace FYPTracker.Models
         [StringLength(50)]
         public string Name { get; set; }
 
+        [StringLength(255)]
         public string Description { get; set; }
 
         // Navigation property

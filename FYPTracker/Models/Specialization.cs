@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace FYPTracker.Models
@@ -7,6 +8,7 @@ namespace FYPTracker.Models
     {
         public int Id { get; set; }
         
+        [StringLength(100)]
         [Column("SpecializationName")]
         public string Name { get; set; }
         

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace FYPTracker.Models
@@ -8,6 +9,7 @@ namespace FYPTracker.Models
     {
         public int Id { get; set; }
         
+        [StringLength(50)]
         [Column("SessionName")]
         public string Name { get; set; }
 
