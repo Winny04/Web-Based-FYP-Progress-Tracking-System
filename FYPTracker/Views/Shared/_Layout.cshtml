@@ -1,0 +1,535 @@
+@using FYPTracker.Components
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment WebHostEnv
+@inject Microsoft.Extensions.Configuration.IConfiguration AppConfig
+@inject FYPTracker.Services.Time.ISystemClock SystemClock
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <partial name="_Favicon" />
+    <!--begin::Fonts-->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Poppins:300,400,500,600,700" />
+    <!--end::Fonts-->
+    <!--begin::Page Vendor Stylesheets(used by this page)-->
+    <link href="~/assets/plugins/custom/fullcalendar/fullcalendar.bundle.css" rel="stylesheet" type="text/css" />
+    <link href="~/assets/plugins/custom/datatables/datatables.bundle.css" rel="stylesheet" type="text/css" />
+    <!--end::Page Vendor Stylesheets-->
+    <!--begin::Global Stylesheets Bundle(used by all pages)-->
+    <link href="~/assets/plugins/global/plugins.bundle.css" rel="stylesheet" type="text/css" />
+    <link href="~/assets/css/style.bundle.css" rel="stylesheet" type="text/css" />
+    <link href="~/css/custom.css" rel="stylesheet" type="text/css" />
+    <link href="~/css/site.css" rel="stylesheet" type="text/css" />
+    <link href="~/css/initials-avatar.css" rel="stylesheet" type="text/css" />
+    <link rel='stylesheet' href='https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css' />
+    <link rel='stylesheet' href='https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css' />
+    <link rel="stylesheet" href="~/css/quill.snow.css" type="text/css"/>
+    @* <link rel="stylesheet" href="https://cdn.form.io/formiojs/formio.full.min.css">*@
+    <link rel="stylesheet" href="~/assets//css/choice.min.css" />
+    <link rel="stylesheet" href="~/css/tail.select-light.css" type="text/css" />
+    <title>@ViewData["Title"]</title>
+
+    <!--end::Global Stylesheets Bundle-->
+
+</head>
+<body id="kt_body"
+      style="background-color: #f8fafc;"
+      class="page-loading-enabled page-loading toolbar-enabled">
+@await Component.InvokeAsync(typeof(LoaderViewComponent))
+
+    <!--begin::Javascript-->
+    <script>var hostUrl = "~/assets/";</script>
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"></script>
+    <!--begin::Global Javascript Bundle(used by all pages)-->
+    <script src="~/assets/plugins/global/plugins.bundle.js"></script>
+    <script src="~/assets/js/scripts.bundle.js"></script>
+    <script src="~/assets//js/quill.js"></script>
+    <!--end::Global Javascript Bundle-->
+    <!--begin::Page Vendors Javascript(used by this page)-->
+    <script src="~/assets/plugins/custom/fullcalendar/fullcalendar.bundle.js"></script>
+    <script src="~/assets/plugins/custom/datatables/datatables.bundle.js"></script>
+     <script src="~/js/Natural.js"></script>
+    <!--end::Page Vendors Javascript-->
+    <!--begin::Page Custom Javascript(used by this page)-->
+    <script src="~/assets/js/widgets.bundle.js"></script>
+    <script src="~/assets/js/custom/widgets.js"></script>
+    <script src="~/assets/js/custom/apps/chat/chat.js"></script>
+    <script src="~/assets/js/custom/intro.js"></script>
+    <script src="~/assets/js/custom/utilities/modals/upgrade-plan.js"></script>
+    <script src="~/assets/js/custom/utilities/modals/create-app.js"></script>
+    <script src="~/assets/js/custom/utilities/modals/create-campaign.js"></script>
+    <script src="~/assets/js/custom/utilities/modals/users-search.js"></script>
+
+    <script src="~/js/tail.select.min.js"></script>
+    <script src="~/js/MultiMailPlugin.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        @{
+            var identity = User.Identity as System.Security.Claims.ClaimsIdentity;
+            var idClaim = identity?.FindFirst("Id");
+            var currentUserId = idClaim != null ? idClaim.Value : "0";
+            var sessionRole = Context.Session.GetString("ActiveRole");
+            var userRoles = identity?.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList() ?? new List<string>();
+            var userTypeClaim = !string.IsNullOrEmpty(sessionRole) ? sessionRole : (userRoles.FirstOrDefault() ?? "");
+        }
+        var globalUserId = parseInt('@currentUserId');
+        function incrementNotificationBadge() {
+            var badge = document.getElementById("header_notification_badge");
+            if (badge) {
+                var currentCount = parseInt(badge.innerText) || 0;
+                badge.innerText = currentCount + 1;
+                badge.classList.remove("d-none");
+                // Animate to grab attention
+                badge.style.transform = "scale(1.5)";
+                setTimeout(() => { badge.style.transform = "scale(1)"; }, 200);
+            }
+        }
+
+        if(globalUserId > 0) {
+            window.signalRConnection = new signalR.HubConnectionBuilder()
+                .withUrl("/notificationHub")
+                .build();
+
+            @if (userTypeClaim == "Student")
+            {
+            <text>
+            window.signalRConnection.on("ReceiveRequestStatusUpdate", (supervisorId, status, requestId) => {
+                incrementNotificationBadge();
+                var bellBadge = document.querySelector('.badge-bell');
+                if(bellBadge) {
+                    bellBadge.innerText = parseInt(bellBadge.innerText) + 1;
+                }
+                
+                var isDashboardOrRequestPage = window.location.pathname.toLowerCase().includes('/student/index') || window.location.pathname.toLowerCase().includes('/student/selectsupervisor');
+                if (isDashboardOrRequestPage) {
+                    document.dispatchEvent(new CustomEvent('RequestStatusUpdateEvent', { detail: { requestId: requestId, status: status } }));
+                    const Toast = Swal.mixin({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 3000,
+                        timerProgressBar: true
+                    });
+                    Toast.fire({
+                        icon: status === 'Approved' ? 'success' : 'info',
+                        title: `Supervisor request was ${status}`
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'Status Updated!',
+                        text: `Your supervisor request was ${status}.`,
+                        icon: status === 'Approved' ? 'success' : 'info',
+                        showCancelButton: true,
+                        confirmButtonText: 'View',
+                        cancelButtonText: 'Dismiss'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            window.location.href = '/Student/SelectSupervisor';
+                        }
+                    });
+                }
+            });
+            </text>
+            }
+
+            @if (userTypeClaim == "Supervisor")
+            {
+            <text>
+            window.signalRConnection.on("ReceiveNewSupervisorRequest", (reqData) => {
+                incrementNotificationBadge();
+                var currentActiveSession = '@Html.Raw(ViewBag.CurrentSession ?? "")';
+                
+                var isSupervisorRequestsPage = window.location.pathname.toLowerCase().includes('/supervisor/studentrequests') || window.location.pathname.toLowerCase().includes('/supervisor/index');
+                if (isSupervisorRequestsPage && currentActiveSession === reqData.session) {
+                    document.dispatchEvent(new CustomEvent('NewSupervisorRequestEvent', { detail: reqData }));
+                    const Toast = Swal.mixin({
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false,
+                        timer: 3000,
+                        timerProgressBar: true
+                    });
+                    Toast.fire({
+                        icon: 'info',
+                        title: `New request from ${reqData.studentName}`
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'New Student Request!',
+                        text: `${reqData.studentName} (${reqData.session}) has requested you for: ${reqData.topic}`,
+                        icon: 'info',
+                        showCancelButton: true,
+                        confirmButtonText: 'View Request',
+                        cancelButtonText: 'Dismiss'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            window.location.href = '/Supervisor/StudentRequests?sessionFilter=' + encodeURIComponent(reqData.session);
+                        }
+                    });
+                }
+            });
+            </text>
+            }
+
+            @if (userTypeClaim == "Student" || userTypeClaim == "Supervisor")
+            {
+            <text>
+            // Meeting Notification
+            window.signalRConnection.on("ReceiveMeetingUpdate", (payload) => {
+                incrementNotificationBadge();
+                var isMeetingPage = window.location.pathname.toLowerCase().includes('manage') || window.location.pathname.toLowerCase().includes('calendar') || window.location.pathname.toLowerCase().includes('bookmeeting');
+                
+                if (isMeetingPage) {
+                    payload._handled = false;
+                    document.dispatchEvent(new CustomEvent('MeetingUpdateEvent', { detail: payload }));
+                    
+                    if (!payload._handled) {
+                        const Toast = Swal.mixin({
+                            toast: true,
+                            position: 'top-end',
+                            showConfirmButton: false,
+                            timer: 3000,
+                            timerProgressBar: true
+                        });
+                        Toast.fire({
+                            icon: (payload.status === 'Approved' || payload.type === 'MeetingLogSigned') ? 'success' : 'info',
+                            title: payload.title || 'Meeting Update'
+                        });
+                    }
+                } else {
+                    Swal.fire({
+                        title: payload.title,
+                        text: payload.message,
+                        icon: 'info',
+                        showCancelButton: true,
+                        confirmButtonText: 'View',
+                        cancelButtonText: 'Dismiss'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            let url = '@(userTypeClaim == "Student" ? "/Student/BookMeeting" : "/Supervisor/ManageMeetings")';
+                            if ('@(userTypeClaim)' === 'Supervisor' && payload.session) {
+                                url += '?sessionFilter=' + encodeURIComponent(payload.session);
+                            }
+                            window.location.href = url;
+                        }
+                    });
+                }
+            });
+
+            // Milestone Notification
+            window.signalRConnection.on("ReceiveMilestoneUpdate", (payload) => {
+                incrementNotificationBadge();
+                var isMilestonePage = window.location.pathname.toLowerCase().includes('projectdetails') || window.location.pathname.toLowerCase().includes('forms') || window.location.pathname.toLowerCase().includes('reviewsubmissions');
+                
+                if (isMilestonePage) {
+                    payload._handled = false;
+                    document.dispatchEvent(new CustomEvent('MilestoneUpdateEvent', { detail: payload }));
+                    
+                    if (!payload._handled) {
+                        const Toast = Swal.mixin({
+                            toast: true,
+                            position: 'top-end',
+                            showConfirmButton: false,
+                            timer: 3000,
+                            timerProgressBar: true
+                        });
+                        Toast.fire({
+                            icon: (payload.type === 'ReviewMilestone' && payload.status === 'Approved') ? 'success' : (payload.type === 'DeleteMilestone' ? 'warning' : 'info'),
+                            title: payload.title || 'Milestone Update'
+                        });
+                    }
+                } else {
+                    Swal.fire({
+                        title: payload.title,
+                        text: payload.message,
+                        icon: 'info',
+                        showCancelButton: true,
+                        confirmButtonText: 'View',
+                        cancelButtonText: 'Dismiss'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            let url = '@(userTypeClaim == "Student" ? "/Student/Forms" : "/Supervisor/MyProjects")';
+                            if ('@(userTypeClaim)' === 'Student' && payload.title && payload.title.startsWith('Step ')) {
+                                url = '/Student/Stage2';
+                            } else if ('@(userTypeClaim)' === 'Supervisor' && payload.session) {
+                                url = '/Supervisor/ReviewSubmissions?sessionFilter=' + encodeURIComponent(payload.session);
+                            }
+                            window.location.href = url;
+                        }
+                    });
+                }
+            });
+            </text>
+            }
+
+            // Global Chat Notification
+            window.signalRConnection.on("ReceiveChatMessage", (msg) => {
+                var isChatPage = window.location.pathname.toLowerCase().includes('/chat');
+                if (!isChatPage) {
+                    // Show a toast notification if the user is not currently in the chat screen
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'info',
+                        title: 'New Chat Message',
+                        text: 'You have a new message. Click to view.',
+                        showConfirmButton: false,
+                        timer: 4000,
+                        timerProgressBar: true,
+                        didOpen: (toast) => {
+                            toast.addEventListener('mouseenter', Swal.stopTimer)
+                            toast.addEventListener('mouseleave', Swal.resumeTimer)
+                            toast.addEventListener('click', () => { window.location.href = '/Chat'; })
+                        }
+                    });
+                }
+            });
+
+            window.signalRConnection.start().then(() => {
+                window.signalRConnection.invoke("JoinUserGroup", globalUserId);
+            }).catch(err => console.error(err));
+        }
+
+        //$("#noticeSlider").css("display", "none");
+        //var myCarousel = document.getElementById('carouselExampleSlidesOnly')
+        //var carousel = new bootstrap.Carousel(myCarousel)
+        //console.log(carousel)
+        //carousel.to(1)
+        $(document).ready(function () {
+            $("#toggleNotify").change(function (e) {
+                if ($('#toggleNotify').is(':checked')){
+                    $("#carouselExampleControls").css("display", "flex");
+                    setCookie('eform_notify', "1")
+                }
+                else{
+                    $("#carouselExampleControls").css("display", "none");
+                    setCookie('eform_notify', "0")
+                }
+            });
+
+            toggleNotifyCookie();
+        })
+
+        function toggleNotifyCookie(){
+            if (getCookie("eform_notify") !== null) {
+                if (getCookie("eform_notify") === "1") {
+                    $('#toggleNotify').prop('checked', true);
+                    $("#carouselExampleControls").css("display", "flex");
+                }
+                else {
+                    $('#toggleNotify').prop('checked', false);
+                    $("#carouselExampleControls").css("display", "none");
+                }
+            }
+            else {
+                setCookie('eform_notify', "1")
+            }
+        }
+
+        //setInterval(function () {
+        //    console.log('c')
+        //    if(getCookie("eform_notify") !== null){
+        //        if (getCookie("eform_notify") === "590"){
+        //            setCookie('eform_notify',"10")
+        //            //show next slide
+        //            if (getCookie("eform_notify_index") !== null) {
+        //                var slideIndex = parseInt(getCookie("eform_notify_index"));
+        //                slideIndex += 1;
+
+        //                //slideIndex = slideIndex > 3 ? 0 : slideIndex;
+        //                carousel.to(slideIndex)
+        //                setCookie('eform_notify_index', slideIndex.toString())
+        //            }
+        //            else{
+        //                setCookie('eform_notify_index', "0")
+        //                carousel.to(0)
+        //            }
+
+        //            $("#noticeSlider").css("display", "block");
+        //            setTimeout(function(){
+        //                $("#noticeSlider").css("display", "none");
+        //            }, 15000)
+        //        }
+        //        else{
+        //            var getSecond = parseInt(getCookie("eform_notify"))
+        //            getSecond += 10;
+        //            console.log('hi')
+        //            $("#noticeSlider").css("display", "none");
+        //            setCookie('eform_notify', getSecond.toString())
+        //        }
+        //    }
+        //    else{
+        //        setCookie('eform_notify', "10")
+        //    }
+        //}, 10000);
+
+        function setCookie(name,value) {
+            document.cookie = name + "=" + (value || "")+"; path=/";
+        }
+        function getCookie(name) {
+            var nameEQ = name + "=";
+            var ca = document.cookie.split(';');
+            for (var i = 0; i < ca.length; i++) {
+                var c = ca[i];
+                while (c.charAt(0) == ' ') c = c.substring(1, c.length);
+                if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length, c.length);
+            }
+            return null;
+        }
+
+        function downloadUserManual() {
+            var a = document.createElement('a');
+            a.href = "E-Form Internal System User Manual V1.1.docx";
+            a.download = "E-Form Internal System User Manual V1.1.docx";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+    <!--end::Page Custom Javascript-->
+    <!--end::Javascript-->
+    <!--begin::Main-->
+    <!--begin::Root-->
+    <div class="d-flex flex-column flex-root">
+        <!--begin::Page-->
+        <div class="page d-flex flex-row flex-column-fluid">
+            <!--begin::Wrapper-->
+            <div class="wrapper d-flex flex-column flex-row-fluid"
+             id="kt_wrapper">
+
+            <!-- Sticky Header -->
+            @await Component.InvokeAsync(typeof(MasterViewComponent))
+
+            @{
+                bool isTestingAllowed = FYPTracker.Helpers.TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(WebHostEnv, AppConfig);
+                bool isAdmin = User.IsInRole("Admin") || User.IsInRole("SuperAdmin");
+            }
+
+            @if (isTestingAllowed)
+            {
+                <div class="bg-dark text-white px-3 py-2 border-bottom border-warning d-flex align-items-center justify-content-between flex-wrap gap-2 shadow-sm" style="font-size: 0.85rem; z-index: 999;">
+                    <div class="d-flex align-items-center gap-2">
+                        @if (SystemClock.IsSimulated)
+                        {
+                            <span class="badge bg-warning text-dark fw-bold px-2 py-1"><i class="fas fa-history me-1"></i>SIMULATION MODE</span>
+                            <span class="text-warning fw-semibold">@SystemClock.Now.ToString("dd MMM yyyy, h:mm tt")</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary text-white fw-bold px-2 py-1"><i class="fas fa-clock me-1"></i>REAL SYSTEM TIME</span>
+                            <span class="text-light">@SystemClock.Now.ToString("dd MMM yyyy, h:mm tt")</span>
+                        }
+                        <span class="text-white-50 d-none d-md-inline">(Testing Environment: FYPTracker_Test)</span>
+                    </div>
+
+                    @if (isAdmin)
+                    {
+                        <div class="d-flex align-items-center gap-2">
+                            <form asp-controller="TestingClock" asp-action="AdvanceDays" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="days" value="1" />
+                                <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                <button type="submit" class="btn btn-xs btn-outline-warning text-white py-1 px-2 rounded fw-bold" style="font-size: 0.75rem;" title="Advance clock by 1 day">+1 Day</button>
+                            </form>
+                            <form asp-controller="TestingClock" asp-action="AdvanceDays" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="days" value="7" />
+                                <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                <button type="submit" class="btn btn-xs btn-outline-warning text-white py-1 px-2 rounded fw-bold" style="font-size: 0.75rem;" title="Advance clock by 1 week">+1 Week</button>
+                            </form>
+
+                            <button type="button" class="btn btn-xs btn-warning text-dark py-1 px-2 rounded fw-bold" style="font-size: 0.75rem;" data-toggle="modal" data-target="#testingClockModal" data-bs-toggle="modal" data-bs-target="#testingClockModal">
+                                <i class="fas fa-calendar-alt me-1"></i>Set Clock
+                            </button>
+                            @if (SystemClock.IsSimulated)
+                            {
+                                <form asp-controller="TestingClock" asp-action="ResetToRealTime" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                    <button type="submit" class="btn btn-xs btn-outline-light py-1 px-2 rounded fw-bold" style="font-size: 0.75rem;" title="Reset to real system time">Reset</button>
+                                </form>
+                            }
+                        </div>
+                    }
+                </div>
+
+                @if (isAdmin)
+                {
+                    <!-- Admin Set Clock Modal -->
+                    <div class="modal fade" id="testingClockModal" tabindex="-1" role="dialog" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered" role="document">
+                            <div class="modal-content border-0 shadow-lg rounded-4">
+                                <div class="modal-header bg-dark text-white p-4">
+                                    <h5 class="modal-title fw-bold text-white"><i class="fas fa-clock text-warning me-2"></i>Configure Simulated Clock</h5>
+                                    <button type="button" class="close text-white btn-close-white" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" style="background: none; border: none; font-size: 1.5rem; opacity: 0.8;">&times;</button>
+                                </div>
+                                <form asp-controller="TestingClock" asp-action="SetSimulatedTime" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                    <div class="modal-body p-4">
+                                        <p class="text-muted small mb-3">
+                                            Select any target date and time between January and October 2026 for manual testing. All users will observe this simulated time.
+                                        </p>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold text-dark small text-uppercase">Target Date</label>
+                                            <input type="date" name="targetDate" class="form-control" value="@SystemClock.Now.ToString("yyyy-MM-dd")" required />
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold text-dark small text-uppercase">Target Time</label>
+                                            <input type="time" name="targetTime" class="form-control" value="@SystemClock.Now.ToString("HH:mm")" required />
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer bg-light p-3">
+                                        <button type="button" class="btn btn-secondary rounded-pill px-4 fw-bold" data-dismiss="modal" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold text-dark">Apply Simulated Time</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+
+            <!-- Main Content -->
+            <div class="container-fluid d-flex flex-column flex-column-fluid">
+                <main role="main" class="pb-3 flex-column-fluid">
+                    @RenderBody()
+                </main>
+            </div>
+
+            <!-- Footer -->
+            <footer class="border-top footer text-muted">
+                @await Component.InvokeAsync(typeof(FooterViewComponent))
+            </footer>
+            </div>
+        </div>
+    </div>
+    @await RenderSectionAsync("Scripts", required: false)
+
+    @if (TempData["success"] != null || TempData["Success"] != null)
+    {
+        var successMsg = TempData["success"] ?? TempData["Success"];
+        <script>
+            window.addEventListener('DOMContentLoaded', (event) => {
+                if (typeof toastr !== 'undefined') {
+                    toastr.success('@Html.Raw(successMsg)');
+                } else if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        text: '@Html.Raw(successMsg)',
+                        icon: "success",
+                        buttonsStyling: false,
+                        confirmButtonText: "Ok, got it!",
+                        customClass: { confirmButton: "btn btn-primary" }
+                    });
+                } else {
+                    alert('@Html.Raw(successMsg)');
+                }
+            });
+        </script>
+    }
+
+    <ejs-scripts></ejs-scripts>
+</body>
+</html>

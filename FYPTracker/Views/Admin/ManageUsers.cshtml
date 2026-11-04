@@ -1,0 +1,1701 @@
+@using FYPTracker.Common
+@using FYPTracker.Helpers
+@using FYPTracker.Models
+@model FYPTracker.Controllers.ApplicationUserVM
+@inject FYPTrackerContext DbContext
+@{
+    //ViewBag.Title = "Configuration>Users";
+    ViewBag.Title = "Manage Users";
+    var departmentList = Departments.DepartmentListFromDb(DbContext);
+    var programmeList = Departments.ProgrammeListFromDb(DbContext);
+    var specializationList = Departments.SpecializationListFromDb(DbContext);
+    var userTypeList = new List<SelectListItem>();
+    userTypeList = UserTypes.UserTypeFilterList();
+    var createUserTypeList = new List<SelectListItem>
+    {
+        new SelectListItem { Text = "Student", Value = "Student" },
+        new SelectListItem { Text = "Academic Staff (Supervisor & Examiner)", Value = "AcademicStaff" },
+        new SelectListItem { Text = "Supervisor Only", Value = "Supervisor" },
+        new SelectListItem { Text = "Examiner Only", Value = "Examiner" }
+    };
+}
+<style>
+    .premium-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        border-radius: 20px;
+    }
+    .table-premium tbody tr {
+        transition: all 0.3s ease;
+    }
+    .table-premium tbody tr:hover {
+        background-color: #f8fafc !important;
+        transform: scale(1.002);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        z-index: 10;
+        position: relative;
+        border-radius: 12px;
+    }
+    .tableBorder {
+        border-right: 2px solid #D3D3D3;
+        color: black;
+        font-size: 15px;
+    }
+    #mytable th, #mytable td {
+        vertical-align: middle;
+        padding-top: 0.6rem !important;
+        padding-bottom: 0.6rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+    #mytable .symbol-35px {
+        width: 35px;
+        height: 35px;
+    }
+    #mytable .symbol-35px img, #mytable .symbol-35px .symbol-label {
+        width: 35px;
+        height: 35px;
+        font-size: 0.9rem;
+    }
+    #mytable .action-btn-group {
+        display: inline-flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 3px;
+        white-space: nowrap;
+    }
+    #mytable .action-btn-group .btn-icon.btn-sm {
+        width: 28px;
+        height: 28px;
+    }
+    #mytable .action-btn-group .btn-icon.btn-sm i {
+        font-size: 0.95rem !important;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <div class="card premium-card border-0 mb-5">
+        <div class="card-header border-0 pt-5 px-5 d-flex justify-content-between align-items-center flex-wrap gap-3 bg-transparent">
+            <div>
+                <h2 class="fw-bolder text-dark mb-1" style="letter-spacing: -0.5px;">
+                    <i class="fas fa-users-cog text-primary me-2"></i>User Management
+                </h2>
+                <p class="text-muted mb-0" style="font-size: 0.95rem;">Manage all user accounts for the system.</p>
+            </div>
+            <div class="card-toolbar d-flex align-items-center flex-wrap gap-3">
+                <div class="d-flex align-items-center position-relative my-1">
+                    <span class="svg-icon svg-icon-1 position-absolute px-1 ms-3 text-muted">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" id="searchBar" class="form-control form-control-solid w-250px shadow-sm border-0 bg-light" placeholder="Search user" style="padding-left:2.8rem !important; border-radius: 10px;" />
+                </div>
+                <!--start:: Btn Bulk Invite-->
+                <a href="#" id="btn-BulkInvite" class="btn btn-primary shadow-sm fw-bold align-self-center h-40px d-flex align-items-center" style="border-radius: 10px;" data-bs-toggle="modal" data-bs-target="#bulkInviteModal">
+                    <i class="fas fa-envelope me-1"></i>Invite
+                </a>
+                <!--end:: Btn Bulk Invite-->
+                <!--start:: Btn CSV Upload-->
+                <a href="#" id="btn-CSVUpload" class="btn btn-light-success shadow-sm fw-bold align-self-center h-40px d-flex align-items-center" style="border-radius: 10px;" data-bs-toggle="modal" data-bs-target="#csvUploadModal">
+                    <i class="fas fa-file-csv me-1"></i>CSV Upload
+                </a>
+                <!--end:: Btn CSV Upload-->
+            </div>
+        </div>
+
+    <div class="card-body p-5 pt-0">
+        <!-- User Role Nav Tabs -->
+        <ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x mb-5 fs-5 fw-bolder border-0" id="userRoleTabs">
+            <li class="nav-item">
+                <a class="nav-link active text-primary" data-bs-toggle="tab" href="#all_users" onclick="filterUserType(event, '')">All Users</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-muted" data-bs-toggle="tab" href="#students" onclick="filterUserType(event, 'Student')">Students</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link text-muted" data-bs-toggle="tab" href="#academic_staff" onclick="filterUserType(event, 'AcademicStaff')">Academic Staff</a>
+            </li>
+        </ul>
+        <div class="table-responsive">
+            <table id="mytable" class="table table-premium align-middle mb-0 gs-0 gy-3 fs-7">
+                <thead class="bg-light text-muted text-uppercase fw-bolder" style="font-size: 0.75rem; letter-spacing: 0.5px;">
+                    <tr>
+                        <th class="w-20px ps-4 border-bottom-0">ID</th>
+                        <th style="min-width: 180px;" class="border-bottom-0">User</th>
+                        <th style="min-width: 80px;" class="border-bottom-0">Role</th>
+                        <th style="min-width: 120px;" class="border-bottom-0">Supervisor</th>
+                        <th style="min-width: 130px;" class="border-bottom-0">Assigned</th>
+                        <th style="min-width: 60px;" class="text-center border-bottom-0">Count</th>
+                        <th style="min-width: 110px;" class="border-bottom-0">Created</th>
+                        <th style="min-width: 70px;" class="border-bottom-0">Status</th>
+                        <th style="min-width: 90px;" class="border-bottom-0">Login</th>
+                        <th style="min-width: 120px;" class="text-end pe-4 border-bottom-0">Action</th>
+                    </tr>
+                </thead>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editAccModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-600px">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit User</h2>
+                <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                    <span class="svg-icon svg-icon-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                            <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                        </svg>
+                    </span>
+                </div>
+            </div>
+            <div class="modal-body p-5">
+                <div class="form-horizontal row g-3">
+                    <input type="hidden" id="editUserId" />
+                    <input type="hidden" id="editUserType" />
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-bolder text-dark fs-6">Full Name <span class="text-danger">*</span></label>
+                        <input type="text" id="editFullName" class="form-control" placeholder="Enter full name" />
+                        <div id="editFullNameError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-bolder text-dark fs-6">Email <span class="text-danger">*</span></label>
+                        <input type="email" id="editEmail" class="form-control" placeholder="xxx@gmail.com" />
+                        <div id="editEmailError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-bolder text-dark fs-6">Phone</label>
+                        <input type="text" id="editPhone" class="form-control" placeholder="012-3456789" />
+                        <div id="editPhoneError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                    </div>
+
+                    <div id="editLookupFields" class="col-12" style="display:none;">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6" id="editDeptContainer">
+                                <label class="form-label fw-bolder text-dark fs-6">Department <span class="text-danger">*</span></label>
+                                <select id="editDepartment" class="form-select fw-bold">
+                                    <option value="">-- Select Department --</option>
+                                    @foreach (var dept in departmentList)
+                                    {
+                                        <option value="@dept.Value">@dept.Text</option>
+                                    }
+                                </select>
+                                <div id="editDepartmentError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                            </div>
+                            <div class="col-12 col-md-6" id="editProgContainer">
+                                <label class="form-label fw-bolder text-dark fs-6">Programme</label>
+                                <select id="editProgramme" class="form-select fw-bold" multiple="multiple" data-control="select2" data-placeholder="-- Select Programme(s) --">
+                                    <option value=""></option>
+                                    @foreach (var prog in programmeList)
+                                    {
+                                        <option value="@prog.Value">@prog.Text</option>
+                                    }
+                                </select>
+                                <div id="editProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                            </div>
+                            <div class="col-12" id="editSpecContainer">
+                                <label class="form-label fw-bolder text-dark fs-6">Specialization</label>
+                                <select id="editSpecialization" class="form-select fw-bold" multiple="multiple" data-control="select2" data-placeholder="-- Select Specialization(s) --">
+                                    <option value=""></option>
+                                    @foreach (var spec in specializationList)
+                                    {
+                                        <option value="@spec.Value">@spec.Text</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Student-specific fields in Edit Modal -->
+                    <div id="editStudentFields" class="col-12" style="display:none;">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bolder text-dark fs-6">Programme <span class="text-danger">*</span></label>
+                                <select id="editStudentProgramme" class="form-select fw-bold">
+                                    <option value="">-- Select Programme --</option>
+                                    @foreach (var prog in programmeList)
+                                    {
+                                        <option value="@prog.Value">@prog.Text</option>
+                                    }
+                                </select>
+                                <div id="editStudentProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bolder text-dark fs-6">Academic Session <span class="text-danger">*</span></label>
+                                <select id="editAcademicSession" class="form-select fw-bold">
+                                    <option value="">-- Select Session --</option>
+                                </select>
+                                <div id="editAcademicSessionError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <div id="editSupervisorFields" class="col-12" style="display:none;">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bolder text-dark fs-6">Title <span class="text-danger">*</span></label>
+                                <select id="editTitle" class="form-select fw-bold">
+                                    <option value="">-- Select Title --</option>
+                                    <option value="Mr.">Mr.</option>
+                                    <option value="Ms.">Ms.</option>
+                                    <option value="Mrs.">Mrs.</option>
+                                    <option value="Dr.">Dr.</option>
+                                    <option value="Prof.">Prof.</option>
+                                    <option value="Assoc. Prof.">Assoc. Prof.</option>
+                                    <option value="Ts.">Ts.</option>
+                                    <option value="Ir.">Ir.</option>
+                                </select>
+                                <div id="editTitleError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bolder text-dark fs-6">Max Student Quota</label>
+                                <input type="number" id="editMaxSlots" class="form-control" min="0" max="50" placeholder="e.g. 5" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bolder text-dark fs-7">Assigned Roles <span class="text-danger">*</span></label>
+                                <div class="d-flex gap-4 p-3 bg-light rounded border border-gray-200">
+                                    <div class="form-check form-check-solid d-flex align-items-center m-0">
+                                        <input class="form-check-input mt-0 me-2" type="checkbox" name="editAcademicRoles" value="Supervisor" id="editRoleSup" />
+                                        <label class="form-check-label fw-bold text-gray-700 m-0" for="editRoleSup">Supervisor</label>
+                                    </div>
+                                    <div class="form-check form-check-solid d-flex align-items-center m-0">
+                                        <input class="form-check-input mt-0 me-2" type="checkbox" name="editAcademicRoles" value="Examiner" id="editRoleExm" />
+                                        <label class="form-check-label fw-bold text-gray-700 m-0" for="editRoleExm">Examiner</label>
+                                    </div>
+                                </div>
+                                <div id="editAcademicRoleError" class="text-danger mt-1 fs-8 fw-bold" style="display:none;">Please select at least one role.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <button type="button" id="btn_edit_submit" class="btn btn-lg btn-primary w-100">Save Changes</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transfer Students Modal -->
+<div class="modal fade" id="transferStudentsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-500px">
+        <div class="modal-content">
+            <form id="transferForm" method="post" action="/Admin/TransferStudents">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="fromSupervisorId" id="transferFromId" />
+                <div class="modal-header border-0 pb-0">
+                    <h2 class="fw-bold"><i class="fas fa-exchange-alt text-primary me-2"></i>Transfer Students</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body pb-3">
+                    <div class="alert alert-warning mb-4">
+                        You are transferring all active students from <strong id="transferFromName"></strong> to a new supervisor. This is usually done when a lecturer goes on leave (e.g. maternity/medical).
+                    </div>
+                    <div class="mb-5">
+                        <label class="form-label fw-bold">Select New Supervisor</label>
+                        <select name="toSupervisorId" id="transferToId" class="form-select form-select-solid fw-bold" required>
+                            <option value="">-- Select New Supervisor --</option>
+                            @if (ViewBag.Supervisors != null)
+                            {
+                                foreach (var sup in (List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>)ViewBag.Supervisors)
+                                {
+                                    <option value="@sup.Value">@sup.Text</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-check me-1"></i>Confirm Transfer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Invite Modal -->
+<div class="modal fade" id="bulkInviteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content">
+            <form method="post" action="/Admin/BulkInvite">
+                @Html.AntiForgeryToken()
+                <div class="modal-header py-4">
+                    <h3 class="modal-title fw-bolder mb-0">Invite Users</h3>
+                    <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                        <span class="svg-icon svg-icon-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                                <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+                <div class="modal-body p-4 pb-0">
+                    <div class="row mb-3">
+                        <div class="col-md-6 fv-row">
+                            <label class="form-label fw-bolder text-dark fs-7">Account Type <span class="text-danger">*</span></label>
+                            <select name="bulkUserType" id="bulkUserType" class="form-select form-select-solid form-select-sm fw-bold" required>
+                                <option value="">-- Select Type --</option>
+                                <option value="Student">Student</option>
+                                <option value="AcademicStaff">Academic Staff</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 fv-row">
+                            <label class="form-label fw-bolder text-dark fs-7">Email Domain</label>
+                            <div class="input-group input-group-solid input-group-sm">
+                                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                <input type="text" id="sharedDomain" class="form-control form-control-solid fw-bold text-muted" value="@@newinti.edu.my" readonly>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Academic Staff specific fields -->
+                    <div id="bulkAcademicFields" style="display:none;" class="mb-4">
+                        <label class="form-label fw-bolder text-dark fs-7">Assign Roles <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-4 p-3 bg-light rounded border border-gray-200">
+                            <div class="form-check form-check-solid d-flex align-items-center m-0">
+                                <input class="form-check-input mt-0 me-2" type="checkbox" name="bulkAcademicRoles" value="Supervisor" id="roleSupBulk" checked />
+                                <label class="form-check-label fw-bold text-gray-700 m-0" for="roleSupBulk">Supervisor</label>
+                            </div>
+                            <div class="form-check form-check-solid d-flex align-items-center m-0">
+                                <input class="form-check-input mt-0 me-2" type="checkbox" name="bulkAcademicRoles" value="Examiner" id="roleExmBulk" />
+                                <label class="form-check-label fw-bold text-gray-700 m-0" for="roleExmBulk">Examiner</label>
+                            </div>
+                        </div>
+                        <div id="bulkAcademicRoleError" class="text-danger mt-1 fs-8 fw-bold" style="display:none;">Please select at least one role.</div>
+                    </div>
+
+                    <!-- Student-specific required fields -->
+                    <div id="bulkStudentFields" style="display:none;">
+                        <div class="alert alert-warning border-0 rounded-3 d-flex align-items-center gap-3 p-3 mb-3 py-2">
+                            <i class="fas fa-exclamation-triangle text-warning fs-5"></i>
+                            <div class="fs-8 text-dark"><strong>Required for Students:</strong> Programme and Academic Session must be set before login credentials can be sent.</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6 fv-row">
+                                <label class="form-label fw-bolder text-dark fs-7">Programme <span class="text-danger">*</span></label>
+                                <select name="bulkProgramme" id="bulkProgramme" class="form-select form-select-solid form-select-sm fw-bold">
+                                    <option value="">-- Select Programme --</option>
+                                    @foreach (var prog in programmeList)
+                                    {
+                                        <option value="@prog.Value">@prog.Text</option>
+                                    }
+                                </select>
+                                <div id="bulkProgrammeError" class="text-danger mt-1 fs-8 fw-bold"></div>
+                            </div>
+                            <div class="col-md-6 fv-row">
+                                <label class="form-label fw-bolder text-dark fs-7">Academic Session <span class="text-danger">*</span></label>
+                                <select name="bulkAcademicSession" id="bulkAcademicSession" class="form-select form-select-solid form-select-sm fw-bold">
+                                    <option value="">-- Select Session --</option>
+                                </select>
+                                <div id="bulkAcademicSessionError" class="text-danger mt-1 fs-8 fw-bold"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="fv-row mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-bolder text-dark fs-7 mb-0">Users to Invite (<span id="inviteCountTitle">1</span>)</label>
+                            <button type="button" class="btn btn-sm btn-light btn-active-light-primary px-3 py-1" id="pasteMultipleBtn">
+                                <i class="bi bi-clipboard-check fs-7"></i> Paste Multiple
+                            </button>
+                        </div>
+                        
+                        <div id="pasteMultipleSection" style="display:none;" class="mb-3">
+                            <textarea id="pasteMultipleArea" class="form-control form-control-solid fs-7" rows="2" placeholder="Paste usernames or emails here (comma or newline separated)..."></textarea>
+                            <div class="mt-2 text-end">
+                                <button type="button" class="btn btn-sm btn-light me-2 px-3 py-1" id="cancelPasteBtn">Cancel</button>
+                                <button type="button" class="btn btn-sm btn-primary px-3 py-1" id="processPasteBtn">Generate Rows</button>
+                            </div>
+                        </div>
+                        
+                        <div class="table-responsive border rounded bg-white" style="max-height: 250px; overflow-y: auto;">
+                            <table class="table table-sm table-row-dashed table-row-gray-200 align-middle gs-3 gy-2 mb-0" id="inviteUsersTable">
+                                <thead class="bg-light" style="position: sticky; top: 0; z-index: 1;">
+                                    <tr class="fw-bolder text-muted fs-8 text-uppercase">
+                                        <th class="min-w-150px">Full Name</th>
+                                        <th class="min-w-150px">Username</th>
+                                        <th class="min-w-100px text-center">Status</th>
+                                        <th class="w-50px text-end pe-4">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="inviteesList">
+                                    <tr class="invitee-row">
+                                        <td>
+                                            <input type="text" name="inviteNames" class="form-control form-control-solid form-control-sm fs-8" placeholder="Full Name (Optional)">
+                                        </td>
+                                        <td>
+                                            <input type="text" class="form-control form-control-solid form-control-sm fs-8 username-input" placeholder="Username *" required>
+                                            <input type="hidden" name="inviteEmails" class="full-email-hidden">
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge badge-light-secondary status-badge w-100 fs-8">Ready</span>
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            <button type="button" class="btn btn-icon btn-light-danger btn-sm h-30px w-30px remove-invitee" disabled><i class="bi bi-trash fs-7"></i></button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-2 text-end">
+                            <button type="button" class="btn btn-sm btn-light btn-active-light-primary px-3 py-2" id="addInviteeBtn">
+                                <i class="bi bi-plus fs-6"></i> Add Another User
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-2 pb-4 bg-white d-flex justify-content-center" style="position: sticky; bottom: 0; z-index: 2;">
+                    <button type="submit" id="bulkInviteSubmitBtn" class="btn btn-primary w-100 mx-4">Send 1 Invites</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- CSV Upload Modal -->
+<div class="modal fade" id="csvUploadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-600px">
+        <div class="modal-content">
+            <form method="post" action="/Admin/UploadCSV" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="modal-header" style="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-bottom: 1px solid #6ee7b7;">
+                    <div>
+                        <h2 class="fw-bolder text-dark mb-0"><i class="fas fa-file-csv text-success me-2"></i>Bulk Upload via CSV</h2>
+                        <p class="text-muted mb-0 fs-7 mt-1">Upload a CSV file with columns: <code>Full Name, Email</code></p>
+                    </div>
+                    <div class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal">
+                        <span class="svg-icon svg-icon-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <rect opacity="0.5" x="6" y="17.3137" width="16" height="2" rx="1" transform="rotate(-45 6 17.3137)" fill="black" />
+                                <rect x="7.41422" y="6" width="16" height="2" rx="1" transform="rotate(45 7.41422 6)" fill="black" />
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+                <div class="modal-body p-5">
+                    <div class="alert alert-light-primary border border-primary rounded-3 d-flex align-items-start gap-3 p-3 mb-4">
+                        <i class="fas fa-info-circle text-primary fs-4 mt-1"></i>
+                        <div class="fs-7 text-dark">
+                            <strong>CSV Format:</strong> First row is treated as a header and skipped.<br/>
+                            Expected columns: <code>Full Name</code>, <code>Email</code>
+                        </div>
+                    </div>
+
+                    <div class="fv-row mb-5">
+                        <label class="form-label fw-bolder text-dark fs-6">CSV File <span class="text-danger">*</span></label>
+                        <input type="file" name="csvFile" id="csvFile" class="form-control form-control-solid" accept=".csv" required />
+                        <div class="form-text text-muted">Only <code>.csv</code> files are accepted.</div>
+                    </div>
+
+                    <div class="fv-row mb-5">
+                        <label class="form-label fw-bolder text-dark fs-6">User Type <span class="text-danger">*</span></label>
+                        <select name="csvUserType" id="csvUserType" class="form-select form-select-solid form-select-lg fw-bold" required>
+                            <option value="">-- Select Type --</option>
+                            <option value="Student">Student</option>
+                            <option value="Supervisor">Supervisor</option>
+                            <option value="Examiner">Examiner</option>
+                        </select>
+                    </div>
+
+                    <!-- Student-specific fields (shown only for Student type) -->
+                    <div id="csvStudentFields" style="display:none;">
+                        <div class="alert alert-warning border-0 rounded-3 d-flex align-items-center gap-3 p-3 mb-4">
+                            <i class="fas fa-exclamation-triangle text-warning fs-4"></i>
+                            <div class="fs-7 text-dark"><strong>Required for Students:</strong> Programme and Academic Session will be applied to all imported students.</div>
+                        </div>
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Programme <span class="text-danger">*</span></label>
+                            <select name="csvProgramme" id="csvProgramme" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Programme --</option>
+                                @foreach (var prog in programmeList)
+                                {
+                                    <option value="@prog.Value">@prog.Text</option>
+                                }
+                            </select>
+                            <div id="csvProgrammeError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                        </div>
+                        <div class="fv-row mb-5">
+                            <label class="form-label fw-bolder text-dark fs-6">Academic Session <span class="text-danger">*</span></label>
+                            <select name="csvAcademicSession" id="csvAcademicSession" class="form-select form-select-solid form-select-lg fw-bold">
+                                <option value="">-- Select Session --</option>
+                            </select>
+                            <div id="csvAcademicSessionError" class="text-danger mt-1 fs-7 fw-bold"></div>
+                        </div>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <button type="submit" id="csvUploadSubmitBtn" class="btn btn-lg btn-success w-100"><i class="fas fa-cloud-upload-alt me-2"></i>Upload & Import</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<!-- DataTables Buttons CSS & JS -->
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.dataTables.min.css"/>
+<script type="text/javascript" src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js"></script>
+<script>
+    // Ensure all POST AJAX requests include the AntiForgeryToken to prevent 400 Bad Request
+    $.ajaxPrefilter(function (options, originalOptions, jqXHR) {
+        if (options.type.toUpperCase() === "POST") {
+            var token = $('input[name="__RequestVerificationToken"]').first().val();
+            if (token) {
+                if (typeof options.data === 'string') {
+                    if (options.data.indexOf("__RequestVerificationToken") === -1) {
+                        options.data += (options.data.length > 0 ? "&" : "") + "__RequestVerificationToken=" + encodeURIComponent(token);
+                    }
+                } else if (typeof options.data === 'object' && !(options.data instanceof FormData)) {
+                    options.data.__RequestVerificationToken = token;
+                }
+            }
+        }
+    });
+
+    $(document).ready(function () {
+        @if (TempData["Success"] != null)
+        {
+            <text>
+            Swal.fire({
+                title: 'Success!',
+                text: '@Html.Raw(TempData["Success"].ToString().Replace("'", "\\'"))',
+                icon: 'success',
+                confirmButtonColor: '#3b82f6'
+            });
+            </text>
+        }
+
+        @if (TempData["Error"] != null)
+        {
+            <text>
+            Swal.fire({
+                title: 'Error!',
+                text: '@Html.Raw(TempData["Error"].ToString().Replace("'", "\\'"))',
+                icon: 'error',
+                confirmButtonColor: '#3b82f6'
+            });
+            </text>
+        }
+
+        @if (TempData["Info"] != null)
+        {
+            var infoMsg = TempData["Info"]?.ToString() ?? "";
+            if (!infoMsg.Contains("confirmed supervisor", StringComparison.OrdinalIgnoreCase))
+            {
+                <text>
+                Swal.fire({
+                    title: 'Info',
+                    text: '@Html.Raw(infoMsg.Replace("'", "\\'"))',
+                    icon: 'info',
+                    confirmButtonColor: '#3b82f6'
+                });
+                </text>
+            }
+        }
+
+        // Dynamically populate Academic Session dropdown from DB
+        var activeSessions = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(ViewBag.AcademicSessions));
+        var sessionSelect = $('#createAcademicSession'); // populated if a create modal is added
+        var editSessionSelect = $('#editAcademicSession');
+        var bulkSessionSelect = $('#bulkAcademicSession');
+        var csvSessionSelect = $('#csvAcademicSession');
+
+        if (activeSessions && activeSessions.length > 0) {
+            activeSessions.forEach(function(sess) {
+                sessionSelect.append(new Option(sess.Text, sess.Value));
+                editSessionSelect.append(new Option(sess.Text, sess.Value));
+                bulkSessionSelect.append(new Option(sess.Text, sess.Value));
+                csvSessionSelect.append(new Option(sess.Text, sess.Value));
+            });
+        }
+
+        // Show/hide fields in bulk invite modal
+        $('#bulkUserType').on('change', function () {
+            var val = $(this).val();
+            if (val === 'Student') {
+                $('#bulkStudentFields').slideDown(200);
+                $('#bulkProgramme').prop('required', true);
+                $('#bulkAcademicSession').prop('required', true);
+                $('#bulkAcademicFields').slideUp(200);
+            } else if (val === 'AcademicStaff') {
+                $('#bulkStudentFields').slideUp(200);
+                $('#bulkProgramme').prop('required', false).val('');
+                $('#bulkAcademicSession').prop('required', false).val('');
+                $('#bulkProgrammeError').text('');
+                $('#bulkAcademicSessionError').text('');
+                $('#bulkAcademicFields').slideDown(200);
+            } else {
+                $('#bulkStudentFields').slideUp(200);
+                $('#bulkAcademicFields').slideUp(200);
+            }
+        });
+
+        // Client-side validation before submitting bulk invite
+        $('#bulkInviteSubmitBtn').closest('form').on('submit', function (e) {
+            var userType = $('#bulkUserType').val();
+            var isValid = true;
+
+            if (userType === 'Student') {
+                if (!$('#bulkProgramme').val()) {
+                    $('#bulkProgrammeError').text('Please select a Programme.');
+                    isValid = false;
+                } else {
+                    $('#bulkProgrammeError').text('');
+                }
+                if (!$('#bulkAcademicSession').val()) {
+                    $('#bulkAcademicSessionError').text('Please select an Academic Session.');
+                    isValid = false;
+                } else {
+                    $('#bulkAcademicSessionError').text('');
+                }
+            } else if (userType === 'AcademicStaff') {
+                if ($('input[name="bulkAcademicRoles"]:checked').length === 0) {
+                    $('#bulkAcademicRoleError').show();
+                    isValid = false;
+                } else {
+                    $('#bulkAcademicRoleError').hide();
+                }
+            }
+
+            if (!isValid) {
+                e.preventDefault();
+            }
+        });
+
+        LoadTable();
+
+        // ── CSV Upload: show/hide student fields ──
+        $('#csvUserType').on('change', function () {
+            if ($(this).val() === 'Student') {
+                $('#csvStudentFields').slideDown(200);
+                $('#csvProgramme').prop('required', true);
+                $('#csvAcademicSession').prop('required', true);
+            } else {
+                $('#csvStudentFields').slideUp(200);
+                $('#csvProgramme').prop('required', false).val('');
+                $('#csvAcademicSession').prop('required', false).val('');
+                $('#csvProgrammeError').text('');
+                $('#csvAcademicSessionError').text('');
+            }
+        });
+
+        // CSV Upload: client-side validation before submit
+        $('#csvUploadSubmitBtn').closest('form').on('submit', function (e) {
+            var userType = $('#csvUserType').val();
+            var isValid = true;
+            if (userType === 'Student') {
+                if (!$('#csvProgramme').val()) {
+                    $('#csvProgrammeError').text('Please select a Programme.');
+                    isValid = false;
+                } else { $('#csvProgrammeError').text(''); }
+                if (!$('#csvAcademicSession').val()) {
+                    $('#csvAcademicSessionError').text('Please select an Academic Session.');
+                    isValid = false;
+                } else { $('#csvAcademicSessionError').text(''); }
+            }
+            if (!isValid) e.preventDefault();
+        });
+
+    });
+
+    // ── Resend Invite ──
+    function ResendInvite(userId, fullName) {
+        Swal.fire({
+            title: 'Resend Login Credentials?',
+            html: '<p>A new temporary password will be generated and emailed to <strong>' + fullName + '</strong>.</p>',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#0ea5e9',
+            cancelButtonColor: '#a1a5b7',
+            confirmButtonText: '<i class="bi bi-send-fill me-1"></i> Yes, Resend!',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    type: 'POST',
+                    url: '/Admin/ResendInvite',
+                    data: { userId: userId },
+                    success: function (data) {
+                        if (data.success) {
+                            Swal.fire({ title: 'Sent!', text: data.message, icon: 'success', confirmButtonText: 'Ok' });
+                        } else {
+                            Swal.fire({ title: 'Error', text: data.message, icon: 'error', confirmButtonText: 'Ok' });
+                        }
+                    },
+                    error: function () {
+                        Swal.fire({ title: 'Error', text: 'An unexpected error occurred.', icon: 'error' });
+                    }
+                });
+            }
+        });
+    }
+
+    $('#typeFilter').change(function (e) { $('#mytable').DataTable().columns(2).search(e.target.value).draw(); });
+
+    function OpenEditModal(employeeId, isViewOnly) {
+        var isView = false;
+        EditableModal();
+        if (isViewOnly == "View") {
+            $("#modal-title").text("View");
+            isView = true;
+        }
+        else {
+            $("#modal-title").text("Edit");
+        }
+
+        $.ajax({
+            type: "POST",
+            url: '/User/Edit',
+            data: {
+                id: employeeId
+            },
+            success: function (data, row) {
+                var imagePath = data.Image;
+                $("#ApplicationUser_Id").val(data.Id);
+                $("#ApplicationUser_FullName").val(data.FullName);
+                $("#ApplicationUser_Email").val(data.Email);
+                $("#ApplicationUser_PassCode").val(data.PassCode);
+                if (data.Image != null) {
+                    $("#UserImage").attr("value", data.Image);
+                    $("#uploadedImg").attr("src", data.Image);
+                    $("#backImg").css("background-image", "url(" + data.Image + ")");
+                    $("#backImg1").css("background-image", "url(" + data.Image + ")");
+                }
+                else {
+                    $("#UserImage").attr("value", '');
+                    $("#uploadedImg").attr("src", '');
+                    $("#backImg").css("background-image", "url(" + "assets/media/svg/avatars/blank.png" + ")");
+                    $("#backImg1").css("background-image", "url(" + "assets/media/svg/avatars/blank.png" + ")");
+
+                }
+                $('#create_new_user_modal').modal('show');
+                //CheckHasImage(isView);
+            },
+            error: function (data) {
+            }
+
+        });
+        $("#div-submit").html('<input type="submit" value="Save" class="btn btn-primary" />');
+    };
+
+
+    $("#SearchDepartmentName").change(function (e) {
+        e.stopPropagation();
+        ReloadTable();
+    });
+
+    $('#searchBar').keyup(function () {
+        $("#mytable").DataTable().search($(this).val()).draw();
+    });
+
+    function ReloadTable() {
+        $("#mytable tbody").remove();
+        LoadTable();
+    }
+
+    function LoadTable() {
+        $.post("@Url.Action("ManageUsersData")", { DepartmentName: $('#SearchDepartmentName').val() }, function (d) {
+            $("#mytable").DataTable(
+                {
+                    dom: 'Brtip',
+                    language: {
+                        info: "Showing _START_ to _END_ of _TOTAL_ users",
+                        infoEmpty: "No matching users found.",
+                        emptyTable: "No users found in the system.",
+                        zeroRecords: "No matching users found."
+                    },
+                    buttons: [
+                        { extend: 'csv', className: 'btn btn-sm btn-primary', text: '<i class="fas fa-file-csv"></i> Export CSV' },
+                        { extend: 'excel', className: 'btn btn-sm btn-success', text: '<i class="fas fa-file-excel"></i> Export Excel' }
+                    ],
+                    processing: true,
+                    searching: true,
+                    destroy: true,
+                    data: d.data,
+                    drawCallback: function(settings) {
+                        if (typeof KTApp !== 'undefined') {
+                            KTApp.initBootstrapTooltips();
+                        } else {
+                            $('[data-bs-toggle="tooltip"]').tooltip();
+                        }
+                    },
+                    columnDefs: [
+                        {
+                            "defaultContent": "-",
+                            "targets": "_all"
+                        }, 
+                        {
+                            targets: 1,
+                            createdCell: function (td) {
+                                // Default styling
+                            }
+                        },
+                        {
+                            targets: [2, 3, 4, 5, 6, 7, 8],
+                            createdCell: function (td, cellData, rowData, row, col) {
+                                // Default styling
+                            }
+                        },
+                        {
+                            targets: 9,
+                            createdCell: function (td, cellData, rowData, row, col) {
+                                $(td).addClass('text-end');
+                            }
+                        },
+                        {
+                            "targets": 6, "render": function (data, type, row, meta) {
+                                return data ? moment(data.toString()).format('DD MMM YYYY HHmm') : '-';
+                            }
+                        }],
+                    order: [[0, 'desc']],// order by ID desc (newest first)
+                    aoColumns: [
+                        { mData: "id", visible: false },
+                        {
+                            render: function (data, type, row, meta) {
+                                let imageComponent = ""
+
+                                if (row.image !== "") {
+                                    imageComponent = '<div class="symbol symbol-35px me-3"><img alt="Pic" src="' + row.image + '" onerror="this.onerror=null;this.src=\'/assets/media/avatars/blank.png\';" /></div>';
+                                } else {
+                                    imageComponent = '<div class="symbol symbol-35px me-3"><span class="symbol-label bg-light-danger text-danger fw-bolder">' + row.fullName.charAt(0).toUpperCase() + '</span></div>'
+                                }
+
+                                let detailComponent = '<div class="d-flex justify-content-start flex-column"><span class="text-dark fw-bolder fs-7">' + row.fullName + '</span><span class="text-muted fs-8">ID: ' + (row.employeeId || 'N/A') + '</span><span class="text-muted fs-8 text-truncate" style="max-width:180px;" title="' + row.email + '">' + row.email + '</span></div>';
+                                let fullComponent = '<div class="d-flex align-items-center">' + imageComponent + detailComponent + '</div>';
+
+                                return fullComponent;
+                            }
+                        },
+                        { 
+                            render: function (data, type, row, meta) {
+                                if (type === 'display') {
+                                    let roleDisplay = row.userType || '';
+                                    if (roleDisplay.includes('Supervisor') && roleDisplay.includes('Examiner')) {
+                                        roleDisplay = '<span class="badge badge-light-primary fw-bold mb-1">Supervisor</span><br><span class="badge badge-light-info fw-bold">Examiner</span>';
+                                    } else if (roleDisplay === 'Supervisor') {
+                                        roleDisplay = '<span class="badge badge-light-primary fw-bold">Supervisor</span>';
+                                    } else if (roleDisplay === 'Examiner') {
+                                        roleDisplay = '<span class="badge badge-light-info fw-bold">Examiner</span>';
+                                    } else if (roleDisplay === 'Student') {
+                                        roleDisplay = '<span class="badge badge-light-dark fw-bold">Student</span>';
+                                    } else {
+                                        roleDisplay = '<span class="badge badge-light-dark fw-bold">' + roleDisplay + '</span>';
+                                    }
+                                    
+                                    let badge = roleDisplay;
+                                    if (row.isProfileIncomplete) {
+                                        badge += '<br><span class="badge badge-light-warning fs-8 mt-1 border border-warning" data-bs-toggle="tooltip" title="Missing required profile configuration"><i class="bi bi-exclamation-triangle-fill text-warning me-1"></i> Setup Required</span>';
+                                    }
+                                    return badge;
+                                }
+                                return row.userType;
+                            }
+                        },
+                        { 
+                            render: function (data, type, row, meta) {
+                                if(row.userType === 'Student') {
+                                    return '<span class="text-dark fw-bold">' + (row.supervisorName || 'Not Assigned') + '</span>';
+                                }
+                                return '-';
+                            }
+                        },
+                        { 
+                            render: function (data, type, row, meta) {
+                                if(row.userType && (row.userType.includes('Supervisor') || row.userType.includes('Examiner'))) {
+                                    var safeStudents = (row.assignedStudents || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                                    if(row.assignedStudentCount > 0) {
+                                        return '<a href="javascript:void(0);" onclick="ViewAssignedStudents(\'' + row.fullName.replace(/'/g, "\\'") + '\', \'' + safeStudents + '\', ' + row.assignedStudentCount + ')" class="text-primary fw-bold text-hover-info text-decoration-underline" data-bs-toggle="tooltip" title="View Assigned Students">View</a>';
+                                    } else {
+                                        return '<span class="text-muted fw-bold">No Students</span>';
+                                    }
+                                }
+                                return '-';
+                            }
+                        },
+                        { 
+                            render: function (data, type, row, meta) {
+                                if(row.userType && (row.userType.includes('Supervisor') || row.userType.includes('Examiner'))) {
+                                    return '<span class="text-dark fw-bold">' + (row.assignedStudentCount || '0') + '</span>';
+                                }
+                                return '-';
+                            }
+                        },
+                        { mData: "dateCreated" },
+                        {
+                            render: function (data, type, row, meta) {
+                                if(row.isResign){
+                                    return '<div class="badge badge-light-danger fw-bold" data-bs-toggle="tooltip" title="Account Deactivated">Inactive</div>';
+                                }
+                                else{
+                                    return '<div class="badge badge-light-success fw-bold" data-bs-toggle="tooltip" title="Account Active">Active</div>';
+                                }
+                            }
+                        },
+                        {
+                            render: function (data, type, row, meta) {
+                                if (row.requirePasswordChange) {
+                                    return '<span class="badge badge-light-warning fw-bold fs-7" data-bs-toggle="tooltip" title="User has not set their password yet"><i class="bi bi-clock-history text-warning me-1"></i>Not Logged In</span>';
+                                } else {
+                                    return '<span class="badge badge-light-success fw-bold fs-7" data-bs-toggle="tooltip" title="User is fully active"><i class="bi bi-check-circle-fill text-success me-1"></i>Logged In</span>';
+                                }
+                            }
+                        },
+                        {
+                            render: function (data, type, row, meta) {
+                                let buttonComponent = '<div class="action-btn-group justify-content-end">';
+                                buttonComponent += '<a id="edit_' + row.id + '" onclick="Edit(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit User"><i class="bi bi-pencil-fill fs-5"></i></a>';
+                                if (row.userType && (row.userType.includes('Supervisor') || row.userType.includes('SUPERVISOR'))) {
+                                    buttonComponent += '<a id="transfer_' + row.id + '" onclick="TransferStudentsModal(' + row.id + ', \'' + row.fullName.replace(/'/g, "\\'") + '\')" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Transfer Students"><i class="fas fa-exchange-alt fs-5 text-primary"></i></a>';
+                                }
+                                // Resend invite button — only for users who haven't activated yet
+                                if (row.requirePasswordChange) {
+                                    buttonComponent += '<a id="resend_' + row.id + '" onclick="ResendInvite(' + row.id + ', \'' + row.fullName.replace(/'/g, "\\'") + '\')" class="btn btn-icon btn-bg-light btn-active-color-info btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Resend Login Credentials"><i class="bi bi-send-fill fs-5 text-info"></i></a>';
+                                }
+                                if (row.isResign) {
+                                    buttonComponent += '<a id="activate_' + row.id + '" onclick="Activate(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-success btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Activate User"><i class="bi bi-check-circle-fill fs-5 text-success"></i></a>';
+                                } else {
+                                    buttonComponent += '<a id="deactivate_' + row.id + '" onclick="Delete(' + row.id + ')" class="btn btn-icon btn-bg-light btn-active-color-warning btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Deactivate User"><i class="bi bi-slash-circle-fill fs-5 text-warning"></i></a>';
+                                }
+                                buttonComponent += '<a id="harddelete_' + row.id + '" onclick="HardDeleteUser(' + row.id + ', \'' + row.fullName.replace(/'/g, "\\'") + '\')" class="btn btn-icon btn-bg-light btn-active-color-danger btn-sm" data-bs-toggle="tooltip" data-bs-placement="top" title="Permanently Delete User"><i class="bi bi-trash-fill fs-5 text-danger"></i></a>';
+                                buttonComponent += '</div>';
+                                return buttonComponent;
+                            }
+                        }
+                    ],
+                }
+            )
+
+        });
+    }
+
+    function ViewAssignedStudents(supervisorName, studentsStr, count) {
+        let listHtml = '';
+        if (studentsStr === 'No Students' || !studentsStr) {
+            listHtml = '<div class="text-muted fst-italic py-3">No students assigned yet.</div>';
+        } else {
+            let students = studentsStr.split(', ');
+            listHtml = '<ul class="list-group list-group-flush text-start mt-3" style="max-height: 250px; overflow-y: auto;">';
+            students.forEach(s => {
+                listHtml += '<li class="list-group-item px-0 border-0 border-bottom"><i class="fas fa-user-graduate me-3 text-primary"></i><span class="fw-bold">' + s + '</span></li>';
+            });
+            listHtml += '</ul>';
+        }
+        
+        Swal.fire({
+            title: '<i class="fas fa-users text-primary me-2 fs-2"></i> Assigned Students',
+            html: '<div class="mb-4 text-muted border-bottom pb-3">Supervisor: <strong class="text-dark">' + supervisorName + '</strong> &bull; Total: <strong class="text-dark">' + (count || 0) + '</strong></div>' + listHtml,
+            confirmButtonColor: '#3b82f6',
+            confirmButtonText: 'Close',
+            customClass: {
+                popup: 'rounded-4'
+            }
+        });
+    }
+
+    function Activate(employeeId) {
+        Swal.fire({
+            title: 'Confirm Activation',
+            text: "Are you sure you want to activate this user?",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#50cd89',
+            cancelButtonColor: '#f1416c',
+            confirmButtonText: 'Yes, activate!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    type: "POST",
+                    url: '/Admin/Activate',
+                    data: { id: employeeId },
+                    success: function (data) {
+                        if (data) {
+                            Swal.fire({ text: "User activated successfully", icon: "success", confirmButtonText: "Ok, got it!" });
+                            LoadTable();
+                        } else {
+                            Swal.fire({ text: "Failed to activate user", icon: "error", confirmButtonText: "Ok, got it!" });
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    function Delete(employeeId) {
+        Swal.fire({
+            title: 'Confirm Deactivation',
+            text: "Are you sure you want to deactivate this user? They will no longer be able to log in.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#f59e0b',
+            cancelButtonColor: '#a1a5b7',
+            confirmButtonText: 'Yes, deactivate!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    type: "POST",
+                    url: '/Admin/Delete',
+                    data: { id: employeeId },
+                    success: function (data) {
+                        Swal.fire({ text: "User deactivated successfully.", icon: "success", confirmButtonText: "Ok, got it!" });
+                        LoadTable();
+                    },
+                    error: function (data) {
+                        LoadTable();
+                    }
+                });
+            }
+        });
+    }
+
+    function HardDeleteUser(employeeId, fullName) {
+        Swal.fire({
+            title: '⚠️ Permanently Delete User?',
+            html: '<p>You are about to <strong>permanently delete</strong> <strong>' + fullName + '</strong>.</p>' +
+                  '<p class="text-danger mt-2 mb-0"><strong>This will also delete all their FYP project data, milestones, files, meeting records, and cannot be undone.</strong></p>',
+            icon: 'error',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'Yes, permanently delete!',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Second confirmation
+                Swal.fire({
+                    title: 'Are you absolutely sure?',
+                    text: 'This action CANNOT be undone. Type "DELETE" to confirm.',
+                    input: 'text',
+                    inputPlaceholder: 'Type DELETE to confirm',
+                    showCancelButton: true,
+                    confirmButtonColor: '#ef4444',
+                    cancelButtonColor: '#6b7280',
+                    confirmButtonText: 'Permanently Delete',
+                    preConfirm: (val) => {
+                        if (val !== 'DELETE') {
+                            Swal.showValidationMessage('You must type DELETE to confirm.');
+                        }
+                    }
+                }).then((result2) => {
+                    if (result2.isConfirmed) {
+                        $.ajax({
+                            type: "POST",
+                            url: '/Admin/HardDelete',
+                            data: { id: employeeId },
+                            success: function (data) {
+                                if (data.status) {
+                                    Swal.fire({ title: 'Deleted!', text: data.msg, icon: 'success', confirmButtonText: 'Ok' });
+                                    LoadTable();
+                                } else {
+                                    Swal.fire({ title: 'Error', text: data.msg, icon: 'error', confirmButtonText: 'Ok' });
+                                }
+                            },
+                            error: function () {
+                                Swal.fire({ title: 'Error', text: 'An unexpected error occurred.', icon: 'error' });
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    function TransferStudentsModal(id, name) {
+        $('#transferFromId').val(id);
+        $('#transferFromName').text(name);
+        
+        // Disable the current supervisor in the dropdown
+        $('#transferToId option').prop('disabled', false);
+        $('#transferToId option[value="'+id+'"]').prop('disabled', true);
+        $('#transferToId').val('');
+
+        $('#transferStudentsModal').modal('show');
+    }
+
+    function Edit(employeeId) {
+        $.ajax({
+            type: "GET",
+            url: '/Admin/GetUserDetails',
+            data: { id: employeeId },
+            success: function (data) {
+                if (data.success) {
+                    $('#editUserId').val(data.id);
+                    $('#editUserType').val(data.userType);
+                    $('#editFullName').val(data.fullName);
+                    $('#editEmail').val(data.email);
+                    $('#editPhone').val(data.phone);
+
+                    var uType = (data.userType || "").toLowerCase();
+                    var isStudent = uType.includes('student');
+                    var isAcademicStaff = uType.includes('supervisor') || uType.includes('examiner');
+
+                    if (isStudent || isAcademicStaff) {
+                        $('#editLookupFields').show();
+
+                        if (isStudent) {
+                            $('#editDeptContainer').hide();
+                            $('#editDepartment').val('');
+                            $('#editSpecContainer').hide();
+                            $('#editProgContainer').hide();
+                            $('#editStudentFields').show();
+                            // Programme: ensure option exists before selecting
+                            if (data.programme) {
+                                var $progSel = $('#editStudentProgramme');
+                                if ($progSel.find('option[value="' + data.programme + '"]').length === 0) {
+                                    $progSel.append(new Option(data.programme, data.programme));
+                                }
+                                $progSel.val(data.programme);
+                            }
+                            // Academic Session: ensure option exists before selecting
+                            if (data.academicSession) {
+                                var $sessSel = $('#editAcademicSession');
+                                if ($sessSel.find('option[value="' + data.academicSession + '"]').length === 0) {
+                                    $sessSel.append(new Option(data.academicSession, data.academicSession));
+                                }
+                                $sessSel.val(data.academicSession);
+                            }
+                        } else if (isAcademicStaff) {
+                            $('#editDeptContainer').show();
+                            $('#editSpecContainer').show();
+                            $('#editProgContainer').show();
+                        }
+
+                        $('#editDepartment').val(data.department);
+                        
+                        var progArray = data.programme ? data.programme.split(',').map(s => s.trim()) : [];
+                        $('#editProgramme').val(progArray).trigger('change');
+                        
+                        var specArray = data.specialization ? data.specialization.split(',').map(s => s.trim()) : [];
+                        $('#editSpecialization').val(specArray).trigger('change');
+                    } else {
+                        $('#editLookupFields').hide();
+                    }
+
+                    if (isStudent) {
+                        // editStudentFields already shown above
+                        $('#editSupervisorFields').hide();
+                    } else if (isAcademicStaff) {
+                        $('#editStudentFields').hide();
+                        $('#editSupervisorFields').show();
+                        $('#editTitle').val(data.title);
+                        $('#editMaxSlots').val(data.maxStudentSlots);
+                        
+                        // Populate checkboxes based on current roles
+                        $('#editRoleSup').prop('checked', data.userType && data.userType.includes('Supervisor'));
+                        $('#editRoleExm').prop('checked', data.userType && data.userType.includes('Examiner'));
+                    } else {
+                        $('#editStudentFields').hide();
+                        $('#editSupervisorFields').hide();
+                    }
+                    
+                    // Clear previous validation states
+                    $('#editPhoneError').text("");
+                    $('#editPhone').removeClass('is-invalid');
+                    $('#editEmailError').text("");
+                    $('#editEmail').removeClass('is-invalid');
+                    
+                    $('#editAccModal').modal('show');
+                } else {
+                    Swal.fire({ text: data.msg || "Could not fetch user details.", icon: "error", confirmButtonText: "Ok, got it!" });
+                }
+            },
+            error: function () {
+                Swal.fire({ text: "Server error while fetching user details.", icon: "error", confirmButtonText: "Ok, got it!" });
+            }
+        });
+    }
+
+    $('#btn_edit_submit').click(function () {
+        var id = $('#editUserId').val();
+        var fullName = $('#editFullName').val().trim();
+        var email = $('#editEmail').val().trim();
+        var phone = $('#editPhone').val().trim();
+        var department = $('#editDepartment').val();
+        
+        var userType = $('#editUserType').val();
+        
+        // For students, read from the student-specific dropdowns
+        var programme, specialization, academicSession;
+        if (userType === 'Student' || userType === 'STUDENT') {
+            programme = $('#editStudentProgramme').val() || '';
+            specialization = '';
+            academicSession = $('#editAcademicSession').val() || '';
+        } else {
+            var progVal = $('#editProgramme').val();
+            programme = Array.isArray(progVal) ? progVal.join(', ') : (progVal || '');
+            var specVal = $('#editSpecialization').val();
+            specialization = Array.isArray(specVal) ? specVal.join(', ') : (specVal || '');
+            academicSession = '';
+        }
+        
+        var title = $('#editTitle').val().trim();
+
+        // Clear previous inline errors
+        $('#editEmailError').text('');
+        $('#editStudentProgrammeError').text('');
+        $('#editAcademicSessionError').text('');
+        $('#editTitleError').text('');
+        $('#editDepartmentError').text('');
+
+        if (!fullName) {
+            Swal.fire({ text: "Please enter a full name.", icon: "warning", confirmButtonText: "Ok, got it!" });
+            return;
+        }
+
+        if (!email) {
+            $('#editEmailError').text('Please enter an email.');
+            return;
+        }
+
+        const emailPattern = /^[^@@\s]+@@[^@@\s]+\.[^@@\s]+$/;
+        if (!emailPattern.test(email)) {
+            $('#editEmailError').text('Please enter a valid email address.');
+            return;
+        }
+
+
+        if (userType === "Student" || userType === "STUDENT") {
+            if (!programme) {
+                $('#editStudentProgrammeError').text('Please select a Programme.');
+                return;
+            }
+            if (!academicSession) {
+                $('#editAcademicSessionError').text('Please select an Academic Session.');
+                return;
+            }
+        }
+
+        if (userType === "Supervisor") {
+            if (!title) {
+                $('#editTitleError').text('Please select a Title.');
+                return;
+            }
+            if (!department) {
+                $('#editDepartmentError').text('Please select a Department.');
+                return;
+            }
+        }
+
+        const phonePattern = /^01[0-9]-?\d{7,8}$/;
+        if (phone && !phonePattern.test(phone)) {
+            Swal.fire({ text: "Please enter a valid Malaysian mobile number (e.g. 012-3456789).", icon: "warning", confirmButtonText: "Ok, got it!" });
+            return;
+        }
+
+        var roles = [];
+        if (userType !== "Student" && userType !== "STUDENT") {
+            if ($('input[name="editAcademicRoles"]:checked').length === 0) {
+                $('#editAcademicRoleError').show();
+                return;
+            } else {
+                $('#editAcademicRoleError').hide();
+                $('input[name="editAcademicRoles"]:checked').each(function() {
+                    roles.push($(this).val());
+                });
+            }
+        }
+
+        $.ajax({
+            url: "/Admin/UpdateUserModal", method: "POST",
+            data: { 
+                id: id, 
+                fullName: fullName,
+                email: email, 
+                phone: phone, 
+                department: department, 
+                programme: programme, 
+                specialization: specialization, 
+                academicSession: academicSession, 
+                title: title,
+                maxStudentSlots: $('#editMaxSlots').val(),
+                roles: roles
+            },
+            success: function (r) {
+                if (r.status) {
+                    $('#editAccModal').modal('hide');
+                    Swal.fire({ text: r.msg, icon: "success", confirmButtonText: "Ok, got it!" }).then(function () { LoadTable(); });
+                } else {
+                    Swal.fire({ text: r.msg, icon: "warning", confirmButtonText: "Ok, got it!" });
+                }
+            },
+            error: function () {
+                Swal.fire({ text: "An error occurred. Please try again.", icon: "error", confirmButtonText: "Ok, got it!" });
+            }
+        });
+    });
+
+    // Real-time email validation
+    const editEmailInput = document.getElementById('editEmail');
+    const editEmailError = document.getElementById('editEmailError');
+    const editEmailPattern = /^[^@@\s]+@@[^@@\s]+\.[^@@\s]+$/;
+
+    if (editEmailInput) {
+        editEmailInput.addEventListener('input', function() {
+            if (this.value && !editEmailPattern.test(this.value)) {
+                editEmailError.innerText = "Please enter a valid email format.";
+                this.classList.add('is-invalid');
+            } else {
+                editEmailError.innerText = "";
+                this.classList.remove('is-invalid');
+            }
+        });
+    }
+
+    // Real-time phone validation for Edit modal
+    const editPhoneInput = document.getElementById('editPhone');
+    const editPhoneError = document.getElementById('editPhoneError');
+    const editPhonePattern = /^01[0-9]-?\d{7,8}$/;
+
+    if (editPhoneInput) {
+        editPhoneInput.addEventListener('input', function() {
+            if (this.value && !editPhonePattern.test(this.value)) {
+                editPhoneError.innerText = "Please enter a valid Malaysian mobile number (e.g. 012-3456789).";
+                this.classList.add('is-invalid');
+            } else {
+                editPhoneError.innerText = "";
+                this.classList.remove('is-invalid');
+            }
+        });
+    }
+
+    // Clear dropdown errors on change
+    $(document).ready(function() {
+        $('#editStudentProgramme, #editAcademicSession, #editTitle, #editDepartment').on('change', function() {
+            $(this).siblings('.text-danger').text('');
+        });
+    });
+
+    // ── Tab Filtering Logic ────────────────────────────────────
+    function filterUserType(e, type) {
+        e.preventDefault();
+        const table = $("#mytable").DataTable();
+        
+        let searchRegex = '';
+        if (type === 'AcademicStaff') {
+            searchRegex = 'Supervisor|Examiner';
+        } else if (type) {
+            searchRegex = '\\b' + type + '\\b';
+        }
+
+        // Filter by user type column (index 2) using regex for exact or partial word match
+        table.column(2).search(searchRegex, true, false).draw();
+        
+        // Dynamically hide/show columns based on the role
+        // Column 3 is Supervisor (for Students), Column 4 is Assigned Students (for Supervisors/Examiners), Column 5 is Student Count
+        if (type === 'Student') {
+            table.column(3).visible(true);
+            table.column(4).visible(false);
+            table.column(5).visible(false);
+        } else if (type === 'AcademicStaff' || type === 'Supervisor' || type === 'Examiner') {
+            table.column(3).visible(false);
+            table.column(4).visible(true);
+            table.column(5).visible(true);
+        } else {
+            table.column(3).visible(true);
+            table.column(4).visible(true);
+            table.column(5).visible(true);
+        }
+
+        // Update active tab styling
+        $('#userRoleTabs .nav-link').removeClass('active text-primary').addClass('text-muted');
+        $(e.target).removeClass('text-muted').addClass('active text-primary');
+    }
+
+    $(document).ready(function () {
+        // Toggle domain based on User Type
+        $('#bulkUserType').on('change', function () {
+            let type = $(this).val();
+            let domain = type === 'Student' ? '@@student.newinti.edu.my' : '@@newinti.edu.my';
+            $('#sharedDomain').val(domain);
+            updateHiddenEmails();
+            validateAllRows();
+        });
+
+        // Add Invitee Row
+        $('#addInviteeBtn').click(function () {
+            addInviteeRow();
+        });
+
+        // Remove Invitee Row
+        $(document).on('click', '.remove-invitee', function () {
+            if ($('.invitee-row').length > 1) {
+                $(this).closest('.invitee-row').remove();
+                updateRemoveButtons();
+                updateHiddenEmails();
+                validateAllRows();
+            }
+        });
+        
+        // Paste Multiple Handlers
+        $('#pasteMultipleBtn').click(function() {
+            $('#pasteMultipleSection').slideDown();
+            $('#pasteMultipleArea').focus();
+        });
+        $('#cancelPasteBtn').click(function() {
+            $('#pasteMultipleSection').slideUp();
+            $('#pasteMultipleArea').val('');
+        });
+        $('#processPasteBtn').click(function() {
+            let pasteData = $('#pasteMultipleArea').val();
+            if (!pasteData) {
+                $('#pasteMultipleSection').slideUp();
+                return;
+            }
+            
+            let rawItems = pasteData.split(/[\n\r,]+/).map(s => s.trim()).filter(s => s.length > 0);
+            let extractedUsernames = [];
+
+            rawItems.forEach(item => {
+                if (item.includes('@@')) {
+                    extractedUsernames.push(item.split('@@')[0]);
+                } else {
+                    extractedUsernames.push(item);
+                }
+            });
+
+            if (extractedUsernames.length > 0) {
+                // If there's only one empty row, fill it first
+                let rows = $('.invitee-row');
+                let firstRow = rows.first();
+                let firstInput = firstRow.find('.username-input');
+                let startIndex = 0;
+                
+                if (rows.length === 1 && !firstInput.val()) {
+                    firstInput.val(extractedUsernames[0]);
+                    startIndex = 1;
+                }
+                
+                for (let i = startIndex; i < extractedUsernames.length; i++) {
+                    let newRow = addInviteeRow();
+                    newRow.find('.username-input').val(extractedUsernames[i]);
+                }
+                updateHiddenEmails();
+                validateAllRows();
+            }
+            $('#pasteMultipleSection').slideUp();
+            $('#pasteMultipleArea').val('');
+        });
+
+        // Validation on input
+        $(document).on('input', '.username-input', function() {
+            updateHiddenEmails();
+            validateAllRows();
+        });
+
+        function updateHiddenEmails() {
+            let domain = $('#sharedDomain').val();
+            $('.invitee-row').each(function() {
+                let username = $(this).find('.username-input').val().trim();
+                let fullEmail = username ? username + domain : '';
+                $(this).find('.full-email-hidden').val(fullEmail);
+            });
+        }
+
+        let validationTimer = null;
+
+        function validateAllRows() {
+            clearTimeout(validationTimer);
+            let usernames = [];
+            let emailsToCheck = [];
+            let localErrors = 0;
+            let validRows = 0;
+            let domain = $('#sharedDomain').val();
+            
+            $('.invitee-row').each(function() {
+                let row = $(this);
+                let input = row.find('.username-input');
+                let username = input.val().trim();
+                let type = $('#bulkUserType').val();
+                
+                if (type === 'Supervisor' || type === 'Examiner') {
+                    username = username.toLowerCase();
+                    if (input.val() !== username) {
+                        input.val(username); // auto-normalize UI
+                    }
+                }
+                
+                let badge = row.find('.status-badge');
+                
+                if (!username) {
+                    badge.removeClass().addClass('badge badge-light-danger status-badge w-100').text('Invalid Username');
+                    row.find('.error-msg').remove();
+                    input.addClass('is-invalid');
+                    localErrors++;
+                } else {
+                    let isValid = true;
+                    let errorMsg = '';
+                    
+                    if (type === 'Student') {
+                        if (!/^p\d{8}$/.test(username)) {
+                            isValid = false;
+                            errorMsg = 'Student ID must be in the format p followed by 8 digits, e.g. p22014692.';
+                        }
+                    } else {
+                        // Supervisor or Examiner
+                        if (!/^[a-z0-9.-]+$/.test(username) || username.includes('@@') || username.includes(' ')) {
+                            isValid = false;
+                            errorMsg = 'Invalid username format';
+                        }
+                    }
+
+                    if (!isValid) {
+                        badge.removeClass().addClass('badge badge-light-danger status-badge w-100').text('Invalid Username');
+                        if (row.find('.error-msg').length === 0) {
+                            input.after(`<div class="text-danger fs-8 mt-1 error-msg">${errorMsg}</div>`);
+                        } else {
+                            row.find('.error-msg').text(errorMsg);
+                        }
+                        input.addClass('is-invalid');
+                        localErrors++;
+                    } else if (usernames.includes(username)) {
+                        badge.removeClass().addClass('badge badge-light-warning status-badge w-100').text('Duplicate in List');
+                        row.find('.error-msg').remove();
+                        input.addClass('is-invalid');
+                        localErrors++;
+                    } else {
+                        usernames.push(username);
+                        emailsToCheck.push(username + domain);
+                        badge.removeClass().addClass('badge badge-light-info status-badge w-100').text('Checking...');
+                        row.find('.error-msg').remove();
+                        input.removeClass('is-invalid');
+                        validRows++;
+                    }
+                }
+            });
+            
+            $('#bulkInviteSubmitBtn').prop('disabled', true);
+            updateRemoveButtons(0); // Temporarily hide count during check
+
+            if (emailsToCheck.length === 0) {
+                $('#bulkInviteSubmitBtn').prop('disabled', localErrors > 0);
+                return;
+            }
+
+            validationTimer = setTimeout(function() {
+                $.ajax({
+                    url: '/Admin/CheckBulkEmails',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(emailsToCheck),
+                    success: function (results) {
+                        let remoteErrors = 0;
+                        let finalValidRows = 0;
+                        $('.invitee-row').each(function() {
+                            let row = $(this);
+                            let input = row.find('.username-input');
+                            let username = input.val().trim();
+                            let badge = row.find('.status-badge');
+                            
+                            if (badge.text() === 'Checking...') {
+                                // AJAX response keys might just be emails, but we normalized them to lowercase
+                                let fullEmail = (username + domain).toLowerCase();
+                                
+                                // We check against results dictionary by matching keys
+                                let foundResult = null;
+                                for (let key in results) {
+                                    if (key.toLowerCase() === fullEmail) {
+                                        foundResult = results[key];
+                                        break;
+                                    }
+                                }
+
+                                if (foundResult) {
+                                    input.addClass('is-invalid');
+                                    remoteErrors++;
+                                    if (foundResult === 'Pending') {
+                                        badge.removeClass().addClass('badge badge-light-warning status-badge w-100').text('Invitation already sent');
+                                    } else {
+                                        badge.removeClass().addClass('badge badge-light-danger status-badge w-100').text('Already registered');
+                                    }
+                                } else {
+                                    badge.removeClass().addClass('badge badge-light-success status-badge w-100').text('Ready');
+                                    finalValidRows++;
+                                }
+                            }
+                        });
+                        
+                        $('#bulkInviteSubmitBtn').prop('disabled', localErrors > 0 || remoteErrors > 0 || finalValidRows === 0);
+                        updateRemoveButtons(finalValidRows);
+                    },
+                    error: function() {
+                        // On error, let them submit but they will fail at backend validation
+                        $('#bulkInviteSubmitBtn').prop('disabled', localErrors > 0);
+                        updateRemoveButtons(validRows);
+                    }
+                });
+            }, 300); // 300ms debounce
+        }
+
+        function addInviteeRow() {
+            let rowHtml = `
+                <tr class="invitee-row">
+                    <td>
+                        <input type="text" name="inviteNames" class="form-control form-control-solid form-control-sm fs-8" placeholder="Full Name (Optional)">
+                    </td>
+                    <td>
+                        <input type="text" class="form-control form-control-solid form-control-sm fs-8 username-input" placeholder="Username *" required>
+                        <input type="hidden" name="inviteEmails" class="full-email-hidden">
+                    </td>
+                    <td class="text-center">
+                        <span class="badge badge-light-secondary status-badge w-100 fs-8">Ready</span>
+                    </td>
+                    <td class="text-end pe-4">
+                        <button type="button" class="btn btn-icon btn-light-danger btn-sm h-30px w-30px remove-invitee"><i class="bi bi-trash fs-7"></i></button>
+                    </td>
+                </tr>
+            `;
+            let newRow = $(rowHtml);
+            $('#inviteesList').append(newRow);
+            
+            // Auto scroll to bottom
+            let container = $('.bulk-invite-scroll');
+            if (container.length) {
+                container.scrollTop(container[0].scrollHeight);
+            }
+            
+            updateRemoveButtons(0);
+            return newRow;
+        }
+
+        function updateRemoveButtons(validCount = 0) {
+            let count = $('.invitee-row').length;
+            if (count === 1) {
+                $('.remove-invitee').prop('disabled', true);
+            } else {
+                $('.remove-invitee').prop('disabled', false);
+            }
+            $('#inviteCountTitle').text(count);
+            $('#bulkInviteSubmitBtn').text(`Send ${validCount} Invite${validCount !== 1 ? 's' : ''}`);
+        }
+        
+        // Initial setup
+        validateAllRows();
+    });
+</script>
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,532 @@
+@using System.Text.Json
+@model IEnumerable<FYPTracker.Models.FYPMilestone>
+@{
+    ViewData["Title"] = "IAF Review & Approval";
+    var rowData = Model.Select(m => {
+        int latestAttempt = 1;
+        if (!string.IsNullOrEmpty(m.Remarks) && m.Remarks.Contains("JSON: ")) {
+            try {
+                var json = m.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+                var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(json);
+                latestAttempt = history.CurrentAttempt;
+            } catch {}
+        }
+        return new {
+            Id = m.Id,
+            ProjectId = m.Project?.Id ?? 0,
+            StudentName = m.Project?.Student?.FullName ?? "Unknown",
+            MatricId = m.Project?.Student?.EmployeeId ?? "N/A",
+            ProjectTitle = m.Project?.Title ?? "N/A",
+            SupervisorName = m.Project?.Supervisor?.FullName ?? "Unassigned",
+            Status = m.Status,
+            LatestAttempt = latestAttempt,
+            ApprovalDate = m.CreatedDate.ToString("dd MMM yyyy") 
+        };
+    }).ToList();
+    
+    var jsonRowData = JsonSerializer.Serialize(rowData);
+}
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/styles/ag-grid.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/styles/ag-theme-quartz.css" />
+
+<style>
+    .premium-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        border-radius: 20px;
+    }
+    
+    .iaf-table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 20px; font-size: 14px;}
+    .iaf-table, .iaf-table th, .iaf-table td { border: 1px solid #ccc; }
+    .iaf-table th, .iaf-table td { padding: 8px; vertical-align: top; text-align: left; }
+    .iaf-label { font-weight: bold; width: 30%; }
+    .iaf-value { width: 70%; white-space: pre-wrap; }
+    .iaf-attempt-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 12px 16px; border: 1px solid #e4e6ef; background-color: #fff; border-radius: 10px; transition: box-shadow .2s ease, transform .2s ease; }
+    .iaf-attempt-card:hover { box-shadow: 0 4px 14px rgba(13,110,253,0.10); transform: translateY(-1px); }
+    .iaf-attempt-card .iaf-attempt-title { font-weight: 700; color: #0d6efd; margin: 0; }
+    .iaf-attempt-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; }
+    .badge-light-success { background-color: #e8fff3; color: #50cd89; }
+    .badge-light-danger { background-color: #fff5f8; color: #f1416c; }
+    .badge-light-warning { background-color: #fff8dd; color: #ffc700; }
+    .badge-light-secondary { background-color: #f4f4f4; color: #5e6278; }
+
+    /* Ag Grid styling tweaks for premium feel */
+    .ag-theme-quartz {
+        --ag-header-background-color: #f8fafc;
+        --ag-header-foreground-color: #64748b;
+        --ag-font-family: 'Inter', sans-serif;
+        --ag-font-size: 13px;
+        --ag-row-hover-color: #f1f5f9;
+        --ag-borders: solid 1px #e2e8f0;
+        --ag-header-column-separator-display: block;
+        --ag-header-column-separator-height: 100%;
+        --ag-header-column-separator-width: 1px;
+        --ag-header-column-separator-color: #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <div class="card premium-card border-0 mb-5">
+        <div class="card-header border-0 pt-5 px-5 d-flex flex-column gap-3 bg-transparent">
+            <div class="mb-1">
+                <a asp-controller="Admin" asp-action="Settings" class="btn btn-sm btn-outline-secondary fw-bold rounded-pill px-3 shadow-sm">
+                    <i class="fas fa-arrow-left me-1"></i> Back to System Settings
+                </a>
+            </div>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div>
+                    <h2 class="fw-bolder text-dark mb-1" style="letter-spacing: -0.5px;">
+                        <i class="fas fa-file-signature text-success me-2"></i>IAF Review &amp; Approval
+                    </h2>
+                    <p class="text-muted mb-0" style="font-size: 0.95rem;">Review signed Initial Project Allocation Forms (IAF), grant initial panel approval, mandate defense sessions, or manage defense outcomes.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body p-5 pt-4">
+            @if (TempData["Success"] != null)
+            {
+                <div class="alert alert-light-success border border-success border-opacity-25 shadow-sm p-4 mb-4 rounded-4 d-flex align-items-center">
+                    <i class="fas fa-check-circle text-success fs-2 me-3"></i>
+                    <div class="fs-6 fw-bold text-dark">@TempData["Success"]</div>
+                </div>
+            }
+            @if (TempData["Error"] != null)
+            {
+                <div class="alert alert-light-danger border border-danger border-opacity-25 shadow-sm p-4 mb-4 rounded-4 d-flex align-items-center">
+                    <i class="fas fa-exclamation-triangle text-danger fs-2 me-3"></i>
+                    <div class="fs-6 fw-bold text-dark">@TempData["Error"]</div>
+                </div>
+            }
+            
+            <div id="iafGrid" class="ag-theme-quartz border shadow-sm" style="height: 600px; width: 100%;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Forms for actions -->
+<form id="approveForm" asp-action="AdminFinalApproveIaf" method="post" style="display:none;">
+    <input type="hidden" name="milestoneId" id="approveMilestoneId" />
+</form>
+
+<form id="rejectIafForm" asp-action="AdminRejectIaf" method="post" style="display:none;">
+    <input type="hidden" name="milestoneId" id="rejectMilestoneId" />
+    <input type="hidden" name="panelComments" id="rejectPanelCommentsHidden" />
+    <input type="hidden" name="requireDefense" id="rejectRequireDefenseHidden" value="false" />
+</form>
+
+<!-- Reject IAF Modal -->
+<div class="modal fade" id="rejectIafModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-warning text-dark" id="rejectModalHeader">
+                <h5 class="modal-title fw-bold" id="rejectModalTitle"><i class="fas fa-exclamation-triangle me-2"></i>Reject IAF</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-muted mb-3">Select the panel decision and provide authoritative comments for the student.</p>
+                
+                <div class="mb-4 p-3 bg-light rounded border">
+                    <label class="form-label fw-bold mb-2">Panel Decision <span class="text-danger">*</span></label>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="rejectionTypeChoice" id="rejectTypeRevision" value="revision" checked onchange="onRejectTypeChanged()">
+                        <label class="form-check-label fw-semibold text-dark" for="rejectTypeRevision">
+                            <strong>Revision Required</strong> — Student revises IAF and re-requests supervisor review (No Defense).
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="rejectionTypeChoice" id="rejectTypeDefense" value="defense" onchange="onRejectTypeChanged()">
+                        <label class="form-check-label fw-semibold text-danger" for="rejectTypeDefense">
+                            <strong>Mandate Defense</strong> — Panel rejects IAF and requires student to defend proposal before an independent examiner.
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Panel Comments <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="rejectPanelComments" rows="4" placeholder="Enter detailed feedback or defense justification..." required></textarea>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="rejectSubmitBtn" class="btn btn-warning fw-bold text-dark" onclick="submitRejectIaf()"><i class="fas fa-paper-plane me-2"></i>Submit Decision</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- Schedule Defense Modal -->
+<div class="modal fade" id="scheduleDefenseModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <form asp-action="AdminScheduleDefense" method="post">
+                <input type="hidden" name="milestoneId" id="defenseMilestoneId" />
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-calendar-check me-2"></i>Schedule Defense</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-muted mb-4">Reject this IAF and mandate a defense session for the student.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Defense Date <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" name="defenseDate" min="@DateTime.Now.ToString("yyyy-MM-dd")" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Start Time <span class="text-danger">*</span></label>
+                        <input type="time" class="form-control" name="defenseTime" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Venue / Link <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="venue" placeholder="e.g., Room 204 or Microsoft Teams Link" required>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary fw-bold" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger fw-bold"><i class="fas fa-paper-plane me-2"></i>Schedule & Notify</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@foreach (var m in Model)
+{
+    if (!string.IsNullOrEmpty(m.Remarks) && m.Remarks.Contains("JSON: "))
+    {
+        try {
+            var json = m.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+            var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(json);
+            var latestAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
+            
+            if (latestAttempt != null) {
+                var fd = latestAttempt.FormData ?? new Dictionary<string, string>();
+                string Fv(string k) => fd.TryGetValue(k, out var v) ? v : "";
+                var isSigned = !string.IsNullOrEmpty(latestAttempt.SupervisorSignature);
+                
+                var snapshotFile = m.SubmissionFiles?.FirstOrDefault(f => f.AttemptNumber == latestAttempt.AttemptNumber && f.FileName.StartsWith("Signed IAF", StringComparison.OrdinalIgnoreCase));
+                var attStatusBadge = m.Status switch {
+                    "AdminApproved" => "badge bg-success",
+                    "DefenseScheduled" or "DefenseRequired" => "badge bg-danger",
+                    "PanelRevisionRequired" or "ChangeOfTopicRequired" => "badge bg-warning text-dark",
+                    _ => "badge bg-info text-dark"
+                };
+
+                <div class="modal fade" id="iafModal_@(m.Id)" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                        <div class="modal-content border-0 shadow">
+                            <div class="modal-header bg-light py-3 px-4 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="modal-title fw-bold text-dark mb-0">
+                                        <i class="fas fa-file-signature text-success me-2"></i>Signed IAF — Attempt @latestAttempt.AttemptNumber
+                                    </h5>
+                                    <div class="small text-muted mt-1">
+                                        <span>Student: <strong>@(m.Project?.Student?.FullName ?? "Unknown")</strong> (@(m.Project?.Student?.CoventryId ?? "N/A"))</span> &bull; 
+                                        <span>Status: <span class="@attStatusBadge">@m.Status</span></span>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" data-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body bg-light p-4">
+                                <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white p-3">
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <div class="small text-muted">Proposed Project Title</div>
+                                            <div class="fw-bold text-dark">@(m.Project?.Title ?? "N/A")</div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="small text-muted">Supervisor</div>
+                                            <div class="fw-bold text-dark">@(isSigned ? (!string.IsNullOrWhiteSpace(Fv("__iafSignedByName")) ? Fv("__iafSignedByName") : (m.Project?.Supervisor?.FullName ?? "Unassigned")) : (m.Project?.Supervisor?.FullName ?? "Unassigned"))</div>
+                                            @if (isSigned) {
+                                                <span class="badge bg-light-success text-success border border-success border-opacity-25 mt-1"><i class="fas fa-check-circle me-1"></i>Supervisor Signed</span>
+                                            } else {
+                                                <span class="badge bg-light-secondary text-muted border mt-1">Not Signed</span>
+                                            }
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="small text-muted">Supervisor Reviewed Date</div>
+                                            <div class="fw-bold text-dark">@(latestAttempt.SupervisorReviewedAt?.ToString("dd MMM yyyy, hh:mm tt") ?? "—")</div>
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(latestAttempt.SupervisorFeedback))
+                                        {
+                                            <div class="col-12 mt-2 pt-2 border-top">
+                                                <div class="small text-muted fw-bold"><i class="fas fa-comment-alt text-primary me-1"></i>Supervisor Feedback:</div>
+                                                <div class="small text-dark p-2 bg-light rounded mt-1">@latestAttempt.SupervisorFeedback</div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+
+                                @{
+                                    FYPTracker.ViewModels.MeetingRecordTemplateVM? viewTemplate = null;
+                                    if (fd.TryGetValue("__iafTemplateSnapshot", out var snapshotJson) && !string.IsNullOrWhiteSpace(snapshotJson))
+                                    {
+                                        try
+                                        {
+                                            viewTemplate = JsonSerializer.Deserialize<FYPTracker.ViewModels.MeetingRecordTemplateVM>(
+                                                snapshotJson,
+                                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                                            if (viewTemplate?.Fields == null || viewTemplate.Fields.Count == 0)
+                                                viewTemplate = null;
+                                        }
+                                        catch { viewTemplate = null; }
+                                    }
+
+                                    var formDataMap = new Dictionary<string, string>(fd);
+                                    if (!formDataMap.ContainsKey("references") && formDataMap.ContainsKey("References")) formDataMap["references"] = formDataMap["References"];
+                                    if (!formDataMap.ContainsKey("agreedSupervisor") && formDataMap.ContainsKey("Agreed Supervisor Name")) formDataMap["agreedSupervisor"] = formDataMap["Agreed Supervisor Name"];
+                                    
+                                    var displayedSupervisorName = !string.IsNullOrWhiteSpace(Fv("__iafSignedByName")) ? Fv("__iafSignedByName") : (m.Project?.Supervisor?.FullName ?? "");
+
+                                    var iafViewModel = new FYPTracker.ViewModels.IafDocumentViewModel
+                                    {
+                                        Template = viewTemplate ?? new FYPTracker.ViewModels.MeetingRecordTemplateVM(),
+                                        FormData = formDataMap,
+                                        RenderMode = "ReadOnly",
+                                        IsLocked = true,
+                                        AttemptNumber = latestAttempt.AttemptNumber,
+                                        MilestoneId = m.Id,
+                                        Status = m.Status,
+                                        StudentName = !string.IsNullOrWhiteSpace(Fv("studentName")) ? Fv("studentName") : m.Project?.Student?.FullName ?? "",
+                                        CoventryId = !string.IsNullOrWhiteSpace(Fv("coventryId")) ? Fv("coventryId") : m.Project?.Student?.CoventryId ?? "",
+                                        Program = !string.IsNullOrWhiteSpace(Fv("program")) ? Fv("program") : m.Project?.Student?.Programme ?? "",
+                                        ProjectTitle = !string.IsNullOrWhiteSpace(Fv("title")) ? Fv("title") : m.Project?.Title ?? "",
+                                        SupervisorName = isSigned ? displayedSupervisorName : (!string.IsNullOrWhiteSpace(Fv("agreedSupervisor")) ? Fv("agreedSupervisor") : ""),
+                                        SupervisorSignature = latestAttempt.SupervisorSignature ?? "",
+                                        SignatureDate = latestAttempt.SupervisorReviewedAt,
+                                        SupervisorFeedback = latestAttempt.SupervisorFeedback ?? "",
+                                        PanelComments = latestAttempt.PanelComments ?? ""
+                                    };
+                                }
+                                <div class="w-100">
+                                    @if (viewTemplate?.Fields == null ||
+                                        viewTemplate.Fields.Count == 0)
+                                    {
+                                        <div class="alert alert-warning">
+                                            The original IAF template snapshot is unavailable.
+                                            This historical attempt cannot be rendered reliably.
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        @await Html.PartialAsync("_IafDocument", iafViewModel)
+                                    }
+                                </div>
+                            </div>
+                            <div class="modal-footer bg-light d-flex justify-content-between">
+                                <div class="d-flex gap-2">
+                                    <a href="@Url.Action("ViewDigitalForm", "Admin", new { milestoneId = m.Id, attemptNumber = latestAttempt.AttemptNumber })" 
+                                       target="_blank" 
+                                       rel="noopener noreferrer"
+                                       class="btn btn-sm btn-outline-primary fw-semibold">
+                                        <i class="fas fa-external-link-alt me-1"></i>Print / Save as PDF
+                                    </a>
+                                    @if (snapshotFile != null)
+                                    {
+                                        <a href="@Url.Action("DownloadFile", "Admin", new { fileId = snapshotFile.Id })" 
+                                           class="btn btn-sm btn-success fw-semibold shadow-sm text-white">
+                                            <i class="fas fa-file-download me-1"></i>Download Signed PDF
+                                        </a>
+                                    }
+                                </div>
+                                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        } catch {}
+    }
+}
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31.3.2/dist/ag-grid-community.min.js"></script>
+    <script>
+        function approveIaf(id) {
+            if(confirm('Are you sure you want to grant final approval for this IAF?')) {
+                document.getElementById('approveMilestoneId').value = id;
+                document.getElementById('approveForm').submit();
+            }
+        }
+
+        function rejectIaf(id) {
+            document.getElementById('rejectMilestoneId').value = id;
+            document.getElementById('rejectPanelComments').value = '';
+            document.getElementById('rejectTypeRevision').checked = true;
+            onRejectTypeChanged();
+            var myModal = new bootstrap.Modal(document.getElementById('rejectIafModal'));
+            myModal.show();
+        }
+
+        function onRejectTypeChanged() {
+            var isDefense = document.getElementById('rejectTypeDefense').checked;
+            var header = document.getElementById('rejectModalHeader');
+            var title = document.getElementById('rejectModalTitle');
+            var btn = document.getElementById('rejectSubmitBtn');
+
+            if (isDefense) {
+                header.className = 'modal-header bg-danger text-white';
+                title.innerHTML = '<i class="fas fa-gavel me-2"></i>Reject IAF (Mandate Defense)';
+                btn.className = 'btn btn-danger fw-bold';
+                btn.innerHTML = '<i class="fas fa-gavel me-2"></i>Mandate Defense Session';
+            } else {
+                header.className = 'modal-header bg-warning text-dark';
+                title.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Reject IAF (Require Revision)';
+                btn.className = 'btn btn-warning fw-bold text-dark';
+                btn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Request Revision';
+            }
+        }
+
+        function submitRejectIaf() {
+            var comments = document.getElementById('rejectPanelComments').value.trim();
+            if (!comments) {
+                alert('Please provide panel comments.');
+                return;
+            }
+            var isDefense = document.getElementById('rejectTypeDefense').checked;
+            document.getElementById('rejectPanelCommentsHidden').value = comments;
+            document.getElementById('rejectRequireDefenseHidden').value = isDefense ? 'true' : 'false';
+            document.getElementById('rejectIafForm').submit();
+        }
+
+        function scheduleDefense(id) {
+            document.getElementById('defenseMilestoneId').value = id;
+            var myModal = new bootstrap.Modal(document.getElementById('scheduleDefenseModal'));
+            myModal.show();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var rowData = @Html.Raw(jsonRowData);
+            
+            var gridOptions = {
+                rowData: rowData,
+                columnDefs: [
+                    { field: "StudentName", headerName: "Student Name", flex: 2, filter: true },
+                    { field: "ProjectTitle", headerName: "Proposed Title", flex: 3, filter: true, wrapText: true, autoHeight: true },
+                    { field: "SupervisorName", headerName: "Supervisor", flex: 1.5, filter: true },
+                    { field: "LatestAttempt", headerName: "Latest Attempt", flex: 1, filter: true },
+                    { 
+                        field: "Status", 
+                        headerName: "Status", 
+                        flex: 1.5, 
+                        cellRenderer: function(params) {
+                            if(params.value === 'AdminApproved') {
+                                return '<span class="badge bg-success">Admin Approved</span>';
+                            } else if (params.value === 'DefenseScheduled') {
+                                return '<span class="badge bg-danger">Defense Scheduled</span>';
+                            } else if (params.value === 'DefenseRequired') {
+                                return '<span class="badge bg-danger">Defense Required</span>';
+                            } else if (params.value === 'PanelRevisionRequired') {
+                                return '<span class="badge bg-warning text-dark">Revision Required</span>';
+                            } else if (params.value === 'ChangeOfTopicRequired') {
+                                return '<span class="badge bg-danger">Change of Topic Required</span>';
+                            } else {
+                                return '<span class="badge bg-warning text-dark">Pending Panel Review</span>';
+                            }
+                        }
+                    },
+                    {
+                        headerName: "Actions",
+                        flex: 2.2,
+                        sortable: false,
+                        filter: false,
+                        autoHeight: true,
+                        cellRenderer: function(params) {
+                            if (params.data.Status === 'PendingPanelReview') {
+                                return `
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF">
+                                            <i class="fas fa-eye"></i> View
+                                        </button>
+                                        <button onclick="approveIaf(${params.data.Id})" class="btn btn-sm btn-success" title="Approve IAF">
+                                            <i class="fas fa-check"></i> Approve
+                                        </button>
+                                        <button onclick="rejectIaf(${params.data.Id})" class="btn btn-sm btn-warning text-dark" title="Request Revision or Require Defense">
+                                            <i class="fas fa-edit"></i> Review
+                                        </button>
+                                    </div>
+                                `;
+                            }
+
+                            if (params.data.Status === 'DefenseRequired') {
+                                return `
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF"><i class="fas fa-eye"></i> View</button>
+                                        <a href="/Admin/SmartScheduleDefense?milestoneId=${params.data.Id}" class="btn btn-sm btn-info text-white fw-bold" title="Smart Schedule Defense">
+                                            <i class="fas fa-magic"></i> Schedule Defense
+                                        </a>
+                                    </div>
+                                `;
+                            }
+
+                            if (params.data.Status === 'DefenseScheduled') {
+                                return `
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF"><i class="fas fa-eye"></i> View</button>
+                                        <a href="/Admin/ManageDefenses" class="btn btn-sm btn-primary fw-bold" title="Manage Defenses">
+                                            <i class="fas fa-calendar-check"></i> Manage Defense
+                                        </a>
+                                    </div>
+                                `;
+                            }
+
+                            if (params.data.Status === 'AdminApproved') {
+                                return `
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF">
+                                            <i class="fas fa-eye"></i> View IAF
+                                        </button>
+                                        <a href="/Admin/ManageDefenses" class="btn btn-sm btn-outline-success" title="View Defense Details">
+                                            <i class="fas fa-check-circle"></i> Result
+                                        </a>
+                                    </div>
+                                `;
+                            }
+
+                            if (params.data.Status === 'PanelRevisionRequired' || params.data.Status === 'ChangeOfTopicRequired') {
+                                return `
+                                    <div class="d-flex gap-1">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF">
+                                            <i class="fas fa-eye"></i> View
+                                        </button>
+                                        <a href="/Admin/ViewDigitalForm?milestoneId=${params.data.Id}&attemptNumber=${params.data.LatestAttempt}" target="_blank" class="btn btn-sm btn-outline-secondary" title="View Attempt History">
+                                            <i class="fas fa-history"></i> History
+                                        </a>
+                                    </div>
+                                `;
+                            }
+
+                            return `
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#iafModal_${params.data.Id}" title="View IAF">
+                                        <i class="fas fa-eye"></i> View IAF
+                                    </button>
+                                </div>
+                            `;
+                        }
+                    }
+                ],
+                defaultColDef: {
+                    sortable: true,
+                    resizable: true
+                },
+                pagination: true,
+                paginationPageSize: 15,
+                domLayout: 'normal'
+            };
+
+            var gridDiv = document.querySelector('#iafGrid');
+            new agGrid.Grid(gridDiv, gridOptions);
+        });
+    </script>
+}
+
+
+
+

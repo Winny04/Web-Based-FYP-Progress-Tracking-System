@@ -1,0 +1,233 @@
+@{
+    ViewData["Title"] = "Reports & Analytics";
+}
+
+<style>
+    :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
+
+    .page-hero {
+        background: var(--hero-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
+    }
+
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid #f1f5f9;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        padding: 24px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .chart-container {
+        position: relative;
+        flex-grow: 1;
+        min-height: 300px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+
+<div class="container-xxl py-4">
+
+    <div class="page-hero">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h2 class="fw-bold mb-1"><i class="fas fa-chart-pie me-2"></i>Reports & Analytics</h2>
+                <p class="mb-0 opacity-80">Gain insights into your students' progress, meeting trends, and supervision load.</p>
+            </div>
+            @await Html.PartialAsync("_SessionFilter")
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <!-- Milestone Status Doughnut -->
+        <div class="col-md-6 col-lg-3">
+            <div class="glass-card">
+                <h6 class="fw-bold text-dark text-uppercase mb-4" style="letter-spacing: 0.5px; font-size: 0.85rem;">Milestone Submission Status</h6>
+                <div class="chart-container">
+                    <canvas id="milestoneChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Meeting Status Bar -->
+        <div class="col-md-6 col-lg-5">
+            <div class="glass-card">
+                <h6 class="fw-bold text-dark text-uppercase mb-4" style="letter-spacing: 0.5px; font-size: 0.85rem;">Meeting Request Status</h6>
+                <div class="chart-container">
+                    <canvas id="meetingChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Student Program Pie -->
+        <div class="col-md-6 col-lg-4">
+            <div class="glass-card">
+                <h6 class="fw-bold text-dark text-uppercase mb-4" style="letter-spacing: 0.5px; font-size: 0.85rem;">Supervised Students by Program</h6>
+                <div class="chart-container">
+                    <canvas id="programChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <!-- Monthly Meetings Line Chart -->
+        <div class="col-12">
+            <div class="glass-card">
+                <h6 class="fw-bold text-dark text-uppercase mb-4" style="letter-spacing: 0.5px; font-size: 0.85rem;">Monthly Meeting Activity (@DateTime.Today.Year)</h6>
+                <div class="chart-container" style="min-height: 400px;">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            // Shared Color Palette (Professional Monochrome/Subtle Accents)
+            const colors = {
+                approved: 'rgba(16, 185, 129, 0.8)', // Emerald green
+                pending: 'rgba(245, 158, 11, 0.8)',  // Amber
+                rejected: 'rgba(239, 68, 68, 0.8)',  // Red
+                postponed: 'rgba(59, 130, 246, 0.8)', // Blue
+                underReview: 'rgba(139, 92, 246, 0.8)', // Purple
+                neutral1: 'rgba(100, 116, 139, 0.8)', // Slate
+                neutral2: 'rgba(148, 163, 184, 0.8)'  // Light Slate
+            };
+
+            const bgColors = [colors.approved, colors.pending, colors.rejected, colors.underReview, colors.postponed, colors.neutral1, colors.neutral2];
+
+            // 1. Milestone Chart (Doughnut)
+            const rawMilestones = @Html.Raw(ViewBag.MilestoneStatsJson ?? "[]");
+            if(rawMilestones.length > 0) {
+                const ctx1 = document.getElementById('milestoneChart').getContext('2d');
+                new Chart(ctx1, {
+                    type: 'doughnut',
+                    data: {
+                        labels: rawMilestones.map(x => x.Status),
+                        datasets: [{
+                            data: rawMilestones.map(x => x.Count),
+                            backgroundColor: bgColors,
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                });
+            } else {
+                document.getElementById('milestoneChart').outerHTML = '<div class="text-center text-muted w-100 py-5"><i class="fas fa-chart-pie fs-1 mb-3" style="color: #cbd5e1;"></i><h6 class="fw-bold text-dark">No Milestone Data</h6><p class="small mb-0">No submissions found for the selected session.</p></div>';
+            }
+
+            // 2. Program Chart (Pie)
+            const rawPrograms = @Html.Raw(ViewBag.ProgramStatsJson ?? "[]");
+            if(rawPrograms.length > 0) {
+                const ctx2 = document.getElementById('programChart').getContext('2d');
+                new Chart(ctx2, {
+                    type: 'pie',
+                    data: {
+                        labels: rawPrograms.map(x => x.Program),
+                        datasets: [{
+                            data: rawPrograms.map(x => x.Count),
+                            backgroundColor: [colors.neutral1, colors.postponed, colors.approved, colors.pending, colors.underReview],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                });
+            } else {
+                document.getElementById('programChart').outerHTML = '<div class="text-center text-muted w-100 py-5"><i class="fas fa-users fs-1 mb-3" style="color: #cbd5e1;"></i><h6 class="fw-bold text-dark">No Program Data</h6><p class="small mb-0">No active students in this session.</p></div>';
+            }
+
+            // 3. Meeting Status Chart (Bar)
+            const rawMeetings = @Html.Raw(ViewBag.MeetingStatsJson ?? "[]");
+            if(rawMeetings.length > 0) {
+                const ctx3 = document.getElementById('meetingChart').getContext('2d');
+                
+                // Map specific colors to statuses if possible
+                const barColors = rawMeetings.map(m => {
+                    if(m.Status === 'Approved') return colors.approved;
+                    if(m.Status === 'Pending') return colors.pending;
+                    if(m.Status === 'Rejected') return colors.rejected;
+                    if(m.Status === 'Postponed') return colors.postponed;
+                    return colors.neutral1;
+                });
+
+                new Chart(ctx3, {
+                    type: 'bar',
+                    data: {
+                        labels: rawMeetings.map(x => x.Status),
+                        datasets: [{
+                            label: 'Total Meetings',
+                            data: rawMeetings.map(x => x.Count),
+                            backgroundColor: barColors,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false, 
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                    }
+                });
+            } else {
+                document.getElementById('meetingChart').outerHTML = '<div class="text-center text-muted w-100 py-5"><i class="fas fa-calendar-times fs-1 mb-3" style="color: #cbd5e1;"></i><h6 class="fw-bold text-dark">No Meeting Data</h6><p class="small mb-0">No meeting requests found.</p></div>';
+            }
+
+            // 4. Monthly Meeting Chart (Line)
+            const rawMonthly = @Html.Raw(ViewBag.MonthlyMeetingStatsJson ?? "[]");
+            if(rawMonthly.length > 0) {
+                const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                
+                // Create an array of 12 zeros
+                const monthlyData = Array(12).fill(0);
+                rawMonthly.forEach(m => {
+                    // m.Month is 1-12, array is 0-11
+                    monthlyData[m.Month - 1] = m.Count;
+                });
+
+                const ctx4 = document.getElementById('monthlyChart').getContext('2d');
+                new Chart(ctx4, {
+                    type: 'line',
+                    data: {
+                        labels: monthNames,
+                        datasets: [{
+                            label: 'Meetings Held/Scheduled',
+                            data: monthlyData,
+                            borderColor: colors.neutral1,
+                            backgroundColor: 'rgba(100, 116, 139, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.3,
+                            pointBackgroundColor: colors.neutral1,
+                            pointRadius: 4
+                        }]
+                    },
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                    }
+                });
+            } else {
+                document.getElementById('monthlyChart').outerHTML = '<div class="text-center text-muted w-100 py-5"><i class="fas fa-chart-line fs-1 mb-3" style="color: #cbd5e1;"></i><h6 class="fw-bold text-dark">No Monthly Data</h6><p class="small mb-0">No meeting activity recorded for this year.</p></div>';
+            }
+
+        });
+    </script>
+}

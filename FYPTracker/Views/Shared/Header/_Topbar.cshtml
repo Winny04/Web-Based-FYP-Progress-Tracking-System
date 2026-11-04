@@ -1,0 +1,751 @@
+<!--begin::Toolbar wrapper-->
+<div class="topbar d-flex align-items-center flex-shrink-0">
+
+    @using Microsoft.AspNetCore.Mvc;
+    @using FYPTracker.Models;
+    @using Microsoft.EntityFrameworkCore;
+    @using Microsoft.AspNetCore.Http;
+
+    @{
+        var dbContext =
+            Context.RequestServices.GetService(typeof(FYPTrackerContext))
+            as FYPTrackerContext;
+
+        var currentUserName = Context.User.Identity?.Name;
+
+        var currentUserObj = currentUserName != null
+            ? dbContext?.ApplicationUsers
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefault(u =>
+                    u.UserName == currentUserName ||
+                    u.Email == currentUserName)
+            : null;
+
+        var avatarImg =
+            !string.IsNullOrEmpty(currentUserObj?.Image)
+                ? currentUserObj.Image
+                : "/assets/media/avatars/blank.png";
+
+
+        // =============================================
+        // CURRENT ACTIVE ROLE
+        // =============================================
+        var userType = Context.Session.GetString("ActiveRole");
+
+        if (string.IsNullOrEmpty(userType))
+        {
+            var userRoles = Context.User.Claims
+                .Where(c =>
+                    c.Type ==
+                    System.Security.Claims.ClaimTypes.Role)
+                .Select(c => c.Value)
+                .ToList();
+
+            userType = userRoles.FirstOrDefault() ?? "";
+        }
+
+
+        // =============================================
+        // NOTIFICATION URL BY ROLE
+        // =============================================
+        string notifUrl = "/User/Notification";
+
+        if (userType == "Student")
+        {
+            notifUrl = "/Student/Notifications";
+        }
+        else if (userType == "Supervisor")
+        {
+            notifUrl = "/Supervisor/Notifications";
+        }
+        else if (userType == "Examiner")
+        {
+            notifUrl = "/Examiner/Notifications";
+        }
+
+
+        // =============================================
+        // UNREAD NOTIFICATION COUNT
+        // =============================================
+        int unreadCount = 0;
+
+        if (currentUserObj != null && dbContext != null)
+        {
+            unreadCount = dbContext.FYPNotifications
+                .Count(n =>
+                    n.RecipientId == currentUserObj.Id &&
+                    !n.IsRead);
+        }
+
+
+        // =============================================
+        // PROFILE DISPLAY NAME
+        // =============================================
+        var profileDisplayName =
+            (!string.IsNullOrEmpty(currentUserObj?.Title) &&
+             currentUserObj.Title != "Not Assigned"
+                ? currentUserObj.Title + " "
+                : "")
+            +
+            (currentUserObj?.FullName
+                ?? Context.User.Identity?.Name
+                ?? "");
+
+
+        // Tooltip text
+        var profileTooltip =
+            !string.IsNullOrEmpty(userType)
+                ? $"{profileDisplayName} ({userType})"
+                : profileDisplayName;
+    }
+
+
+    <!-- ============================================= -->
+    <!-- PROFILE / USER MENU -->
+    <!-- ============================================= -->
+
+    <div class="d-flex align-items-center ms-2 ms-xl-3 flex-shrink-0"
+         id="kt_header_user_menu_toggle">
+
+
+        <!-- ============================================= -->
+        <!-- PROFILE TRIGGER -->
+        <!-- ============================================= -->
+
+        <div class="topbar-profile-trigger d-flex align-items-center"
+             data-kt-menu-trigger="click"
+             data-kt-menu-attach="parent"
+             data-kt-menu-placement="bottom-end"
+             data-bs-toggle="tooltip"
+             data-bs-placement="bottom"
+             data-bs-container="body"
+             title="@profileTooltip">
+
+            <!-- Avatar -->
+            <img class="topbar-profile-avatar rounded-circle"
+                 src="@avatarImg"
+                 alt="@profileDisplayName"
+                 onerror="this.onerror=null; this.src='/assets/media/avatars/blank.png';" />
+
+
+            <!-- Name + Role -->
+            <div class="topbar-profile-info">
+
+                <span class="topbar-profile-name">
+                    @profileDisplayName
+                </span>
+
+                <span class="topbar-profile-role">
+                    @userType
+                </span>
+
+            </div>
+
+
+            <!-- Dropdown Arrow -->
+            <i class="fas fa-chevron-down
+                      topbar-profile-arrow
+                      text-muted
+                      ms-2">
+            </i>
+
+        </div>
+
+
+        <!-- ============================================= -->
+        <!-- USER ACCOUNT DROPDOWN -->
+        <!-- ============================================= -->
+
+        <div class="menu
+                    menu-sub
+                    menu-sub-dropdown
+                    menu-column
+                    menu-rounded
+                    menu-gray-800
+                    menu-state-bg
+                    menu-state-primary
+                    fw-bold
+                    py-4
+                    fs-6
+                    w-275px"
+             data-kt-menu="true">
+
+
+            <!-- ============================================= -->
+            <!-- USER INFO -->
+            <!-- ============================================= -->
+
+            <div class="menu-item px-3">
+
+                <div class="menu-content
+                            d-flex
+                            align-items-center
+                            px-3">
+
+                    <img class="rounded-circle me-3"
+                         src="@avatarImg"
+                         alt="@profileDisplayName"
+                         style="
+                            width:40px;
+                            height:40px;
+                            object-fit:cover;
+                         "
+                         onerror="this.onerror=null; this.src='/assets/media/avatars/blank.png';" />
+
+
+                    <div class="d-flex flex-column">
+
+                        <div class="fw-bolder
+                                    d-flex
+                                    align-items-center
+                                    fs-5">
+
+                            @profileDisplayName
+
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(userType))
+                        {
+                            <span class="text-muted fs-7 mt-1">
+                                @userType
+                            </span>
+                        }
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="separator my-2"></div>
+
+
+            <!-- ============================================= -->
+            <!-- MY PROFILE -->
+            <!-- ============================================= -->
+
+            <div class="menu-item px-5">
+
+                <a href="/User/Profile?name=@Context.User.Identity?.Name"
+                   class="menu-link px-5">
+
+                    <i class="fas fa-user
+                              me-2
+                              text-muted">
+                    </i>
+
+                    My Profile
+
+                </a>
+
+            </div>
+
+
+            <div class="separator my-2"></div>
+
+
+            <!-- ============================================= -->
+            <!-- SWITCH ROLE -->
+            <!-- ============================================= -->
+
+            @if (currentUserObj != null &&
+                 currentUserObj.UserRoles != null &&
+                 currentUserObj.UserRoles.Count > 1)
+            {
+                <div class="menu-item px-5"
+                     data-kt-menu-trigger="hover"
+                     data-kt-menu-placement="left-start">
+
+                    <a href="#"
+                       class="menu-link px-5">
+
+                        <span class="menu-title">
+
+                            <i class="fas fa-exchange-alt
+                                      me-2
+                                      text-muted">
+                            </i>
+
+                            Switch Role
+
+                        </span>
+
+                        <span class="menu-arrow"></span>
+
+                    </a>
+
+
+                    <div class="menu-sub
+                                menu-sub-dropdown
+                                w-175px
+                                py-4">
+
+                        @foreach (var ur in currentUserObj.UserRoles)
+                        {
+                            var roleName = ur.Role?.Name;
+
+                            if (!string.IsNullOrEmpty(roleName))
+                            {
+                                <div class="menu-item px-3">
+
+                                    <form method="post"
+                                          asp-controller="User"
+                                          asp-action="SwitchRole"
+                                          class="w-100">
+
+                                        @Html.AntiForgeryToken()
+
+                                        <input type="hidden"
+                                               name="newRole"
+                                               value="@roleName" />
+
+
+                                        <button type="submit"
+                                                class="menu-link
+                                                       px-5
+                                                       border-0
+                                                       bg-transparent
+                                                       w-100
+                                                       text-start
+                                                       @(string.Equals(
+                                                           userType,
+                                                           roleName,
+                                                           StringComparison.OrdinalIgnoreCase)
+                                                           ? "active text-primary"
+                                                           : "")">
+
+                                            @roleName
+
+                                        </button>
+
+                                    </form>
+
+                                </div>
+                            }
+                        }
+
+                    </div>
+
+                </div>
+
+
+                <div class="separator my-2"></div>
+            }
+
+
+            <!-- ============================================= -->
+            <!-- NOTIFICATION -->
+            <!-- ============================================= -->
+
+            @if (userType != "Admin")
+            {
+                <div class="menu-item px-5">
+
+                    <a href="@notifUrl"
+                       class="menu-link px-5">
+
+                        <i class="fas fa-bell
+                                  me-2
+                                  text-muted">
+                        </i>
+
+
+                        <span class="flex-grow-1">
+                            Notification
+                        </span>
+
+
+                        <span id="header_notification_badge"
+                              class="badge
+                                     badge-sm
+                                     badge-circle
+                                     badge-danger
+                                     @(unreadCount > 0
+                                         ? ""
+                                         : "d-none")"
+                              style="
+                                  width:18px;
+                                  height:18px;
+                                  font-size:0.75rem;
+                                  transition:transform 0.2s;
+                              ">
+
+                            @unreadCount
+
+                        </span>
+
+                    </a>
+
+                </div>
+
+
+                <div class="separator my-2"></div>
+            }
+
+
+            <!-- ============================================= -->
+            <!-- SIGN OUT -->
+            <!-- ============================================= -->
+
+            <div class="menu-item px-5">
+
+                <a href="/User/Logout"
+                   class="menu-link px-5">
+
+                    <i class="fas fa-sign-out-alt
+                              me-2
+                              text-muted">
+                    </i>
+
+                    Sign Out
+
+                </a>
+
+            </div>
+
+        </div>
+        <!--end::User account menu-->
+
+    </div>
+
+</div>
+<!--end::Toolbar wrapper-->
+
+
+
+<style>
+
+    /* ==========================================================
+       MAIN TOPBAR
+       ========================================================== */
+
+    .topbar {
+        min-height: 64px;
+        white-space: nowrap;
+        flex: 0 0 auto;
+    }
+
+
+    /*
+       Allow the main header navigation area
+       to shrink instead of pushing profile outside screen.
+    */
+    #kt_header_menu {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+    }
+
+
+    #kt_header_menu .menu {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        min-width: 0;
+    }
+
+
+    #kt_header_menu .menu-link {
+        white-space: nowrap;
+    }
+
+
+    /*
+       Profile must remain visible.
+    */
+    #kt_header_user_menu_toggle {
+        flex: 0 0 auto;
+        min-width: 0;
+    }
+
+
+
+    /* ==========================================================
+       PROFILE TRIGGER
+       ========================================================== */
+
+    .topbar-profile-trigger {
+        min-height: 48px;
+        padding: 5px 10px;
+        border-radius: 10px;
+
+        cursor: pointer;
+
+        white-space: nowrap;
+
+        transition:
+            background-color 0.2s ease,
+            box-shadow 0.2s ease;
+    }
+
+
+    .topbar-profile-trigger:hover {
+        background-color: #f3f6f9;
+    }
+
+
+
+    /* ==========================================================
+       PROFILE IMAGE
+       ========================================================== */
+
+    .topbar-profile-avatar {
+        width: 38px;
+        height: 38px;
+
+        object-fit: cover;
+
+        flex-shrink: 0;
+    }
+
+
+
+    /* ==========================================================
+       PROFILE NAME + ROLE
+       ========================================================== */
+
+    .topbar-profile-info {
+        display: flex;
+        flex-direction: column;
+
+        justify-content: center;
+
+        margin-left: 8px;
+
+        min-width: 0;
+        max-width: 160px;
+
+        line-height: 1.2;
+    }
+
+
+    .topbar-profile-name {
+        display: block;
+
+        max-width: 160px;
+
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        font-size: 13px;
+        font-weight: 600;
+
+        color: #3f4254;
+    }
+
+
+    .topbar-profile-role {
+        display: block;
+
+        margin-top: 3px;
+
+        font-size: 11px;
+        font-weight: 500;
+
+        color: #a1a5b7;
+    }
+
+
+    .topbar-profile-arrow {
+        font-size: 9px;
+        flex-shrink: 0;
+    }
+
+
+
+    /* ==========================================================
+       LARGE DESKTOP
+       Slightly reduce navigation spacing
+       ========================================================== */
+
+    @@media (max-width: 1800px) {
+
+        #kt_header_menu .menu-link {
+            padding-left: 11px !important;
+            padding-right: 11px !important;
+        }
+
+    }
+
+
+
+    /* ==========================================================
+       MEDIUM DESKTOP
+       ========================================================== */
+
+    @@media (max-width: 1650px) {
+
+        #kt_header_menu .menu-link {
+            padding-left: 8px !important;
+            padding-right: 8px !important;
+        }
+
+        #kt_header_menu .menu-title {
+            font-size: 14px !important;
+        }
+
+        .topbar-profile-info {
+            max-width: 130px;
+        }
+
+        .topbar-profile-name {
+            max-width: 130px;
+        }
+
+    }
+
+
+
+    /* ==========================================================
+       SMALLER DESKTOP / LAPTOPS
+       Slightly compact spacing but KEEP name visible
+       ========================================================== */
+
+    @@media (max-width: 1500px) {
+
+        .topbar-profile-trigger {
+            padding: 4px 8px;
+        }
+
+        .topbar-profile-info {
+            display: flex !important;
+            max-width: 110px;
+        }
+
+        .topbar-profile-name {
+            max-width: 110px;
+            font-size: 12px;
+        }
+
+        .topbar-profile-role {
+            font-size: 10px;
+        }
+
+        .topbar-profile-arrow {
+            display: inline-block !important;
+        }
+
+        #kt_header_menu .menu-link {
+            padding-left: 6px !important;
+            padding-right: 6px !important;
+        }
+
+        #kt_header_menu .menu-title {
+            font-size: 13px !important;
+        }
+
+    }
+
+
+
+    /* ==========================================================
+       COMPACT DESKTOP & TABLETS (Down to 768px)
+       Keep profile name visible next to avatar
+       ========================================================== */
+
+    @@media (max-width: 1200px) {
+
+        .topbar-profile-info {
+            display: flex !important;
+            max-width: 100px;
+        }
+
+        .topbar-profile-name {
+            max-width: 100px;
+            font-size: 12px;
+        }
+
+        .topbar-profile-role {
+            display: none !important; /* Hide role on tight screens to save space while keeping name visible */
+        }
+
+    }
+
+
+
+    /* ==========================================================
+       TABLET / SMALL SCREEN
+       Metronic can handle its own responsive menu.
+       ========================================================== */
+
+    @@media (max-width: 1199.98px) {
+
+        .topbar {
+            min-height: 58px;
+        }
+
+
+        #kt_header_user_menu_toggle {
+            margin-left: 6px !important;
+        }
+
+
+        .topbar-profile-avatar {
+            width: 34px;
+            height: 34px;
+        }
+
+    }
+
+
+
+    /* ==========================================================
+       MOBILE
+       ========================================================== */
+
+    @@media (max-width: 767.98px) {
+
+        .topbar {
+            min-height: 54px;
+        }
+
+
+        .topbar-profile-avatar {
+            width: 32px;
+            height: 32px;
+        }
+
+
+        .topbar-profile-trigger {
+            min-height: 40px;
+            padding: 3px;
+        }
+
+    }
+
+</style>
+
+
+
+<script>
+
+    document.addEventListener("DOMContentLoaded", function () {
+
+        /*
+         * Initialize Bootstrap tooltip only if the
+         * element has not already been initialized.
+         */
+        document
+            .querySelectorAll('[data-bs-toggle="tooltip"]')
+            .forEach(function (element) {
+
+                if (typeof bootstrap !== "undefined" &&
+                    bootstrap.Tooltip) {
+
+                    var existingTooltip =
+                        bootstrap.Tooltip.getInstance(element);
+
+                    if (!existingTooltip) {
+
+                        new bootstrap.Tooltip(element);
+
+                    }
+                }
+
+            });
+
+    });
+
+</script>

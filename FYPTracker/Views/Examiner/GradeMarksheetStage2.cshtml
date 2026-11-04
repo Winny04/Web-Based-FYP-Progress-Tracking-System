@@ -1,0 +1,420 @@
+@model FYPTracker.Models.FYPProject
+@{
+    ViewData["Title"] = "Stage 2 Final Evaluation";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var dppFile = FYPTracker.Utils.GradingHelper.GetStage2FinalReportFile(Model.Milestones);
+    var existingMarks = Model.Stage2ExaminerMarksheetData;
+    bool isLegacyUnversioned = FYPTracker.Utils.GradingHelper.IsLegacyUnversionedExaminerRecord(existingMarks);
+
+    // If legacy unversioned, parse raw values safely for display only
+    string legacyCrit1 = "-", legacyCrit2 = "-", legacyCrit3 = "-", legacyCrit4 = "-", legacyCrit5 = "-", legacyCrit6 = "-", legacyCrit7 = "-", legacyTotal = "-", legacyFeedback = "";
+    if (isLegacyUnversioned && !string.IsNullOrEmpty(existingMarks))
+    {
+        try
+        {
+            using var legacyDoc = System.Text.Json.JsonDocument.Parse(existingMarks);
+            var root = legacyDoc.RootElement;
+            if (root.TryGetProperty("Crit1", out var c1)) legacyCrit1 = c1.ToString();
+            if (root.TryGetProperty("Crit2", out var c2)) legacyCrit2 = c2.ToString();
+            if (root.TryGetProperty("Crit3", out var c3)) legacyCrit3 = c3.ToString();
+            if (root.TryGetProperty("Crit4", out var c4)) legacyCrit4 = c4.ToString();
+            if (root.TryGetProperty("Crit5", out var c5)) legacyCrit5 = c5.ToString();
+            if (root.TryGetProperty("Crit6", out var c6)) legacyCrit6 = c6.ToString();
+            if (root.TryGetProperty("Crit7", out var c7)) legacyCrit7 = c7.ToString();
+            if (root.TryGetProperty("Total", out var tot)) legacyTotal = tot.ToString();
+            if (root.TryGetProperty("Feedback", out var fb)) legacyFeedback = fb.GetString() ?? "";
+        }
+        catch { }
+    }
+}
+
+<div class="d-flex flex-column h-100" style="background: #f8fafc; min-height: calc(100vh - 100px);">
+    <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center shadow-sm">
+        <div>
+            <h3 class="fw-bold mb-1 text-dark"><i class="fas fa-graduation-cap text-success me-2"></i> Stage 2 Final Evaluation</h3>
+            <p class="mb-0 text-muted">
+                Candidate: <span class="fw-bold text-dark">@Model.Student?.FullName</span> | 
+                Dissertation: <span class="fw-bold text-dark">@Model.Title</span>
+            </p>
+        </div>
+        <div>
+            <a href="javascript:history.back()" class="btn btn-outline-secondary rounded-pill px-4"><i class="fas fa-arrow-left me-2"></i>Back</a>
+        </div>
+    </div>
+
+    <div class="row g-0 flex-grow-1">
+        <!-- PDF Viewer (Left Side) -->
+        <div class="col-lg-6 border-end bg-dark">
+            @if (dppFile != null)
+            {
+                <iframe src="@dppFile.FilePath" style="width: 100%; height: calc(100vh - 180px); border: none;" allowfullscreen></iframe>
+            }
+            else
+            {
+                <div class="d-flex align-items-center justify-content-center h-100 text-white flex-column">
+                    <i class="fas fa-file-pdf fa-4x mb-3 text-secondary"></i>
+                    <h5>No final document uploaded</h5>
+                </div>
+            }
+        </div>
+
+        <!-- Evaluation Form (Right Side) -->
+        <div class="col-lg-6 bg-white overflow-auto" style="height: calc(100vh - 180px);">
+            <div class="p-4 p-xl-5">
+                @if (isLegacyUnversioned)
+                {
+                    <div class="alert alert-warning border border-warning shadow-sm rounded-3 mb-4 d-flex align-items-center">
+                        <i class="fas fa-exclamation-triangle fs-3 text-warning me-3"></i>
+                        <div>
+                            <h6 class="fw-bold mb-1 text-dark">Historical grading format requires review</h6>
+                            <p class="mb-0 small text-dark">This marksheet was submitted using a legacy grading format. To prevent accidental modification or score corruption, editing is disabled. Historical raw marks and comments are displayed below in read-only format.</p>
+                        </div>
+                    </div>
+
+                    <div class="card border border-warning-subtle shadow-sm rounded-3 mb-4">
+                        <div class="card-header bg-warning-subtle py-3 border-0 d-flex justify-content-between align-items-center">
+                            <span class="fw-bold text-dark"><i class="fas fa-history me-2 text-warning"></i>Historical Examiner Marksheet (Read-Only)</span>
+                            <span class="badge bg-secondary">Legacy Unversioned</span>
+                        </div>
+                        <div class="card-body p-4">
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-sm align-middle mb-3">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Criterion</th>
+                                            <th class="text-center" style="width: 140px;">Recorded Mark</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td>1. Understanding of Problem Domain</td><td class="text-center fw-bold">@legacyCrit1</td></tr>
+                                        <tr><td>2. Literature Review</td><td class="text-center fw-bold">@legacyCrit2</td></tr>
+                                        <tr><td>3. Research Methodology</td><td class="text-center fw-bold">@legacyCrit3</td></tr>
+                                        <tr><td>4. Analysis & Outcome</td><td class="text-center fw-bold">@legacyCrit4</td></tr>
+                                        <tr><td>5. Report Structure & Clarity</td><td class="text-center fw-bold">@legacyCrit5</td></tr>
+                                        <tr><td>6. Project Management</td><td class="text-center fw-bold">@legacyCrit6</td></tr>
+                                        <tr><td>7. Project Demonstration & Presentation</td><td class="text-center fw-bold">@legacyCrit7</td></tr>
+                                        <tr class="table-light fw-bold"><td>Recorded Raw Total</td><td class="text-center text-primary">@legacyTotal</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="mt-3">
+                                <label class="fw-bold text-dark small mb-1">Historical Examiner Feedback:</label>
+                                <div class="p-3 bg-light rounded border text-muted small">
+                                    @(string.IsNullOrWhiteSpace(legacyFeedback) ? (string.IsNullOrWhiteSpace(Model.ExaminerComments) ? "No feedback recorded." : Model.ExaminerComments) : legacyFeedback)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <form asp-controller="Examiner" asp-action="GradeMarksheetStage2" method="post" id="marksheetForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="projectId" value="@Model.Id" />
+                    <!-- We'll store the JSON data here -->
+                    <input type="hidden" name="marksheetData" id="marksheetData" value="@existingMarks" />
+
+                    <div class="d-flex align-items-center justify-content-between mb-4 pb-2 border-bottom">
+                        <div>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fs-8 fw-bold text-uppercase">
+                                <i class="fas fa-graduation-cap me-1"></i> Stage 2 Examiner Evaluation
+                            </span>
+                        </div>
+                        <div class="text-muted small">
+                            Role: <span class="fw-bold text-dark">Examiner</span>
+                        </div>
+                    </div>
+
+                    <!-- 1. Understanding of Problem Domain -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">1. Understanding of Problem Domain</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valCrit1">0/10</span>
+                            </div>
+                            <p class="text-muted small mb-3">Demonstrates clear understanding of problem, formulates appropriate objectives, identifies relevant legal/social/ethical issues.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" id="scoreCrit1" oninput="updateScore('Crit1')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightCrit1">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Literature Review -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">2. Literature Review</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valCrit2">0/20</span>
+                            </div>
+                            <p class="text-muted small mb-3">Critical investigation of relevant area, comparison with similar products, use of relevant and recent references.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" id="scoreCrit2" oninput="updateScore('Crit2')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightCrit2">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Research Methodology -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">3. Research Methodology</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valCrit3">0/10</span>
+                            </div>
+                            <p class="text-muted small mb-3">Appropriate methods chosen, executed effectively, suitable project plan developed and documented.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" id="scoreCrit3" oninput="updateScore('Crit3')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightCrit3">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Analysis & Outcome -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">4. Analysis & Outcome</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valCrit4">0/20</span>
+                            </div>
+                            <p class="text-muted small mb-3">Appropriate evaluation/testing methods, valid results, originality, ownership, clear analysis.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" id="scoreCrit4" oninput="updateScore('Crit4')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightCrit4">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 5. Report structure and clarity -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">5. Report Structure & Clarity</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valCrit5">0/5</span>
+                            </div>
+                            <p class="text-muted small mb-3">Logical structure, correct grammar, citation formats, critical evaluation.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" id="scoreCrit5" oninput="updateScore('Crit5')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightCrit5">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 6. Project Management -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">6. Project Management</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valCrit6">0/5</span>
+                            </div>
+                            <p class="text-muted small mb-3">Evidence of management (meeting logs), problem solving, ability to deliver.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" id="scoreCrit6" oninput="updateScore('Crit6')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightCrit6">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 7. Project Demonstration -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">7. Project Demonstration & Presentation</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valCrit7">0/30</span>
+                            </div>
+                            <p class="text-muted small mb-3">Delivery techniques, use of language, answering questions, clear ownership shown during viva.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" id="scoreCrit7" oninput="updateScore('Crit7')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightCrit7">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Examiner Comments Card -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4">
+                        <div class="card-body p-4">
+                            <label class="fw-bold fs-6 text-dark mb-2"><i class="fas fa-comment-alt text-success me-2"></i>Examiner Qualitative Comments</label>
+                            <p class="text-muted small mb-2">Provide detailed observations, critique of final dissertation, and viva presentation feedback.</p>
+                            <textarea class="form-control bg-light" name="examinerComments" id="feedbackText" rows="5" placeholder="Provide detailed feedback, strengths, and areas for improvement...">@Model.ExaminerComments</textarea>
+                        </div>
+                    </div>
+
+                    <!-- Footer Actions -->
+                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                        <div class="fs-4 fw-bold text-dark">
+                            Total Score: <span id="totalScore" class="text-primary">0</span><span class="text-muted fs-5">/100</span>
+                        </div>
+                        @if (isLegacyUnversioned)
+                        {
+                            <button type="button" class="btn btn-secondary btn-lg px-5 rounded-pill shadow-sm d-flex align-items-center" disabled title="Historical grading format requires review">
+                                <i class="fas fa-lock me-2"></i> Marksheet Locked (Legacy Format)
+                            </button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-success btn-lg px-5 rounded-pill shadow-sm d-flex align-items-center" onclick="confirmSubmission()">
+                                <i class="fas fa-check-double me-2"></i> Submit Stage 2 Marks
+                            </button>
+                        }
+                    </div>
+
+                    <!-- Confirmation Modal -->
+                    <div class="modal fade" id="submitConfirmModal" tabindex="-1" aria-labelledby="submitConfirmModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content border-0 shadow">
+                                <div class="modal-header bg-light">
+                                    <h5 class="modal-title fw-bold text-dark" id="submitConfirmModalLabel"><i class="fas fa-check-circle text-success me-2"></i>Confirm Stage 2 Evaluation</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body p-4">
+                                    <p class="mb-3 text-dark">Are you sure you want to submit Stage 2 marks for <strong class="text-success">@Model.Student?.FullName</strong>?</p>
+                                    <div class="p-3 bg-light rounded-3 border mb-3">
+                                        <div class="d-flex justify-content-between">
+                                            <span class="text-muted small">Examiner Total Score:</span>
+                                            <span class="fw-bold text-dark" id="modalConfirmTotal">0/100</span>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mb-0"><i class="fas fa-info-circle me-1"></i>Once submitted, your marks and comments will be saved and used for the joint final grade calculation with the Supervisor.</p>
+                                </div>
+                                <div class="modal-footer bg-light">
+                                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" class="btn btn-success rounded-pill px-4" id="modalConfirmSubmitBtn" onclick="executeSubmit()">Confirm & Submit</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Custom Range Sliders */
+    .custom-range::-webkit-slider-thumb {
+        background: #0f172a;
+        width: 24px;
+        height: 24px;
+        border: 4px solid white;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    .custom-range::-webkit-slider-runnable-track {
+        background: #cbd5e1;
+        height: 8px;
+        border-radius: 4px;
+    }
+    .criterion-card {
+        transition: box-shadow 0.2s ease-in-out;
+    }
+    .criterion-card:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08) !important;
+    }
+</style>
+
+@section Scripts {
+    <script>
+        // Init scores from existing data if any (Version 2 only)
+        let isLegacy = '@isLegacyUnversioned'.toLowerCase() === 'true';
+        let existing = document.getElementById('marksheetData').value;
+        if (existing && !isLegacy) {
+            try {
+                let data = JSON.parse(existing);
+                document.getElementById('scoreCrit1').value = data.Crit1 || 0;
+                document.getElementById('scoreCrit2').value = data.Crit2 || 0;
+                document.getElementById('scoreCrit3').value = data.Crit3 || 0;
+                document.getElementById('scoreCrit4').value = data.Crit4 || 0;
+                document.getElementById('scoreCrit5').value = data.Crit5 || 0;
+                document.getElementById('scoreCrit6').value = data.Crit6 || 0;
+                document.getElementById('scoreCrit7').value = data.Crit7 || 0;
+                
+                ['Crit1', 'Crit2', 'Crit3', 'Crit4', 'Crit5', 'Crit6', 'Crit7'].forEach(cat => {
+                    if(document.getElementById('val' + cat)) updateScore(cat, false);
+                });
+            } catch(e) {}
+        }
+
+        const fullMarks = { Crit1: 10, Crit2: 20, Crit3: 10, Crit4: 20, Crit5: 5, Crit6: 5, Crit7: 30 };
+
+        function formatScore(val) {
+            let rounded = Math.round(val * 100) / 100;
+            if (rounded % 1 === 0) return rounded.toString();
+            return (Math.round(rounded * 10) / 10 === rounded) ? rounded.toFixed(1) : rounded.toFixed(2);
+        }
+
+        function updateScore(category, updateAvg = true) {
+            let weight = parseInt(document.getElementById('score' + category).value) || 0;
+            if (document.getElementById('weight' + category)) {
+                document.getElementById('weight' + category).innerText = "Weight: " + weight + "/4";
+            }
+            
+            let fullMark = fullMarks[category];
+            let score = (weight / 4.0) * fullMark;
+            
+            document.getElementById('val' + category).innerText = formatScore(score) + "/" + fullMark;
+            
+            if (updateAvg) calculateTotal();
+        }
+
+        function calculateTotal() {
+            let total = 0;
+            ['Crit1', 'Crit2', 'Crit3', 'Crit4', 'Crit5', 'Crit6', 'Crit7'].forEach(cat => {
+                let weight = parseInt(document.getElementById('score' + cat).value) || 0;
+                total += (weight / 4.0) * fullMarks[cat];
+            });
+            
+            document.getElementById('totalScore').innerText = formatScore(total);
+        }
+
+        function confirmSubmission() {
+            let form = document.getElementById('marksheetForm');
+            if (!form.reportValidity()) {
+                return;
+            }
+
+            let totalText = document.getElementById('totalScore').innerText;
+            document.getElementById('modalConfirmTotal').innerText = totalText + "/100";
+
+            let modalEl = document.getElementById('submitConfirmModal');
+            let modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        function executeSubmit() {
+            let confirmBtn = document.getElementById('modalConfirmSubmitBtn');
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Submitting...';
+            }
+
+            let data = {
+                Version: 2,
+                Scale: "Rubric0-4",
+                Crit1: document.getElementById('scoreCrit1').value,
+                Crit2: document.getElementById('scoreCrit2').value,
+                Crit3: document.getElementById('scoreCrit3').value,
+                Crit4: document.getElementById('scoreCrit4').value,
+                Crit5: document.getElementById('scoreCrit5').value,
+                Crit6: document.getElementById('scoreCrit6').value,
+                Crit7: document.getElementById('scoreCrit7').value,
+                Feedback: document.getElementById('feedbackText') ? document.getElementById('feedbackText').value : "",
+                Total: document.getElementById('totalScore').innerText
+            };
+
+            document.getElementById('marksheetData').value = JSON.stringify(data);
+            document.getElementById('marksheetForm').submit();
+        }
+        
+        // Initial calculation
+        calculateTotal();
+        
+        // Initial label setup
+        ['Crit1', 'Crit2', 'Crit3', 'Crit4', 'Crit5', 'Crit6', 'Crit7'].forEach(cat => updateScore(cat, false));
+
+        // Lock inputs if unversioned legacy
+        if ('@isLegacyUnversioned'.toLowerCase() === 'true') {
+            document.querySelectorAll('#marksheetForm input[type="range"], #marksheetForm textarea').forEach(el => {
+                el.disabled = true;
+            });
+        }
+    </script>
+}

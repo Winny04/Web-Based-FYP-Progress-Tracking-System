@@ -1,0 +1,141 @@
+@using FYPTracker.Models
+@{
+    var title     = ViewData["CatTitle"]  as string ?? "Notifications";
+    var icon      = ViewData["CatIcon"]   as string ?? "fas fa-bell";
+    var bgGrad    = ViewData["BgGrad"]   as string ?? "linear-gradient(135deg,#64748b,#94a3b8)";
+    var iconBg    = ViewData["IconBg"]   as string ?? "#f1f5f9";
+    var iconColor = ViewData["IconColor"] as string ?? "#64748b";
+    var items     = ViewData["Items"]    as List<FYPNotification> ?? new List<FYPNotification>();
+    var catId     = "cat_" + title.Replace(" ", "_");
+    var unreadInCat = items.Count(x => !x.IsRead);
+}
+
+<div class="category-card">
+    <!-- Category Header (click to collapse) -->
+    <button class="category-header" style="background: @bgGrad; color: white;"
+            type="button" data-bs-toggle="collapse" data-bs-target="#@catId" aria-expanded="true">
+        <div class="notif-icon" style="background:rgba(255,255,255,0.2);color:white;width:34px;height:34px;font-size:15px;border-radius:8px;">
+            <i class="@icon"></i>
+        </div>
+        <span>@title</span>
+        @if (unreadInCat > 0)
+        {
+            <span class="badge rounded-pill ms-1" style="background:rgba(255,255,255,0.25);font-size:.72rem;">
+                @unreadInCat new
+            </span>
+        }
+        <span class="cat-count">@items.Count total</span>
+        <i class="fas fa-chevron-down chevron"></i>
+    </button>
+
+    <!-- Category Body -->
+    <div class="collapse show notif-body" id="@catId">
+        @if (!items.Any())
+        {
+            <div class="empty-cat">
+                <i class="fas fa-inbox mb-2 d-block fs-4 opacity-40"></i>
+                No @title.ToLower() notifications yet.
+            </div>
+        }
+        else
+        {
+            @foreach (var n in items.OrderByDescending(x => x.CreatedDate))
+            {
+                var iconCls = n.Type switch {
+                    "SupervisionRequest" => "fas fa-user-plus",
+                    "MeetingUpdate"      => "fas fa-calendar-check",
+                    "MeetingRequest"     => "fas fa-calendar-plus",
+                    "Submission"         => "fas fa-file-upload",
+                    _                   => "fas fa-bell"
+                };
+                var diff = DateTime.Now - n.CreatedDate;
+                string timeAgo;
+                if      (diff.TotalMinutes < 1)  timeAgo = "Just now";
+                else if (diff.TotalMinutes < 60) timeAgo = $"{(int)diff.TotalMinutes}m ago";
+                else if (diff.TotalHours   < 24) timeAgo = $"{(int)diff.TotalHours}h ago";
+                else if (diff.TotalDays    < 7)  timeAgo = $"{(int)diff.TotalDays}d ago";
+                else                             timeAgo = n.CreatedDate.ToString("dd MMM yyyy");
+
+                <div class="notif-item @(n.IsRead ? "" : "unread")">
+                    <div class="d-flex align-items-start gap-3">
+                        @if (!n.IsRead)
+                        {
+                            <div class="unread-dot"></div>
+                        }
+                        else
+                        {
+                            <div style="width:9px;flex-shrink:0;"></div>
+                        }
+                        <div class="notif-icon" style="background:@iconBg;color:@iconColor;">
+                            <i class="@iconCls"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                <div class="fw-bold text-dark" style="font-size:.93rem;">@n.Title</div>
+                                <small class="text-muted">@timeAgo</small>
+                            </div>
+                            @if (!string.IsNullOrEmpty(n.Message))
+                            {
+                                <div class="text-muted mt-1" style="font-size:.84rem;">@n.Message</div>
+                            }
+                            <div class="mt-2 d-flex align-items-center flex-wrap gap-2">
+                                <small class="text-muted">@n.CreatedDate.ToString("dd MMM yyyy, h:mm tt")</small>
+
+                                @if (!n.IsRead)
+                                {
+                                    if (n.Type == "MeetingRequest" && n.RelatedRecordId != null)
+                                    {
+                                        <form asp-action="RespondMeetingFromNotification" asp-controller="Supervisor" method="post" class="d-flex align-items-center gap-2 flex-wrap">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="meetingId" value="@n.RelatedRecordId" />
+                                            <input type="hidden" name="notificationId" value="@n.Id" />
+                                            <input type="text" name="note" class="form-control form-control-sm" placeholder="Note to student (required)..." style="max-width:220px;border-radius:8px;" required minlength="10" />
+                                            <button type="submit" name="status" value="Approved" class="btn btn-sm btn-success fw-bold px-3" style="border-radius:8px;">Approve</button>
+                                            <button type="submit" name="status" value="Rejected" class="btn btn-sm btn-danger fw-bold px-3" style="border-radius:8px;">Reject</button>
+                                        </form>
+                                    }
+                                    else if (n.Type == "SupervisionRequest")
+                                    {
+                                        <a href="/Supervisor/StudentRequests@(n.RelatedRecordId != null ? "?openRequestId=" + n.RelatedRecordId : "")"
+                                           class="btn btn-sm btn-outline-success fw-bold px-3" style="border-radius:8px;">
+                                            <i class="fas fa-external-link-alt me-1"></i>Review Request
+                                        </a>
+                                    }
+                                    else if (n.Type == "Submission")
+                                    {
+                                        <a href="@(n.RelatedRecordId != null ? "/Supervisor/GradeSubmission/" + n.RelatedRecordId : "/Supervisor/ReviewSubmissions")"
+                                           class="btn btn-sm btn-outline-primary fw-bold px-3" style="border-radius:8px;">
+                                            <i class="fas fa-external-link-alt me-1"></i>Review Submission
+                                        </a>
+                                    }
+
+                                    <form asp-action="MarkAsRead" asp-controller="Supervisor" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="notificationId" value="@n.Id" />
+                                        <button type="submit" class="btn-read">
+                                            <i class="fas fa-check me-1"></i>Mark Read
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <small class="text-success"><i class="fas fa-check-circle me-1"></i>Read</small>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+<script>
+    // Rotate chevron on collapse toggle
+    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(btn => {
+        const target = document.querySelector(btn.dataset.bsTarget);
+        if (!target) return;
+        target.addEventListener('show.bs.collapse', () => btn.classList.remove('collapsed'));
+        target.addEventListener('hide.bs.collapse', () => btn.classList.add('collapsed'));
+    });
+</script>

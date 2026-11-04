@@ -1,0 +1,198 @@
+@model IEnumerable<FYPTracker.Models.SupervisorTimetableEntry>
+@{
+    ViewData["Title"] = "Manage Teaching Timetable";
+}
+
+<style>
+    :root { 
+        --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); 
+        --glass-bg: rgba(255, 255, 255, 0.95);
+        --glass-border: rgba(255, 255, 255, 0.2);
+    }
+    
+    .page-hero {
+        background: var(--hero-grad);
+        border-radius: 20px;
+        padding: 30px;
+        color: white;
+        margin-bottom: 30px;
+        box-shadow: 0 10px 30px rgba(30,41,59,.18);
+    }
+    
+    .premium-card {
+        background: var(--glass-bg);
+        backdrop-filter: blur(10px);
+        border: 1px solid var(--glass-border);
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .premium-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05);
+    }
+</style>
+
+<div class="container-xxl py-4">
+    <div class="mb-4">
+        <a asp-controller="Timetable" asp-action="ManageAvailability" asp-route-sessionFilter="@ViewBag.CurrentSession" class="btn btn-sm btn-outline-secondary rounded-pill px-3 shadow-sm fw-bold">
+            <i class="fas fa-arrow-left me-2"></i>Back to My Availability
+        </a>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 rounded-4 shadow-sm mb-4 d-flex align-items-center">
+            <i class="fas fa-check-circle fs-4 me-3"></i>
+            <div>@TempData["Success"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 rounded-4 shadow-sm mb-4 d-flex align-items-center">
+            <i class="fas fa-exclamation-triangle fs-4 me-3"></i>
+            <div>@TempData["Error"]</div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bolder mb-1 text-white"><i class="fas fa-calendar-check text-info me-2"></i>Teaching Timetable</h2>
+            <p class="mb-0 text-white opacity-75 fs-6" style="max-width: 600px;">Upload your weekly timetable to block teaching hours from student meetings.</p>
+        </div>
+        <div>
+            @{
+                var sessions = ViewBag.AllSessions as IEnumerable<string> ?? new List<string>();
+                string selectedSession = ViewBag.CurrentSession as string ?? "";
+            }
+
+            <form method="get" asp-action="ManageTimetable" class="d-flex align-items-center gap-2 bg-white bg-opacity-10 px-3 py-2 rounded-pill backdrop-blur" style="width: auto; max-width: 320px;">
+                <label for="sessionFilterSelect" class="text-white mb-0 fw-semibold text-nowrap" style="font-size: 0.9rem;">
+                    <i class="fas fa-filter text-info me-1"></i>Session:
+                </label>
+                <select id="sessionFilterSelect"
+                    name="sessionFilter"
+                    class="form-select form-select-sm border-0 shadow-none fw-semibold"
+                    style="color: #1e293b; background-color: #ffffff; border-radius: 20px; font-size: 0.85rem; width: 180px; min-width: 160px; cursor: pointer;"
+                    onchange="this.form.submit()">
+                    @foreach (var session in sessions)
+                    {
+                        if (session == selectedSession)
+                        {
+                            <option value="@session" selected>@session</option>
+                        }
+                        else
+                        {
+                            <option value="@session">@session</option>
+                        }
+                    }
+                </select>
+            </form>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-5">
+            <div class="premium-card h-100">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex justify-content-center align-items-center me-3" style="width: 45px; height: 45px;">
+                            <i class="fas fa-file-upload fs-5"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-0">Upload Timetable (CSV)</h5>
+                    </div>
+                    
+                    <p class="text-muted small mb-4">
+                        The CSV format must strictly contain the following columns: <br>
+                        <code>DayOfWeek, StartTime, EndTime, Details</code><br>
+                        (e.g. <code>Monday, 09:00, 11:00, Lecture 1</code>).
+                    </p>
+                    
+                    <form asp-action="PreviewTimetable" enctype="multipart/form-data" method="post" class="bg-light p-4 rounded-4">
+                        <input type="hidden" name="sessionFilter" value="@ViewBag.CurrentSession" />
+                        <div class="mb-3">
+                            <a asp-controller="Timetable" asp-action="DownloadTemplate" class="btn btn-outline-primary btn-sm rounded-pill fw-bold w-100 py-2 shadow-sm d-flex align-items-center justify-content-center">
+                                <i class="fas fa-file-csv me-2"></i>Download CSV Template
+                            </a>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label fw-bold text-dark small text-uppercase">Select File</label>
+                            <input class="form-control bg-white border-0 shadow-sm" type="file" id="timetableFile" name="timetableFile" accept=".csv" required />
+                        </div>
+                        <button class="btn btn-primary w-100 fw-bold rounded-pill shadow-sm" type="submit">Preview & Upload</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-7">
+            <div class="premium-card h-100 flex-column d-flex">
+                <div class="card-header bg-transparent border-0 p-4 pb-0">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-info bg-opacity-10 text-info rounded-circle d-flex justify-content-center align-items-center me-3" style="width: 45px; height: 45px;">
+                                <i class="fas fa-calendar-times fs-5"></i>
+                            </div>
+                            <h5 class="fw-bold text-dark mb-0">Current Busy Periods</h5>
+                        </div>
+                        @if (Model != null && Model.Any()) {
+                            <span class="badge bg-light text-dark border">@Model.Count() classes</span>
+                        }
+                    </div>
+                </div>
+                <div class="card-body p-4 pt-3 flex-grow-1">
+                    @if (Model != null && Model.Any())
+                    {
+                        <div class="table-responsive rounded-4 border overflow-hidden">
+                            <table class="table table-borderless table-hover align-middle mb-0">
+                                <thead class="bg-light">
+                                    <tr class="text-muted small fw-bold text-uppercase border-bottom">
+                                        <th class="ps-4">Day</th>
+                                        <th>Time</th>
+                                        <th class="pe-4">Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{
+                                        int GetDayOrder(string? d) => d?.Trim().ToLowerInvariant() switch
+                                        {
+                                            "monday" => 1,
+                                            "tuesday" => 2,
+                                            "wednesday" => 3,
+                                            "thursday" => 4,
+                                            "friday" => 5,
+                                            "saturday" => 6,
+                                            "sunday" => 7,
+                                            _ => 99
+                                        };
+                                    }
+                                    @foreach (var item in Model.OrderBy(i => GetDayOrder(i.DayOfWeek)).ThenBy(i => i.StartTime))
+                                    {
+                                        <tr>
+                                            <td class="ps-4 fw-bold text-dark">
+                                                <span class="badge badge-light-primary px-3 py-2 fw-bolder fs-7" style="color: #009ef7 !important; background-color: #f1faff !important; border: 1px solid rgba(0, 158, 247, 0.3) !important;">@item.DayOfWeek</span>
+                                            </td>
+                                            <td><span class="fw-semibold text-dark"><i class="far fa-clock text-muted me-1 small"></i> @item.StartTime.ToString(@"hh\:mm") - @item.EndTime.ToString(@"hh\:mm")</span></td>
+                                            <td class="pe-4 text-muted small">@item.Details</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="h-100 d-flex flex-column align-items-center justify-content-center py-5 text-muted bg-light rounded-4 border border-dashed">
+                            <i class="fas fa-inbox fs-1 mb-3 opacity-25"></i>
+                            <h6 class="fw-bold text-dark mb-1">No Timetable Uploaded</h6>
+                            <p class="mb-0 small px-4 text-center">You have no weekly busy periods scheduled for this session.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,6185 @@
+using FYPTracker.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Text;
+using System.Linq;
+using FYPTracker.ViewModels;
+using FYPTracker.Services.Others.Interfaces;
+using FYPTracker.Configuration.Auhtorization;
+using FYPTracker.Helpers;
+using ClosedXML.Excel;
+using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
+using System.IO;
+using System;
+using System.Collections.Generic;
+using FYPTracker.Common;
+using Microsoft.AspNetCore.SignalR;
+using FYPTracker.Hubs;
+using FYPTracker.Services;
+using FYPTracker.Services.Defense;
+using FYPTracker.Services.Time;
+using System.Security.Claims;
+using FYPTracker.Utils;
+
+namespace FYPTracker.Controllers
+{
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    [FYPTracker.Filters.AuthorizeUserType("Admin", "SuperAdmin")]
+    public class AdminController : Controller
+    {
+
+        private readonly FYPTrackerContext _context;
+        private readonly IEmailService _emailService;
+        private readonly IHubContext<NotificationHub> _hubContext;
+
+        // B3.9: Prepared dependency.
+        private readonly IIAFAlternativeTimeRequestService?
+            _alternativeTimeRequestService;
+        private readonly IWebHostEnvironment? _env;
+        private readonly IConfiguration? _configuration;
+        private readonly IIAFDefenseBookingService? _defenseBookingService;
+
+        public AdminController(
+            FYPTrackerContext context,
+            IEmailService emailService,
+            IHubContext<NotificationHub> hubContext,
+            IIAFAlternativeTimeRequestService? alternativeTimeRequestService = null,
+            IWebHostEnvironment? env = null,
+            IConfiguration? configuration = null,
+            IIAFDefenseBookingService? defenseBookingService = null)
+        {
+            _context = context;
+            _emailService = emailService;
+            _hubContext = hubContext;
+            _alternativeTimeRequestService = alternativeTimeRequestService;
+            _env = env;
+            _configuration = configuration;
+            _defenseBookingService = defenseBookingService;
+        }
+
+        private bool IsAlternativeTimeFeatureEnabled()
+        {
+            return IAFAlternativeTimeFeatureGate.IsFeatureEnabled(_configuration, _env, _context) && _alternativeTimeRequestService != null;
+        }
+
+        #region B3.7 - IAF Alternative Time Request
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public IActionResult CreateIAFAlternativeTimeRequest(
+            int milestoneId,
+            int examinerId,
+            string? adminNotes)
+        {
+            if (!IsAlternativeTimeFeatureEnabled())
+            {
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new
+                    {
+                        success = false,
+                        code = "ALTERNATIVE_TIME_REQUEST_DISABLED",
+                        message = "IAF Alternative Time Request is not yet available."
+                    });
+            }
+
+            return CreateIAFAlternativeTimeRequestCoreAsync(milestoneId, examinerId, adminNotes).GetAwaiter().GetResult();
+        }
+
+        private async Task<IActionResult> CreateIAFAlternativeTimeRequestCoreAsync(
+            int milestoneId,
+            int examinerId,
+            string? adminNotes)
+        {
+            if (milestoneId <= 0 || examinerId <= 0)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_PARAMETERS",
+                    message = "Valid Milestone ID and Examiner ID are required."
+                });
+            }
+
+            // Derive Admin ID from authenticated server-side claims
+            if (!int.TryParse(User.FindFirst("Id")?.Value, out int currentAdminUserId) || currentAdminUserId <= 0)
+            {
+                var userName = User.Identity?.Name;
+                var u = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
+                if (u != null) currentAdminUserId = u.Id;
+            }
+
+            if (currentAdminUserId <= 0)
+            {
+                return Unauthorized(new
+                {
+                    success = false,
+                    code = "UNAUTHORIZED_ACCESS",
+                    message = "A valid authenticated administrator identity is required."
+                });
+            }
+
+            // Derive attempt, academic session, supervisor from authoritative database records
+            var milestone = await _context.FYPMilestones
+                .AsNoTracking()
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestone == null || milestone.Project == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "MILESTONE_NOT_FOUND",
+                    message = "The selected IAF milestone or project does not exist."
+                });
+            }
+
+            var attemptResult = IAFDefenseBookingService.ResolveAuthoritativeAttemptNumber(milestone.Remarks);
+            if (!attemptResult.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_ATTEMPT_HISTORY",
+                    message = attemptResult.ErrorMessage ?? "Unable to determine the authoritative IAF attempt."
+                });
+            }
+
+            int attemptNumber = attemptResult.AttemptNumber;
+            int supervisorId = milestone.Project.SupervisorId ?? 0;
+
+            string? sessionName = milestone.Project.AcademicSession;
+            if (string.IsNullOrWhiteSpace(sessionName))
+            {
+                sessionName = await _context.ApplicationUsers
+                    .AsNoTracking()
+                    .Where(u => u.Id == milestone.Project.StudentId)
+                    .Select(u => u.AcademicSession)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (string.IsNullOrWhiteSpace(sessionName))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "SESSION_NOT_FOUND",
+                    message = "No academic session is configured for this project or student."
+                });
+            }
+
+            var session = await _context.AcademicSessions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Name == sessionName.Trim());
+
+            if (session == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "SESSION_NOT_FOUND",
+                    message = "The project's academic session could not be resolved."
+                });
+            }
+
+            int academicSessionId = session.Id;
+
+            var result = await _alternativeTimeRequestService!.CreateRequestAsync(
+                milestoneId: milestoneId,
+                attemptNumber: attemptNumber,
+                academicSessionId: academicSessionId,
+                requestedLecturerId: examinerId,
+                requestedLecturerRole: "Examiner",
+                currentAdminUserId: currentAdminUserId,
+                isAdminUser: true,
+                supervisorId: supervisorId,
+                adminNotes: adminNotes);
+
+            if (!result.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = result.ErrorCode,
+                    message = result.ErrorMessage
+                });
+            }
+
+            try
+            {
+                var examinerNotification = new FYPNotification
+                {
+                    RecipientId = examinerId,
+                    Type = "IAFAlternativeTimeRequested",
+                    Title = "IAF Defense Alternative Time Requested",
+                    Message = $"An alternative time proposal has been requested for an IAF Defense session (Project: {milestone.Project.Title}). Please review and submit your available date and time.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                };
+                _context.FYPNotifications.Add(examinerNotification);
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CreateIAFAlternativeTimeRequest] Notification warning: {ex.Message}");
+            }
+
+            return Json(new
+            {
+                success = true,
+                message = "Alternative time request sent successfully.",
+                requestId = result.Request?.Id
+            });
+        }
+
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public IActionResult RejectIAFAlternativeTimeSuggestion(
+            int requestId,
+            string? reason,
+            string? rowVersion = null)
+        {
+            if (requestId <= 0)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_REQUEST_ID",
+                    message = "A valid request ID is required."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(reason) ||
+                reason.Length > 1000)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_REJECTION_REASON",
+                    message = "A rejection reason is required and must not exceed 1000 characters."
+                });
+            }
+
+            if (!IsAlternativeTimeFeatureEnabled())
+            {
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new
+                    {
+                        success = false,
+                        code = "ALTERNATIVE_TIME_REJECTION_DISABLED",
+                        message = "IAF Alternative Time Request rejection is not yet available."
+                    });
+            }
+
+            return RejectIAFAlternativeTimeSuggestionCoreAsync(requestId, reason, rowVersion).GetAwaiter().GetResult();
+        }
+
+        private async Task<IActionResult> RejectIAFAlternativeTimeSuggestionCoreAsync(
+            int requestId,
+            string? reason,
+            string? rowVersion = null)
+        {
+            if (!int.TryParse(User.FindFirst("Id")?.Value, out int currentAdminUserId) || currentAdminUserId <= 0)
+            {
+                var userName = User.Identity?.Name;
+                var u = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
+                if (u != null) currentAdminUserId = u.Id;
+            }
+
+            if (currentAdminUserId <= 0)
+            {
+                return Unauthorized(new
+                {
+                    success = false,
+                    code = "UNAUTHORIZED_ACCESS",
+                    message = "A valid authenticated administrator identity is required."
+                });
+            }
+
+            byte[]? clientRowVersion = null;
+            if (!string.IsNullOrEmpty(rowVersion))
+            {
+                try
+                {
+                    clientRowVersion = Convert.FromBase64String(rowVersion);
+                }
+                catch
+                {
+                    return BadRequest(new { success = false, code = "INVALID_ROW_VERSION", message = "Invalid concurrency token format." });
+                }
+            }
+            else
+            {
+                var req = await _context.IAFAlternativeTimeRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == requestId);
+                clientRowVersion = req?.RowVersion;
+            }
+
+            var result = await _alternativeTimeRequestService!.RejectSuggestionAsync(
+                requestId,
+                currentAdminUserId,
+                true,
+                reason!,
+                clientRowVersion);
+
+            if (!result.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = result.ErrorCode,
+                    message = result.ErrorMessage
+                });
+            }
+
+            return Json(new
+            {
+                success = true,
+                message = "Alternative time suggestion rejected successfully."
+            });
+        }
+
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public IActionResult CancelIAFAlternativeTimeRequest(
+            int requestId,
+            string? reason,
+            string? rowVersion = null)
+        {
+            if (requestId <= 0)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_REQUEST_ID",
+                    message = "A valid request ID is required."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(reason) ||
+                reason.Length > 1000)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_CANCELLATION_REASON",
+                    message = "A cancellation reason is required and must not exceed 1000 characters."
+                });
+            }
+
+            if (!IsAlternativeTimeFeatureEnabled())
+            {
+                return StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    new
+                    {
+                        success = false,
+                        code = "ALTERNATIVE_TIME_CANCELLATION_DISABLED",
+                        message = "IAF Alternative Time Request cancellation is not yet available."
+                    });
+            }
+
+            return CancelIAFAlternativeTimeRequestCoreAsync(requestId, reason, rowVersion).GetAwaiter().GetResult();
+        }
+
+        private async Task<IActionResult> CancelIAFAlternativeTimeRequestCoreAsync(
+            int requestId,
+            string? reason,
+            string? rowVersion = null)
+        {
+            if (!int.TryParse(User.FindFirst("Id")?.Value, out int currentAdminUserId) || currentAdminUserId <= 0)
+            {
+                var userName = User.Identity?.Name;
+                var u = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
+                if (u != null) currentAdminUserId = u.Id;
+            }
+
+            if (currentAdminUserId <= 0)
+            {
+                return Unauthorized(new
+                {
+                    success = false,
+                    code = "UNAUTHORIZED_ACCESS",
+                    message = "A valid authenticated administrator identity is required."
+                });
+            }
+
+            byte[]? clientRowVersion = null;
+            if (!string.IsNullOrEmpty(rowVersion))
+            {
+                try
+                {
+                    clientRowVersion = Convert.FromBase64String(rowVersion);
+                }
+                catch
+                {
+                    return BadRequest(new { success = false, code = "INVALID_ROW_VERSION", message = "Invalid concurrency token format." });
+                }
+            }
+            else
+            {
+                var req = await _context.IAFAlternativeTimeRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == requestId);
+                clientRowVersion = req?.RowVersion;
+            }
+
+            var result = await _alternativeTimeRequestService!.CancelRequestAsync(
+                requestId,
+                currentAdminUserId,
+                true,
+                reason!,
+                clientRowVersion);
+
+            if (!result.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = result.ErrorCode,
+                    message = result.ErrorMessage
+                });
+            }
+
+            return Json(new
+            {
+                success = true,
+                message = "Alternative time request cancelled successfully."
+            });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public async Task<IActionResult> ConfirmIAFAlternativeTimeBooking(
+            int requestId,
+            string venue,
+            string? rowVersion = null)
+        {
+            if (requestId <= 0)
+            {
+                return BadRequest(new { success = false, code = "INVALID_REQUEST_ID", message = "A valid request ID is required." });
+            }
+
+            if (string.IsNullOrWhiteSpace(venue) || venue.Trim().Length > 200)
+            {
+                return BadRequest(new { success = false, code = "INVALID_VENUE", message = "A valid venue is required (maximum 200 characters)." });
+            }
+
+            if (!IsAlternativeTimeFeatureEnabled())
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    success = false,
+                    code = "ALTERNATIVE_TIME_CONFIRMATION_DISABLED",
+                    message = "IAF Alternative Time Request confirmation is not yet available."
+                });
+            }
+
+            if (_defenseBookingService == null)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    success = false,
+                    code = "BOOKING_SERVICE_UNAVAILABLE",
+                    message = "Authoritative IAF defense booking service is unavailable."
+                });
+            }
+
+            if (_alternativeTimeRequestService == null)
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+                {
+                    success = false,
+                    code = "SERVICE_UNAVAILABLE",
+                    message = "Alternative time request service is unavailable."
+                });
+            }
+
+            // Require client-supplied concurrency token before any booking operation
+            if (string.IsNullOrWhiteSpace(rowVersion))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "ROW_VERSION_REQUIRED",
+                    message = "A concurrency token (rowVersion) is required."
+                });
+            }
+
+            byte[] clientRowVersion;
+            try
+            {
+                clientRowVersion = Convert.FromBase64String(rowVersion);
+            }
+            catch
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_ROW_VERSION",
+                    message = "Invalid concurrency token format."
+                });
+            }
+
+            // Verify authenticated Admin identity
+            if (!int.TryParse(User.FindFirst("Id")?.Value, out int currentAdminUserId) || currentAdminUserId <= 0)
+            {
+                var userName = User.Identity?.Name;
+                if (!string.IsNullOrEmpty(userName))
+                {
+                    var u = await _context.ApplicationUsers.FirstOrDefaultAsync(x => x.UserName == userName || x.Email == userName);
+                    if (u != null) currentAdminUserId = u.Id;
+                }
+            }
+
+            if (currentAdminUserId <= 0)
+            {
+                return Unauthorized(new
+                {
+                    success = false,
+                    code = "UNAUTHORIZED_ACCESS",
+                    message = "A valid authenticated administrator identity is required."
+                });
+            }
+
+            // Verify ActiveRole in session
+            string? activeRole = HttpContext.Session?.GetString("ActiveRole");
+            if (!string.Equals(activeRole, "Admin", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(activeRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_WORKSPACE",
+                    message = "Switch to the Admin workspace before performing this action."
+                });
+            }
+
+            // Verify Admin role claim
+            bool hasAdminClaim = User.Claims.Any(c =>
+                c.Type == ClaimTypes.Role &&
+                (string.Equals(c.Value, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(c.Value, "SuperAdmin", StringComparison.OrdinalIgnoreCase)));
+
+            if (!hasAdminClaim)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "UNAUTHORIZED_ROLE",
+                    message = "The authenticated user does not own an administrative role."
+                });
+            }
+
+            // Verify active admin authorization in database
+            bool isAuthorizedAdmin = await _context.ApplicationUsers
+                .AsNoTracking()
+                .AnyAsync(u =>
+                    u.Id == currentAdminUserId &&
+                    !u.IsResign &&
+                    u.UserRoles.Any(ur =>
+                        ur.Role.Name == "Admin" ||
+                        ur.Role.Name == "SuperAdmin"));
+
+            if (!isAuthorizedAdmin)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "ADMIN_NOT_AUTHORIZED",
+                    message = "The account is inactive or no longer has administrative privileges."
+                });
+            }
+
+            var request = await _context.IAFAlternativeTimeRequests
+                .AsNoTracking()
+                .Include(r => r.Milestone)
+                    .ThenInclude(m => m.Project)
+                .FirstOrDefaultAsync(r => r.Id == requestId);
+
+            if (request == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "REQUEST_NOT_FOUND",
+                    message = "Alternative time request not found."
+                });
+            }
+
+            // Reject stale token before any booking operation
+            if (request.RowVersion == null || !request.RowVersion.SequenceEqual(clientRowVersion))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "CONCURRENCY_CONFLICT",
+                    message = "This request has changed. Please refresh before confirming booking."
+                });
+            }
+
+            // Idempotent retry protection: if already Accepted, return success without duplicate booking
+            if (string.Equals(request.Status, IAFAlternativeTimeRequest.StatusAccepted, StringComparison.OrdinalIgnoreCase))
+            {
+                int? confirmedBookingId = null;
+                if (!string.IsNullOrEmpty(request.DecisionReason) && request.DecisionReason.StartsWith("Accepted with Booking #"))
+                {
+                    var idStr = request.DecisionReason.Substring("Accepted with Booking #".Length).Trim();
+                    if (int.TryParse(idStr, out int parsedId))
+                    {
+                        confirmedBookingId = parsedId;
+                    }
+                }
+
+                IAFDefenseBooking? existingConfirmedBooking = null;
+                if (confirmedBookingId.HasValue)
+                {
+                    existingConfirmedBooking = await _context.IAFDefenseBookings
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(b => b.Id == confirmedBookingId.Value);
+                }
+                else if (request.SuggestedDate.HasValue && request.SuggestedStartTime.HasValue)
+                {
+                    existingConfirmedBooking = await _context.IAFDefenseBookings
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(b =>
+                            b.MilestoneId == request.MilestoneId &&
+                            b.ExaminerId == request.RequestedLecturerId &&
+                            b.DefenseDate.Date == request.SuggestedDate.Value.Date &&
+                            b.StartTime == request.SuggestedStartTime.Value &&
+                            b.BookingStatus != "Cancelled");
+                }
+
+                if (existingConfirmedBooking != null &&
+                    !string.Equals(existingConfirmedBooking.BookingStatus, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Json(new
+                    {
+                        success = true,
+                        alreadyAccepted = true,
+                        message = "IAF Defense booking was already confirmed for this request.",
+                        bookingId = existingConfirmedBooking.Id
+                    });
+                }
+
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_STATUS",
+                    message = "Cannot confirm a request that has already been accepted without an active booking."
+                });
+            }
+
+            if (!string.Equals(request.Status, IAFAlternativeTimeRequest.StatusSuggested, StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INVALID_STATUS",
+                    message = $"Cannot confirm a request in '{request.Status}' status (expected 'Suggested')."
+                });
+            }
+
+            if (!request.SuggestedDate.HasValue || !request.SuggestedStartTime.HasValue || !request.SuggestedDurationMinutes.HasValue)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INCOMPLETE_SUGGESTION",
+                    message = "The suggestion does not contain a complete date, time, and duration."
+                });
+            }
+
+            if (request.Milestone == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "MILESTONE_NOT_FOUND",
+                    message = "The associated milestone does not exist."
+                });
+            }
+
+            if (!string.Equals(request.Milestone.Status, "DefenseRequired", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "INELIGIBLE_MILESTONE",
+                    message = "Milestone is not in DefenseRequired status."
+                });
+            }
+
+            if (request.Milestone.Project == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "PROJECT_NOT_FOUND",
+                    message = "The associated project does not exist."
+                });
+            }
+
+            // Independent examiner check: Supervisor cannot examine their own student's project
+            if (request.Milestone.Project.SupervisorId == request.RequestedLecturerId)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = "SUPERVISOR_CANNOT_EXAMINE",
+                    message = "Supervisor cannot examine their own student's project."
+                });
+            }
+
+            // Partial-success recovery / reconciliation:
+            // If a matching active booking already exists from prior disconnected execution,
+            // reconcile by finalizing the request to Accepted instead of creating duplicate booking.
+            var matchingBooking = await _context.IAFDefenseBookings.FirstOrDefaultAsync(b =>
+                b.MilestoneId == request.MilestoneId &&
+                b.ExaminerId == request.RequestedLecturerId &&
+                b.DefenseDate.Date == request.SuggestedDate.Value.Date &&
+                b.StartTime == request.SuggestedStartTime.Value &&
+                b.BookingStatus != "Cancelled");
+
+            if (matchingBooking != null)
+            {
+                var reconcileResult = await _alternativeTimeRequestService.FinalizeAcceptedAsync(
+                    requestId: request.Id,
+                    currentAdminUserId: currentAdminUserId,
+                    isAdminUser: true,
+                    confirmedBookingId: matchingBooking.Id,
+                    clientRowVersion: clientRowVersion);
+
+                if (!reconcileResult.Success)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        code = reconcileResult.ErrorCode ?? "FINALIZE_FAILED",
+                        message = reconcileResult.ErrorMessage ?? "Existing matching booking found, but Alternative Time Request could not be finalized."
+                    });
+                }
+
+                return Json(new
+                {
+                    success = true,
+                    reconciled = true,
+                    message = "IAF Defense booking reconciled and suggestion marked as Accepted.",
+                    bookingId = matchingBooking.Id
+                });
+            }
+
+            // Atomic execution: finalize Alternative Time Request inside the booking transaction before commit
+            Func<IAFDefenseBooking, Task<AlternativeTimeRequestResult?>> onBeforeCommit = async (booking) =>
+            {
+                var finalizeResult = await _alternativeTimeRequestService.FinalizeAcceptedAsync(
+                    requestId: request.Id,
+                    currentAdminUserId: currentAdminUserId,
+                    isAdminUser: true,
+                    confirmedBookingId: booking.Id,
+                    clientRowVersion: clientRowVersion);
+
+                if (!finalizeResult.Success)
+                {
+                    return finalizeResult;
+                }
+
+                return null;
+            };
+
+            var bookingResult = await _defenseBookingService.ScheduleOrRescheduleDefenseAsync(
+                milestoneId: request.MilestoneId,
+                examinerId: request.RequestedLecturerId,
+                defenseDate: request.SuggestedDate.Value,
+                startTime: request.SuggestedStartTime.Value,
+                venue: venue.Trim(),
+                currentUserId: currentAdminUserId,
+                changeReason: $"Scheduled via accepted Alternative Time Request #{request.Id}",
+                onBeforeCommit: onBeforeCommit);
+
+            if (!bookingResult.Success)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    code = bookingResult.ErrorCode ?? "BOOKING_FAILED",
+                    message = bookingResult.ErrorMessage ?? "Failed to commit authoritative defense booking."
+                });
+            }
+
+            return Json(new
+            {
+                success = true,
+                message = "IAF Defense successfully booked and suggestion marked as Accepted.",
+                bookingId = bookingResult.Booking!.Id
+            });
+        }
+
+        #endregion
+
+        private void RemoveImage(ApplicationUser model)
+        {
+            if (!string.IsNullOrEmpty(model.Image))
+            {
+                var imagePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", model.Image.TrimStart('/'));
+                if (System.IO.File.Exists(imagePath))
+                {
+                    System.IO.File.Delete(imagePath);
+                }
+            }
+        }
+
+        private ApplicationUser UploadImageToDir(IFormFile picture)
+        {
+            if (picture != null && picture.Length > 0)
+            {
+                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(picture.FileName);
+                var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "assets", "media", "avatars");
+                Directory.CreateDirectory(uploadsFolder);
+                var filePath = Path.Combine(uploadsFolder, fileName);
+                using (var fileStream = new FileStream(filePath, FileMode.Create))
+                {
+                    picture.CopyTo(fileStream);
+                }
+                return new ApplicationUser { Image = $"/assets/media/avatars/{fileName}" };
+            }
+            return new ApplicationUser { Image = "/assets/media/avatars/blank.png" };
+        }
+
+        /// <summary>
+        /// Calculates account expiry from a session string like "2026 Aug" → 2027-01-31.
+        /// Jan → Jul 31 same year; April → Oct 31 same year; Aug → Jan 31 next year.
+        /// </summary>
+        private static DateTime? CalculateAccountExpiry(string? academicSession)
+        {
+            if (string.IsNullOrWhiteSpace(academicSession)) return null;
+            var parts = academicSession.Trim().Split(' ');
+            if (parts.Length < 2 || !int.TryParse(parts[0], out int year)) return null;
+            string intake = parts[1].ToLower();
+            return intake switch
+            {
+                "jan"   => new DateTime(year, 7, 31),
+                "april" => new DateTime(year, 10, 31),
+                "aug"   => new DateTime(year + 1, 1, 31),
+                _       => null
+            };
+        }
+
+        /// <summary>Generates a random 8-character alphanumeric password.</summary>
+        private static string GenerateTempPassword()
+        {
+            const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+            var rng = new Random();
+            return new string(Enumerable.Range(0, 8).Select(_ => chars[rng.Next(chars.Length)]).ToArray());
+        }
+
+
+        public async Task<IActionResult> Index()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+            
+            // 1. Calculate Stats
+            var users = await _context.ApplicationUsers.Include(u => u.UserRoles).ThenInclude(r => r.Role).ToListAsync();
+            ViewBag.TotalUsers = users.Count;
+            ViewBag.TotalStudents = users.Count(u => u.UserRoles.Any(r => r.Role.Name == "Student"));
+            ViewBag.TotalSupervisors = users.Count(u => u.UserRoles.Any(r => r.Role.Name == "Supervisor"));
+
+            var projects = await _context.FYPProjects.Include(p => p.Milestones).ToListAsync();
+            ViewBag.TotalProjects = projects.Count;
+            
+            ViewBag.PendingRequests = await _context.SupervisorRequests.CountAsync(r => r.Status == "Pending");
+
+            // Completion Rate: % of projects where all 3 milestones are "Approved"
+            if (projects.Any())
+            {
+                var completed = projects.Count(p => p.Milestones.All(m => m.Status == "Approved") && p.Milestones.Count >= 3);
+                ViewBag.CompletionRate = (int)((double)completed / projects.Count * 100);
+            }
+            else
+            {
+                ViewBag.CompletionRate = 0;
+            }
+
+            return View();
+        }
+
+        [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> RespondRepeatRequest(int studentId, string status)
+        {
+            int.TryParse(HttpContext.User.FindFirst("Id")?.Value, out int adminUserId);
+            var student = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.Id == studentId);
+            if (student != null)
+            {
+                if (status == "Approved")
+                {
+                    var currentProject = await _context.FYPProjects.FirstOrDefaultAsync(p => p.StudentId == studentId && p.Status != "Archived");
+                    if (currentProject != null) {
+                        string oldStatus = currentProject.Status;
+                        currentProject.Status = "Archived";
+                        _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
+                        {
+                            ProjectId = currentProject.Id,
+                            OldStatus = oldStatus,
+                            NewStatus = "Archived",
+                            ChangedById = adminUserId > 0 ? adminUserId : null,
+                            Remarks = "Project archived due to repeat request approval."
+                        });
+                    }
+                    var currentRequests = await _context.SupervisorRequests.Where(r => r.StudentId == studentId && r.Status == "Pending").ToListAsync();
+                    foreach (var r in currentRequests) {
+                        r.Status = "Archived";
+                    }
+                }
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Repeat request processed.";
+            }
+            return RedirectToAction(nameof(ManageUsers));
+        }
+
+        [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> ArchiveAcademicSession(string sessionName)
+        {
+            int.TryParse(HttpContext.User.FindFirst("Id")?.Value, out int adminUserId);
+            if (string.IsNullOrWhiteSpace(sessionName)) {
+                TempData["Error"] = "Session name cannot be empty.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var projects = await _context.FYPProjects.Include(p => p.Student).Where(p => p.Student.AcademicSession == sessionName && p.Status != "Archived").ToListAsync();
+            foreach (var p in projects)
+            {
+                string oldStatus = p.Status;
+                p.Status = "Archived";
+                _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
+                {
+                    ProjectId = p.Id,
+                    OldStatus = oldStatus,
+                    NewStatus = "Archived",
+                    ChangedById = adminUserId > 0 ? adminUserId : null,
+                    Remarks = $"Archived via batch academic session archiving ({sessionName})."
+                });
+            }
+
+            var requests = await _context.SupervisorRequests.Include(r => r.Student).Where(r => r.Student.AcademicSession == sessionName && r.Status == "Pending").ToListAsync();
+            foreach (var r in requests)
+            {
+                r.Status = "Archived";
+            }
+
+            await _context.SaveChangesAsync();
+            
+            TempData["Success"] = $"Successfully archived session {sessionName}. {projects.Count} projects archived.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        public async Task<IActionResult> ExportSummary()
+        {
+            var projects = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .Include(p => p.Milestones)
+                .ToListAsync();
+
+            var csv = new StringBuilder();
+            csv.AppendLine("ProjectID,Student,Matric,Supervisor,MilestonesCompleted,Status");
+
+            foreach (var p in projects)
+            {
+                int completedCount = p.Milestones.Count(m => m.Status == "Approved");
+                csv.AppendLine($"{p.Id},{p.Student?.FullName},{p.Student?.EmployeeId},{p.Supervisor?.FullName},{completedCount}/{p.Milestones.Count},{p.Status}");
+            }
+
+            byte[] buffer = Encoding.UTF8.GetBytes(csv.ToString());
+            return File(buffer, "text/csv", $"FYP_Summary_Report_{DateTime.Now:yyyyMMdd}.csv");
+        }
+            [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> ManageUsers()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+
+            // System-wide stats for Admin
+            ViewBag.TotalStudents    = await _context.ApplicationUsers.CountAsync(u => u.UserRoles.Any(r => r.Role.Name == "Student"));
+            ViewBag.TotalSupervisors = await _context.ApplicationUsers.CountAsync(u => u.UserRoles.Any(r => r.Role.Name == "Supervisor"));
+            ViewBag.TotalExaminers   = await _context.ApplicationUsers.CountAsync(u => u.UserRoles.Any(r => r.Role.Name == "Examiner"));
+            ViewBag.TotalProjects    = await _context.FYPProjects.CountAsync();
+            ViewBag.PendingRequests  = await _context.SupervisorRequests.CountAsync(r => r.Status == "Pending");
+            ViewBag.Supervisors = await _context.ApplicationUsers
+                .Where(u => (u.UserRoles.Any(r => r.Role.Name == "Supervisor") || u.UserRoles.Any(r => r.Role.Name == "SUPERVISOR")) && !u.IsResign)
+                .Select(u => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = u.Id.ToString(), Text = u.FullName })
+                .ToListAsync();
+
+            ViewBag.AcademicSessions = await _context.AcademicSessions
+                .Where(x => x.IsActive)
+                .Select(x => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = x.Name, Text = x.Name })
+                .ToListAsync();
+
+            return View(new ApplicationUserVM());
+        }
+
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> ManageProjects()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+
+            var students = await _context.ApplicationUsers
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Student"))
+                .ToListAsync();
+
+            var projects = await _context.FYPProjects
+                .Include(p => p.Supervisor)
+                .Include(p => p.Milestones)
+                .Include(p => p.AssignedExaminers)
+                    .ThenInclude(ae => ae.Examiner)
+                .ToListAsync();
+
+            ViewBag.AvailableExaminers = await _context.ApplicationUsers
+                .Include(u => u.EmpDepartment)
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Examiner") && !u.IsResign)
+                .OrderBy(u => u.FullName)
+                .ToListAsync();
+
+            var viewModels = students.Select(s => new FYPTracker.ViewModels.ManageProjectItemVM
+            {
+                Student = s,
+                Project = projects.FirstOrDefault(p => p.StudentId == s.Id)
+            })
+            .OrderByDescending(v => v.Project?.CreatedDate ?? DateTime.MinValue)
+            .ToList();
+
+            return View(viewModels);
+        }
+
+        // ── Admin: Dynamically fetch Project Milestones Modal (Read-only) ──
+        [HttpGet]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> GetProjectMilestones(int id)
+        {
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                    .ThenInclude(s => s.EmpDepartment)
+                .Include(p => p.Supervisor)
+                .Include(p => p.AssignedExaminers)
+                    .ThenInclude(ae => ae.Examiner)
+                .Include(p => p.Milestones)
+                    .ThenInclude(m => m.SubmissionFiles)
+                .Include(p => p.Milestones)
+                    .ThenInclude(m => m.Feedbacks)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (project == null)
+            {
+                return NotFound("<div class='alert alert-danger m-3'><i class='fas fa-exclamation-circle me-2'></i>Project not found.</div>");
+            }
+
+            return PartialView("_ProjectMilestonesModal", project);
+        }
+
+        // ── Admin: Legacy ProjectDetails link support -> Redirects to ManageProjects ──
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        public IActionResult ProjectDetails(int id)
+        {
+            return RedirectToAction(nameof(ManageProjects), new { openProjectId = id });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SetVivaDate(int projectId, DateTime vivaDate, string? vivaVenue)
+        {
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .Include(p => p.AssignedExaminers).ThenInclude(ae => ae.Examiner)
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            if (project.AssignedExaminers == null || !project.AssignedExaminers.Any())
+            {
+                TempData["Error"] = "Cannot set Viva date. Please assign an Examiner first.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // ── Change Detection: Prevent duplicate notifications / emails if unchanged ──
+            string cleanNewVenue = vivaVenue?.Trim() ?? "";
+            string cleanOldVenue = project.VivaVenue?.Trim() ?? "";
+
+            bool isDateUnchanged = project.VivaDate.HasValue
+                && project.VivaDate.Value.Year == vivaDate.Year
+                && project.VivaDate.Value.Month == vivaDate.Month
+                && project.VivaDate.Value.Day == vivaDate.Day
+                && project.VivaDate.Value.Hour == vivaDate.Hour
+                && project.VivaDate.Value.Minute == vivaDate.Minute;
+
+            bool isVenueUnchanged = string.Equals(cleanOldVenue, cleanNewVenue, StringComparison.OrdinalIgnoreCase);
+
+            if (isDateUnchanged && isVenueUnchanged)
+            {
+                TempData["Success"] = "The Viva schedule is already up to date with these details. No duplicate notifications were created.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // ── Server-side validation: prevent scheduling past dates ──
+            if (vivaDate <= DateTime.Now)
+            {
+                TempData["Error"] = "Viva examination date and time cannot be scheduled in the past. Please select an upcoming date and time.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            bool isReschedule = project.VivaDate.HasValue;
+            string notifTitle = isReschedule ? "Viva Schedule Updated" : "Viva Scheduled";
+
+            project.VivaDate = vivaDate;
+            project.VivaVenue = vivaVenue;
+            await _context.SaveChangesAsync();
+
+            string formattedDate = vivaDate.ToString("dd MMMM yyyy, hh:mm tt");
+            string venueDisplay = string.IsNullOrWhiteSpace(vivaVenue) ? "TBA" : vivaVenue;
+
+            // ── In-app notification: Student ─────────────────────────
+            if (project.StudentId > 0)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = project.StudentId,
+                    Type = "VivaScheduled",
+                    Title = notifTitle,
+                    Message = $"Your Viva Oral Examination {(isReschedule ? "schedule has been updated to" : "has been scheduled for")} {formattedDate} at {venueDisplay}.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+            }
+
+            // ── In-app notification: Supervisor ──────────────────────
+            if (project.SupervisorId.HasValue)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = project.SupervisorId.Value,
+                    Type = "VivaScheduled",
+                    Title = notifTitle,
+                    Message = $"Viva for {project.Student?.FullName} has been {(isReschedule ? "rescheduled to" : "scheduled for")} {formattedDate} at {venueDisplay}.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+            }
+
+            // ── In-app notification & Email: Examiner(s) ─────────────
+            var assignedExaminers = project.AssignedExaminers?
+                .Where(ae => ae.Examiner != null)
+                .Select(ae => ae.Examiner!)
+                .DistinctBy(e => e.Id)
+                .ToList() ?? new List<ApplicationUser>();
+
+            foreach (var examiner in assignedExaminers)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = examiner.Id,
+                    Type = "VivaScheduled",
+                    Title = notifTitle,
+                    Message = $"Viva for {project.Student?.FullName} has been {(isReschedule ? "rescheduled to" : "scheduled for")} {formattedDate} at {venueDisplay}.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+
+                if (!string.IsNullOrEmpty(examiner.Email))
+                {
+                    string subject = isReschedule ? "FYP Viva Rescheduled – Examiner Notification" : "FYP Viva Scheduled – Examiner Notification";
+                    string message = $@"<p>Dear <strong>{examiner.FullName}</strong>,</p><br/>
+                        <p>The Admin has {(isReschedule ? "updated the" : "scheduled the")} Viva Oral Examination for a student you are examining.</p>
+                        <ul>
+                            <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
+                            <li><strong>Project Title:</strong> {project.Title}</li>
+                            <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
+                            <li><strong>Venue:</strong> {venueDisplay}</li>
+                        </ul>";
+                    var request = HttpContext.Request;
+                    string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                    string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
+                    try { _emailService.Send(examiner.Email, subject, body); } catch { }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            // ── Email: Student ───────────────────────────────────────
+            if (project.Student != null && !string.IsNullOrEmpty(project.Student.Email))
+            {
+                string subject = isReschedule ? "FYP Viva Oral Examination Schedule Updated" : "FYP Viva Oral Examination Scheduled";
+                string message = $@"<p>Dear <strong>{project.Student.FullName}</strong>,</p><br/>
+                    <p>Your Final Year Project Viva Oral Examination has been {(isReschedule ? "rescheduled" : "scheduled")} by the Admin.</p>
+                    <ul>
+                        <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
+                        <li><strong>Venue:</strong> {venueDisplay}</li>
+                        <li><strong>Project Title:</strong> {project.Title}</li>
+                    </ul>
+                    <p>Please ensure you are fully prepared.</p>";
+                var request = HttpContext.Request;
+                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
+                try { _emailService.Send(project.Student.Email, subject, body); } catch { }
+            }
+
+            // ── Email: Supervisor ────────────────────────────────────
+            if (project.Supervisor != null && !string.IsNullOrEmpty(project.Supervisor.Email))
+            {
+                string subject = isReschedule ? "FYP Viva Rescheduled – Student Notification" : "FYP Viva Scheduled – Student Notification";
+                string message = $@"<p>Dear <strong>{project.Supervisor.FullName}</strong>,</p><br/>
+                    <p>The Admin has {(isReschedule ? "updated the schedule for" : "scheduled")} the Viva Oral Examination for your student.</p>
+                    <ul>
+                        <li><strong>Student:</strong> {project.Student?.FullName} ({project.Student?.EmployeeId})</li>
+                        <li><strong>Project Title:</strong> {project.Title}</li>
+                        <li><strong>Date &amp; Time:</strong> {formattedDate}</li>
+                        <li><strong>Venue:</strong> {venueDisplay}</li>
+                    </ul>";
+                var request = HttpContext.Request;
+                string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                string body = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
+                try { _emailService.Send(project.Supervisor.Email, subject, body); } catch { }
+            }
+
+            // ── SignalR real-time push to Student ────────────────────
+            var payload = new { Type = "VivaScheduled", Message = $"Your Viva has been {(isReschedule ? "rescheduled to" : "scheduled for")} {formattedDate} at {venueDisplay}." };
+            await _hubContext.Clients.Group($"User_{project.StudentId}").SendAsync("ReceiveMilestoneUpdate", payload);
+
+            TempData["Success"] = $"Viva {(isReschedule ? "schedule updated to" : "date set to")} {formattedDate}. The student, supervisor, and examiner have been notified.";
+            
+            string referer = Request.Headers["Referer"].ToString();
+            if (!string.IsNullOrEmpty(referer) && referer.Contains("ManageProjects", StringComparison.OrdinalIgnoreCase))
+            {
+                return RedirectToAction(nameof(ManageProjects));
+            }
+            
+            return RedirectToAction(nameof(ManageProjects));
+        }
+
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> CompleteProject(int projectId)
+        {
+            int.TryParse(HttpContext.User.FindFirst("Id")?.Value, out int adminUserId);
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .Include(p => p.Milestones)
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            if (project.Status == "Completed")
+            {
+                TempData["Warning"] = "Project is already in Completed status.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Academic Guard 1: Stage 1 must be Evaluated and Passed
+            if (project.Stage1Grade != "Pass")
+            {
+                TempData["Error"] = $"Cannot complete project: Stage 1 has not been passed (current status: '{project.Stage1Grade ?? "Unassessed"}').";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Academic Guard 2: Final Viva must be scheduled and concluded (VivaDate must exist and be <= Now)
+            if (!project.VivaDate.HasValue)
+            {
+                TempData["Error"] = "Cannot complete project: Final Viva date has not been scheduled.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+            if (project.VivaDate.Value > DateTime.Now)
+            {
+                TempData["Error"] = $"Cannot complete project: Final Viva is scheduled for {project.VivaDate.Value:dd MMM yyyy, hh:mm tt} and has not yet been conducted.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Academic Guard 3: Final Grade and Examiner Marksheet Assessment must be recorded
+            if (string.IsNullOrWhiteSpace(project.FinalGrade))
+            {
+                TempData["Error"] = "Cannot complete project: Final Grade has not been recorded.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            bool hasExaminerAssessment = !string.IsNullOrWhiteSpace(project.ExaminerMarksheetPath) ||
+                                         !string.IsNullOrWhiteSpace(project.Stage2ExaminerMarksheetData);
+            if (!hasExaminerAssessment)
+            {
+                TempData["Error"] = "Cannot complete project: Examiner Viva marksheet assessment has not been submitted.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Academic Guard 4: All required Stage 2 deliverables (Turnitin, Final Report, Presentation Slides) must be Approved or Completed
+            if (!FYPTracker.Utils.GradingHelper.AreStage2DeliverablesApproved(project.Milestones))
+            {
+                TempData["Error"] = "Cannot complete project: All required Stage 2 deliverables (Turnitin Verification, Final Report, Presentation Slides) must be Approved or Completed.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            string oldStatus = project.Status;
+            project.Status = "Completed";
+
+            _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
+            {
+                ProjectId = project.Id,
+                OldStatus = oldStatus,
+                NewStatus = "Completed",
+                ChangedById = adminUserId > 0 ? adminUserId : null,
+                Remarks = "Project marked as Completed by Administrator after verifying Stage 1 Pass, Stage 2 completion, Final Viva, and Final Grade."
+            });
+
+            // In-app notification to Student
+            if (project.StudentId > 0)
+            {
+                _context.FYPNotifications.Add(new FYPNotification
+                {
+                    RecipientId = project.StudentId,
+                    Type = "ProjectCompleted",
+                    Title = "FYP Project Completed",
+                    Message = $"Congratulations! Your FYP project '{project.Title}' has been finalized and marked as Completed.",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = $"Project '{project.Title}' has been verified and marked as Completed.";
+            return RedirectToAction(nameof(ManageProjects));
+        }
+
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ReopenProject(int projectId)
+        {
+            int.TryParse(HttpContext.User.FindFirst("Id")?.Value, out int adminUserId);
+            var project = await _context.FYPProjects.FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            if (project.Status != "Completed")
+            {
+                TempData["Error"] = $"Cannot reopen project: Project is in '{project.Status}' status, not Completed.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            string oldStatus = project.Status;
+            project.Status = "Approved";
+
+            _context.FYPProjectStatusHistories.Add(new FYPProjectStatusHistory
+            {
+                ProjectId = project.Id,
+                OldStatus = oldStatus,
+                NewStatus = "Approved",
+                ChangedById = adminUserId > 0 ? adminUserId : null,
+                Remarks = "Project re-opened to Active by Administrator."
+            });
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = $"Project '{project.Title}' has been re-opened to Active status.";
+            return RedirectToAction(nameof(ManageProjects));
+        }
+
+
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AssignExaminer(int projectId, int examinerId)
+        {
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.AssignedExaminers)
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            var examiner = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.Id == examinerId && u.UserRoles.Any(r => r.Role.Name == "Examiner") && !u.IsResign);
+
+            if (examiner == null)
+            {
+                TempData["Error"] = "Invalid or inactive Examiner selected.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            var existingAssignments = await _context.FYPProjectExaminers
+                .Where(pe => pe.FYPProjectId == projectId)
+                .ToListAsync();
+
+            if (existingAssignments.Any())
+            {
+                _context.FYPProjectExaminers.RemoveRange(existingAssignments);
+            }
+
+            _context.FYPProjectExaminers.Add(new FYPProjectExaminer
+            {
+                FYPProjectId = project.Id,
+                ExaminerId = examiner.Id,
+                AssignedDate = DateTime.Now
+            });
+
+            await _context.SaveChangesAsync();
+
+            try
+            {
+                var notification = new FYPNotification
+                {
+                    RecipientId = examiner.Id,
+                    Title = "New Project Assignment",
+                    Message = $"Admin has assigned you as the Examiner for project: '{project.Title}'.",
+                    Type = "ExaminerAssignment",
+                    RelatedRecordId = project.Id,
+                    CreatedDate = DateTime.Now,
+                    IsRead = false
+                };
+                _context.FYPNotifications.Add(notification);
+                await _context.SaveChangesAsync();
+
+                if (!string.IsNullOrEmpty(examiner.Email))
+                {
+                    string subject = "FYP Tracking System - Examiner Assignment";
+                    string message = $"<p>Dear {examiner.FullName},</p><br/><p>You have been assigned by the Administrator as the Examiner for project: <strong>{project.Title}</strong> (Student: <strong>{project.Student?.FullName ?? "Unknown"}</strong>).</p>";
+                    var request = HttpContext.Request;
+                    string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                    string content = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
+                    _emailService.Send(examiner.Email, subject, content);
+                }
+            }
+            catch { /* Continue on notification error */ }
+
+            TempData["SuccessTitle"] = "Examiner Assigned Successfully";
+            TempData["SuccessExaminerName"] = examiner.FullName;
+            TempData["SuccessProjectTitle"] = project.Title;
+            TempData["Success"] = $"{examiner.FullName} has been assigned as the examiner for {project.Title}.";
+            return RedirectToAction(nameof(ManageProjects));
+        }
+
+        // ============================================================
+        // AI AUTO-ASSIGN EXAMINER (Rule-Based Keyword Matching Engine)
+        // ============================================================
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AutoAssignExaminer(int projectId)
+        {
+            var project = await _context.FYPProjects
+                .Include(p => p.Student)
+                .Include(p => p.Supervisor)
+                .Include(p => p.AssignedExaminers)
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project == null)
+            {
+                TempData["Error"] = "Project not found.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Build a searchable corpus from the project
+            var projectCorpus = string.Join(" ",
+                project.Title ?? "",
+                project.Description ?? "",
+                project.ProblemStatement ?? "",
+                project.Scope ?? "",
+                project.Objective1 ?? "",// Must have the Examiner role.
+                project.Objective2 ?? "",
+                project.Objective3 ?? "",
+                project.Student?.Specialization ?? ""
+            ).ToLowerInvariant();
+
+            // Get all active examiners with their specialisation
+            var examiners = await _context.ApplicationUsers
+                .Where(u =>
+                    u.UserRoles.Any(r => r.Role.Name == "Examiner") &&
+                    !u.IsResign)
+                .ToListAsync();
+
+            // Examiner assignment count for each lecturer
+            var examinerCounts = await _context.FYPProjectExaminers
+                .GroupBy(x => x.ExaminerId)
+                .Select(g => new
+                {
+                    ExaminerId = g.Key,
+                    Count = g.Count()
+                })
+                .ToDictionaryAsync(x => x.ExaminerId, x => x.Count);
+
+            // Eligible:
+            // 1. Cannot examine own supervised student
+            // 2. Must still have examiner quota
+            examiners = examiners
+                .Where(e =>
+                    e.Id != project.SupervisorId &&
+                    examinerCounts.GetValueOrDefault(e.Id, 0) < e.MaxStudentSlots)
+                .ToList();
+
+            if (!examiners.Any())
+            {
+                TempData["Error"] = "No examiner is available. All eligible examiners may have reached their quota.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            // Score each examiner by keyword overlap
+            var scored = examiners.Select(e =>
+            {
+                var examinerKeywords = string.Join(" ",
+                    e.Specialization ?? "",
+                    e.FullName ?? ""
+                ).ToLowerInvariant();
+
+                var projectTokens = projectCorpus
+                    .Split(new[] { ' ', ',', '.', ';', '/', '\\', '-', '(', ')' },
+                        StringSplitOptions.RemoveEmptyEntries)
+                    .Where(t => t.Length > 3)
+                    .ToHashSet();
+
+                var examinerTokens = examinerKeywords
+                    .Split(new[] { ' ', ',', '.', ';', '/', '\\', '-', '(', ')' },
+                        StringSplitOptions.RemoveEmptyEntries)
+                    .Where(t => t.Length > 3)
+                    .ToHashSet();
+
+                int matchScore = projectTokens.Intersect(examinerTokens).Count();
+
+                int currentExaminerCount =
+                    examinerCounts.GetValueOrDefault(e.Id, 0);
+
+                return new
+                {
+                    Examiner = e,
+                    Score = matchScore,
+                    CurrentCount = currentExaminerCount
+                };
+            })
+            .OrderByDescending(x => x.Score)   // specialization first
+            .ThenBy(x => x.CurrentCount)       // then choose lower workload
+            .ThenBy(x => x.Examiner.FullName)
+            .ToList();
+
+            var bestMatch = scored.FirstOrDefault();
+            if (bestMatch == null)
+            {
+                TempData["Error"] = "Could not find a suitable examiner.";
+                return RedirectToAction(nameof(ManageProjects));
+            }
+
+            var selectedExaminer = bestMatch.Examiner;
+            int aiScore = bestMatch.Score;
+
+            // Remove old assignments
+            var existing = await _context.FYPProjectExaminers
+                .Where(pe => pe.FYPProjectId == projectId)
+                .ToListAsync();
+            if (existing.Any()) _context.FYPProjectExaminers.RemoveRange(existing);
+
+            // Assign the best matched examiner
+            _context.FYPProjectExaminers.Add(new FYPProjectExaminer
+            {
+                FYPProjectId = project.Id,
+                ExaminerId = selectedExaminer.Id,
+                AssignedDate = DateTime.Now
+            });
+
+            await _context.SaveChangesAsync();
+
+            // Send notification + email
+            try
+            {
+                var notification = new FYPNotification
+                {
+                    RecipientId = selectedExaminer.Id,
+                    Title = "New Project Assignment (AI Auto-Assigned)",
+                    Message = $"You have been AI-matched and assigned as the Examiner for project: '{project.Title}' based on your specialisation.",
+                    Type = "ExaminerAssignment",
+                    RelatedRecordId = project.Id,
+                    CreatedDate = DateTime.Now,
+                    IsRead = false
+                };
+                _context.FYPNotifications.Add(notification);
+                await _context.SaveChangesAsync();
+
+                if (!string.IsNullOrEmpty(selectedExaminer.Email))
+                {
+                    string subject = "FYP Tracking System - AI Examiner Assignment";
+                    string message = $"<p>Dear {selectedExaminer.FullName},</p><br/><p>Our AI matching engine has identified you as the best-matched Examiner for project: <strong>{project.Title}</strong> (Student: <strong>{project.Student?.FullName ?? "Unknown"}</strong>) based on your specialisation.</p>";
+                    var request = HttpContext.Request;
+                    string loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+                    string content = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Log In to View Details", loginUrl);
+                    _emailService.Send(selectedExaminer.Email, subject, content);
+                }
+            }
+            catch { /* Continue on notification error */ }
+
+            string secondaryMsg = aiScore > 0
+                ? $"The system matched {selectedExaminer.FullName} with {aiScore} keyword(s) in common with the project scope."
+                : "No strong specialization match was found, so the system selected an eligible examiner.";
+
+            TempData["SuccessTitle"] = "Examiner Assigned Successfully";
+            TempData["SuccessExaminerName"] = selectedExaminer.FullName;
+            TempData["SuccessProjectTitle"] = project.Title;
+            TempData["SuccessSecondary"] = secondaryMsg;
+            TempData["Success"] = $"{selectedExaminer.FullName} has been assigned as the examiner for {project.Title}.";
+            return RedirectToAction(nameof(ManageProjects));
+        }
+
+        [HttpPost]
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemoveExaminer(int projectId)
+        {
+            var project = await _context.FYPProjects
+                .Include(p => p.AssignedExaminers)
+                .FirstOrDefaultAsync(p => p.Id == projectId);
+
+            if (project != null)
+            {
+                var existing = await _context.FYPProjectExaminers
+                    .Where(pe => pe.FYPProjectId == projectId)
+                    .ToListAsync();
+
+                if (existing.Any())
+                {
+                    _context.FYPProjectExaminers.RemoveRange(existing);
+                    await _context.SaveChangesAsync();
+                }
+                TempData["Success"] = "Examiner assignment removed successfully.";
+            }
+            return RedirectToAction(nameof(ManageProjects));
+        }
+
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> ExportProjectsExcel()
+        {
+            var students = await _context.ApplicationUsers
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Student") && !u.IsResign)
+                .ToListAsync();
+
+            var projects = await _context.FYPProjects
+                .Include(p => p.Supervisor)
+                .Include(p => p.AssignedExaminers).ThenInclude(ae => ae.Examiner)
+                .ToListAsync();
+
+            var withSupervisor = new List<FYPTracker.ViewModels.ManageProjectItemVM>();
+            var withoutSupervisor = new List<FYPTracker.ViewModels.ManageProjectItemVM>();
+
+            foreach(var s in students)
+            {
+                var p = projects.FirstOrDefault(pr => pr.StudentId == s.Id);
+                if (p?.Supervisor != null)
+                {
+                    withSupervisor.Add(new FYPTracker.ViewModels.ManageProjectItemVM { Student = s, Project = p });
+                }
+                else
+                {
+                    withoutSupervisor.Add(new FYPTracker.ViewModels.ManageProjectItemVM { Student = s, Project = p });
+                }
+            }
+
+            using (var workbook = new ClosedXML.Excel.XLWorkbook())
+            {
+                var ws1 = workbook.Worksheets.Add("With Supervisor");
+                FormatExcelSheet(ws1, withSupervisor);
+
+                var ws2 = workbook.Worksheets.Add("Without Supervisor");
+                FormatExcelSheet(ws2, withoutSupervisor);
+
+                using (var stream = new System.IO.MemoryStream())
+                {
+                    workbook.SaveAs(stream);
+                    var content = stream.ToArray();
+                    return File(content, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "FYP_Projects_Report.xlsx");
+                }
+            }
+        }
+
+private void FormatExcelSheet(ClosedXML.Excel.IXLWorksheet ws, List<FYPTracker.ViewModels.ManageProjectItemVM> data)
+        {
+            // Headers
+            ws.Cell(1, 1).Value = "Student Name";
+            ws.Cell(1, 2).Value = "Student ID";
+            ws.Cell(1, 3).Value = "Academic Session";
+            ws.Cell(1, 4).Value = "Supervisor Name";
+            ws.Cell(1, 5).Value = "Examiner Name";
+            ws.Cell(1, 6).Value = "Project Title";
+            ws.Cell(1, 7).Value = "Status";
+            ws.Cell(1, 8).Value = "Stage 1 Score";
+            ws.Cell(1, 9).Value = "Stage 1 Grade";
+            ws.Cell(1, 10).Value = "Stage 2 Final Grade";
+            ws.Cell(1, 11).Value = "Started Date";
+
+            var headerRange = ws.Range("A1:K1");
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
+            headerRange.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.DarkSlateBlue;
+            headerRange.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+
+            int row = 2;
+            foreach(var item in data)
+            {
+                var assignedExaminer = item.Project?.AssignedExaminers?.FirstOrDefault()?.Examiner;
+                ws.Cell(row, 1).Value = item.Student.FullName;
+                ws.Cell(row, 2).Value = item.Student.EmployeeId;
+                ws.Cell(row, 3).Value = item.Student.AcademicSession ?? "-";
+                ws.Cell(row, 4).Value = item.Project?.Supervisor?.FullName ?? "Not Assigned";
+                ws.Cell(row, 5).Value = assignedExaminer?.FullName ?? "Not Assigned";
+                ws.Cell(row, 6).Value = item.Project?.Title ?? "No Project";
+                
+                string status = item.Student.IsResign ? "Inactive" : (item.Project != null ? item.Project.Status : "Inactive");
+                ws.Cell(row, 7).Value = status;
+                
+                ws.Cell(row, 8).Value = item.Project?.Stage1TotalScore?.ToString("0.0") ?? "-";
+                ws.Cell(row, 9).Value = item.Project?.Stage1Grade ?? "-";
+                ws.Cell(row, 10).Value = item.Project?.FinalGrade ?? "-";
+                
+                ws.Cell(row, 11).Value = item.Project?.StartDate?.ToString("dd MMM yyyy") ?? "-";
+                
+                // Alternate row coloring
+                if (row % 2 == 0)
+                {
+                    ws.Range($"A{row}:K{row}").Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.AliceBlue;
+                }
+
+                // Status coloring
+                var statusCell = ws.Cell(row, 7);
+                statusCell.Style.Font.Bold = true;
+                if (status == "Active" || status == "Approved" || status == "Completed")
+                    statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.ForestGreen;
+                else if (status == "Inactive")
+                    statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.DimGray;
+                else if (status == "Proposed")
+                    statusCell.Style.Font.FontColor = ClosedXML.Excel.XLColor.DarkOrange;
+                
+                // Stage 1 Grade coloring
+                var stg1Cell = ws.Cell(row, 9);
+                if (stg1Cell.GetString() == "Pass") stg1Cell.Style.Font.FontColor = ClosedXML.Excel.XLColor.ForestGreen;
+                else if (stg1Cell.GetString() == "Fail") stg1Cell.Style.Font.FontColor = ClosedXML.Excel.XLColor.Red;
+                
+                row++;
+            }
+
+            ws.Columns().AdjustToContents();
+            // Give columns a bit more breathing room
+            foreach (var col in ws.Columns()) col.Width += 2;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetUserDetails(int id)
+        {
+            var user = await _context.ApplicationUsers.Include(x => x.EmpDepartment).Include(x => x.UserRoles).ThenInclude(ur => ur.Role).FirstOrDefaultAsync(u => u.Id == id);
+            if (user == null) return Json(new { success = false, msg = "User not found." });
+            return Json(new {
+                success = true,
+                id = user.Id,
+                fullName = user.FullName,
+                email = user.Email,
+                phone = user.Phone,
+                userType = RoleDisplay.Resolve(user.UserRoles.Select(ur => ur.Role.Name), null),
+                department = user.EmpDepartment?.Name,
+                programme = user.Programme,
+                specialization = user.Specialization,
+                academicSession = user.AcademicSession,
+                title = user.Title,
+                maxStudentSlots = user.MaxStudentSlots
+            });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateUserModal(int id, string fullName, string email, string phone, string department, string programme, string academicSession, string title, string specialization, int maxStudentSlots = 0, List<string> roles = null)
+        {
+            try
+            {
+                var user = await _context.ApplicationUsers
+                    .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                    .FirstOrDefaultAsync(u => u.Id == id);
+                if (user == null) return Json(new { status = false, msg = "User not found." });
+
+                // Check email uniqueness if email changed
+                if (user.Email != email)
+                {
+                    var emailExists = await _context.ApplicationUsers.AnyAsync(u => u.Email == email && u.Id != id);
+                    if (emailExists) return Json(new { status = false, msg = "Email already in use by another account." });
+                }
+
+                user.FullName = fullName;
+                user.Email = email;
+                user.Phone = phone;
+                
+                if (user.UserRoles.Any(r => r.Role.Name == "Student") || user.UserRoles.Any(r => r.Role.Name == "STUDENT") || 
+                    user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR") || 
+                    user.UserRoles.Any(r => r.Role.Name == "Examiner") || user.UserRoles.Any(r => r.Role.Name == "EXAMINER"))
+                {
+                    var deptId = await _context.Department.Where(x => x.Name == department).Select(x => x.Id).FirstOrDefaultAsync();
+                    user.DepartmentId = deptId > 0 ? deptId : user.DepartmentId;
+                    
+                    if (!user.UserRoles.Any(r => r.Role.Name == "Student") && !user.UserRoles.Any(r => r.Role.Name == "STUDENT"))
+                    {
+                        user.Programme = programme;
+                        user.Specialization = specialization;
+                    }
+                    else
+                    {
+                        // For students: save Programme from the edit student dropdown
+                        if (!string.IsNullOrWhiteSpace(programme))
+                            user.Programme = programme;
+                    }
+                }
+
+                if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || 
+                    user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR"))
+                {
+                    user.Title = title;
+
+                    if (maxStudentSlots < 1)
+                    {
+                        return Json(new
+                        {
+                            status = false,
+                            msg = "Quota must be at least 1."
+                        });
+                    }
+
+                    user.MaxStudentSlots = maxStudentSlots;
+                }
+                else if (user.UserRoles.Any(r => r.Role.Name == "Student") || 
+                        user.UserRoles.Any(r => r.Role.Name == "STUDENT"))
+                {
+                    // Save AcademicSession for students from the edit modal
+                    if (!string.IsNullOrWhiteSpace(academicSession))
+                    {
+                        bool isValidSession = await _context.AcademicSessions
+                            .AnyAsync(s => s.Name == academicSession);
+
+                        if (!isValidSession)
+                        {
+                            return Json(new
+                            {
+                                success = false,
+                                msg = $"Academic Session '{academicSession}' is invalid."
+                            });
+                        }
+
+                        user.AcademicSession = academicSession;
+                    }
+                }
+
+                _context.Update(user);
+
+                if (roles != null && roles.Any() && !user.UserRoles.Any(r => r.Role.Name.Equals("Student", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var allRoles = await _context.AppRoles.ToListAsync();
+                    var supRole = allRoles.FirstOrDefault(r => r.Name.Equals("Supervisor", StringComparison.OrdinalIgnoreCase));
+                    var exmRole = allRoles.FirstOrDefault(r => r.Name.Equals("Examiner", StringComparison.OrdinalIgnoreCase));
+
+                    // Remove missing roles
+                    if (!roles.Contains("Supervisor") && supRole != null)
+                    {
+                        var mapping = user.UserRoles.FirstOrDefault(ur => ur.RoleId == supRole.Id);
+                        if (mapping != null) _context.UserRoleMappings.Remove(mapping);
+                    }
+                    if (!roles.Contains("Examiner") && exmRole != null)
+                    {
+                        var mapping = user.UserRoles.FirstOrDefault(ur => ur.RoleId == exmRole.Id);
+                        if (mapping != null) _context.UserRoleMappings.Remove(mapping);
+                    }
+
+                    // Add new roles
+                    if (roles.Contains("Supervisor") && supRole != null)
+                    {
+                        if (!user.UserRoles.Any(ur => ur.RoleId == supRole.Id))
+                        {
+                            _context.UserRoleMappings.Add(new UserRoleMapping { UserId = user.Id, RoleId = supRole.Id });
+                        }
+                    }
+                    if (roles.Contains("Examiner") && exmRole != null)
+                    {
+                        if (!user.UserRoles.Any(ur => ur.RoleId == exmRole.Id))
+                        {
+                            _context.UserRoleMappings.Add(new UserRoleMapping { UserId = user.Id, RoleId = exmRole.Id });
+                        }
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                
+                return Json(new { status = true, msg = "User details updated successfully." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { status = false, msg = "Server error: " + ex.Message });
+            }
+        }
+
+        [Authorize]
+        public ActionResult EditUser(int id)
+        {
+            // Set the logged-in admin as CurrentUser so the menu shows the correct navigation
+            var loggedInUser = _context.ApplicationUsers.FirstOrDefault(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = loggedInUser;
+
+            var check = _context.ApplicationUsers
+                .Include(x => x.EmpDepartment)
+                .Include(x => x.UserRoles).ThenInclude(ur => ur.Role)
+                .Where(d => d.Id == id).FirstOrDefault();
+            if (check != null)
+            {
+                EmployeeEditVM model = new EmployeeEditVM();
+                model.Id = check.Id;
+                model.UserName = check.UserName;
+                model.FullName = check.FullName;
+
+                model.PassCode = check.PassCode;
+                model.Email = check.Email;
+                model.Image = check.Image;
+                model.UserType = RoleDisplay.Resolve(check.UserRoles.Select(ur => ur.Role.Name), null).ToUpper().Trim();
+                model.Department = check.EmpDepartment?.Name;
+                model.EmployeeId = check.EmployeeId;
+                model.IsResign = check.IsResign.ToString();
+                
+                model.Phone = check.Phone;
+                model.Programme = check.Programme;
+                model.AcademicSession = check.AcademicSession;
+                model.Title = check.Title;
+
+                
+                if (model.UserType == "SUPERVISOR")
+                {
+                    var projects = _context.FYPProjects.Where(p => p.SupervisorId == model.Id).ToList();
+                    ViewBag.FilledSlots = projects.Count;
+                }
+
+                return View(model);
+            }
+            return View();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public ActionResult EditUser(EmployeeEditVM ApplicationUser, IFormFile? picture, string isImgChanged)
+        {
+            try {
+            var model = _context.ApplicationUsers
+                .Include(x => x.EmpDepartment)
+                .Include(x => x.UserRoles).ThenInclude(ur => ur.Role)
+                .Where(d => d.Id == ApplicationUser.Id).FirstOrDefault();
+            var pattern = @"^[a-z0-9](\.?[a-z0-9]){2,}@(gmail\.com|student\.newinti\.edu\.my)$";
+            Regex r = new Regex(pattern, RegexOptions.IgnoreCase);
+            Match m = r.Match(ApplicationUser.Email ?? "");
+            var deptQuery = _context.Department.AsQueryable();
+            var check = _context.ApplicationUsers.Where(x => x.Email == ApplicationUser.Email).FirstOrDefault();
+
+            if (!m.Success)
+            {
+                ModelState.AddModelError("Email", "Please enter the correct email! (xxx@gmail.com or xxx@student.newinti.edu.my)");
+            }
+
+            bool modelIsStudent = model != null && model.UserRoles.Any(ur => ur.Role.Name == "Student");
+            if (model != null && modelIsStudent && !string.IsNullOrWhiteSpace(ApplicationUser.EmployeeId))
+            {
+                var duplicateMatric = _context.ApplicationUsers.Any(u => u.UserRoles.Any(ur => ur.Role.Name == "Student") && u.Id != model.Id && u.EmployeeId != null && u.EmployeeId.ToLower() == ApplicationUser.EmployeeId.ToLower());
+                if (duplicateMatric)
+                {
+                    ModelState.AddModelError("EmployeeId", $"Matric ID '{ApplicationUser.EmployeeId}' is already registered to another student.");
+                }
+            }
+
+            if (!ModelState.IsValid)
+            {
+                EmployeeEditVM model1 = new EmployeeEditVM();
+                model1.Id = model?.Id ?? ApplicationUser.Id;
+                model1.UserName = ApplicationUser.UserName;
+                model1.FullName = ApplicationUser.FullName;
+                model1.PassCode = ApplicationUser.PassCode;
+                model1.Email = ApplicationUser.Email;
+                model1.Image = ApplicationUser.Image;
+                model1.UserType = model != null ? RoleDisplay.Resolve(model.UserRoles.Select(ur => ur.Role.Name), null).ToUpper().Trim() : "";
+                model1.Image = model?.Image ?? ApplicationUser.Image;
+                model1.Department = model?.EmpDepartment?.Name;
+                model1.EmployeeId = model?.EmployeeId ?? ApplicationUser.EmployeeId;
+                model1.IsResign = model?.IsResign.ToString();
+                
+                var projects = _context.FYPProjects.Include(p => p.Supervisor).Include(p => p.Student).ToList();
+                var filledSlots = projects.Count(p => p.SupervisorId == model1.Id);
+                ViewBag.FilledSlots = filledSlots;
+                
+                var currentUser = _context.ApplicationUsers.FirstOrDefault(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+                ViewBag.CurrentUser = currentUser;
+
+                return View(model1);
+            }
+            if (ModelState.IsValid)
+            {
+                if (model != null)
+                {
+                    model.FullName = ApplicationUser.FullName;
+                    model.IsResign = ApplicationUser.IsResign == "on";
+
+                    model.Email = ApplicationUser.Email;
+                    if (model.PassCode != ApplicationUser.PassCode)
+                    {
+                        model.PassCode = Encryption.GetHash(ApplicationUser.PassCode);
+                    }
+                    // Keep the original DB UserType (don't overwrite with uppercased version from form)
+                    // The GET action uppercases for display only — saving ADMIN breaks claims auth which expects "Admin"
+                    // model.UserType stays as-is (already loaded from DB above)
+                    model.DepartmentId = deptQuery.Where(x => x.Name == ApplicationUser.Department).FirstOrDefault()?.Id;
+                    model.EmployeeId = ApplicationUser.EmployeeId;
+                    
+                    model.Phone = ApplicationUser.Phone;
+                    if (!modelIsStudent)
+                    {
+                        model.Programme = ApplicationUser.Programme;
+                        model.AcademicSession = ApplicationUser.AcademicSession;
+                    }
+                    model.Title = ApplicationUser.Title;
+
+
+                    if (isImgChanged == "true")
+                    {
+                        if (model.Image != "/assets/media/avatars/blank.png")
+                        {
+                            RemoveImage(model);
+                        }
+                        var uploadedImg = UploadImageToDir(picture);
+                        model.Image = uploadedImg.Image;
+                    }
+                    _context.ApplicationUsers.Update(model);
+                    _context.SaveChanges();
+                    TempData["Success"] = "User updated successfully!";
+                    return RedirectToAction("Index");
+                }
+            }
+
+            return View(ApplicationUser);
+            } catch (Exception ex) {
+                // Log exception properly here in a real production environment
+                TempData["Error"] = "An unexpected error occurred while updating the user profile. Please try again.";
+                return RedirectToAction("Index");
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public JsonResult Create(ApplicationUserVM newEmployee)
+        {
+            try
+            {
+                if (newEmployee != null)
+                {
+                    // ── Validate required student profile fields before sending credentials ──
+                    if (newEmployee.UserType == "Student")
+                    {
+                        if (string.IsNullOrWhiteSpace(newEmployee.Programme))
+                            return Json(new { status = false, msg = "Programme is required before sending login credentials to a student." });
+
+                        if (string.IsNullOrWhiteSpace(newEmployee.AcademicSession))
+                            return Json(new { status = false, msg = "Academic Session is required before sending login credentials to a student." });
+                    }
+
+                    if (string.IsNullOrWhiteSpace(newEmployee.FullName))
+                        return Json(new { status = false, msg = "Full Name is required." });
+
+                    if (string.IsNullOrWhiteSpace(newEmployee.Email))
+                        return Json(new { status = false, msg = "Email is required." });
+
+                    string newId;
+                    if (!string.IsNullOrEmpty(newEmployee.Email) && 
+                        (newEmployee.Email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) || 
+                         newEmployee.Email.EndsWith("@newinti.edu.my", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        newId = newEmployee.Email.Split('@')[0];
+                    }
+                    else
+                    {
+                        if (newEmployee.UserType == "Student")
+                        {
+                            var random = new Random();
+                            string randomId;
+                            do
+                            {
+                                randomId = "P" + random.Next(10000000, 99999999).ToString();
+                            } while (_context.ApplicationUsers.Any(u => u.UserName == randomId || u.EmployeeId == randomId));
+                            newId = randomId;
+                        }
+                        else
+                        {
+                            string prefix = "SUP-";
+                            var maxNums = _context.ApplicationUsers
+                                .Where(u => u.UserName != null && u.UserName.StartsWith(prefix))
+                                .Select(u => u.UserName.Substring(prefix.Length))
+                                .ToList();
+                                
+                            int nextIdNum = 1;
+                            var validNums = maxNums.Select(n => int.TryParse(n, out int num) ? num : 0);
+                            if (validNums.Any())
+                            {
+                                nextIdNum = validNums.Max() + 1;
+                            }
+                            
+                            newId = $"{prefix}{nextIdNum:D3}";
+                        }
+                    }
+
+                    newEmployee.EmplooyeeInfoID = newId;
+                    newEmployee.UserName = newId;
+
+                    var check = _context.ApplicationUsers.Where(d => d.UserName == newEmployee.UserName).FirstOrDefault();
+                    var check1 = _context.ApplicationUsers.Where(d => d.Email == newEmployee.Email).FirstOrDefault();
+                    var deptQuery = _context.Department.AsQueryable();
+                    if (check == null && check1 == null)
+                    {
+                        string generatedPassword = Guid.NewGuid().ToString("N").Substring(0, 8);
+
+                        var model = new ApplicationUser
+                        {
+                            UserName = newEmployee.UserName,
+                            FullName = newEmployee.FullName,
+
+                            Email = newEmployee.Email,
+                            PassCode = Encryption.GetHash(generatedPassword),
+                            EmployeeId = newEmployee.EmplooyeeInfoID,
+                            DateCreated = DateTime.Now,
+                            DateJoin = DateTime.Now,
+                            AddedBy = "sys",
+                            Image = "/assets/media/avatars/blank.png",
+                            DepartmentId = deptQuery.Where(x => x.Name == newEmployee.Department).FirstOrDefault()?.Id,
+                            Phone = newEmployee.Phone,
+                            Programme = newEmployee.Programme,
+                            AcademicSession = newEmployee.AcademicSession,
+                            Title = newEmployee.Title,
+                            MaxStudentSlots =
+                                newEmployee.UserType == "Supervisor" ||
+                                newEmployee.UserType == "AcademicStaff"
+                                    ? 5
+                                    : null,
+                            RequirePasswordChange = true
+                    };
+                        _context.ApplicationUsers.Add(model);
+                        _context.SaveChanges();
+
+                        // Role membership is stored in UserRoleMappings (source of truth)
+                        var requestedRole = (newEmployee.UserType ?? "").Trim();
+                        var rolesToAddNew = requestedRole == "AcademicStaff" ? new[] { "Supervisor", "Examiner" } : new[] { requestedRole };
+                        foreach (var r in rolesToAddNew)
+                        {
+                            var roleEntity = _context.AppRoles.FirstOrDefault(ar => ar.Name == r);
+                            if (roleEntity != null)
+                            {
+                                _context.UserRoleMappings.Add(new UserRoleMapping { UserId = model.Id, RoleId = roleEntity.Id });
+                            }
+                        }
+                        _context.SaveChanges();
+
+                        try
+                        {
+                            var request = HttpContext.Request;
+                            var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+
+                            string subject = "Welcome to FYP Tracking System - Your Login Credentials";
+                            string message = $@"<p>Welcome, <strong>{newEmployee.FullName}</strong>!</p><br/><p>Your account has been successfully created. Below are your login credentials:</p>
+                                <ul>
+                                    <li><strong>Username:</strong> {newEmployee.UserName}</li>
+                                    <li><strong>Password:</strong> {generatedPassword}</li>
+                                </ul>
+                                <p>Please log in and change your password as soon as possible.</p>";
+                            string htmlBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Click Here to Login", loginUrl);
+                            _emailService.Send(newEmployee.Email, subject, htmlBody);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Failed to send email: {ex.Message}");
+                        }
+
+                        return Json(new { status = true, msg = "User created successfully!", generatedPassword = generatedPassword, userName = model.UserName });
+                    }
+                    else
+                    {
+                        if (check != null) return Json(new { status = false, msg = "This Username is exists, please try another one!" });
+                        if (check1 != null) return Json(new { status = false, msg = "This Email is exists, please try another one!" });
+                    }
+
+                }
+                //return RedirectToAction("Index", newEmployee);
+                return Json(new { status = false, msg = "Invalid data enter. Please try again." });
+            }
+            catch(Exception ex)
+            {
+                return Json(new { status = false, msg = "An error occur. Msg: " + ex.Message });
+            }
+        }
+
+        public ActionResult ManageUsersData()
+        {
+            var users = _context.ApplicationUsers
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .Where(u => !u.UserRoles.Any(r => r.Role.Name == "Admin") && !u.UserRoles.Any(r => r.Role.Name == "SuperAdmin"))
+                .ToList();
+
+            var projects = _context.FYPProjects.Include(p => p.Supervisor).Include(p => p.Student).ToList();
+
+            var empList = users.Select(u => new {
+                id = u.Id,
+                fullName = u.FullName,
+                email = u.Email,
+                employeeId = u.EmployeeId,
+                userType = RoleDisplay.Resolve(u.UserRoles.Select(ur => ur.Role.Name), null), // Preserved for frontend DataTable exact string matching compatibility
+                dateCreated = u.DateCreated,
+                isResign = u.IsResign,
+                image = u.Image,
+                supervisorName = u.UserRoles.Any(r => r.Role.Name == "Student")
+                    ? (projects.FirstOrDefault(p => p.StudentId == u.Id)?.Supervisor?.FullName ?? "Not Assigned")
+                    : "-",
+                assignedStudents = u.UserRoles.Any(r => r.Role.Name == "Supervisor")
+                    ? string.Join(", ", projects.Where(p => p.SupervisorId == u.Id && p.Student != null).Select(p => p.Student.FullName).DefaultIfEmpty("No Students"))
+                    : u.UserRoles.Any(r => r.Role.Name == "Examiner") 
+                        ? string.Join(", ", projects.Where(p => p.AssignedExaminers.Any(ae => ae.ExaminerId == u.Id) && p.Student != null).Select(p => p.Student.FullName).DefaultIfEmpty("No Students"))
+                        : "-",
+                assignedStudentCount = u.UserRoles.Any(r => r.Role.Name == "Supervisor")
+                    ? projects.Count(p => p.SupervisorId == u.Id && p.Student != null).ToString()
+                    : u.UserRoles.Any(r => r.Role.Name == "Examiner")
+                        ? projects.Count(p => p.AssignedExaminers.Any(ae => ae.ExaminerId == u.Id) && p.Student != null).ToString()
+                        : "-",
+                specialization = u.Specialization,
+                requirePasswordChange = u.RequirePasswordChange,
+                accountExpiry = u.AccountExpiry,
+                isProfileIncomplete = (u.UserRoles.Any(r => r.Role.Name == "Supervisor" || r.Role.Name == "Examiner") && 
+                                      (u.DepartmentId == null || 
+                                       string.IsNullOrWhiteSpace(u.Programme) || 
+                                       string.IsNullOrWhiteSpace(u.Specialization) || 
+                                       string.IsNullOrWhiteSpace(u.Title)))
+            }).ToList();
+
+            return Json(new { data = empList, recordsTotal = empList.Count(), recordsFiltered = empList.Count() });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public bool Delete(int id)
+        {
+            try
+            {
+                ApplicationUser ApplicationUser = _context.ApplicationUsers.FirstOrDefault(x => x.Id ==id);
+                if(ApplicationUser != null)
+                {
+                    ApplicationUser.IsResign = true;
+                    _context.SaveChanges();
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                return false;
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public bool Activate(int id)
+        {
+            try
+            {
+                ApplicationUser ApplicationUser = _context.ApplicationUsers.FirstOrDefault(x => x.Id ==id);
+                if(ApplicationUser != null)
+                {
+                    ApplicationUser.IsResign = false;
+                    _context.SaveChanges();
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                return false;
+            }
+        }
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> HardDelete(int id)
+        {
+            try
+            {
+                var user = await _context.ApplicationUsers
+                    .Include(u => u.UserRoles).ThenInclude(r => r.Role)
+                    .FirstOrDefaultAsync(x => x.Id == id);
+                if (user == null) return Json(new { status = false, msg = "User not found." });
+
+                // 1. ChatGroupMembers — Restrict FK (student or supervisor as member)
+                var groupMembers = await _context.ChatGroupMembers
+                    .Where(m => m.StudentId == id).ToListAsync();
+                _context.ChatGroupMembers.RemoveRange(groupMembers);
+
+                // 2. ChatGroups owned by supervisor — Restrict FK (messages cascade via Group)
+                if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR"))
+                {
+                    var ownedGroups = await _context.ChatGroups
+                        .Include(g => g.Messages)
+                        .Include(g => g.Members)
+                        .Where(g => g.SupervisorId == id).ToListAsync();
+                    foreach (var g in ownedGroups)
+                    {
+                        _context.ChatMessages.RemoveRange(g.Messages);
+                        _context.ChatGroupMembers.RemoveRange(g.Members);
+                    }
+                    _context.ChatGroups.RemoveRange(ownedGroups);
+                }
+
+                // 3. ChatMessages (direct 1-to-1 messages) — Restrict FK
+                // 3. ChatMessages — Preserve received history by nullifying ReceiverId, delete sent messages (Restrict FK)
+                var sentMessages = await _context.ChatMessages
+                    .Where(m => m.SenderId == id).ToListAsync();
+                _context.ChatMessages.RemoveRange(sentMessages);
+
+                var receivedMessages = await _context.ChatMessages
+                    .Where(m => m.ReceiverId == id && m.SenderId != id).ToListAsync();
+                foreach (var msg in receivedMessages)
+                {
+                    msg.ReceiverId = null;
+                }
+
+                // FYPNotifications — No FK restrict but needs cleanup to avoid orphans
+                var notifications = await _context.FYPNotifications
+                    .Where(n => n.RecipientId == id).ToListAsync();
+                _context.FYPNotifications.RemoveRange(notifications);
+
+
+                // 4. SupervisorRequests — Restrict FK
+                var requests = await _context.SupervisorRequests
+                    .Where(r => r.StudentId == id || r.SupervisorId == id).ToListAsync();
+                _context.SupervisorRequests.RemoveRange(requests);
+
+                // 5. MeetingBookings — Restrict FK (MeetingLogs cascade automatically)
+                var meetings = await _context.MeetingBookings
+                    .Where(b => b.StudentId == id || b.SupervisorId == id).ToListAsync();
+                _context.MeetingBookings.RemoveRange(meetings);
+
+                // 6. SupervisorAvailabilities — FK on supervisor
+                var availabilities = await _context.SupervisorAvailabilities
+                    .Where(a => a.SupervisorId == id).ToListAsync();
+                _context.SupervisorAvailabilities.RemoveRange(availabilities);
+
+
+                // 8. UserRoleMappings
+                var userRoles = await _context.UserRoleMappings
+                    .Where(r => r.UserId == id).ToListAsync();
+                _context.UserRoleMappings.RemoveRange(userRoles);
+
+                if (user.UserRoles.Any(r => r.Role.Name == "Student") || user.UserRoles.Any(r => r.Role.Name == "STUDENT"))
+                {
+                    var chatGroupMembers = await _context.ChatGroupMembers
+                        .Where(m => m.StudentId == id).ToListAsync();
+                    _context.ChatGroupMembers.RemoveRange(chatGroupMembers);
+
+                    var projects = await _context.FYPProjects
+                        .Where(p => p.StudentId == id).ToListAsync();
+                    
+                    if (projects.Any())
+                    {
+                        var projectIds = projects.Select(p => p.Id).ToList();
+
+                        // Remove Project Examiners
+                        var projectExaminers = await _context.FYPProjectExaminers
+                            .Where(e => projectIds.Contains(e.FYPProjectId)).ToListAsync();
+                        _context.FYPProjectExaminers.RemoveRange(projectExaminers);
+
+                        // Remove Milestones
+                        var milestones = await _context.FYPMilestones
+                            .Where(m => projectIds.Contains(m.FYPProjectId)).ToListAsync();
+                        _context.FYPMilestones.RemoveRange(milestones);
+
+                        _context.FYPProjects.RemoveRange(projects);
+                    }
+                }
+                if (user.UserRoles.Any(r => r.Role.Name == "Supervisor") || user.UserRoles.Any(r => r.Role.Name == "SUPERVISOR"))
+                {
+                    var chatGroups = await _context.ChatGroups
+                        .Where(g => g.SupervisorId == id).ToListAsync();
+                    _context.ChatGroups.RemoveRange(chatGroups);
+
+                    // Nullify supervisor on students' projects (preserve students' data)
+                    var supervisorProjects = await _context.FYPProjects
+                        .Where(p => p.SupervisorId == id).ToListAsync();
+                    foreach (var p in supervisorProjects)
+                        p.SupervisorId = null;
+
+                    // Remove supervisor's feedbacks — Restrict FK
+                    var feedbacks = await _context.FYPFeedbacks
+                        .Where(f => f.SupervisorId == id).ToListAsync();
+                    _context.FYPFeedbacks.RemoveRange(feedbacks);
+                }
+                if (user.UserRoles.Any(r => r.Role.Name == "Examiner") || user.UserRoles.Any(r => r.Role.Name == "EXAMINER"))
+                {
+                    // Nullify examiner on projects by removing mapping
+                    var examinerAssignments = await _context.FYPProjectExaminers
+                        .Where(pe => pe.ExaminerId == id).ToListAsync();
+                    _context.FYPProjectExaminers.RemoveRange(examinerAssignments);
+                }
+
+                // 9. Submission files uploaded by this user — Restrict FK
+                var uploadedFiles = await _context.FYPSubmissionFiles
+                    .Where(f => f.UploadedBy == id).ToListAsync();
+                _context.FYPSubmissionFiles.RemoveRange(uploadedFiles);
+
+                // Save all child deletions first
+                await _context.SaveChangesAsync();
+
+                // 10. Remove user via Raw SQL to completely bypass EF Core tracking conflicts
+                await _context.Database.ExecuteSqlRawAsync("DELETE FROM ApplicationUser WHERE Id = {0}", id);
+
+
+                return Json(new { status = true, msg = "User permanently deleted." });
+            }
+            catch (Exception ex)
+            {
+                var inner = ex.InnerException?.Message ?? ex.Message;
+                return Json(new { status = false, msg = "Error: " + inner });
+            }
+        }
+
+        // ============================================================
+        // ADMIN - MULTIPLE FORM TEMPLATES
+        // GET / POST / AUDIT HISTORY
+        // ============================================================
+
+        private static readonly System.Threading.SemaphoreSlim _templateLock =
+            new System.Threading.SemaphoreSlim(1, 1);
+
+        // Template ID is used for navigation and file selection.
+        // The JSON TemplateKey is preserved separately.
+        private static readonly Dictionary<
+            string, (string FileName, string HistoryFolder)>
+            _formTemplateFiles = new(
+                StringComparer.Ordinal)
+        {
+            ["stage1-meeting"] = (
+                "Stage1RecordOfSupervisorMeeting6000CEM6002CMD.default.json",
+                "RecordOfSupervisorMeeting"
+            ),
+
+            ["stage2-meeting"] = (
+                "Stage2RecordOfSupervisorMeeting6001CEM303COM.default.json",
+                "Stage2RecordOfSupervisorMeeting"
+            ),
+
+            ["iaf"] = (
+                "InitialProjectAllocationForm.default.json",
+                "InitialProjectAllocationForm"
+            ),
+
+            ["thesis-cover"] = (
+                "ThesisCoverPage.default.json",
+                "ThesisCoverPage"
+            ),
+
+            ["group-genai"] = (
+                "GroupGenAiDeclaration.default.json",
+                "GroupGenAiDeclaration"
+            )
+        };
+
+        private static readonly System.Text.Json.JsonSerializerOptions
+            _formTemplateJsonOptions = new()
+        {
+            PropertyNameCaseInsensitive = true,
+            PropertyNamingPolicy =
+                System.Text.Json.JsonNamingPolicy.CamelCase,
+            WriteIndented = true
+        };
+
+        // Generate the next version without resetting decimal versions.
+        // Example: 1.011111 -> 1.011112
+        private static string GetNextFormTemplateVersion(
+            string oldVersion,
+            string versionsDirectory)
+        {
+            var match = Regex.Match(
+                oldVersion ?? "",
+                @"^(v?)(\d+)(?:\.(\d+))?$",
+                RegexOptions.CultureInvariant);
+
+            if (!match.Success)
+                throw new InvalidDataException(
+                    "Unsupported template version format.");
+
+            string prefix = match.Groups[1].Value;
+            string majorText = match.Groups[2].Value;
+
+            long major = long.Parse(
+                majorText,
+                System.Globalization.CultureInfo.InvariantCulture);
+
+            bool hasMinor = match.Groups[3].Success;
+            string minorText = hasMinor
+                ? match.Groups[3].Value
+                : "";
+
+            long minor = hasMinor
+                ? long.Parse(
+                    minorText,
+                    System.Globalization.CultureInfo.InvariantCulture)
+                : 0;
+
+            for (int attempt = 0; attempt < 100000; attempt++)
+            {
+                string candidate;
+
+                if (hasMinor)
+                {
+                    minor = checked(minor + 1);
+
+                    string paddedMinor = minor.ToString(
+                        "D" + minorText.Length,
+                        System.Globalization.CultureInfo.InvariantCulture);
+
+                    candidate = prefix + majorText + "." + paddedMinor;
+                }
+                else
+                {
+                    major = checked(major + 1);
+                    candidate = prefix +
+                        major.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture);
+                }
+
+                string snapshotPath = Path.Combine(
+                    versionsDirectory,
+                    $"version-{candidate}.json");
+
+                if (!System.IO.File.Exists(snapshotPath))
+                    return candidate;
+            }
+
+            throw new InvalidOperationException(
+                "Unable to allocate a unique template version.");
+        }
+
+        // Create snapshots without overwriting existing versions.
+        private static async Task WriteTemplateSnapshotAsync(
+            string path,
+            string json)
+        {
+            await using var stream = new FileStream(
+                path,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None);
+
+            await using var writer = new StreamWriter(
+                stream,
+                new UTF8Encoding(false));
+
+            await writer.WriteAsync(json);
+        }
+
+        // ============================================================
+        // GET - OPEN SELECTED TEMPLATE
+        // ============================================================
+
+        [HttpGet]
+        public async Task<IActionResult> FormTemplateSettings(
+            string? templateId = null,
+            string? templateKey = null)
+        {
+            var loginName = HttpContext.User.Identity?.Name;
+
+            var currentUser = await _context.ApplicationUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u =>
+                    u.UserName == loginName ||
+                    u.Email == loginName);
+
+            if (currentUser == null)
+                return RedirectToAction("Login", "User");
+
+            ViewBag.CurrentUser = currentUser;
+
+            // Backward compatibility with previous templateKey URLs.
+            if (string.IsNullOrWhiteSpace(templateId) &&
+                !string.IsNullOrWhiteSpace(templateKey))
+            {
+                templateId = templateKey switch
+                {
+                    "record-of-supervisor-meeting" =>
+                        "stage1-meeting",
+
+                    "record-of-supervisor-meeting-6001cem-303com" =>
+                        "stage2-meeting",
+
+                    "thesis-cover-page" =>
+                        "thesis-cover",
+
+                    "group-genai-declaration" =>
+                        "group-genai",
+
+                    _ => templateKey
+                };
+            }
+
+            string selectedId = string.IsNullOrWhiteSpace(templateId)
+                ? "stage1-meeting"
+                : templateId.Trim();
+
+            if (!_formTemplateFiles.TryGetValue(
+                selectedId,
+                out var definition))
+            {
+                return BadRequest("Unsupported form template.");
+            }
+
+            string baseDir = Path.Combine(
+                Directory.GetCurrentDirectory(),
+                "FormTemplates");
+
+            string templatePath = Path.Combine(
+                baseDir,
+                definition.FileName);
+
+            string historyPath = Path.Combine(
+                baseDir,
+                "History",
+                definition.HistoryFolder,
+                "history.json");
+
+            string draftPath = templatePath.Replace(".default.json", ".draft.json");
+            string targetPath = System.IO.File.Exists(draftPath) ? draftPath : templatePath;
+
+            if (!System.IO.File.Exists(targetPath))
+                return NotFound(
+                    "Template file not found: " + definition.FileName);
+
+            try
+            {
+                string json = await System.IO.File
+                    .ReadAllTextAsync(targetPath);
+
+                var template =
+                    System.Text.Json.JsonSerializer.Deserialize<
+                        MeetingRecordTemplateVM>(
+                            json,
+                            _formTemplateJsonOptions);
+
+                if (template == null ||
+                    string.IsNullOrWhiteSpace(template.TemplateKey) ||
+                    template.Page == null ||
+                    template.Fields == null ||
+                    template.Fields.Count == 0)
+                {
+                    return StatusCode(
+                        500,
+                        "Form template configuration is invalid.");
+                }
+
+                // Read existing audit records, but never modify them
+                // simply by opening the page.
+                var history = new List<TemplateAuditEvent>();
+
+                if (System.IO.File.Exists(historyPath))
+                {
+                    string historyJson = await System.IO.File
+                        .ReadAllTextAsync(historyPath);
+
+                    history =
+                        System.Text.Json.JsonSerializer.Deserialize<
+                            List<TemplateAuditEvent>>(
+                                historyJson,
+                                _formTemplateJsonOptions)
+                        ?? throw new InvalidDataException(
+                            "Template audit history is invalid.");
+                }
+
+                var vm = new FormTemplateSettingsViewModel
+                {
+                    CurrentTemplate = template,
+                    History = history
+                        .OrderByDescending(h => h.DateModifiedUtc)
+                        .ToList()
+                };
+                
+                ViewBag.SelectedTemplateId = selectedId;
+
+                // Thesis Cover Page date comes from Admin System Settings.
+                // Do not use today's date or a hardcoded cover-page date.
+                ViewBag.CoverPageDeadlineDisplay = "";
+
+                if (selectedId == "thesis-cover")
+                {
+                    string? deadlineValue = await _context.FYPSettings
+                        .AsNoTracking()
+                        .Where(s => s.Key == "DPPDeadline")
+                        .Select(s => s.Value)
+                        .FirstOrDefaultAsync();
+
+                    string[] acceptedFormats =
+                    {
+                        "yyyy-MM-dd",
+                        "yyyy-MM-ddTHH:mm:ss",
+                        "yyyy-MM-ddTHH:mm:ss.fff"
+                    };
+
+                    if (DateTime.TryParseExact(
+                        deadlineValue?.Trim(),
+                        acceptedFormats,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out DateTime dueDate))
+                    {
+                        int day = dueDate.Day;
+
+                        string suffix = day % 100 >= 11 && day % 100 <= 13
+                            ? "th"
+                            : (day % 10) switch
+                            {
+                                1 => "st",
+                                2 => "nd",
+                                3 => "rd",
+                                _ => "th"
+                            };
+
+                        ViewBag.CoverPageDeadlineDisplay =
+                            day.ToString() +
+                            suffix + " " +
+                            dueDate.ToString(
+                                "MMMM yyyy",
+                                System.Globalization.CultureInfo.InvariantCulture);
+                    }
+
+                    string customDocx = Path.Combine(baseDir, "ThesisCoverPage.template.docx");
+                    ViewBag.HasCustomDocxTemplate = System.IO.File.Exists(customDocx);
+                }
+
+                return View(vm);
+
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+
+                return StatusCode(
+                    500,
+                    "Error loading form template.");
+            }
+        }
+
+        // ============================================================
+        // POST - SAVE SELECTED TEMPLATE
+        // ============================================================
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SaveFormTemplate(
+            string templateId,
+            MeetingRecordTemplateVM model,
+            string actionType = "publish",
+            IFormFile? docxTemplateFile = null)
+        {
+            if (string.IsNullOrWhiteSpace(templateId) ||
+                !_formTemplateFiles.TryGetValue(
+                    templateId,
+                    out var definition))
+            {
+                return BadRequest("Invalid template selection.");
+            }
+
+            if (model == null ||
+                model.Fields == null ||
+                model.Fields.Count == 0 ||
+                !ModelState.IsValid)
+            {
+                return BadRequest("Invalid template data.");
+            }
+
+            var loginName = HttpContext.User.Identity?.Name;
+
+            var currentUser = await _context.ApplicationUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u =>
+                    u.UserName == loginName ||
+                    u.Email == loginName);
+
+            if (currentUser == null)
+                return Unauthorized();
+
+            await _templateLock.WaitAsync();
+
+            try
+            {
+                string baseDir = Path.Combine(
+                    Directory.GetCurrentDirectory(),
+                    "FormTemplates");
+
+                string templatePath = Path.Combine(
+                    baseDir,
+                    definition.FileName);
+
+                string historyDir = Path.Combine(
+                    baseDir,
+                    "History",
+                    definition.HistoryFolder);
+
+                string versionsDir = Path.Combine(
+                    historyDir,
+                    "Versions");
+
+                string historyPath = Path.Combine(
+                    historyDir,
+                    "history.json");
+
+                if (!System.IO.File.Exists(templatePath))
+                    return NotFound("Original template not found.");
+
+                string oldJson = await System.IO.File
+                    .ReadAllTextAsync(templatePath);
+
+                var original =
+                    System.Text.Json.JsonSerializer.Deserialize<
+                        MeetingRecordTemplateVM>(
+                            oldJson,
+                            _formTemplateJsonOptions);
+
+                if (original == null ||
+                    original.Fields == null ||
+                    original.Fields.Count == 0 ||
+                    string.IsNullOrWhiteSpace(original.TemplateKey) ||
+                    string.IsNullOrWhiteSpace(original.Version))
+                {
+                    return StatusCode(
+                        500,
+                        "Original template is invalid.");
+                }
+
+                // Never trust TemplateKey from the browser.
+                if (!string.Equals(
+                    model.TemplateKey,
+                    original.TemplateKey,
+                    StringComparison.Ordinal))
+                {
+                    return BadRequest("Template Key mismatch.");
+                }
+
+                // Prevent stale browser tabs from overwriting updates.
+                if (!string.Equals(
+                    model.Version,
+                    original.Version,
+                    StringComparison.Ordinal))
+                {
+                    return Conflict(
+                        "This template was updated elsewhere. " +
+                        "Refresh the page before saving.");
+                }
+
+                // Ensure all immutable field keys match the saved JSON.
+                if (model.Fields.Count != original.Fields.Count)
+                    return BadRequest("Field count mismatch.");
+
+                var submittedFields =
+                    new Dictionary<string, TemplateField>(
+                        StringComparer.Ordinal);
+
+                foreach (var field in model.Fields)
+                {
+                    if (field == null ||
+                        string.IsNullOrWhiteSpace(field.Key) ||
+                        !submittedFields.TryAdd(field.Key, field))
+                    {
+                        return BadRequest(
+                            "Duplicate or missing Field Key.");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(field.Label) ||
+                        field.Label.Length > 250)
+                    {
+                        return BadRequest(
+                            "Field Label is invalid.");
+                    }
+
+                    if (field.Columns < 3 || field.Columns > 12)
+                        return BadRequest(
+                            "Field Width must be between 3 and 12.");
+
+                    if (field.Order < 1 || field.Order > 1000)
+                        return BadRequest(
+                            "Display Order is invalid.");
+                }
+
+                var existingKeys = original.Fields
+                    .Select(f => f.Key)
+                    .ToHashSet(StringComparer.Ordinal);
+
+                if (submittedFields.Keys.Any(
+                    key => !existingKeys.Contains(key)))
+                {
+                    return BadRequest(
+                        "Unknown Field Key detected.");
+                }
+
+                if (submittedFields.Values
+                    .Select(f => f.Order)
+                    .Distinct()
+                    .Count() != submittedFields.Count)
+                {
+                    return BadRequest(
+                        "Display Order values must be unique.");
+                }
+
+                // Update only editable properties.
+                // Keep Title, TemplateKey, Page, Type and MinHeightMm
+                // from the original server-side JSON.
+                var changes = new List<TemplateFieldChange>();
+
+                foreach (var existingField in original.Fields)
+                {
+                    var submitted = submittedFields[existingField.Key];
+
+                    string newLabel = submitted.Label.Trim();
+
+                    if (existingField.Label != newLabel)
+                    {
+                        changes.Add(new TemplateFieldChange
+                        {
+                            FieldKey = existingField.Key,
+                            PropertyName = "Label",
+                            PreviousValue = existingField.Label,
+                            NewValue = newLabel
+                        });
+                    }
+
+                    if (existingField.Order != submitted.Order)
+                    {
+                        changes.Add(new TemplateFieldChange
+                        {
+                            FieldKey = existingField.Key,
+                            PropertyName = "Order",
+                            PreviousValue =
+                                existingField.Order.ToString(),
+                            NewValue =
+                                submitted.Order.ToString()
+                        });
+                    }
+
+                    if (existingField.Columns != submitted.Columns)
+                    {
+                        changes.Add(new TemplateFieldChange
+                        {
+                            FieldKey = existingField.Key,
+                            PropertyName = "Columns",
+                            PreviousValue =
+                                existingField.Columns.ToString(),
+                            NewValue =
+                                submitted.Columns.ToString()
+                        });
+                    }
+
+                    existingField.Label = newLabel;
+                    existingField.Order = submitted.Order;
+                    existingField.Columns = submitted.Columns;
+                }
+
+                byte[]? uploadedDocxBytes = null;
+                if (templateId == "thesis-cover" && docxTemplateFile != null && docxTemplateFile.Length > 0)
+                {
+                    var docxExt = Path.GetExtension(docxTemplateFile.FileName).ToLowerInvariant();
+                    if (docxExt != ".docx")
+                    {
+                        TempData["ErrorMessage"] = "Only valid Microsoft Word (.docx) files can be uploaded as official template.";
+                        return RedirectToAction(nameof(FormTemplateSettings), new { templateId });
+                    }
+
+                    using var readMs = new MemoryStream();
+                    await docxTemplateFile.CopyToAsync(readMs);
+                    uploadedDocxBytes = readMs.ToArray();
+
+                    if (!FYPTracker.Utils.CoverPageDocxHelper.IsValidDocx(uploadedDocxBytes))
+                    {
+                        TempData["ErrorMessage"] = "The uploaded file is not a valid DOCX document or is corrupted.";
+                        return RedirectToAction(nameof(FormTemplateSettings), new { templateId });
+                    }
+
+                    changes.Add(new TemplateFieldChange
+                    {
+                        FieldKey = "DocxTemplate",
+                        PropertyName = "SourceFile",
+                        PreviousValue = "Active Template",
+                        NewValue = docxTemplateFile.FileName
+                    });
+                }
+
+                if (changes.Count == 0 && actionType != "draft")
+                {
+                    TempData["SuccessMessage"] =
+                        "No template changes detected.";
+
+                    return RedirectToAction(
+                        nameof(FormTemplateSettings),
+                        new { templateId });
+                }
+
+                string draftPath = templatePath.Replace(".default.json", ".draft.json");
+
+                if (actionType == "draft")
+                {
+                    string draftJson = System.Text.Json.JsonSerializer.Serialize(original, _formTemplateJsonOptions);
+                    await System.IO.File.WriteAllTextAsync(draftPath, draftJson);
+                    TempData["SuccessMessage"] = "Draft successfully saved.";
+                    return RedirectToAction(nameof(FormTemplateSettings), new { templateId });
+                }
+
+
+                // Read audit history BEFORE writing any changes.
+                var history = new List<TemplateAuditEvent>();
+
+                bool hasHistory =
+                    System.IO.File.Exists(historyPath);
+
+                if (hasHistory)
+                {
+                    string historyJson = await System.IO.File
+                        .ReadAllTextAsync(historyPath);
+
+                    history =
+                        System.Text.Json.JsonSerializer.Deserialize<
+                            List<TemplateAuditEvent>>(
+                                historyJson,
+                                _formTemplateJsonOptions)
+                        ?? throw new InvalidDataException(
+                            "Existing audit history is invalid.");
+                }
+                else
+                {
+                    // Initial audit event for a newly introduced template.
+                    history.Add(new TemplateAuditEvent
+                    {
+                        ActionType = "Created",
+                        ModifiedBy = "System Baseline",
+                        TemplateKey = original.TemplateKey,
+                        TemplateVersion = original.Version,
+                        DateModifiedUtc = DateTime.UtcNow
+                    });
+                }
+
+                Directory.CreateDirectory(versionsDir);
+
+                string previousVersion = original.Version;
+
+                string newVersion = GetNextFormTemplateVersion(
+                    previousVersion,
+                    versionsDir);
+
+                original.Version = newVersion;
+
+                history.Add(new TemplateAuditEvent
+                {
+                    TemplateKey = original.TemplateKey,
+                    TemplateVersion = newVersion,
+                    PreviousVersion = previousVersion,
+                    ActionType = "Updated",
+                    ModifiedBy =
+                        currentUser.FullName ?? currentUser.UserName,
+                    DateModifiedUtc = DateTime.UtcNow,
+                    FieldChanges = changes
+                });
+
+                string newJson =
+                    System.Text.Json.JsonSerializer.Serialize(
+                        original,
+                        _formTemplateJsonOptions);
+
+                string newHistoryJson =
+                    System.Text.Json.JsonSerializer.Serialize(
+                        history,
+                        _formTemplateJsonOptions);
+
+                string oldSnapshotPath = Path.Combine(
+                    versionsDir,
+                    $"version-{previousVersion}.json");
+
+                string newSnapshotPath = Path.Combine(
+                    versionsDir,
+                    $"version-{newVersion}.json");
+
+                // Never overwrite a historical snapshot.
+                if (!System.IO.File.Exists(oldSnapshotPath))
+                {
+                    await WriteTemplateSnapshotAsync(
+                        oldSnapshotPath,
+                        oldJson);
+                }
+
+                // Prepare the updated active template and audit log.
+                string tempTemplatePath = templatePath + "." +
+                    Guid.NewGuid().ToString("N") + ".tmp";
+
+                string tempHistoryPath = historyPath + "." +
+                    Guid.NewGuid().ToString("N") + ".tmp";
+
+                try
+                {
+                    await System.IO.File.WriteAllTextAsync(
+                        tempTemplatePath,
+                        newJson);
+
+                    await System.IO.File.WriteAllTextAsync(
+                        tempHistoryPath,
+                        newHistoryJson);
+
+                    // FileMode.CreateNew prevents overwriting
+                    // an existing version snapshot.
+                    await WriteTemplateSnapshotAsync(
+                        newSnapshotPath,
+                        newJson);
+
+                    // Replace current files after preparation.
+                    System.IO.File.Move(
+                        tempHistoryPath,
+                        historyPath,
+                        true);
+
+                    System.IO.File.Move(
+                        tempTemplatePath,
+                        templatePath,
+                        true);
+                        
+                    if (System.IO.File.Exists(draftPath))
+                    {
+                        System.IO.File.Delete(draftPath);
+                    }
+
+                    if (uploadedDocxBytes != null)
+                    {
+                        string customDocxPath = Path.Combine(baseDir, "ThesisCoverPage.template.docx");
+                        await System.IO.File.WriteAllBytesAsync(customDocxPath, uploadedDocxBytes);
+
+                        if (actionType == "publish")
+                        {
+                            string snapshotDocxPath = Path.Combine(versionsDir, $"version-{newVersion}.template.docx");
+                            if (!System.IO.File.Exists(snapshotDocxPath))
+                            {
+                                await System.IO.File.WriteAllBytesAsync(snapshotDocxPath, uploadedDocxBytes);
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    if (System.IO.File.Exists(tempTemplatePath))
+                        System.IO.File.Delete(tempTemplatePath);
+
+                    if (System.IO.File.Exists(tempHistoryPath))
+                        System.IO.File.Delete(tempHistoryPath);
+                }
+
+                TempData["SuccessMessage"] =
+                    "Form Template successfully updated to version " +
+                    newVersion + ".";
+
+                return RedirectToAction(
+                    nameof(FormTemplateSettings),
+                    new { templateId });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+
+                return StatusCode(
+                    500,
+                    "Error saving form template. " +
+                    "Please check the application logs.");
+            }
+            finally
+            {
+                _templateLock.Release();
+            }
+        }
+
+        // ============================================================
+        // GET - DOWNLOAD ACTIVE COVER PAGE DOCX TEMPLATE
+        // ============================================================
+
+        [HttpGet]
+        public async Task<IActionResult> DownloadActiveCoverPageDocx()
+        {
+            var loginName = HttpContext.User.Identity?.Name;
+            var currentUser = await _context.ApplicationUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserName == loginName || u.Email == loginName);
+
+            if (currentUser == null) return RedirectToAction("Login", "User");
+
+            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "FormTemplates");
+            string customDocxPath = Path.Combine(baseDir, "ThesisCoverPage.template.docx");
+
+            string templateJsonPath = Path.Combine(baseDir, "ThesisCoverPage.default.json");
+            FYPTracker.ViewModels.MeetingRecordTemplateVM? template = null;
+            if (System.IO.File.Exists(templateJsonPath))
+            {
+                string json = await System.IO.File.ReadAllTextAsync(templateJsonPath);
+                template = System.Text.Json.JsonSerializer.Deserialize<FYPTracker.ViewModels.MeetingRecordTemplateVM>(
+                    json, _formTemplateJsonOptions);
+            }
+
+            string? deadlineValue = await _context.FYPSettings
+                .AsNoTracking()
+                .Where(s => s.Key == "DPPDeadline")
+                .Select(s => s.Value)
+                .FirstOrDefaultAsync();
+
+            string documentDateDisplay = "";
+            string[] acceptedFormats = { "yyyy-MM-dd", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-ddTHH:mm:ss.fff" };
+            if (DateTime.TryParseExact(deadlineValue?.Trim(), acceptedFormats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime dueDate))
+            {
+                int day = dueDate.Day;
+                string suffix = day % 100 >= 11 && day % 100 <= 13 ? "th" : (day % 10) switch { 1 => "st", 2 => "nd", 3 => "rd", _ => "th" };
+                documentDateDisplay = $"{day}{suffix} {dueDate:MMMM yyyy}";
+            }
+
+            byte[] bytes = FYPTracker.Utils.CoverPageDocxHelper.GenerateCoverPageDocx(
+                template: template,
+                thesisTitle: "[PROJECT TITLE]",
+                studentName: "[STUDENT NAME]",
+                coventryId: "[COVENTRY STUDENT ID]",
+                supervisorName: "[SUPERVISOR NAME]",
+                programmeName: "[PROGRAM NAME]",
+                documentDate: documentDateDisplay,
+                customDocxTemplatePath: System.IO.File.Exists(customDocxPath) ? customDocxPath : null
+            );
+
+            return File(bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "Thesis_Cover_Page_Official_Template.docx");
+        }
+
+        // ============================================================
+        // LEGACY HISTORY ENDPOINTS
+        // Disabled in the UI. Historical JSON files are preserved.
+        // ============================================================
+
+        [HttpGet]
+        public IActionResult ViewHistoricalTemplate(string version)
+        {
+            return NotFound();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult RestoreFormTemplate(string version)
+        {
+            return NotFound();
+        }
+
+
+        public async Task<IActionResult> Settings(string sessionFilter = null)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+
+            // Determine if running in Testing with FYPTracker_Test
+            var hostEnv = (HttpContext?.RequestServices?.GetService(typeof(Microsoft.AspNetCore.Hosting.IWebHostEnvironment)) as Microsoft.AspNetCore.Hosting.IWebHostEnvironment) ?? _env;
+            var config = (HttpContext?.RequestServices?.GetService(typeof(Microsoft.Extensions.Configuration.IConfiguration)) as Microsoft.Extensions.Configuration.IConfiguration) ?? _configuration;
+            bool isTestingWithTestDb = FYPTracker.Helpers.TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(hostEnv, config);
+
+            List<string> distinctSessions;
+
+            if (isTestingWithTestDb)
+            {
+                // In Testing on FYPTracker_Test, populate sessions directly from master AcademicSessions
+                var activeSessions = await _context.AcademicSessions
+                    .AsNoTracking()
+                    .Where(s => s.IsActive)
+                    .OrderByDescending(s => s.IsCurrent == true)
+                    .ThenByDescending(s => s.StartDate)
+                    .ThenBy(s => s.Name)
+                    .ToListAsync();
+
+                distinctSessions = activeSessions
+                    .Where(s => !string.IsNullOrEmpty(s.Name))
+                    .Select(s => s.Name!)
+                    .Distinct()
+                    .ToList();
+
+                if (string.IsNullOrEmpty(sessionFilter))
+                {
+                    // Prefer session marked IsCurrent = true; otherwise first active session
+                    var preferredSession = activeSessions.FirstOrDefault(s => s.IsCurrent == true)?.Name
+                                        ?? distinctSessions.FirstOrDefault();
+                    sessionFilter = preferredSession ?? string.Empty;
+                }
+            }
+            else
+            {
+                // Development / Production: Preserve existing behavior
+                distinctSessions = await _context.FYPProjects
+                    .Where(p => !string.IsNullOrEmpty(p.AcademicSession))
+                    .Select(p => p.AcademicSession)
+                    .Distinct()
+                    .OrderByDescending(s => s)
+                    .ToListAsync();
+
+                if (string.IsNullOrEmpty(sessionFilter))
+                {
+                    sessionFilter = distinctSessions.FirstOrDefault() ?? "2024/2025";
+                }
+            }
+
+            ViewBag.DistinctSessions = distinctSessions;
+            ViewBag.CurrentSessionFilter = sessionFilter;
+            
+            var currentSessionObj = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == sessionFilter);
+            ViewBag.CurrentSessionObj = currentSessionObj;
+            if (currentSessionObj != null)
+            {
+                ViewBag.DefaultMilestoneTemplates = await _context.DefaultMilestoneTemplates
+                    .Where(t => t.AcademicSessionId == currentSessionObj.Id)
+                    .OrderBy(t => t.Stage).ThenBy(t => t.DisplayOrder)
+                    .ToListAsync();
+            }
+            else
+            {
+                ViewBag.DefaultMilestoneTemplates = new List<DefaultMilestoneTemplate>();
+            }
+
+            DateTime? authoritativeIafDueDate = null;
+            DateTime? authoritativeProposalDueDate = null;
+            if (currentSessionObj != null)
+            {
+                var iafTemplate = await _context.DefaultMilestoneTemplates
+                    .FirstOrDefaultAsync(t => t.AcademicSessionId == currentSessionObj.Id && t.MilestoneCode == "IAF" && t.DueDate != null);
+                if (iafTemplate != null)
+                {
+                    authoritativeIafDueDate = iafTemplate.DueDate;
+                }
+
+                var proposalTemplate = await _context.DefaultMilestoneTemplates
+                    .FirstOrDefaultAsync(t => t.AcademicSessionId == currentSessionObj.Id && (t.MilestoneCode == "STAGE1_FINAL" || t.Title.Contains("Proposal") || t.Title.Contains("Stage 1 Final")) && t.DueDate != null);
+                if (proposalTemplate != null)
+                {
+                    authoritativeProposalDueDate = proposalTemplate.DueDate;
+                }
+            }
+
+            var existingIaf = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .Where(m => m.Project.AcademicSession == sessionFilter && (m.Title == "Initial Project Allocation Form (IAF)" || m.Title.Contains("IAF")) && m.DueDate != null)
+                .OrderByDescending(m => m.DueDate)
+                .FirstOrDefaultAsync();
+                
+            var effectiveIafDueDate = authoritativeIafDueDate ?? existingIaf?.DueDate;
+            if (effectiveIafDueDate.HasValue)
+            {
+                ViewBag.IAFDeadline = effectiveIafDueDate.Value.ToString("yyyy-MM-dd");
+            }
+            else
+            {
+                ViewBag.IAFDeadline = "";
+            }
+
+            var existingProposal = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .Where(m => m.Project.AcademicSession == sessionFilter && (m.MilestoneCode == "STAGE1_FINAL" || m.Title.Contains("Proposal") || m.Title.Contains("Stage 1 Final")) && m.DueDate != null)
+                .OrderByDescending(m => m.DueDate)
+                .FirstOrDefaultAsync();
+
+            var effectiveProposalDueDate = authoritativeProposalDueDate ?? existingProposal?.DueDate;
+            ViewBag.ProposalDeadline = effectiveProposalDueDate?.ToString("yyyy-MM-dd") ?? "";
+
+            var existingStep1 = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .Where(m => m.Project.AcademicSession == sessionFilter && m.Title.StartsWith("Step 1") && m.DueDate != null)
+                .OrderByDescending(m => m.DueDate)
+                .FirstOrDefaultAsync();
+                
+            ViewBag.Step1to4Deadline = existingStep1?.DueDate?.ToString("yyyy-MM-dd") ?? "";
+
+            var existingStep5 = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .Where(m => m.Project.AcademicSession == sessionFilter && m.Title.StartsWith("Step 5") && m.DueDate != null)
+                .OrderByDescending(m => m.DueDate)
+                .FirstOrDefaultAsync();
+                
+            ViewBag.Step5Deadline = existingStep5?.DueDate?.ToString("yyyy-MM-dd") ?? "";
+            // Load FYP global settings (DPP deadline, exhibition, etc.)
+            var fypSettings = await _context.FYPSettings.ToListAsync();
+            ViewBag.FYPSettings = fypSettings;
+
+            // Helper: get setting value by key
+            string GetSetting(string key) => fypSettings.FirstOrDefault(s => s.Key == key)?.Value ?? "";
+            ViewBag.DPPDeadline       = GetSetting("DPPDeadline");
+            ViewBag.ExhibitionDate    = GetSetting("ExhibitionDate");
+            ViewBag.ExhibitionTimeStart = GetSetting("ExhibitionTimeStart");
+            ViewBag.ExhibitionTimeEnd   = GetSetting("ExhibitionTimeEnd");
+            // Configurable supervisor request auto-rejection timeout (in days, default 3)
+            ViewBag.SupervisorRequestTimeoutDays = GetSetting("SupervisorRequestTimeoutDays") is string v && v != "" ? v : "3";
+            // IAF Defense Settings
+            ViewBag.IAFDefenseDurationMinutes =
+                GetSetting("IAFDefenseDurationMinutes");
+
+            ViewBag.IAFDefenseSupervisorRequired =
+                GetSetting("IAFDefenseSupervisorRequired");
+
+            ViewBag.LecturerWorkingHoursStart =
+                GetSetting("LecturerWorkingHoursStart");
+
+            ViewBag.LecturerWorkingHoursEnd =
+                GetSetting("LecturerWorkingHoursEnd");
+
+            ViewBag.VivaDurationMinutes =
+                GetSetting("VivaDurationMinutes");
+
+            ViewBag.MeetingDurationMinutes =
+                GetSetting("MeetingDurationMinutes");
+            return View();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateIAFDeadline(DateTime? deadline, string sessionFilter)
+        {
+            try 
+            {
+                if (!deadline.HasValue)
+                {
+                    TempData["Error"] = "The date provided was invalid or empty.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+                
+                if (string.IsNullOrEmpty(sessionFilter))
+                {
+                    TempData["Error"] = "An academic session must be selected.";
+                    return RedirectToAction(nameof(Settings));
+                }
+
+                // Set the time to 11:59:59 PM of the selected date
+                var endOfDayDeadline = new DateTime(deadline.Value.Year, deadline.Value.Month, deadline.Value.Day, 23, 59, 59);
+
+                // 1. Authoritative Session Template update
+                var sessionObj = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == sessionFilter);
+                if (sessionObj != null)
+                {
+                    var iafTemplates = await _context.DefaultMilestoneTemplates
+                        .Where(t => t.AcademicSessionId == sessionObj.Id && t.MilestoneCode == "IAF")
+                        .ToListAsync();
+                    foreach (var t in iafTemplates)
+                    {
+                        t.DueDate = endOfDayDeadline;
+                    }
+                }
+
+                // 2. Synchronize student IAF milestones in this session (never touch supervisor progress tasks)
+                var milestones = await _context.FYPMilestones
+                    .Include(m => m.Project)
+                    .Where(m => m.Project.AcademicSession == sessionFilter &&
+                               m.MilestoneSource != "Supervisor" &&
+                               (m.MilestoneCode == "IAF" || m.Title == "Initial Project Allocation Form (IAF)" || m.Title.Contains("IAF")))
+                    .ToListAsync();
+
+                int count = 0;
+                foreach(var m in milestones)
+                {
+                    m.DueDate = endOfDayDeadline;
+                    count++;
+                }
+
+                await _context.SaveChangesAsync();
+                TempData["Success"] = $"Successfully updated the official IAF deadline for session {sessionFilter} (synchronized {count} student project(s)).";
+
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+            catch (Exception)
+            {
+                TempData["Error"] = "An unexpected error occurred while processing your request. Please check the logs.";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateDefaultMilestoneDate(DateTime? deadline, string sessionFilter, string milestoneTitle)
+        {
+            try
+            {
+                if (!deadline.HasValue)
+                {
+                    TempData["BulkUpdateError"] = "The date provided was invalid or empty.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                if (string.IsNullOrEmpty(sessionFilter))
+                {
+                    TempData["BulkUpdateError"] = "An academic session must be selected.";
+                    return RedirectToAction(nameof(Settings));
+                }
+                
+                if (string.IsNullOrEmpty(milestoneTitle))
+                {
+                    TempData["BulkUpdateError"] = "A milestone title must be selected.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                // Set the time to 11:59:59 PM of the selected date
+                var endOfDayDeadline = new DateTime(deadline.Value.Year, deadline.Value.Month, deadline.Value.Day, 23, 59, 59);
+
+                // 1. Authoritative Session Template update
+                var sessionObj = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == sessionFilter);
+                if (sessionObj != null)
+                {
+                    var templates = await _context.DefaultMilestoneTemplates
+                        .Where(t => t.AcademicSessionId == sessionObj.Id &&
+                                   (t.Title.Contains(milestoneTitle) ||
+                                    (milestoneTitle == "IAF" && t.MilestoneCode == "IAF") ||
+                                    (milestoneTitle == "Proposal" && (t.MilestoneCode == "STAGE1_FINAL" || t.Title.Contains("Proposal") || t.Title.Contains("Stage 1 Final"))) ||
+                                    (milestoneTitle == "Presentation" && (t.MilestoneCode == "STAGE2_PRESENTATION" || t.Title.Contains("Presentation") || t.Title.Contains("Step 5") || t.Title.Contains("Step 3")))))
+                        .ToListAsync();
+
+                    foreach (var t in templates)
+                    {
+                        t.DueDate = endOfDayDeadline;
+                    }
+                }
+
+                // 2. Synchronize student milestones for this session (never modify supervisor progress tasks)
+                var milestones = await _context.FYPMilestones
+                    .Include(m => m.Project)
+                    .Where(m => m.Project.AcademicSession == sessionFilter &&
+                               m.MilestoneSource != "Supervisor" &&
+                               (m.Title.Contains(milestoneTitle) ||
+                                (milestoneTitle == "IAF" && (m.MilestoneCode == "IAF" || m.Title.Contains("IAF"))) ||
+                                (milestoneTitle == "Proposal" && (m.MilestoneCode == "STAGE1_FINAL" || m.Title.Contains("Proposal") || m.Title.Contains("Stage 1 Final"))) ||
+                                (milestoneTitle == "Presentation" && (m.MilestoneCode == "STAGE2_PRESENTATION" || m.Title.Contains("Presentation") || m.Title.Contains("Step 5") || m.Title.Contains("Step 3")))))
+                    .ToListAsync();
+
+                int count = 0;
+                foreach (var m in milestones)
+                {
+                    m.DueDate = endOfDayDeadline;
+                    count++;
+                }
+
+                await _context.SaveChangesAsync();
+                TempData["BulkUpdateSuccess"] = $"Successfully updated official deadline for '{milestoneTitle}' for session {sessionFilter} (synchronized {count} student project(s)).";
+
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+            catch (Exception)
+            {
+                TempData["BulkUpdateError"] = "An unexpected error occurred while updating the milestone due date.";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+        }
+
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SeedFinalEvaluationSteps(string sessionFilter)
+        {
+            try
+            {
+                // Find all projects in the session that have an approved Final/Thesis milestone but no Step milestones
+                var projects = await _context.FYPProjects
+                    .Include(p => p.Milestones)
+                    .Where(p => p.AcademicSession == sessionFilter || string.IsNullOrEmpty(sessionFilter))
+                    .ToListAsync();
+
+                int count = 0;
+                var toAdd = new List<FYPMilestone>();
+
+                foreach (var project in projects)
+                {
+                    bool hasFinalApproved = project.Milestones.Any(m =>
+                        (m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase))
+                        && m.Status == "Approved");
+
+                    bool hasSteps = project.Milestones.Any(m => m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase));
+
+                    if (hasFinalApproved && !hasSteps)
+                    {
+                        toAdd.AddRange(new[]
+                        {
+                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 1: Turnitin Checking", MilestoneCode = "STAGE2_TURNITIN", Status = "Pending", Stage = 2, IsRequired = true },
+                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 2: Final Report Submission", MilestoneCode = "STAGE2_FINAL", Status = "Pending", Stage = 2, IsRequired = true },
+                            new FYPMilestone { FYPProjectId = project.Id, Title = "Step 3: Presentation Slides Submission", MilestoneCode = "STAGE2_PRESENTATION", Status = "Pending", Stage = 2, IsRequired = true },
+                        });
+                        count++;
+                    }
+                }
+
+                if (toAdd.Any())
+                {
+                    _context.FYPMilestones.AddRange(toAdd);
+                    await _context.SaveChangesAsync();
+                    TempData["Success"] = $"Successfully created Step milestones for {count} project(s).";
+                }
+                else
+                {
+                    TempData["Info"] = "No eligible projects found. Either milestones already exist or no projects have an approved Final milestone.";
+                }
+
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"Error: {ex.Message}";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateFinalEvaluationDeadlines(DateTime? step1to4Deadline, DateTime? step5Deadline, string sessionFilter)
+        {
+            try 
+            {
+                if (!step1to4Deadline.HasValue || !step5Deadline.HasValue)
+                {
+                    TempData["Error"] = "The dates provided were invalid or empty.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+                
+                if (string.IsNullOrEmpty(sessionFilter))
+                {
+                    TempData["Error"] = "An academic session must be selected.";
+                    return RedirectToAction(nameof(Settings));
+                }
+
+                var endOfDay1to4 = new DateTime(step1to4Deadline.Value.Year, step1to4Deadline.Value.Month, step1to4Deadline.Value.Day, 23, 59, 59);
+                var endOfDay5 = new DateTime(step5Deadline.Value.Year, step5Deadline.Value.Month, step5Deadline.Value.Day, 23, 59, 59);
+
+                var milestones = await _context.FYPMilestones
+                    .Include(m => m.Project)
+                    .Where(m => m.Project.AcademicSession == sessionFilter && m.Title.StartsWith("Step"))
+                    .ToListAsync();
+
+                int count = 0;
+                foreach(var m in milestones)
+                {
+                    if (m.MilestoneCode == "STAGE2_PRESENTATION" || m.Title.Contains("Presentation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Step 5"))
+                    {
+                        m.DueDate = endOfDay5;
+                    }
+                    else if (m.MilestoneCode == "STAGE2_TURNITIN" || m.MilestoneCode == "STAGE2_FINAL" || m.Title.Contains("Step 1") || m.Title.Contains("Step 2") || m.Title.Contains("Step 3") || m.Title.Contains("Step 4"))
+                    {
+                        m.DueDate = endOfDay1to4;
+                    }
+                    count++;
+                }
+
+                if (count > 0)
+                {
+                    await _context.SaveChangesAsync();
+                    TempData["Success"] = $"Successfully updated the Final Evaluation deadlines for {count} milestone(s) in {sessionFilter}.";
+                }
+                else
+                {
+                    TempData["Info"] = $"No Final Evaluation steps found in {sessionFilter} to update.";
+                }
+
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+            catch (Exception)
+            {
+                TempData["Error"] = "An unexpected error occurred while processing your request. Please check the logs.";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+        }
+
+        
+        // ============================================================
+        // ADMIN - INDEPENDENT GLOBAL SETTINGS SAVE ACTIONS
+        // ============================================================
+
+        // Shared helper: update ONE FYPSetting key.
+        // The caller is responsible for SaveChangesAsync().
+        private async Task SetGlobalSettingAsync(
+            string key,
+            string value,
+            string label)
+        {
+            var setting = await _context.FYPSettings
+                .FirstOrDefaultAsync(s => s.Key == key);
+
+            if (setting != null)
+            {
+                setting.Value = value;
+                setting.UpdatedDate = DateTime.Now;
+            }
+            else
+            {
+                _context.FYPSettings.Add(
+                    new FYPTracker.Models.FYPSetting
+                    {
+                        Key = key,
+                        Value = value,
+                        Label = label,
+                        UpdatedDate = DateTime.Now
+                    });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateIafDefenseSettings(
+            int durationMinutes,
+            string? supervisorRequired,
+            string? workingHoursStart,
+            string? workingHoursEnd,
+            int? vivaDurationMinutes,
+            int? meetingDurationMinutes,
+            string? sessionFilter)
+        {
+            if (durationMinutes < 15 || durationMinutes > 180)
+            {
+                TempData["Error"] =
+                    "Defense duration must be between 15 and 180 minutes.";
+
+                return RedirectToAction(
+                    nameof(Settings), new { sessionFilter });
+            }
+
+            if (!bool.TryParse(supervisorRequired, out bool isRequired))
+            {
+                TempData["Error"] =
+                    "Please select the Supervisor attendance policy.";
+
+                return RedirectToAction(
+                    nameof(Settings), new { sessionFilter });
+            }
+
+            if (!string.IsNullOrWhiteSpace(workingHoursStart) || !string.IsNullOrWhiteSpace(workingHoursEnd))
+            {
+                if (string.IsNullOrWhiteSpace(workingHoursStart) || string.IsNullOrWhiteSpace(workingHoursEnd))
+                {
+                    TempData["Error"] = "Both Lecturer Working Hours Start and End must be provided.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                if (!TimeSpan.TryParse(workingHoursStart, out var wStart) ||
+                    !TimeSpan.TryParse(workingHoursEnd, out var wEnd) ||
+                    wStart >= wEnd)
+                {
+                    TempData["Error"] = "Lecturer Working Hours Start must be earlier than End time.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                await SetGlobalSettingAsync(
+                    "LecturerWorkingHoursStart",
+                    wStart.ToString(@"hh\:mm"),
+                    "Lecturer Working Hours Start");
+
+                await SetGlobalSettingAsync(
+                    "LecturerWorkingHoursEnd",
+                    wEnd.ToString(@"hh\:mm"),
+                    "Lecturer Working Hours End");
+            }
+
+            if (vivaDurationMinutes.HasValue)
+            {
+                if (vivaDurationMinutes.Value < 15 || vivaDurationMinutes.Value > 180)
+                {
+                    TempData["Error"] = "Viva duration must be between 15 and 180 minutes.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                await SetGlobalSettingAsync(
+                    "VivaDurationMinutes",
+                    vivaDurationMinutes.Value.ToString(),
+                    "Final Viva Duration (Minutes)");
+            }
+
+            if (meetingDurationMinutes.HasValue)
+            {
+                if (meetingDurationMinutes.Value < 15 || meetingDurationMinutes.Value > 180)
+                {
+                    TempData["Error"] = "Supervisor meeting duration must be between 15 and 180 minutes.";
+                    return RedirectToAction(nameof(Settings), new { sessionFilter });
+                }
+
+                await SetGlobalSettingAsync(
+                    "MeetingDurationMinutes",
+                    meetingDurationMinutes.Value.ToString(),
+                    "Supervisor Meeting Duration (Minutes)");
+            }
+
+            await SetGlobalSettingAsync(
+                "IAFDefenseDurationMinutes",
+                durationMinutes.ToString(),
+                "IAF Defense Duration");
+
+            await SetGlobalSettingAsync(
+                "IAFDefenseSupervisorRequired",
+                isRequired ? "true" : "false",
+                "Original Supervisor Attendance Required");
+
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] =
+                "IAF Defense and Lecturer scheduling policies saved successfully.";
+
+            return RedirectToAction(
+                nameof(Settings), new { sessionFilter });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateMeetingDurationSetting(
+            int? meetingDurationMinutes,
+            string? sessionFilter)
+        {
+            if (!meetingDurationMinutes.HasValue)
+            {
+                TempData["Error"] = "Supervisor meeting duration is required and must be a valid positive integer.";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+
+            if (meetingDurationMinutes.Value < 15 || meetingDurationMinutes.Value > 180)
+            {
+                TempData["Error"] = "Supervisor meeting duration must be between 15 and 180 minutes.";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+
+            await SetGlobalSettingAsync(
+                "MeetingDurationMinutes",
+                meetingDurationMinutes.Value.ToString(),
+                "Supervisor Meeting Duration (Minutes)");
+
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Supervisor meeting duration setting saved successfully.";
+            return RedirectToAction(nameof(Settings), new { sessionFilter });
+        }
+
+        // ============================================================
+        // POST - SAVE FINAL VIVA SETTINGS ONLY
+        // ============================================================
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateFinalVivaSettings(
+            int? vivaDurationMinutes,
+            string? sessionFilter)
+        {
+            if (!vivaDurationMinutes.HasValue ||
+                vivaDurationMinutes.Value < 15 ||
+                vivaDurationMinutes.Value > 180)
+            {
+                TempData["Error"] = "Final Viva duration must be between 15 and 180 minutes.";
+                return RedirectToAction(nameof(Settings), new { sessionFilter });
+            }
+
+            try
+            {
+                await SetGlobalSettingAsync(
+                    "VivaDurationMinutes",
+                    vivaDurationMinutes.Value.ToString(),
+                    "Final Viva Duration (Minutes)");
+
+                await _context.SaveChangesAsync();
+
+                TempData["Success"] = "Final Viva settings saved successfully.";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+                TempData["Error"] = "Unable to save Final Viva settings.";
+            }
+
+            return RedirectToAction(nameof(Settings), new { sessionFilter });
+        }
+
+        // ============================================================
+        // POST - SAVE DPP SETTINGS ONLY
+        // ============================================================
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateDppSettings(
+            string? dppDeadline,
+            string? sessionFilter)
+        {
+            try
+            {
+                string value = (dppDeadline ?? "").Trim();
+
+                // Empty is permitted to explicitly clear the
+                // deadline. The UI asks for confirmation.
+                if (!string.IsNullOrEmpty(value) &&
+                    !DateTime.TryParseExact(
+                        value,
+                        "yyyy-MM-dd",
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out _))
+                {
+                    TempData["FYPSettingError"] =
+                        "Invalid DPP deadline. Please select a valid date.";
+
+                    return RedirectToAction(
+                        nameof(Settings),
+                        new { sessionFilter });
+                }
+
+                await SetGlobalSettingAsync(
+                    "DPPDeadline",
+                    value,
+                    "DPP Submission Deadline");
+
+                await _context.SaveChangesAsync();
+
+                TempData["FYPSettingSuccess"] =
+                    "DPP Settings saved successfully.";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+
+                TempData["FYPSettingError"] =
+                    "Unable to save DPP Settings.";
+            }
+
+            return RedirectToAction(
+                nameof(Settings),
+                new { sessionFilter });
+        }
+
+        // ============================================================
+        // POST - SAVE EXHIBITION SETTINGS ONLY
+        // ============================================================
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateExhibitionSettings(
+            string? exhibitionDate,
+            string? exhibitionTimeStart,
+            string? exhibitionTimeEnd,
+            string? sessionFilter)
+        {
+            try
+            {
+                string dateValue = (exhibitionDate ?? "").Trim();
+                string startValue = (exhibitionTimeStart ?? "").Trim();
+                string endValue = (exhibitionTimeEnd ?? "").Trim();
+
+                if (!string.IsNullOrEmpty(dateValue) &&
+                    !DateTime.TryParseExact(
+                        dateValue,
+                        "yyyy-MM-dd",
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out _))
+                {
+                    TempData["FYPSettingError"] =
+                        "Invalid Exhibition Date.";
+
+                    return RedirectToAction(
+                        nameof(Settings),
+                        new { sessionFilter });
+                }
+
+                string[] timeFormats =
+                {
+                    "HH:mm",
+                    "HH:mm:ss"
+                };
+
+                if (!string.IsNullOrEmpty(startValue) &&
+                    !DateTime.TryParseExact(
+                        startValue,
+                        timeFormats,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out _))
+                {
+                    TempData["FYPSettingError"] =
+                        "Invalid Exhibition Start Time.";
+
+                    return RedirectToAction(
+                        nameof(Settings),
+                        new { sessionFilter });
+                }
+
+                if (!string.IsNullOrEmpty(endValue) &&
+                    !DateTime.TryParseExact(
+                        endValue,
+                        timeFormats,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None,
+                        out _))
+                {
+                    TempData["FYPSettingError"] =
+                        "Invalid Exhibition End Time.";
+
+                    return RedirectToAction(
+                        nameof(Settings),
+                        new { sessionFilter });
+                }
+
+                await SetGlobalSettingAsync(
+                    "ExhibitionDate",
+                    dateValue,
+                    "FYP Exhibition Date");
+
+                await SetGlobalSettingAsync(
+                    "ExhibitionTimeStart",
+                    startValue,
+                    "Exhibition Start Time");
+
+                await SetGlobalSettingAsync(
+                    "ExhibitionTimeEnd",
+                    endValue,
+                    "Exhibition End Time");
+
+                await _context.SaveChangesAsync();
+
+                TempData["FYPSettingSuccess"] =
+                    "Exhibition Settings saved successfully.";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+
+                TempData["FYPSettingError"] =
+                    "Unable to save Exhibition Settings.";
+            }
+
+            return RedirectToAction(
+                nameof(Settings),
+                new { sessionFilter });
+        }
+
+        // ============================================================
+        // POST - SAVE WORKFLOW POLICY ONLY
+        // ============================================================
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateWorkflowPolicySettings(
+            int? supervisorRequestTimeoutDays,
+            string? sessionFilter)
+        {
+            if (!supervisorRequestTimeoutDays.HasValue ||
+                supervisorRequestTimeoutDays.Value < 1 ||
+                supervisorRequestTimeoutDays.Value > 30)
+            {
+                TempData["FYPSettingError"] =
+                    "Supervisor Request Timeout must be between 1 and 30 days.";
+
+                return RedirectToAction(
+                    nameof(Settings),
+                    new { sessionFilter });
+            }
+
+            try
+            {
+                await SetGlobalSettingAsync(
+                    "SupervisorRequestTimeoutDays",
+                    supervisorRequestTimeoutDays.Value.ToString(),
+                    "Supervisor Request Timeout (Days)");
+
+                await _context.SaveChangesAsync();
+
+                TempData["FYPSettingSuccess"] =
+                    "Workflow Policy saved successfully.";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+
+                TempData["FYPSettingError"] =
+                    "Unable to save Workflow Policy.";
+            }
+
+            return RedirectToAction(
+                nameof(Settings),
+                new { sessionFilter });
+        }
+
+        public async Task<IActionResult> ApprovedIafList()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+
+            var approvedList = await _context.FYPMilestones
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Supervisor)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.AssignedExaminers)
+                        .ThenInclude(e => e.Examiner)
+                .Include(m => m.SubmissionFiles)
+                .Where(m => (m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation")) && (m.Status == "PendingPanelReview" || m.Status == "AdminApproved" || m.Status == "DefenseScheduled" || m.Status == "DefenseRequired" || m.Status == "PanelRevisionRequired" || m.Status == "ChangeOfTopicRequired"))
+                .ToListAsync();
+
+            return View(approvedList);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ViewDigitalForm(int milestoneId, int attemptNumber)
+        {
+            var user = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+
+            if (user == null) return RedirectToAction("Login", "User");
+            if (attemptNumber < 1) return NotFound();
+
+            var milestone = await _context.FYPMilestones
+                .AsNoTracking()
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Supervisor)
+                .Include(m => m.SubmissionFiles)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestone == null) return NotFound();
+
+            string raw = milestone.Remarks ?? "";
+            int jsonIndex = raw.IndexOf("JSON: ", StringComparison.Ordinal);
+            string parsedJson = jsonIndex >= 0 ? raw.Substring(jsonIndex + "JSON: ".Length) : raw;
+            var history = IafAttemptHistory.ParseOrMigrate(parsedJson);
+
+            if (!history.Attempts.Any(a => a.AttemptNumber == attemptNumber))
+                return NotFound();
+
+            ViewData["AttemptNumber"] = attemptNumber;
+            ViewBag.CurrentUser = user;
+
+            return View("~/Views/Supervisor/ViewDigitalForm.cshtml", milestone);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DownloadFile(int fileId)
+        {
+            var user = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null) return RedirectToAction("Login", "User");
+
+            var file = await _context.FYPSubmissionFiles.FindAsync(fileId);
+            if (file == null || string.IsNullOrEmpty(file.FilePath)) return NotFound();
+
+            var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (string.IsNullOrEmpty(ext)) ext = System.IO.Path.GetExtension(file.FilePath).ToLowerInvariant();
+
+            string mimeType = "application/octet-stream";
+            if (ext == ".pdf") mimeType = "application/pdf";
+            else if (ext == ".docx") mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            else if (ext == ".doc") mimeType = "application/msword";
+            else if (ext == ".png") mimeType = "image/png";
+            else if (ext == ".jpg" || ext == ".jpeg") mimeType = "image/jpeg";
+
+            var physicalPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot", file.FilePath.TrimStart('/', '\\'));
+            if (!System.IO.File.Exists(physicalPath))
+            {
+                if ((file.FileName != null && file.FileName.StartsWith("Signed IAF")) || (file.Remarks != null && file.Remarks.Contains("IAF Rendering Engine")))
+                {
+                    try
+                    {
+                        var milestone = await _context.FYPMilestones
+                            .Include(m => m.Project)
+                                .ThenInclude(p => p.Student)
+                            .Include(m => m.SubmissionFiles)
+                            .FirstOrDefaultAsync(m => m.Id == file.MilestoneId);
+
+                        if (milestone != null && !string.IsNullOrEmpty(milestone.Remarks))
+                        {
+                            string parsedJson = milestone.Remarks;
+                            if (milestone.Remarks.Contains("JSON: ")) parsedJson = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+                            var history = IafAttemptHistory.ParseOrMigrate(parsedJson);
+                            var attempt = history.Attempts.FirstOrDefault(a => a.AttemptNumber == file.AttemptNumber);
+
+                            if (attempt != null && (!string.IsNullOrEmpty(attempt.SupervisorSignature) || attempt.Status == "Approved" || attempt.Status == "AdminApproved" || attempt.Status == "Rejected" || attempt.Status == "ChangeOfTopicRequired" || attempt.Status == "DefenseRequired" || attempt.Status == "PanelRevisionRequired"))
+                            {
+                                var webRoot = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "wwwroot");
+                                var adminUser = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserRoles.Any(r => r.Role.Name == "Admin"));
+                                string adminName = adminUser?.FullName ?? "Admin";
+
+                                var pdfBytes = IafPdfGenerator.GenerateIafPdf(milestone, attempt, milestone.Project?.Student, webRoot, adminName);
+                                string folderPath = Path.Combine(webRoot, "uploads", "submissions");
+                                if (!Directory.Exists(folderPath)) Directory.CreateDirectory(folderPath);
+                                
+                                string uniqueFileName = $"IAF_Snapshot_Attempt_{attempt.AttemptNumber}_{Guid.NewGuid().ToString().Substring(0, 8)}.pdf";
+                                physicalPath = Path.Combine(folderPath, uniqueFileName);
+                                await System.IO.File.WriteAllBytesAsync(physicalPath, pdfBytes);
+
+                                file.FilePath = $"/uploads/submissions/{uniqueFileName}";
+                                file.FileSize = pdfBytes.Length;
+                                await _context.SaveChangesAsync();
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (!System.IO.File.Exists(physicalPath)) return NotFound("File not found on disk.");
+            }
+
+            Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{file.FileName}{(string.IsNullOrEmpty(System.IO.Path.GetExtension(file.FileName)) ? ext : "")}\"");
+            return PhysicalFile(physicalPath, mimeType);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AdminFinalApproveIaf(int milestoneId)
+        {
+            var milestone = await _context.FYPMilestones.FindAsync(milestoneId);
+            if (milestone != null)
+            {
+                if (milestone.Status != "PendingPanelReview")
+                {
+                    TempData["Error"] = "Only IAFs in PendingPanelReview status can be given final approval.";
+                    return RedirectToAction(nameof(ApprovedIafList));
+                }
+                
+                milestone.Status = "AdminApproved";
+                
+                if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
+                {
+                    var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                    var formInfo = parts[0].Trim();
+                    try
+                    {
+                        var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parts[1]);
+                        var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
+                        if (currentAttempt != null)
+                        {
+                            currentAttempt.Status = "AdminApproved";
+                            milestone.Remarks = $"{formInfo} JSON: {System.Text.Json.JsonSerializer.Serialize(history)}";
+                        }
+                    }
+                    catch {}
+                }
+                
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Successfully granted final approval for the IAF.";
+            }
+            return RedirectToAction(nameof(ApprovedIafList));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AdminRejectIaf(int milestoneId, string? panelComments, bool requireDefense = false)
+        {
+            var milestone = await _context.FYPMilestones.Include(m => m.Project).ThenInclude(p => p.Student).FirstOrDefaultAsync(m => m.Id == milestoneId);
+            if (milestone != null)
+            {
+                if (milestone.Status != "PendingPanelReview")
+                {
+                    TempData["Error"] = "Only IAFs in PendingPanelReview status can be rejected by the panel.";
+                    return RedirectToAction(nameof(ApprovedIafList));
+                }
+
+                string newStatus = requireDefense ? "DefenseRequired" : "PanelRevisionRequired";
+                milestone.Status = newStatus;
+
+                if (!string.IsNullOrEmpty(milestone.Remarks) && milestone.Remarks.Contains("JSON: "))
+                {
+                    var parts = milestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                    var formInfo = parts[0].Trim();
+                    try
+                    {
+                        var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parts[1]);
+                        var currentAttempt = history.Attempts.Find(a => a.AttemptNumber == history.CurrentAttempt);
+                        if (currentAttempt != null)
+                        {
+                            currentAttempt.Status = newStatus;
+                            currentAttempt.PanelComments = panelComments;
+                            milestone.Remarks = $"{formInfo} JSON: {System.Text.Json.JsonSerializer.Serialize(history)}";
+                        }
+                    }
+                    catch {}
+                }
+
+                if (requireDefense)
+                {
+                    _context.FYPNotifications.Add(new FYPNotification
+                    {
+                        RecipientId = milestone.Project.StudentId,
+                        Type = "DefenseRequired",
+                        Title = "IAF Defense Required",
+                        Message = "The review panel has rejected your Initial Project Allocation Form and mandated a defense session. Administration will schedule your defense.",
+                        IsRead = false,
+                        CreatedDate = DateTime.Now
+                    });
+                    TempData["Success"] = "IAF rejected. Defense session is now required and milestone is ready for scheduling.";
+                }
+                else
+                {
+                    _context.FYPNotifications.Add(new FYPNotification
+                    {
+                        RecipientId = milestone.Project.StudentId,
+                        Type = "RevisionRequest",
+                        Title = "IAF Revision Required",
+                        Message = "The panel has requested revisions for your Initial Allocation Form. Please review the comments and resubmit.",
+                        IsRead = false,
+                        CreatedDate = DateTime.Now
+                    });
+                    TempData["Success"] = "IAF rejected. Revisions have been requested from the student.";
+                }
+
+                await _context.SaveChangesAsync();
+            }
+            return RedirectToAction(nameof(ApprovedIafList));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AdminRejectIafForDefense(int milestoneId, string? panelComments)
+        {
+            return await AdminRejectIaf(milestoneId, panelComments, requireDefense: true);
+        }
+
+        private async Task<bool> IsIAFDefenseTableAvailableAsync()
+        {
+            try
+            {
+                var conn = _context.Database.GetDbConnection();
+                if (conn.State != System.Data.ConnectionState.Open)
+                {
+                    await conn.OpenAsync();
+                }
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT COUNT(1) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'IAFDefenseBooking';";
+                var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                return count > 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ManageDefenses(string sessionFilter = null)
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+
+            var sessions = await _context.AcademicSessions.OrderByDescending(s => s.StartDate).ToListAsync();
+            ViewBag.AcademicSessions = sessions;
+            
+            var currentSessionObj = sessions.FirstOrDefault(s => s.IsCurrent == true);
+            ViewBag.CurrentSession = sessionFilter ?? currentSessionObj?.Name ?? "2024/2025 Semester 1";
+            string activeSessionFilter = ViewBag.CurrentSession as string;
+
+            var query = _context.FYPMilestones
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.Supervisor)
+                .Include(m => m.Project)
+                    .ThenInclude(p => p.AssignedExaminers)
+                        .ThenInclude(e => e.Examiner)
+                .Where(m => m.Title.Contains("IAF") || m.Title.Contains("Initial Project Allocation"));
+
+            if (!string.IsNullOrEmpty(activeSessionFilter))
+            {
+                query = query.Where(m => m.Project.AcademicSession == activeSessionFilter);
+            }
+
+            // Only include IAFs that require defense, are scheduled, or have evidence of a completed defense (DefenseDate != null)
+            var defenseMilestones = await query
+                .Where(m => m.Status == "DefenseRequired" || 
+                            m.Status == "DefenseScheduled" || 
+                            ((m.Status == "AdminApproved" || m.Status == "ChangeOfTopicRequired" || m.Status == "PanelRevisionRequired") && m.DefenseDate != null && m.Remarks != null && m.Remarks.Contains("JSON: ")))
+                .ToListAsync();
+
+            bool isTableAvailable = await IsIAFDefenseTableAvailableAsync();
+            ViewBag.IsDefenseSchemaAvailable = isTableAvailable;
+            var defenseBookings = new Dictionary<int, IAFDefenseBooking>();
+
+            if (isTableAvailable && defenseMilestones.Any())
+            {
+                var milestoneIds = defenseMilestones.Select(m => m.Id).ToList();
+                var bookings = await _context.IAFDefenseBookings
+                    .AsNoTracking()
+                    .Include(b => b.Examiner)
+                    .Include(b => b.OriginalSupervisor)
+                    .Where(b => milestoneIds.Contains(b.MilestoneId))
+                    .ToListAsync();
+
+                foreach (var b in bookings.OrderBy(x => x.AttemptNumber))
+                {
+                    defenseBookings[b.MilestoneId] = b;
+                }
+            }
+
+            ViewBag.DefenseBookings = defenseBookings;
+            return View(defenseMilestones);
+        }
+
+        private async Task<int?> ResolveDefenseAcademicSessionIdAsync(
+            FYPMilestone milestone)
+        {
+            var project = milestone.Project;
+
+            if (project == null)
+                return null;
+
+            string? sessionName = project.AcademicSession;
+
+            // Fallback for legacy projects without a session value.
+            if (string.IsNullOrWhiteSpace(sessionName))
+            {
+                sessionName = await _context.ApplicationUsers
+                    .AsNoTracking()
+                    .Where(u => u.Id == project.StudentId)
+                    .Select(u => u.AcademicSession)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (string.IsNullOrWhiteSpace(sessionName))
+                return null;
+
+            sessionName = sessionName.Trim();
+
+            // AcademicSession.Name maps to SQL SessionName.
+            return await _context.AcademicSessions
+                .AsNoTracking()
+                .Where(s => s.Name == sessionName)
+                .Select(s => (int?)s.Id)
+                .FirstOrDefaultAsync();
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAvailableDefenseSlots(
+            [FromServices] FYPTracker.Services.ILecturerAvailabilityService availabilityService,
+            int milestoneId,
+            int examinerId,
+            DateTime defenseDate)
+        {
+            // 0. Verify IAF Defense Booking schema is available in target database
+            if (!await IsIAFDefenseTableAvailableAsync())
+            {
+                return Json(new
+                {
+                    success = false,
+                    code = "SchemaNotMigrated",
+                    configurationRequired = true,
+                    message = "The IAF Defense Booking schema (migration 20261011194333_AddIAFDefenseBookingAndAudit) has not been applied to this database. Defense slots cannot be queried until migration is executed.",
+                    slots = Array.Empty<object>()
+                });
+            }
+
+            // 1. Validate IAF milestone and project
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestone == null || milestone.Project == null)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = "Invalid IAF milestone or project."
+                });
+            }
+
+            // 2. Validate independent Examiner
+            var examiner = await _context.ApplicationUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u =>
+                    u.Id == examinerId &&
+                    !u.IsResign &&
+                    u.UserRoles.Any(r => r.Role.Name == "Examiner"));
+
+            if (examiner == null)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = "Invalid or inactive Examiner."
+                });
+            }
+
+            // 3. Original Supervisor cannot be independent Examiner
+            int? supervisorId = milestone.Project.SupervisorId;
+
+            if (supervisorId.HasValue &&
+                supervisorId.Value == examinerId)
+            {
+                return Json(new
+                {
+                    success = false,
+                    message = "Original Supervisor cannot be the independent Examiner."
+                });
+            }
+
+            // 4. Read IAF Defense Duration from FYPSetting
+            var durationSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s =>
+                    s.Key == "IAFDefenseDurationMinutes");
+
+            if (!int.TryParse(
+                    durationSetting?.Value,
+                    out int durationMinutes) ||
+                durationMinutes < 15 ||
+                durationMinutes > 180)
+            {
+                return Json(new
+                {
+                    success = false,
+                    configurationRequired = true,
+                    message = "Please configure IAF Defense Duration in Admin Settings."
+                });
+            }
+
+            // 5. Read Original Supervisor Attendance Policy
+            var supervisorSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s =>
+                    s.Key == "IAFDefenseSupervisorRequired");
+
+            if (!bool.TryParse(
+                    supervisorSetting?.Value,
+                    out bool supervisorRequired))
+            {
+                return Json(new
+                {
+                    success = false,
+                    configurationRequired = true,
+                    code = "AcademicConfigurationRequired",
+                    message = "Please configure Supervisor Attendance Policy in Admin Settings."
+                });
+            }
+
+            // 5.1. Strictly Require Configured Lecturer Working Hours (No automatic 09:00 - 17:00 fallback)
+            var startSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursStart");
+            var endSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "LecturerWorkingHoursEnd");
+
+            if (startSetting == null || string.IsNullOrWhiteSpace(startSetting.Value) ||
+                !TimeSpan.TryParse(startSetting.Value, out var parsedWorkStart) ||
+                endSetting == null || string.IsNullOrWhiteSpace(endSetting.Value) ||
+                !TimeSpan.TryParse(endSetting.Value, out var parsedWorkEnd) ||
+                parsedWorkStart >= parsedWorkEnd)
+            {
+                return Json(new
+                {
+                    success = false,
+                    configurationRequired = true,
+                    code = "AcademicConfigurationRequired",
+                    message = "Lecturer Working Hours (Start & End Time) are not configured or invalid in Admin Settings. Both values are required.",
+                    slots = Array.Empty<object>()
+                });
+            }
+
+            // 6. Independent Examiner is always mandatory
+            var lecturerIds = new List<int> { examinerId };
+
+            // Include Original Supervisor only when required
+            if (supervisorRequired)
+            {
+                if (!supervisorId.HasValue)
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = "Original Supervisor is not assigned."
+                    });
+                }
+
+                lecturerIds.Add(supervisorId.Value);
+            }
+
+            // 7. Calculate actual mutual availability
+            // Resolve the session belonging to this IAF project.
+            int? academicSessionId =
+                await ResolveDefenseAcademicSessionIdAsync(milestone);
+
+            if (!academicSessionId.HasValue)
+            {
+                return Json(new
+                {
+                    success = false,
+                    code = "AcademicConfigurationRequired",
+                    message = "The project's Academic Session is not configured or could not be resolved from current records.",
+                    slots = Array.Empty<object>()
+                });
+            }
+
+            if (academicSessionId.HasValue)
+            {
+                // Diagnostic checks for lecturer prerequisites
+                foreach (var lecturerId in lecturerIds.Distinct())
+                {
+                    bool hasTimetable = await _context.SupervisorTimetableEntries
+                        .AsNoTracking()
+                        .AnyAsync(t => t.SupervisorId == lecturerId && t.AcademicSessionId == academicSessionId.Value);
+
+                    if (!hasTimetable)
+                    {
+                        var userObj = await _context.ApplicationUsers.AsNoTracking().FirstOrDefaultAsync(u => u.Id == lecturerId);
+                        string lecturerRole = (lecturerId == examinerId) ? "Independent Examiner" : "Original Supervisor";
+                        return Json(new
+                        {
+                            success = false,
+                            code = "TimetableNotConfigured",
+                            message = $"{lecturerRole} ({userObj?.FullName ?? lecturerId.ToString()}) has not configured a teaching timetable for Academic Session {milestone.Project.AcademicSession}. Genuine availability cannot be determined.",
+                            slots = Array.Empty<object>()
+                        });
+                    }
+                }
+
+                // 7.1. Diagnostic check: verify if any participating lecturer has an indeterminate meeting on defenseDate
+                var meetingsOnDate = await _context.MeetingBookings
+                    .AsNoTracking()
+                    .Where(m => lecturerIds.Contains(m.SupervisorId) && 
+                                m.MeetingDate == defenseDate.Date && 
+                                (m.Status == "Approved" || m.Status == "Pending"))
+                    .ToListAsync();
+
+                var indeterminateMeeting = meetingsOnDate.FirstOrDefault(m => 
+                    (!m.StartDateTime.HasValue || !m.EndDateTime.HasValue) &&
+                    (string.IsNullOrWhiteSpace(m.MeetingTime) || 
+                     (!TimeSpan.TryParse(m.MeetingTime, out _) && !DateTime.TryParse(m.MeetingTime, out _))));
+
+                if (indeterminateMeeting != null)
+                {
+                    var lecturer = await _context.ApplicationUsers.AsNoTracking().FirstOrDefaultAsync(u => u.Id == indeterminateMeeting.SupervisorId);
+                    string lecturerRole = (indeterminateMeeting.SupervisorId == examinerId) ? "Independent Examiner" : "Original Supervisor";
+                    return Json(new
+                    {
+                        success = false,
+                        code = "ConflictOrUnavailable",
+                        message = $"{lecturerRole} ({lecturer?.FullName ?? indeterminateMeeting.SupervisorId.ToString()}) has a scheduled meeting (Booking #{indeterminateMeeting.Id}) on {defenseDate:yyyy-MM-dd} with an unresolved duration/time. Slots cannot be safely determined.",
+                        slots = Array.Empty<object>()
+                    });
+                }
+
+                // 7.2. Diagnostic check: verify Final Viva presentations and require authoritative duration & participant info
+                var vivasOnDate = await _context.FYPProjects
+                    .AsNoTracking()
+                    .Include(p => p.AssignedExaminers)
+                    .Where(p => p.VivaDate.HasValue && p.VivaDate.Value.Date == defenseDate.Date &&
+                                (lecturerIds.Contains(p.SupervisorId ?? -1) || 
+                                 (p.AssignedExaminers != null && p.AssignedExaminers.Any(ae => lecturerIds.Contains(ae.ExaminerId)))))
+                    .ToListAsync();
+
+                if (vivasOnDate.Any())
+                {
+                    var vivaDurationSetting = await _context.FYPSettings
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(s => s.Key == "VivaDurationMinutes");
+
+                    if (!int.TryParse(vivaDurationSetting?.Value, out int parsedVivaDur) || parsedVivaDur < 15 || parsedVivaDur > 180)
+                    {
+                        return Json(new
+                        {
+                            success = false,
+                            configurationRequired = true,
+                            code = "AcademicConfigurationRequired",
+                            message = "A participating lecturer has a Final Viva presentation scheduled on this date, but Viva Duration is not configured in Admin Settings. Defense slots cannot be safely generated.",
+                            slots = Array.Empty<object>()
+                        });
+                    }
+
+                    var incompleteViva = vivasOnDate.FirstOrDefault(p => 
+                        p.SupervisorId == null || p.AssignedExaminers == null || !p.AssignedExaminers.Any());
+                    if (incompleteViva != null)
+                    {
+                        return Json(new
+                        {
+                            success = false,
+                            code = "ConflictOrUnavailable",
+                            message = $"Project '{incompleteViva.Title}' has a Viva scheduled on {defenseDate:yyyy-MM-dd} with incomplete participant assignments. Defense slots cannot be safely confirmed.",
+                            slots = Array.Empty<object>()
+                        });
+                    }
+                }
+            }
+
+            // Calculate slots
+            List<TimeSpanRange> slots = new();
+            if (academicSessionId.HasValue)
+            {
+                slots = await availabilityService
+                    .GetMutualAvailableSlotsAsync(
+                        lecturerIds.Distinct().ToList(),
+                        defenseDate.Date,
+                        durationMinutes,
+                        academicSessionId.Value);
+            }
+
+
+            // 8. Format response for existing JavaScript UI
+            var formattedSlots = slots.Select(s =>
+            {
+                var start = DateTime.Today.Add(s.StartTime);
+                var end = DateTime.Today.Add(s.EndTime);
+
+                return new
+                {
+                    startTime = start.ToString("HH:mm"),
+                    endTime = end.ToString("HH:mm"),
+                    display = $"{start:hh:mm tt} - {end:hh:mm tt}"
+                };
+            }).ToList();
+
+            string noSlotsMessage = "No mutual free time slots found after excluding teaching commitments, meetings, date overrides, and defenses.";
+
+            return Json(new
+            {
+                success = formattedSlots.Any(),
+                code = formattedSlots.Any() ? "Available" : "ConflictOrUnavailable",
+                message = formattedSlots.Any() ? "Slots retrieved successfully." : noSlotsMessage,
+                durationMinutes,
+                supervisorRequired,
+                slots = formattedSlots
+            });
+        }
+
+        public async Task<IActionResult> SmartScheduleDefense(
+            [FromServices] FYPTracker.Services.Defense.IIAFDefenseBookingService defenseBookingService,
+            int milestoneId)
+        {
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project)
+                .ThenInclude(p => p.Student)
+                .Include(m => m.Project)
+                .ThenInclude(p => p.Supervisor)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestone == null) return NotFound();
+
+            var examiners = await _context.ApplicationUsers
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Examiner") && !u.IsResign)
+                .ToListAsync();
+            
+            var supervisorId = milestone.Project?.SupervisorId ?? 0;
+            ViewBag.EligibleExaminers = examiners.Where(e => e.Id != supervisorId).OrderBy(e => e.FullName).ToList();
+
+            var durationSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "IAFDefenseDurationMinutes");
+            int.TryParse(durationSetting?.Value, out int durationMinutes);
+            ViewBag.DefenseDurationMinutes = durationMinutes > 0 ? durationMinutes : 45;
+
+            var supervisorSetting = await _context.FYPSettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == "IAFDefenseSupervisorRequired");
+            bool.TryParse(supervisorSetting?.Value, out bool supervisorRequired);
+            ViewBag.SupervisorRequired = supervisorRequired;
+
+            // Load existing booking if schema is available
+            if (await IsIAFDefenseTableAvailableAsync())
+            {
+                ViewBag.ExistingBooking = await defenseBookingService.GetActiveBookingAsync(milestoneId);
+            }
+
+            if (IsAlternativeTimeFeatureEnabled())
+            {
+                var attemptRes = IAFDefenseBookingService.ResolveAuthoritativeAttemptNumber(milestone.Remarks);
+                if (attemptRes.Success)
+                {
+                    ViewBag.ActiveAlternativeTimeRequest = await _context.IAFAlternativeTimeRequests
+                        .AsNoTracking()
+                        .Include(r => r.RequestedLecturer)
+                        .Where(r => r.MilestoneId == milestoneId &&
+                                    r.AttemptNumber == attemptRes.AttemptNumber &&
+                                    (r.Status == IAFAlternativeTimeRequest.StatusPending ||
+                                     r.Status == IAFAlternativeTimeRequest.StatusSuggested))
+                        .OrderByDescending(r => r.Id)
+                        .FirstOrDefaultAsync();
+                }
+            }
+
+            return View(milestone);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AdminScheduleDefense(
+            [FromServices] FYPTracker.Services.Defense.IIAFDefenseBookingService defenseBookingService,
+            [FromServices] Microsoft.Extensions.Hosting.IHostEnvironment hostEnv,
+            [FromServices] Microsoft.Extensions.Configuration.IConfiguration config,
+            int milestoneId,
+            int examinerId,
+            DateTime defenseDate,
+            TimeSpan defenseTime,
+            string venue)
+        {
+            // Enforce Administrative Role Authorization
+            if (!User.IsInRole("Admin") && !User.IsInRole("SuperAdmin"))
+            {
+                TempData["Error"] = "Unauthorized: Administrative privileges are required to schedule an IAF Defense session.";
+                return RedirectToAction(nameof(ManageDefenses));
+            }
+
+            // Condition 5, 6 & 7: Re-read actual milestone record from database and validate project, attempt, and status
+            var milestoneCheck = await _context.FYPMilestones
+                .Include(m => m.Project).ThenInclude(p => p.Student)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            if (milestoneCheck == null || milestoneCheck.Project == null || milestoneCheck.Project.Student == null)
+            {
+                TempData["Error"] = $"SAFETY ABORT: Milestone #{milestoneId} does not exist or has no associated project/student.";
+                return RedirectToAction(nameof(ManageDefenses));
+            }
+
+            if (milestoneCheck.Status != "DefenseRequired" && milestoneCheck.Status != "DefenseScheduled")
+            {
+                TempData["Error"] = $"SAFETY ABORT: Milestone status is '{milestoneCheck.Status}'. Expected 'DefenseRequired' or 'DefenseScheduled'.";
+                return RedirectToAction(nameof(ManageDefenses));
+            }
+
+            // Validate IAF Attempt from authoritative remarks history (supports Attempt 1 and Attempt 2)
+            string checkRemarksJson = "";
+            if (!string.IsNullOrEmpty(milestoneCheck.Remarks) && milestoneCheck.Remarks.Contains("JSON: "))
+            {
+                checkRemarksJson = milestoneCheck.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+            }
+            var attemptHistory = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(checkRemarksJson);
+            if (attemptHistory.CurrentAttempt < 1 || attemptHistory.CurrentAttempt > 2)
+            {
+                TempData["Error"] = $"SAFETY ABORT: Current IAF attempt is {attemptHistory.CurrentAttempt}. Defense is only valid for Attempt 1 or Attempt 2.";
+                return RedirectToAction(nameof(ManageDefenses));
+            }
+
+            // Ensure IAF Defense schema exists
+            if (!await IsIAFDefenseTableAvailableAsync())
+            {
+                TempData["Error"] = "SAFETY ABORT: The IAF Defense Booking schema (IAFDefenseBooking) is not available in target database.";
+                return RedirectToAction(nameof(ManageDefenses));
+            }
+
+            var userName = User.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(userName))
+            {
+                TempData["Error"] = "Unable to determine authenticated user identity.";
+                return RedirectToAction(nameof(SmartScheduleDefense), new { milestoneId });
+            }
+
+            var currentUser = await _context.ApplicationUsers
+                .FirstOrDefaultAsync(u => u.UserName == userName || u.Email == userName);
+
+            if (currentUser == null)
+            {
+                TempData["Error"] = "Authenticated user account could not be found in the database.";
+                return RedirectToAction(nameof(SmartScheduleDefense), new { milestoneId });
+            }
+
+            int currentUserId = currentUser.Id;
+
+            var result = await defenseBookingService.ScheduleOrRescheduleDefenseAsync(
+                milestoneId,
+                examinerId,
+                defenseDate,
+                defenseTime,
+                venue,
+                currentUserId);
+
+            if (!result.Success)
+            {
+                TempData["Error"] = $"Failed to schedule defense: {result.ErrorMessage}";
+                return RedirectToAction(nameof(SmartScheduleDefense), new { milestoneId });
+            }
+
+            var milestone = await _context.FYPMilestones
+                .Include(m => m.Project).ThenInclude(p => p.Student)
+                .Include(m => m.Project).ThenInclude(p => p.Supervisor)
+                .FirstOrDefaultAsync(m => m.Id == milestoneId);
+
+            var examiner = await _context.ApplicationUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == examinerId);
+
+            var student = milestone?.Project?.Student;
+            var supervisor = milestone?.Project?.Supervisor;
+            var projectTitle = milestone?.Project?.Title ?? "N/A";
+            var projectSession = milestone?.Project?.AcademicSession;
+
+            var formattedDate = defenseDate.ToString("dd MMM yyyy (dddd)");
+            var formattedStartTime = new DateTime(defenseTime.Ticks).ToString("hh:mm tt");
+            int durationMinutes = result.Booking?.DurationMinutes ?? 45;
+            var formattedEndTime = new DateTime(defenseTime.Add(TimeSpan.FromMinutes(durationMinutes)).Ticks).ToString("hh:mm tt");
+
+            // ── Multi-party Notification Pipeline ───────────────────────────
+            // 1. Check supervisor notification policy
+            bool isSupervisorRequired = result.Booking?.IsSupervisorRequired ?? false;
+
+            var inAppNotifications = new List<FYPNotification>();
+            FYPNotification? studentNotification = null;
+            FYPNotification? examinerNotification = null;
+            FYPNotification? supervisorNotification = null;
+
+            if (student != null)
+            {
+                studentNotification = new FYPNotification
+                {
+                    RecipientId = student.Id,
+                    Type = "IAFDefenseScheduled",
+                    Title = "IAF Defense Scheduled",
+                    Message = $"Your Initial Project Allocation Form (IAF) requires a mandatory Defense Session.\nProject: {projectTitle}\nDate: {formattedDate}\nTime: {formattedStartTime} - {formattedEndTime}\nVenue: {venue}\nExaminer: {examiner?.FullName ?? "Assigned Independent Examiner"}",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                };
+                inAppNotifications.Add(studentNotification);
+            }
+
+            if (examiner != null)
+            {
+                examinerNotification = new FYPNotification
+                {
+                    RecipientId = examiner.Id,
+                    Type = "IAFDefenseAssignment",
+                    Title = "Assigned as Independent Examiner for IAF Defense",
+                    Message = $"You have been assigned as the Independent Examiner for an IAF Defense session.\nStudent: {student?.FullName ?? "Student"} ({student?.CoventryId ?? student?.EmployeeId ?? "N/A"})\nProject: {projectTitle}\nDate: {formattedDate}\nTime: {formattedStartTime} - {formattedEndTime}\nVenue: {venue}",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                };
+                inAppNotifications.Add(examinerNotification);
+            }
+
+            // Only notify supervisor if supervisor attendance/notification is required by policy
+            if (isSupervisorRequired && supervisor != null)
+            {
+                supervisorNotification = new FYPNotification
+                {
+                    RecipientId = supervisor.Id,
+                    Type = "IAFDefenseScheduled",
+                    Title = "Student IAF Defense Session Scheduled",
+                    Message = $"Your student {student?.FullName ?? "Student"}'s IAF Defense session has been scheduled.\nDate: {formattedDate}\nTime: {formattedStartTime} - {formattedEndTime}\nVenue: {venue}\nExaminer: {examiner?.FullName ?? "N/A"}",
+                    IsRead = false,
+                    CreatedDate = DateTime.Now
+                };
+                inAppNotifications.Add(supervisorNotification);
+            }
+
+            // 2. Persist in-app notifications BEFORE external Email or SignalR dispatch
+            bool inAppPersisted = false;
+
+            if (inAppNotifications.Count > 0)
+            {
+                try
+                {
+                    _context.FYPNotifications.AddRange(inAppNotifications);
+                    await _context.SaveChangesAsync();
+                    inAppPersisted = true;
+                }
+                catch (Exception ex)
+                {
+                    inAppPersisted = false;
+                    Console.WriteLine($"[AdminScheduleDefense] ❌ Failed persisting in-app notifications: {ex}");
+                }
+            }
+            else
+            {
+                inAppPersisted = true;
+            }
+
+            // If in-app notification persistence fails, do not proceed with external Email or SignalR dispatch
+            if (!inAppPersisted)
+            {
+                TempData["Warning"] = "Defense session was successfully booked and saved in the database. However, in-app notification records could not be saved, and external notifications were withheld to prevent unrecorded dispatches.";
+                return RedirectToAction(nameof(ManageDefenses), new { sessionFilter = projectSession });
+            }
+
+            // 3. SignalR Real-Time Dispatch (only after in-app notifications were safely persisted)
+            if (studentNotification != null)
+            {
+                try
+                {
+                    await _hubContext.Clients.User(studentNotification.RecipientId.ToString())
+                        .SendAsync("ReceiveNotification", studentNotification.Title, studentNotification.Message);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[AdminScheduleDefense] ⚠ SignalR real-time dispatch to student ({studentNotification.RecipientId}) failed: {ex.Message}");
+                }
+            }
+
+            if (examinerNotification != null)
+            {
+                try
+                {
+                    await _hubContext.Clients.User(examinerNotification.RecipientId.ToString())
+                        .SendAsync("ReceiveNotification", examinerNotification.Title, examinerNotification.Message);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[AdminScheduleDefense] ⚠ SignalR real-time dispatch to examiner ({examinerNotification.RecipientId}) failed: {ex.Message}");
+                }
+            }
+
+            if (supervisorNotification != null)
+            {
+                try
+                {
+                    await _hubContext.Clients.User(supervisorNotification.RecipientId.ToString())
+                        .SendAsync("ReceiveNotification", supervisorNotification.Title, supervisorNotification.Message);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[AdminScheduleDefense] ⚠ SignalR real-time dispatch to supervisor ({supervisorNotification.RecipientId}) failed: {ex.Message}");
+                }
+            }
+
+            // 4. Email Dispatch with safe tracking and exception suppression
+            var emailSuccesses = new List<string>();
+            var emailFailures = new List<string>();
+            var missingEmails = new List<string>();
+
+            // Student Email
+            if (student != null)
+            {
+                if (!string.IsNullOrWhiteSpace(student.Email))
+                {
+                    try
+                    {
+                        string emailHtml = $@"
+                            <h3>IAF Defense Session Scheduled</h3>
+                            <p>Dear {student.FullName},</p>
+                            <p>A mandatory Initial Project Allocation Form (IAF) Defense Session has been scheduled for your project.</p>
+                            <table style='border-collapse:collapse; width:100%; max-width:500px;'>
+                                <tr><td style='padding:6px; font-weight:bold;'>Project Title:</td><td style='padding:6px;'>{projectTitle}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Date:</td><td style='padding:6px;'>{formattedDate}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Time:</td><td style='padding:6px;'>{formattedStartTime} - {formattedEndTime}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Venue:</td><td style='padding:6px;'>{venue}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Independent Examiner:</td><td style='padding:6px;'>{examiner?.FullName ?? "N/A"}</td></tr>
+                            </table>
+                            <p style='margin-top:15px;'>Please ensure you attend the defense session promptly.</p>
+                            <p>Regards,<br/>FYP Committee</p>";
+
+                        _emailService.Send(student.Email!, "FYP Notice: IAF Defense Session Scheduled", emailHtml);
+                        emailSuccesses.Add("Student");
+                    }
+                    catch (Exception ex)
+                    {
+                        emailFailures.Add("Student");
+                        Console.WriteLine($"[AdminScheduleDefense] ❌ Failed sending student email: {ex}");
+                    }
+                }
+                else
+                {
+                    missingEmails.Add("Student (missing email address)");
+                }
+            }
+
+            // Examiner Email
+            if (examiner != null)
+            {
+                if (!string.IsNullOrWhiteSpace(examiner.Email))
+                {
+                    try
+                    {
+                        string emailHtml = $@"
+                            <h3>IAF Defense Examiner Assignment</h3>
+                            <p>Dear {examiner.FullName},</p>
+                            <p>You have been assigned as the Independent Examiner for an Initial Project Allocation Form (IAF) Defense Session.</p>
+                            <table style='border-collapse:collapse; width:100%; max-width:500px;'>
+                                <tr><td style='padding:6px; font-weight:bold;'>Student Name:</td><td style='padding:6px;'>{student?.FullName ?? "N/A"} ({student?.CoventryId ?? student?.EmployeeId ?? "N/A"})</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Project Title:</td><td style='padding:6px;'>{projectTitle}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Date:</td><td style='padding:6px;'>{formattedDate}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Time:</td><td style='padding:6px;'>{formattedStartTime} - {formattedEndTime}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Venue:</td><td style='padding:6px;'>{venue}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Original Supervisor:</td><td style='padding:6px;'>{supervisor?.FullName ?? "N/A"}</td></tr>
+                            </table>
+                            <p style='margin-top:15px;'>Please log in to FYP Tracker to review the student's submission before the session.</p>
+                            <p>Regards,<br/>FYP Committee</p>";
+
+                        _emailService.Send(examiner.Email!, "FYP Notice: IAF Defense Examiner Assignment", emailHtml);
+                        emailSuccesses.Add("Examiner");
+                    }
+                    catch (Exception ex)
+                    {
+                        emailFailures.Add("Examiner");
+                        Console.WriteLine($"[AdminScheduleDefense] ❌ Failed sending examiner email: {ex}");
+                    }
+                }
+                else
+                {
+                    missingEmails.Add("Examiner (missing email address)");
+                }
+            }
+
+            // Supervisor Email (only if attendance/notification is required by policy)
+            if (isSupervisorRequired && supervisor != null)
+            {
+                if (!string.IsNullOrWhiteSpace(supervisor.Email))
+                {
+                    try
+                    {
+                        string emailHtml = $@"
+                            <h3>Student IAF Defense Scheduled</h3>
+                            <p>Dear {supervisor.FullName},</p>
+                            <p>An IAF Defense session has been scheduled for your student.</p>
+                            <table style='border-collapse:collapse; width:100%; max-width:500px;'>
+                                <tr><td style='padding:6px; font-weight:bold;'>Student Name:</td><td style='padding:6px;'>{student?.FullName ?? "N/A"}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Project Title:</td><td style='padding:6px;'>{projectTitle}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Date:</td><td style='padding:6px;'>{formattedDate}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Time:</td><td style='padding:6px;'>{formattedStartTime} - {formattedEndTime}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Venue:</td><td style='padding:6px;'>{venue}</td></tr>
+                                <tr><td style='padding:6px; font-weight:bold;'>Independent Examiner:</td><td style='padding:6px;'>{examiner?.FullName ?? "N/A"}</td></tr>
+                            </table>
+                            <p>Regards,<br/>FYP Committee</p>";
+
+                        _emailService.Send(supervisor.Email!, "FYP Notice: Student IAF Defense Scheduled", emailHtml);
+                        emailSuccesses.Add("Supervisor");
+                    }
+                    catch (Exception ex)
+                    {
+                        emailFailures.Add("Supervisor");
+                        Console.WriteLine($"[AdminScheduleDefense] ❌ Failed sending supervisor email: {ex}");
+                    }
+                }
+                else
+                {
+                    missingEmails.Add("Supervisor (missing email address)");
+                }
+            }
+
+            // 5. Report delivery results accurately to Admin UI
+            bool hasPartialNotificationFailure = emailFailures.Count > 0 || missingEmails.Count > 0;
+
+            if (hasPartialNotificationFailure)
+            {
+                var issues = new List<string>();
+                if (emailFailures.Count > 0) issues.Add($"Email delivery could not be completed for: {string.Join(", ", emailFailures)}");
+                if (missingEmails.Count > 0) issues.Add($"Email skipped due to missing address for: {string.Join(", ", missingEmails)}");
+
+                TempData["Warning"] = $"Defense session was successfully booked and saved in the database. However, notification delivery was only partial: {string.Join("; ", issues)}.";
+            }
+            else
+            {
+                TempData["Success"] = "Successfully scheduled defense session. All in-app notifications and participant emails were sent successfully.";
+            }
+
+            return RedirectToAction(nameof(ManageDefenses), new { sessionFilter = projectSession });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AdminPassDefense(
+            [FromServices] FYPTracker.Services.Defense.IIAFDefenseBookingService defenseBookingService,
+            [FromServices] FYPTracker.Services.Time.ISystemClock clock,
+            int milestoneId,
+            string? outcomeComments = null)
+        {
+            TempData["Error"] = "Direct Admin defense outcome recording has been retired. Defense outcomes must be finalized directly by the assigned Independent Examiner following the face-to-face defense session.";
+            return RedirectToAction(nameof(ApprovedIafList));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AdminFailDefense(
+            [FromServices] FYPTracker.Services.Defense.IIAFDefenseBookingService defenseBookingService,
+            [FromServices] FYPTracker.Services.Time.ISystemClock clock,
+            int milestoneId,
+            string? outcomeComments = null)
+        {
+            TempData["Error"] = "Direct Admin defense outcome recording has been retired. Defense outcomes must be finalized directly by the assigned Independent Examiner following the face-to-face defense session.";
+            return RedirectToAction(nameof(ApprovedIafList));
+        }
+
+        [HttpPost]
+        [Authorize]
+        [IgnoreAntiforgeryToken] // Allow AJAX calls easily
+        public async Task<IActionResult> CheckBulkEmails([FromBody] List<string> emails)
+        {
+            if (emails == null || !emails.Any())
+                return Json(new Dictionary<string, string>());
+
+            var results = new Dictionary<string, string>();
+            
+            // Safely extract all possible search terms
+            var searchTerms = new List<string>();
+            foreach (var email in emails)
+            {
+                var normEmail = email.Trim().ToLower();
+                searchTerms.Add(normEmail);
+                if (normEmail.Contains("@"))
+                {
+                    searchTerms.Add(normEmail.Split('@')[0]);
+                }
+            }
+            
+            // Do a massive OR query on the server to grab any potential matches.
+            // SQL Server is case-insensitive by default, so we don't need .ToLower() in the query.
+            var existingUsers = await _context.ApplicationUsers
+                .Where(u => searchTerms.Contains(u.Email) || searchTerms.Contains(u.UserName))
+                .ToListAsync();
+            
+            foreach (var email in emails)
+            {
+                var normEmail = email.Trim().ToLower();
+                var normUsername = normEmail.Contains("@") ? normEmail.Split('@')[0] : normEmail;
+                
+                // Do the precise case-insensitive match in memory
+                var user = existingUsers.FirstOrDefault(u => 
+                    (u.Email != null && u.Email.ToLower() == normEmail) || 
+                    (u.UserName != null && u.UserName.ToLower() == normUsername) || 
+                    (u.UserName != null && u.UserName.ToLower() == normEmail)
+                );
+                
+                if (user != null)
+                {
+                    if (user.RequirePasswordChange)
+                        results[email] = "Pending";
+                    else
+                        results[email] = "Registered";
+                }
+            }
+            
+            return Json(results);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> BulkInvite(List<string> inviteNames, List<string> inviteEmails, string bulkUserType, List<string> bulkAcademicRoles, string bulkProgramme, string bulkAcademicSession)
+        {
+            if (inviteEmails == null || !inviteEmails.Any() || string.IsNullOrWhiteSpace(bulkUserType))
+            {
+                TempData["Error"] = "Please provide emails and select a user type.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            // ── Validate required student profile fields before sending credentials ──
+            if (bulkUserType == "Student")
+            {
+                if (string.IsNullOrWhiteSpace(bulkProgramme))
+                {
+                    TempData["Error"] = "Programme is required before sending login credentials to students.";
+                    return RedirectToAction(nameof(ManageUsers));
+                }
+                if (string.IsNullOrWhiteSpace(bulkAcademicSession))
+                {
+                    TempData["Error"] = "Academic Session is required before sending login credentials to students.";
+                    return RedirectToAction(nameof(ManageUsers));
+                }
+                
+                // Validate that the session is active in the DB
+                bool isValidSession = await _context.AcademicSessions.AnyAsync(s => s.Name == bulkAcademicSession && s.IsActive);
+                if (!isValidSession)
+                {
+                    TempData["Error"] = $"Academic Session '{bulkAcademicSession}' is invalid or inactive.";
+                    return RedirectToAction(nameof(ManageUsers));
+                }
+            }
+
+            var invites = new List<(string Name, string Email)>();
+            var emailRegex = new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$");
+
+            for (int i = 0; i < inviteEmails.Count; i++)
+            {
+                var email = inviteEmails[i]?.Trim();
+                if (!string.IsNullOrEmpty(email) && emailRegex.IsMatch(email))
+                {
+                    string name = "";
+                    if (inviteNames != null && i < inviteNames.Count && !string.IsNullOrWhiteSpace(inviteNames[i]))
+                    {
+                        name = inviteNames[i].Trim();
+                    }
+                    invites.Add((name, email));
+                }
+            }
+
+            invites = invites.GroupBy(x => x.Email).Select(g => g.First()).ToList();
+
+            if (!invites.Any())
+            {
+                TempData["Error"] = "No valid emails found.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            int successCount = 0;
+            int duplicateCount = 0;
+            
+            string prefix = bulkUserType == "Examiner" ? "EXM-" : "SUP-";
+            var maxNums = await _context.ApplicationUsers
+                .Where(u => u.UserName != null && u.UserName.StartsWith(prefix))
+                .Select(u => u.UserName.Substring(prefix.Length))
+                .ToListAsync();
+
+            int nextIdNum = 1;
+            var validNums = maxNums.Select(n => int.TryParse(n, out int num) ? num : 0);
+            if (validNums.Any())
+            {
+                nextIdNum = validNums.Max() + 1;
+            }
+
+            var request = HttpContext.Request;
+            var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+
+            // Pre-fetch existing users for precise check
+            var searchTerms = new List<string>();
+            foreach (var inv in invites)
+            {
+                var normEmail = inv.Email.Trim().ToLower();
+                searchTerms.Add(normEmail);
+                if (normEmail.Contains("@")) searchTerms.Add(normEmail.Split('@')[0]);
+            }
+            var existingUsers = await _context.ApplicationUsers
+                .Where(u => searchTerms.Contains(u.Email) || searchTerms.Contains(u.UserName))
+                .ToListAsync();
+
+            foreach (var invite in invites)
+            {
+                var email = invite.Email.Trim().ToLower(); // Domain is case-insensitive, we normalize early.
+                var username = email.Split('@')[0];
+                
+                // Server-side format validation to prevent frontend bypass
+                bool isValidFormat = true;
+                if (bulkUserType == "Student") {
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(username, @"^p\d{8}$")) isValidFormat = false;
+                } else {
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(username, @"^[a-z0-9.-]+$")) isValidFormat = false;
+                }
+                
+                if (!isValidFormat) continue; // Skip entirely, it will not count towards success
+                
+                // Precise case-insensitive match in memory
+                var existingUser = existingUsers.FirstOrDefault(u => 
+                    (u.Email != null && u.Email.ToLower() == email) || 
+                    (u.UserName != null && u.UserName.ToLower() == username) ||
+                    (u.UserName != null && u.UserName.ToLower() == email)
+                );
+                
+                if (existingUser != null)
+                {
+                    duplicateCount++;
+                    continue;
+                }
+
+                string newId;
+                if (email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) || 
+                    email.EndsWith("@newinti.edu.my", StringComparison.OrdinalIgnoreCase))
+                {
+                    newId = email.Split('@')[0];
+                }
+                else if (bulkUserType == "Student")
+                {
+                    var random = new Random();
+                    string randomId;
+                    do
+                    {
+                        randomId = "P" + random.Next(10000000, 99999999).ToString();
+                    } while (await _context.ApplicationUsers.AnyAsync(u => u.UserName == randomId || u.EmployeeId == randomId));
+                    newId = randomId;
+                }
+                else
+                {
+                    newId = $"{prefix}{nextIdNum:D3}";
+                    nextIdNum++;
+                }
+
+                // ── Generate a unique temp password ──
+                string tempPwd = GenerateTempPassword();
+
+                var newUser = new ApplicationUser
+                {
+                    UserName = newId,
+                    FullName = !string.IsNullOrWhiteSpace(invite.Name) ? invite.Name : email.Split('@')[0],
+                    Email = email,
+                    PassCode = FYPTracker.Common.Encryption.GetHash(tempPwd),
+                    TempPassword = tempPwd,
+                    EmployeeId = newId,
+                    DateCreated = DateTime.Now,
+                    DateJoin = DateTime.Now,
+                    AddedBy = "sys",
+                    Image = "/assets/media/avatars/blank.png",
+                    RequirePasswordChange = true, // Forces onboarding flow
+                    // Store student-specific profile fields supplied by admin
+                    Programme = bulkUserType == "Student" ? bulkProgramme : null,
+                    AcademicSession = bulkUserType == "Student" ? bulkAcademicSession : null,
+                    AccountExpiry = bulkUserType == "Student" ? CalculateAccountExpiry(bulkAcademicSession) : null
+                };
+
+                _context.ApplicationUsers.Add(newUser);
+                await _context.SaveChangesAsync(); // save so we have newUser.Id for the log
+
+                var rolesToAddNew = bulkUserType == "AcademicStaff" ? bulkAcademicRoles.ToArray() : new[] { bulkUserType };
+                foreach (var r in rolesToAddNew)
+                {
+                    var bulkRoleEntity = await _context.AppRoles.FirstOrDefaultAsync(ar => ar.Name == r);
+                    if (bulkRoleEntity != null)
+                    {
+                        _context.UserRoleMappings.Add(new UserRoleMapping { UserId = newUser.Id, RoleId = bulkRoleEntity.Id });
+                    }
+                }
+                await _context.SaveChangesAsync();
+
+
+
+                successCount++;
+
+                // ── Prepare Email ──
+                string subject = "Welcome to FYP Tracking System - Your Login Credentials";
+                string message = $@"<p>Your account has been successfully created by the administrator. Below are your login credentials:</p>
+                    <ul>
+                        <li><strong>Username:</strong> {newId}</li>
+                        <li><strong>Email:</strong> {email}</li>
+                        <li><strong>Temporary Password:</strong> {tempPwd}</li>
+                    </ul>
+                    <p>Upon your first login, you will be required to set up your profile and change your password.</p>";
+                var httpRequest = HttpContext.Request;
+                string emailLoginUrl = $"{httpRequest.Scheme}://{httpRequest.Host}/User/Login";
+                string htmlBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Click Here to Login", emailLoginUrl);
+                try
+                {
+                    _emailService.Send(email, subject, htmlBody);
+                }
+                catch { /* Ignore email failures during bulk insert */ }
+            }
+
+            if (successCount > 0)
+            {
+                TempData["Success"] = $"Successfully invited {successCount} users. {duplicateCount} duplicates ignored.";
+            }
+            else
+            {
+                TempData["Info"] = $"No new users created. {duplicateCount} emails were already registered.";
+            }
+
+            return RedirectToAction(nameof(ManageUsers));
+        }
+
+        // ────────────────────────────────────────────────────────
+        // Resend Invite
+        // ────────────────────────────────────────────────────────
+        [HttpPost]
+        [Authorize]
+        [ValidateAntiForgeryToken]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> ResendInvite(int userId)
+        {
+            var admin = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (admin == null) return Json(new { success = false, message = "Unauthorized." });
+
+            var user = await _context.ApplicationUsers.FindAsync(userId);
+            if (user == null) return Json(new { success = false, message = "User not found." });
+
+            if (!user.RequirePasswordChange)
+                return Json(new { success = false, message = "This user has already activated their account." });
+
+            // Generate a fresh temp password
+            string newTempPwd = GenerateTempPassword();
+            user.PassCode = FYPTracker.Common.Encryption.GetHash(newTempPwd);
+            user.TempPassword = newTempPwd;
+
+
+
+            await _context.SaveChangesAsync();
+
+            // Resend email
+            var request = HttpContext.Request;
+            var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+            string subject = "FYP Tracking System - Your Updated Login Credentials";
+            string message = $@"<p>Dear <strong>{user.FullName}</strong>,</p><br/>
+                <p>Your login credentials have been refreshed by the administrator. Please use the details below to log in:</p>
+                <ul>
+                    <li><strong>Username:</strong> {user.UserName}</li>
+                    <li><strong>Email:</strong> {user.Email}</li>
+                    <li><strong>New Temporary Password:</strong> {newTempPwd}</li>
+                </ul>
+                <p>You will be required to change your password upon first login.</p>";
+            string htmlBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Click Here to Login", loginUrl);
+
+            try { _emailService.Send(user.Email!, subject, htmlBody); }
+            catch { /* email failure is non-fatal */ }
+
+            return Json(new { success = true, message = $"Credentials resent to {user.Email}." });
+        }
+
+        // ────────────────────────────────────────────────────────
+        // CSV Bulk Upload
+        // ────────────────────────────────────────────────────────
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UploadCSV(IFormFile csvFile, string csvUserType, string csvProgramme, string csvAcademicSession)
+        {
+            if (csvFile == null || csvFile.Length == 0)
+            {
+                TempData["Error"] = "Please select a CSV file to upload.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            var ext = Path.GetExtension(csvFile.FileName).ToLowerInvariant();
+            if (ext != ".csv")
+            {
+                TempData["Error"] = "Only .csv files are supported.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            if (string.IsNullOrWhiteSpace(csvUserType))
+            {
+                TempData["Error"] = "Please select a User Type.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            if (csvUserType == "Student")
+            {
+                if (string.IsNullOrWhiteSpace(csvProgramme))
+                { TempData["Error"] = "Programme is required for student CSV uploads."; return RedirectToAction(nameof(ManageUsers)); }
+                if (string.IsNullOrWhiteSpace(csvAcademicSession))
+                { TempData["Error"] = "Academic Session is required for student CSV uploads."; return RedirectToAction(nameof(ManageUsers)); }
+                
+                // Validate session exists and is active
+                bool isValidSession = await _context.AcademicSessions.AnyAsync(s => s.Name == csvAcademicSession && s.IsActive);
+                if (!isValidSession)
+                {
+                    TempData["Error"] = $"Academic Session '{csvAcademicSession}' is invalid or inactive.";
+                    return RedirectToAction(nameof(ManageUsers));
+                }
+            }
+
+            var admin = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            var emailRegex = new Regex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$");
+            var request = HttpContext.Request;
+            var loginUrl = $"{request.Scheme}://{request.Host}/User/Login";
+
+            int successCount = 0, dupCount = 0, errorCount = 0;
+
+            string prefix = csvUserType == "Examiner" ? "EXM-" : "SUP-";
+            var maxNums = await _context.ApplicationUsers
+                .Where(u => u.UserName != null && u.UserName.StartsWith(prefix))
+                .Select(u => u.UserName!.Substring(prefix.Length))
+                .ToListAsync();
+            int nextIdNum = maxNums.Select(n => int.TryParse(n, out int num) ? num : 0).DefaultIfEmpty(0).Max() + 1;
+
+            using var reader = new System.IO.StreamReader(csvFile.OpenReadStream());
+            bool isFirstLine = true;
+            while (!reader.EndOfStream)
+            {
+                var line = await reader.ReadLineAsync();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                // Skip header row
+                if (isFirstLine) { isFirstLine = false; continue; }
+
+                var cols = line.Split(',').Select(c => c.Trim().Trim('"')).ToArray();
+                // Expected: Full Name, Email  (min 2 columns)
+                if (cols.Length < 2) { errorCount++; continue; }
+
+                string name  = cols[0];
+                string email = cols[1];
+
+                if (!emailRegex.IsMatch(email)) { errorCount++; continue; }
+
+                var existingUser = await _context.ApplicationUsers
+                    .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                    .FirstOrDefaultAsync(u => u.Email == email || u.UserName == email);
+                    
+                if (existingUser != null)
+                {
+                    dupCount++;
+                    continue;
+                }
+
+                string newId;
+                if (email.EndsWith("@student.newinti.edu.my", StringComparison.OrdinalIgnoreCase) ||
+                    email.EndsWith("@newinti.edu.my", StringComparison.OrdinalIgnoreCase))
+                {
+                    newId = email.Split('@')[0];
+                }
+                else if (csvUserType == "Student")
+                {
+                    var rng = new Random();
+                    string rid;
+                    do { rid = "P" + rng.Next(10000000, 99999999); }
+                    while (await _context.ApplicationUsers.AnyAsync(u => u.UserName == rid || u.EmployeeId == rid));
+                    newId = rid;
+                }
+                else
+                {
+                    newId = $"{prefix}{nextIdNum:D3}";
+                    nextIdNum++;
+                }
+
+                string tempPwd = GenerateTempPassword();
+                var newUser = new ApplicationUser
+                {
+                    UserName = newId,
+                    FullName = !string.IsNullOrWhiteSpace(name) ? name : email.Split('@')[0],
+                    Email = email,
+                    PassCode = FYPTracker.Common.Encryption.GetHash(tempPwd),
+                    TempPassword = tempPwd,
+                    EmployeeId = newId,
+                    DateCreated = DateTime.Now,
+                    DateJoin = DateTime.Now,
+                    AddedBy = "sys",
+                    Image = "/assets/media/avatars/blank.png",
+                    RequirePasswordChange = true,
+                    Programme = csvUserType == "Student" ? csvProgramme : null,
+                    AcademicSession = csvUserType == "Student" ? csvAcademicSession : null,
+                    AccountExpiry = csvUserType == "Student" ? CalculateAccountExpiry(csvAcademicSession) : null
+                };
+                _context.ApplicationUsers.Add(newUser);
+                await _context.SaveChangesAsync();
+
+                var rolesToAddNew = csvUserType == "AcademicStaff" ? new[] { "Supervisor", "Examiner" } : new[] { csvUserType };
+                foreach (var r in rolesToAddNew)
+                {
+                    var csvRoleEntity = await _context.AppRoles.FirstOrDefaultAsync(ar => ar.Name == r);
+                    if (csvRoleEntity != null)
+                    {
+                        _context.UserRoleMappings.Add(new UserRoleMapping { UserId = newUser.Id, RoleId = csvRoleEntity.Id });
+                    }
+                }
+                await _context.SaveChangesAsync();
+
+
+
+                // Send welcome email
+                try
+                {
+                    string subject = "Welcome to FYP Tracking System - Your Login Credentials";
+                    string message = $@"<p>Your account has been created. Here are your login credentials:</p>
+<ul><li><strong>Username:</strong> {newId}</li><li><strong>Email:</strong> {email}</li><li><strong>Temporary Password:</strong> {tempPwd}</li></ul>
+<p>You will be asked to change your password on first login.</p>";
+                    string htmlBody = FYPTracker.Helpers.EmailTemplateHelper.GetStandardizedTemplate(subject, message, "Click Here to Login", loginUrl);
+                    _emailService.Send(email, subject, htmlBody);
+                }
+                catch { }
+
+                successCount++;
+            }
+
+            if (successCount > 0)
+                TempData["Success"] = $"CSV imported: {successCount} user(s) created. {dupCount} duplicate(s) skipped. {errorCount} invalid row(s) ignored.";
+            else
+                TempData["Info"] = $"No new users created from CSV. {dupCount} duplicate(s), {errorCount} invalid row(s).";
+
+            return RedirectToAction(nameof(ManageUsers));
+        }
+
+        // ────────────────────────────────────────────────────────
+        // Reporting (Admin)
+        // ────────────────────────────────────────────────────────
+        public async Task<IActionResult> Reporting(string sessionFilter)
+        {
+            var user = await _context.ApplicationUsers
+                .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            if (user == null || (!user.UserRoles.Any(r => r.Role.Name == "Admin") && !user.UserRoles.Any(r => r.Role.Name == "SuperAdmin"))) return RedirectToAction("Login", "User");
+            ViewBag.CurrentUser = user;
+
+            // Fetch distinct sessions
+            var distinctSessions = await _context.ApplicationUsers
+                .Where(u => !string.IsNullOrEmpty(u.AcademicSession))
+                .Select(u => u.AcademicSession)
+                .Distinct()
+                .OrderByDescending(s => s)
+                .ToListAsync();
+
+            ViewBag.DistinctSessions = distinctSessions;
+            ViewBag.CurrentSessionFilter = sessionFilter;
+
+            // 1. Supervisor Capacity vs Workload
+            var supervisors = await _context.ApplicationUsers
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Supervisor") && !u.IsResign)
+                .Select(s => new {
+                    Name = s.FullName ?? s.UserName,
+                    MaxSlots = s.MaxStudentSlots ?? 5,
+                    CurrentStudents = _context.FYPProjects.Count(p => p.SupervisorId == s.Id && !p.Student.IsResign && p.Status == "Approved" && (string.IsNullOrEmpty(sessionFilter) || p.Student.AcademicSession == sessionFilter))
+                })
+                .ToListAsync();
+
+            // 2. Global Student Allocation Status
+            var studentsQuery = _context.ApplicationUsers
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Student") && !u.IsResign);
+
+            if (!string.IsNullOrEmpty(sessionFilter))
+            {
+                studentsQuery = studentsQuery.Where(u => u.AcademicSession == sessionFilter);
+            }
+
+            var allActiveStudents = await studentsQuery
+                .Select(s => new {
+                    s.Id,
+                    HasApprovedProject = _context.FYPProjects.Any(p => p.StudentId == s.Id && p.Status == "Approved"),
+                    HasPendingProject = _context.FYPProjects.Any(p => p.StudentId == s.Id && p.Status == "Pending")
+                })
+                .ToListAsync();
+
+            var allocationStatusCounts = new[] {
+                new { Status = "Allocated", Count = allActiveStudents.Count(s => s.HasApprovedProject) },
+                new { Status = "Pending", Count = allActiveStudents.Count(s => !s.HasApprovedProject && s.HasPendingProject) },
+                new { Status = "No Project", Count = allActiveStudents.Count(s => !s.HasApprovedProject && !s.HasPendingProject) }
+            };
+
+            // 3. Faculty Demographics / Program Distribution
+            var programCountsQuery = _context.ApplicationUsers
+                .Where(u => u.UserRoles.Any(r => r.Role.Name == "Student") && !u.IsResign && !string.IsNullOrEmpty(u.Programme));
+
+            if (!string.IsNullOrEmpty(sessionFilter))
+            {
+                programCountsQuery = programCountsQuery.Where(u => u.AcademicSession == sessionFilter);
+            }
+
+            var programCounts = await programCountsQuery
+                .GroupBy(u => u.Programme)
+                .Select(g => new { Program = g.Key, Count = g.Count() })
+                .ToListAsync();
+
+            // 4. Global Milestone Bottlenecks
+            var milestonesQuery = _context.FYPMilestones
+                .Where(m => !m.Project.Student.IsResign);
+
+            if (!string.IsNullOrEmpty(sessionFilter))
+            {
+                milestonesQuery = milestonesQuery.Where(m => m.Project.Student.AcademicSession == sessionFilter);
+            }
+
+            var milestones = await milestonesQuery
+                .Select(m => new { m.Title, m.Status })
+                .ToListAsync();
+
+            var milestoneStatusData = milestones
+                .Select(m => new {
+                    Category = m.Title.Contains("IAF") || m.Title.Contains("Initial") ? "IAF" :
+                               m.Title.Contains("Stage 1 Final Submission") ? "Proposal" :
+                               m.Title.Contains("Final") ? "Final Report" : "Other",
+                    m.Status
+                })
+                .Where(m => m.Category != "Other")
+                .GroupBy(m => new { m.Category, m.Status })
+                .Select(g => new { g.Key.Category, g.Key.Status, Count = g.Count() })
+                .ToList();
+
+            ViewBag.SupervisorCapacityJson = System.Text.Json.JsonSerializer.Serialize(supervisors);
+            ViewBag.AllocationStatsJson = System.Text.Json.JsonSerializer.Serialize(allocationStatusCounts);
+            ViewBag.ProgramStatsJson = System.Text.Json.JsonSerializer.Serialize(programCounts);
+            ViewBag.MilestoneBottlenecksJson = System.Text.Json.JsonSerializer.Serialize(milestoneStatusData);
+
+            return View();
+        }
+
+        [Authorize]
+        [ClaimRequirement("Type", "Admin")]
+        public async Task<IActionResult> ManageLookups()
+        {
+            var user = await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == HttpContext.User.Identity.Name || u.Email == HttpContext.User.Identity.Name);
+            ViewBag.CurrentUser = user;
+            return View();
+        }
+
+        [HttpPost]
+        public IActionResult LookupData(string type)
+        {
+            try
+            {
+                if (type == "Department")
+                {
+                    var data = _context.Department.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive }).ToList();
+                    return Json(new { data = data });
+                }
+                else if (type == "Programme")
+                {
+                    var data = _context.Programme.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive }).ToList();
+                    return Json(new { data = data });
+                }
+                else if (type == "Specialization")
+                {
+                    var data = _context.Specialization.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive }).ToList();
+                    return Json(new { data = data });
+                }
+                else if (type == "AcademicSession")
+                {
+                    var data = _context.AcademicSessions.Select(x => new { id = x.Id, name = x.Name, isActive = x.IsActive, startDate = x.StartDate, endDate = x.EndDate, isCurrent = x.IsCurrent, requiredMeetingsStage1 = x.RequiredMeetingsStage1, requiredMeetingsStage2 = x.RequiredMeetingsStage2 }).ToList();
+                    return Json(new { data = data });
+                }
+                return Json(new { data = new List<object>() });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { status = false, msg = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult AddLookup(string type, string name, DateTime? startDate = null, DateTime? endDate = null, bool isCurrent = false, bool isActive = true, int? requiredMeetingsStage1 = null, int? requiredMeetingsStage2 = null)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(name)) return Json(new { status = false, msg = "Name cannot be empty." });
+
+                if (type == "Department")
+                {
+                    if (_context.Department.Any(x => x.Name.ToLower() == name.ToLower())) return Json(new { status = false, msg = "Exists!" });
+                    _context.Department.Add(new Department { Name = name, IsActive = true });
+                }
+                else if (type == "Programme")
+                {
+                    if (_context.Programme.Any(x => x.Name.ToLower() == name.ToLower())) return Json(new { status = false, msg = "Exists!" });
+                    _context.Programme.Add(new Programme { Name = name, IsActive = true });
+                }
+                else if (type == "Specialization")
+                {
+                    if (_context.Specialization.Any(x => x.Name.ToLower() == name.ToLower())) return Json(new { status = false, msg = "Exists!" });
+                    _context.Specialization.Add(new Specialization { Name = name, IsActive = true });
+                }
+                else if (type == "AcademicSession")
+                {
+                    if (startDate.HasValue && endDate.HasValue && endDate <= startDate) return Json(new { status = false, msg = "End Date must be after Start Date." });
+                    if (_context.AcademicSessions.Any(x => x.Name.ToLower() == name.ToLower())) return Json(new { status = false, msg = "Exists!" });
+                    
+                    if (requiredMeetingsStage1.HasValue && (requiredMeetingsStage1.Value < 10 || requiredMeetingsStage1.Value > 14))
+                        return Json(new { status = false, msg = "Stage 1 Required Meetings must be between 10 and 14." });
+
+                    if (requiredMeetingsStage2.HasValue && (requiredMeetingsStage2.Value < 10 || requiredMeetingsStage2.Value > 14))
+                        return Json(new { status = false, msg = "Stage 2 Required Meetings must be between 10 and 14." });
+
+                    if (isCurrent)
+                    {
+                        var currents = _context.AcademicSessions.Where(s => s.IsCurrent == true).ToList();
+                        foreach (var curr in currents) curr.IsCurrent = false;
+                    }
+                    
+                    _context.AcademicSessions.Add(new AcademicSession { Name = name, IsActive = true, StartDate = startDate, EndDate = endDate, IsCurrent = isCurrent, RequiredMeetingsStage1 = requiredMeetingsStage1, RequiredMeetingsStage2 = requiredMeetingsStage2 });
+                }
+                _context.SaveChanges();
+                return Json(new { status = true });
+            }
+            catch(Exception ex)
+            {
+                return Json(new { status = false, msg = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult EditLookup(string type, int id, string name, DateTime? startDate = null, DateTime? endDate = null, bool isCurrent = false, bool isActive = true, int? requiredMeetingsStage1 = null, int? requiredMeetingsStage2 = null)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(name)) return Json(new { status = false, msg = "Name cannot be empty." });
+
+                if (type == "Department")
+                {
+                    var entity = _context.Department.Find(id);
+                    if (entity != null) { entity.Name = name; entity.IsActive = isActive; _context.SaveChanges(); }
+                }
+                else if (type == "Programme")
+                {
+                    var entity = _context.Programme.Find(id);
+                    if (entity != null) { entity.Name = name; entity.IsActive = isActive; _context.SaveChanges(); }
+                }
+                else if (type == "Specialization")
+                {
+                    var entity = _context.Specialization.Find(id);
+                    if (entity != null) { entity.Name = name; entity.IsActive = isActive; _context.SaveChanges(); }
+                }
+                else if (type == "AcademicSession")
+                {
+                    if (startDate.HasValue && endDate.HasValue && endDate <= startDate) return Json(new { status = false, msg = "End Date must be after Start Date." });
+
+                    if (requiredMeetingsStage1.HasValue && (requiredMeetingsStage1.Value < 10 || requiredMeetingsStage1.Value > 14))
+                        return Json(new { status = false, msg = "Stage 1 Required Meetings must be between 10 and 14." });
+
+                    if (requiredMeetingsStage2.HasValue && (requiredMeetingsStage2.Value < 10 || requiredMeetingsStage2.Value > 14))
+                        return Json(new { status = false, msg = "Stage 2 Required Meetings must be between 10 and 14." });
+
+                    var entity = _context.AcademicSessions.Find(id);
+                    if (entity != null) 
+                    { 
+                        if (isCurrent && entity.IsCurrent != true)
+                        {
+                            var currents = _context.AcademicSessions.Where(s => s.IsCurrent == true && s.Id != id).ToList();
+                            foreach (var curr in currents) curr.IsCurrent = false;
+                        }
+                        entity.Name = name; 
+                        entity.IsActive = isActive; 
+                        entity.StartDate = startDate; 
+                        entity.EndDate = endDate; 
+                        entity.IsCurrent = isCurrent; 
+                        entity.RequiredMeetingsStage1 = requiredMeetingsStage1;
+                        entity.RequiredMeetingsStage2 = requiredMeetingsStage2;
+                        _context.SaveChanges(); 
+                    }
+                }
+                return Json(new { status = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { status = false, msg = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> TransferStudents(int fromSupervisorId, int toSupervisorId)
+        {
+            if (fromSupervisorId == 0 || toSupervisorId == 0 || fromSupervisorId == toSupervisorId)
+            {
+                TempData["Error"] = "Invalid supervisor selection.";
+                return RedirectToAction(nameof(ManageUsers));
+            }
+
+            try
+            {
+                // Transfer from SupervisorRequests
+                var requests = await _context.SupervisorRequests
+                    .Where(r => r.SupervisorId == fromSupervisorId && (r.Status == "Approved" || r.Status == "Pending"))
+                    .ToListAsync();
+                foreach(var req in requests)
+                {
+                    req.SupervisorId = toSupervisorId;
+                }
+
+                // Transfer from FYPProjects
+                var projects = await _context.FYPProjects
+                    .Where(p => p.SupervisorId == fromSupervisorId && p.Status != "Completed")
+                    .ToListAsync();
+                foreach (var p in projects)
+                {
+                    p.SupervisorId = toSupervisorId;
+                }
+                
+                // Transfer active meeting bookings (Pending or Approved)
+                var meetings = await _context.MeetingBookings
+                    .Where(m => m.SupervisorId == fromSupervisorId && (m.Status == "Pending" || m.Status == "Approved"))
+                    .ToListAsync();
+                foreach (var m in meetings)
+                {
+                    m.SupervisorId = toSupervisorId;
+                }
+
+                await _context.SaveChangesAsync();
+                TempData["Success"] = $"Successfully transferred {projects.Count} projects and {requests.Count} requests to the new supervisor.";
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "An error occurred during transfer: " + ex.Message;
+            }
+
+            return RedirectToAction(nameof(ManageUsers));
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult ToggleLookupStatus(string type, int id)
+        {
+            try
+            {
+                if (type == "Department")
+                {
+                    var entity = _context.Department.Find(id);
+                    if (entity != null) { entity.IsActive = !entity.IsActive; _context.SaveChanges(); }
+                }
+                else if (type == "Programme")
+                {
+                    var entity = _context.Programme.Find(id);
+                    if (entity != null) { entity.IsActive = !entity.IsActive; _context.SaveChanges(); }
+                }
+                else if (type == "Specialization")
+                {
+                    var entity = _context.Specialization.Find(id);
+                    if (entity != null) { entity.IsActive = !entity.IsActive; _context.SaveChanges(); }
+                }
+                else if (type == "AcademicSession")
+                {
+                    var entity = _context.AcademicSessions.Find(id);
+                    if (entity != null) { entity.IsActive = !entity.IsActive; _context.SaveChanges(); }
+                }
+                return Json(new { status = true });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { status = false, msg = ex.Message });
+            }
+        }
+
+        // === Default Milestone Template Management ===
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddDefaultMilestoneTemplate(DefaultMilestoneTemplate model, string sessionFilter)
+        {
+            if (ModelState.IsValid)
+            {
+                var sessionObj = await _context.AcademicSessions.FirstOrDefaultAsync(s => s.Name == sessionFilter);
+                if (sessionObj != null)
+                {
+                    model.AcademicSessionId = sessionObj.Id;
+
+                    bool exists = await _context.DefaultMilestoneTemplates.AnyAsync(t => 
+                        t.AcademicSessionId == model.AcademicSessionId && 
+                        t.Stage == model.Stage &&
+                        ((t.MilestoneCode == model.MilestoneCode && (model.MilestoneCode == "IAF" || model.MilestoneCode == "STAGE1_FINAL")) || 
+                         (t.Title == model.Title))
+                    );
+
+                    if (exists)
+                    {
+                        TempData["Error"] = "A template with this Milestone Code (if IAF/STAGE1_FINAL) or Title already exists for this stage and session.";
+                        return RedirectToAction(nameof(Settings), new { sessionFilter });
+                    }
+
+                    _context.DefaultMilestoneTemplates.Add(model);
+                    await _context.SaveChangesAsync();
+
+                    if (model.IsActive && model.Stage == 1)
+                    {
+                        var projects = await _context.FYPProjects
+                            .Include(p => p.Milestones)
+                            .Where(p => p.AcademicSession == sessionFilter && p.Status != "Failed" && p.Status != "Completed")
+                            .ToListAsync();
+
+                        var newMilestones = projects
+                            .Where(p => !p.Milestones.Any(m => m.DefaultMilestoneTemplateId == model.Id))
+                            .Select(p => new FYPMilestone
+                            {
+                                FYPProjectId = p.Id,
+                                Title = model.Title,
+                                Description = model.Description,
+                                DueDate = model.DueDate,
+                                Status = "Pending",
+                                MilestoneSource = "Default",
+                                MilestoneCode = model.MilestoneCode,
+                                Stage = model.Stage,
+                                IsRequired = model.IsRequired,
+                                DefaultMilestoneTemplateId = model.Id
+                            }).ToList();
+
+                        if (newMilestones.Any())
+                        {
+                            _context.FYPMilestones.AddRange(newMilestones);
+                            await _context.SaveChangesAsync();
+                        }
+                        await _context.SaveChangesAsync();
+                    }
+
+                    TempData["Success"] = "Default Milestone added successfully.";
+                }
+            }
+            return RedirectToAction(nameof(Settings), new { sessionFilter });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditDefaultMilestoneTemplate(int id, DefaultMilestoneTemplate model, string sessionFilter)
+        {
+            var existing = await _context.DefaultMilestoneTemplates
+                .Include(t => t.Session)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
+            if (existing != null)
+            {
+                existing.Title = model.Title;
+                existing.MilestoneCode = model.MilestoneCode;
+                existing.Stage = model.Stage;
+                existing.IsRequired = model.IsRequired;
+                existing.DueDate = model.DueDate;
+                existing.DisplayOrder = model.DisplayOrder;
+
+                // Synchronize all official student FYPMilestones linked to this template or session
+                var targetSessionName = existing.Session?.Name ?? sessionFilter;
+                var studentMilestones = await _context.FYPMilestones
+                    .Include(m => m.Project)
+                    .Where(m => m.DefaultMilestoneTemplateId == existing.Id || 
+                               (m.Project.AcademicSession == targetSessionName && m.MilestoneSource == "Default" && 
+                                ((existing.MilestoneCode != null && m.MilestoneCode == existing.MilestoneCode) || m.Title == existing.Title)))
+                    .ToListAsync();
+
+                foreach (var sm in studentMilestones)
+                {
+                    sm.Title = existing.Title;
+                    sm.MilestoneCode = existing.MilestoneCode;
+                    sm.Stage = existing.Stage;
+                    sm.IsRequired = existing.IsRequired;
+                    sm.DueDate = existing.DueDate;
+                    if (sm.DefaultMilestoneTemplateId == null)
+                    {
+                        sm.DefaultMilestoneTemplateId = existing.Id;
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                TempData["Success"] = $"Template and {studentMilestones.Count} linked student milestone(s) updated successfully.";
+            }
+            return RedirectToAction(nameof(Settings), new { sessionFilter });
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleDefaultMilestoneTemplate(int id, string sessionFilter)
+        {
+            var existing = await _context.DefaultMilestoneTemplates
+                .Include(t => t.Session)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
+            if (existing != null)
+            {
+                existing.IsActive = !existing.IsActive;
+                await _context.SaveChangesAsync();
+                
+                if (existing.IsActive && existing.Stage == 1 && existing.Session != null)
+                {
+                    var projects = await _context.FYPProjects
+                        .Include(p => p.Milestones)
+                        .Where(p => p.AcademicSession == existing.Session.Name && p.Status != "Failed" && p.Status != "Completed")
+                        .ToListAsync();
+
+                    var newMilestones = projects
+                        .Where(p => !p.Milestones.Any(m => m.DefaultMilestoneTemplateId == existing.Id))
+                        .Select(p => new FYPMilestone
+                        {
+                            FYPProjectId = p.Id,
+                            Title = existing.Title,
+                            Description = existing.Description,
+                            DueDate = existing.DueDate,
+                            Status = "Pending",
+                            MilestoneSource = "Default",
+                            MilestoneCode = existing.MilestoneCode,
+                            Stage = existing.Stage,
+                            IsRequired = existing.IsRequired,
+                            DefaultMilestoneTemplateId = existing.Id
+                        }).ToList();
+
+                    if (newMilestones.Any())
+                    {
+                        _context.FYPMilestones.AddRange(newMilestones);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+                TempData["Success"] = $"Template {(existing.IsActive ? "activated" : "deactivated")}.";
+            }
+            return RedirectToAction(nameof(Settings), new { sessionFilter });
+        }
+    }
+}
+
+
+
+

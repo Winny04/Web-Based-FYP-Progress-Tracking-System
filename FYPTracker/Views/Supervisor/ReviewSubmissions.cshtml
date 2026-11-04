@@ -1,0 +1,557 @@
+@model IEnumerable<FYPTracker.Models.FYPMilestone>
+
+@{
+    ViewData["Title"] = "Review Submissions";
+    var currentUser = ViewBag.CurrentUser as FYPTracker.Models.ApplicationUser;
+    
+    var pendingList = ViewBag.PendingList as List<FYPTracker.Models.FYPMilestone> ?? new List<FYPTracker.Models.FYPMilestone>();
+    var allStudentsList = ViewBag.AllStudentsList as List<FYPTracker.Models.FYPProject> ?? new List<FYPTracker.Models.FYPProject>();
+    string activeTab = ViewBag.ActiveTab as string ?? "pending";
+    var allMilestoneTitles = ViewBag.AllMilestoneTitles as List<string> ?? new List<string>();
+    
+    int totalPending = ViewBag.TotalPending ?? 0;
+    int totalAll = ViewBag.TotalAll ?? 0;
+    int currentPage = ViewBag.CurrentPage ?? 1;
+    int pageSize = ViewBag.PageSize ?? 10;
+    
+    int totalPendingPages = (int)Math.Ceiling((double)totalPending / pageSize);
+    int totalAllPages = (int)Math.Ceiling((double)totalAll / pageSize);
+}
+
+<div class="container-xxl py-4">
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+        <div>
+            <h2 class="fw-bold mb-1 text-white"><i class="fas fa-clipboard-check me-2"></i>Review Submissions</h2>
+            <p class="mb-0 text-white opacity-75">Review and grade pending milestones and submissions from your assigned students.</p>
+        </div>
+        <div class="d-flex gap-2">
+            @await Html.PartialAsync("_SessionFilter")
+        </div>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 shadow-sm rounded-3 mb-4"><i class="fas fa-check-circle me-2"></i>@TempData["Success"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 shadow-sm rounded-3 mb-4"><i class="fas fa-exclamation-circle me-2"></i>@TempData["Error"]</div>
+    }
+
+    <!-- Summary Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 text-center h-100 p-3">
+                <h5 class="text-muted fw-bold mb-1">Total Students</h5>
+                <h2 class="fw-bolder text-primary mb-0">@ViewBag.TotalStudents</h2>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 text-center h-100 p-3">
+                <h5 class="text-muted fw-bold mb-1">Pending Reviews</h5>
+                <h2 class="fw-bolder text-warning mb-0">@ViewBag.PendingReviewsCount</h2>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 text-center h-100 p-3">
+                <h5 class="text-muted fw-bold mb-1">Reviewed Submissions</h5>
+                <h2 class="fw-bolder text-success mb-0">@ViewBag.ReviewedCount</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toolbar Filters -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body">
+            <form method="get" action="/Supervisor/ReviewSubmissions" class="row g-3 align-items-end" id="filterForm">
+                <input type="hidden" name="tab" value="@activeTab" id="activeTabInput" />
+                <div class="col-md-3">
+                    <label class="form-label text-muted fw-bold fs-7 mb-1">Search Student</label>
+                    <input type="text" name="searchQuery" class="form-control bg-light border-0" value="@ViewBag.SearchQuery" placeholder="Name or ID..." />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label text-muted fw-bold fs-7 mb-1">Milestone</label>
+                    <select name="milestoneFilter" class="form-select bg-light border-0 text-truncate">
+                        <option value="">All Milestones</option>
+                        @foreach(var t in allMilestoneTitles)
+                        {
+                            if (ViewBag.MilestoneFilter == t) {
+                                <option value="@t" selected>@t</option>
+                            } else {
+                                <option value="@t">@t</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label text-muted fw-bold fs-7 mb-1">Status</label>
+                    <select name="statusFilter" class="form-select bg-light border-0">
+                        <option value="">All Statuses</option>
+                        @{
+                            string sf = ViewBag.StatusFilter as string;
+                        }
+                        @if (sf == "Pending Review") { <option value="Pending Review" selected>Pending Review</option> } else { <option value="Pending Review">Pending Review</option> }
+                        @if (sf == "Not Submitted") { <option value="Not Submitted" selected>Not Submitted</option> } else { <option value="Not Submitted">Not Submitted</option> }
+                        @if (sf == "Approved") { <option value="Approved" selected>Approved</option> } else { <option value="Approved">Approved</option> }
+                        @if (sf == "Revision Required") { <option value="Revision Required" selected>Revision Required</option> } else { <option value="Revision Required">Revision Required</option> }
+                        @if (sf == "Locked") { <option value="Locked" selected>Locked</option> } else { <option value="Locked">Locked</option> }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label text-muted fw-bold fs-7 mb-1">Stage</label>
+                    <select name="stageFilter" class="form-select bg-light border-0">
+                        <option value="">All Stages</option>
+                        @{ string stf = ViewBag.StageFilter as string; }
+                        @if (stf == "1") { <option value="1" selected>Stage 1</option> } else { <option value="1">Stage 1</option> }
+                        @if (stf == "2") { <option value="2" selected>Stage 2</option> } else { <option value="2">Stage 2</option> }
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary w-100 fw-bold"><i class="fas fa-search me-1"></i>Filter</button>
+                    <a href="/Supervisor/ReviewSubmissions?tab=@activeTab" class="btn btn-light text-muted w-100 fw-bold"><i class="fas fa-undo"></i></a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabs Nav -->
+    <ul class="nav nav-pills custom-tabs mb-4" id="reviewTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "pending" ? "active" : "") fw-bold px-4 rounded-pill me-2 shadow-sm" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending" type="button" role="tab" onclick="document.getElementById('activeTabInput').value='pending'">
+                <i class="fas fa-clock me-2"></i>Pending Review
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "all" ? "active" : "") fw-bold px-4 rounded-pill shadow-sm" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" onclick="document.getElementById('activeTabInput').value='all'">
+                <i class="fas fa-users me-2"></i>All Milestones
+            </button>
+        </li>
+    </ul>
+
+    <!-- Tabs Content -->
+    <div class="tab-content" id="reviewTabsContent">
+        <!-- Tab 1: Pending Reviews -->
+        <div class="tab-pane fade @(activeTab == "pending" ? "show active" : "")" id="pending" role="tabpanel">
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 custom-table">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th class="ps-4 fw-bold text-muted text-uppercase fs-7">Student</th>
+                                    <th class="fw-bold text-muted text-uppercase fs-7">Milestone</th>
+                                    <th class="fw-bold text-muted text-uppercase fs-7">Stage</th>
+                                    <th class="fw-bold text-muted text-uppercase fs-7">Date Submitted</th>
+                                    <th class="text-center fw-bold text-muted text-uppercase fs-7">Status</th>
+                                    <th class="text-end pe-4 fw-bold text-muted text-uppercase fs-7">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (pendingList.Any())
+                                {
+                                    @foreach (var m in pendingList)
+                                    {
+                                        <tr>
+                                            <td class="ps-4 py-3">
+                                                <div class="d-flex align-items-center">
+                                                    <div class="symbol symbol-40px me-3">
+                                                        <span class="symbol-label bg-primary text-inverse-primary fw-bolder">@(m.Project?.Student?.FullName?.FirstOrDefault() ?? '?')</span>
+                                                    </div>
+                                                    <div class="d-flex flex-column">
+                                                        <span class="text-dark fw-bolder fs-6">@m.Project?.Student?.FullName</span>
+                                                        <span class="text-muted fw-bold fs-7">@m.Project?.Student?.EmployeeId</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="text-dark fw-bolder d-block fs-6">@m.Title</span>
+                                                <span class="badge badge-light-secondary text-muted px-2" style="font-size: 0.65rem;">@(m.IsRequired ? "Required" : "Optional")</span>
+                                            </td>
+                                            <td><span class="badge bg-secondary fw-bold text-dark">Stage @m.Stage</span></td>
+                                            <td>
+                                                <span class="text-dark fw-bold d-block">@(m.SubmittedDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</span>
+                                            </td>
+                                            <td class="text-center">
+                                                <span class="badge badge-light-warning text-warning fw-bolder px-3 py-2 border"><i class="fas fa-hourglass-half me-1"></i>Pending Review</span>
+                                            </td>
+                                            <td class="text-end pe-4">
+                                                <a href="/Supervisor/GradeSubmission/@m.Id" class="btn btn-sm btn-outline-primary fw-bold px-3"><i class="fas fa-search me-1"></i>Review</a>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="6" class="text-center py-5">
+                                            <div class="empty-state">
+                                                <i class="fas fa-check-circle fs-1 text-success mb-3 opacity-50"></i>
+                                                <h5 class="fw-bolder text-dark mb-1">You're all caught up!</h5>
+                                                <p class="text-muted mb-0">No submissions are currently awaiting your review.</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            @if (totalPendingPages > 1)
+            {
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        @for (int i = 1; i <= totalPendingPages; i++)
+                        {
+                            <li class="page-item @(i == currentPage ? "active" : "")">
+                                <button class="page-link" onclick="paginate(@i, 'pending')">@i</button>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+            }
+        </div>
+
+        <!-- Tab 2: All Milestones (Accordion) -->
+        <div class="tab-pane fade @(activeTab == "all" ? "show active" : "")" id="all" role="tabpanel">
+            <div class="accordion accordion-custom mb-4" id="studentsAccordion">
+                @if (allStudentsList.Any())
+                {
+                    @foreach (var proj in allStudentsList)
+                    {
+                        var s1 = proj.Milestones.Where(m => m.Stage == 1).OrderBy(m => m.DueDate).ToList();
+                        var s2 = proj.Milestones.Where(m => m.Stage == 2 && !FYPTracker.Utils.GradingHelper.IsObsoleteOrRetiredStage2Milestone(m)).OrderBy(m => m.DueDate).ToList();
+                        int pendingCount = proj.Milestones.Count(m => m.Status == "Submitted" || m.Status == "PendingSupervisorReview" || m.Status == "UnderReview");
+                        bool isRubricPending = FYPTracker.Utils.GradingHelper.IsStage1SupervisorRubricPending(proj, proj.Milestones);
+                        
+                        <div class="accordion-item card border-0 shadow-sm rounded-4 mb-3 overflow-hidden">
+                            <h2 class="accordion-header" id="heading-@proj.Id">
+                                <button class="accordion-button collapsed px-4 py-3 d-flex align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-@proj.Id" aria-expanded="false" aria-controls="collapse-@proj.Id">
+                                    <div class="d-flex align-items-center flex-grow-1">
+                                        <div class="symbol symbol-45px me-3">
+                                            <span class="symbol-label bg-light-primary text-primary fw-bolder fs-5">@(proj.Student?.FullName?.FirstOrDefault() ?? '?')</span>
+                                        </div>
+                                        <div class="d-flex flex-column me-auto text-start">
+                                            <span class="text-dark fw-bolder fs-5">@proj.Student?.FullName <span class="text-muted fs-7 ms-2">(@proj.Student?.EmployeeId)</span></span>
+                                            <span class="text-muted fw-bold fs-7 text-truncate" style="max-width: 400px;">@proj.Title</span>
+                                        </div>
+                                        <div class="ms-auto d-flex align-items-center gap-3 pe-3">
+                                            <span class="badge bg-light text-dark border">@proj.AcademicSession</span>
+                                            @if (pendingCount > 0)
+                                            {
+                                                <span class="badge bg-danger rounded-pill px-3 py-2 fw-bold"><i class="fas fa-bell me-1"></i>@pendingCount Pending</span>
+                                            }
+                                            @if (isRubricPending)
+                                            {
+                                                <span class="badge bg-warning text-dark rounded-pill px-3 py-2 fw-bold"><i class="fas fa-hourglass-start me-1"></i>Pending Marksheet</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </button>
+                            </h2>
+                            <div id="collapse-@proj.Id" class="accordion-collapse collapse" aria-labelledby="heading-@proj.Id" data-bs-parent="#studentsAccordion">
+                                <div class="accordion-body p-0 border-top bg-light">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover align-middle mb-0 custom-table">
+                                            <thead>
+                                                <tr>
+                                                    <th class="ps-4 fw-bold text-muted text-uppercase fs-7">Milestone</th>
+                                                    <th class="fw-bold text-muted text-uppercase fs-7">Due Date</th>
+                                                    <th class="fw-bold text-muted text-uppercase fs-7">Date Submitted</th>
+                                                    <th class="text-center fw-bold text-muted text-uppercase fs-7">Status</th>
+                                                    <th class="text-end pe-4 fw-bold text-muted text-uppercase fs-7">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <!-- Stage 1 -->
+                                                <tr class="bg-white"><td colspan="5" class="ps-4 py-2 border-bottom-0"><span class="badge bg-primary fw-bold"><i class="fas fa-tasks me-1"></i>Stage 1 Milestones</span></td></tr>
+                                                @foreach (var ms in s1)
+                                                {
+                                                    string stText = ms.Status;
+                                                    if (!ms.SubmittedDate.HasValue && (string.IsNullOrEmpty(ms.Status) || ms.Status == "Pending")) stText = "Not Submitted";
+                                                    else if (ms.Status == "Locked") stText = "Locked";
+                                                    else if (ms.Status == "Submitted" || ms.Status == "PendingSupervisorReview" || ms.Status == "UnderReview") stText = "Pending Review";
+                                                    else if (ms.Status == "ReturnedForChanges" || ms.Status == "ReturnedForEdits" || ms.Status == "Rejected") stText = "Revision Required";
+                                                    else if (ms.Status == "Approved" || ms.Status == "Completed" || ms.Status == "SupervisorSigned" || ms.Status == "AdminApproved" || ms.Status == "PendingPanelReview" || ms.Status == "DefenseRequired" || ms.Status == "DefenseScheduled") stText = "Approved";
+
+                                                    string badgeClass = "badge-light text-muted border";
+                                                    if (stText == "Pending Review") badgeClass = "badge-light-warning text-warning border-warning";
+                                                    else if (stText == "Revision Required") badgeClass = "badge-light-danger text-danger border-danger";
+                                                    else if (stText == "Approved") badgeClass = "badge-light-success text-success border-success";
+                                                    
+                                                    bool canReview = (stText == "Pending Review");
+                                                    bool canView = (!canReview && (ms.SubmittedDate.HasValue || stText == "Approved" || stText == "Revision Required"));
+
+                                                    <tr>
+                                                        <td class="ps-4 py-3">
+                                                            <div class="d-flex align-items-center">
+                                                                <span class="text-dark fw-bolder d-block fs-6">@ms.Title</span>
+                                                                <span class="badge badge-light-secondary text-muted ms-2 px-2" style="font-size: 0.65rem;">@(ms.IsRequired ? "Required" : "Optional")</span>
+                                                            </div>
+                                                        </td>
+                                                        <td><span class="text-muted fw-bold d-block fs-7">@(ms.DueDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</span></td>
+                                                        <td><span class="text-dark fw-bold d-block fs-7">@(ms.SubmittedDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</span></td>
+                                                        <td class="text-center">
+                                                            <span class="badge @badgeClass fw-bolder px-3 py-2">@stText</span>
+                                                        </td>
+                                                        <td class="text-end pe-4">
+                                                            @if (canReview)
+                                                            {
+                                                                <a href="/Supervisor/GradeSubmission/@ms.Id" class="btn btn-sm btn-outline-primary fw-bold px-3"><i class="fas fa-search me-1"></i>Review</a>
+                                                            }
+                                                            else if (canView)
+                                                            {
+                                                                <a href="/Supervisor/GradeSubmission/@ms.Id" class="btn btn-sm btn-outline-secondary fw-bold px-3"><i class="fas fa-eye me-1"></i>View Details</a>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="text-muted fw-bold">—</span>
+                                                            }
+                                                        </td>
+                                                    </tr>
+                                                }
+                                                
+                                                @{
+                                                    var s1FinalMilestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(s1);
+                                                    bool isS1Approved = s1FinalMilestone != null && FYPTracker.Utils.GradingHelper.IsStage1DppApproved(s1FinalMilestone);
+                                                    string supMarks = s1FinalMilestone?.SupervisorMarksheetData ?? "";
+                                                    bool isS1SupDraft = FYPTracker.Utils.GradingHelper.IsMarksheetDraft(supMarks);
+                                                    bool isS1SupGraded = !string.IsNullOrEmpty(supMarks) && !isS1SupDraft;
+                                                    if (isS1Approved)
+                                                    {
+                                                        <tr class="table-light border-top border-2 border-primary">
+                                                            <td class="ps-4 py-3">
+                                                                <div class="d-flex align-items-center">
+                                                                    <i class="fas fa-file-signature text-primary fs-5 me-2"></i>
+                                                                    <div>
+                                                                        <span class="text-dark fw-bolder d-block fs-6">Stage 1 Proposal Assessment Rubric</span>
+                                                                        <small class="text-muted">Official 6-criterion proposal rubric evaluation</small>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td><span class="text-muted fw-bold d-block fs-7">—</span></td>
+                                                            <td><span class="text-dark fw-bold d-block fs-7">—</span></td>
+                                                            <td class="text-center">
+                                                                @if (isS1SupGraded)
+                                                                {
+                                                                    <span class="badge badge-light-success text-success border-success fw-bolder px-3 py-2">
+                                                                        <i class="fas fa-check-circle me-1"></i>Graded
+                                                                    </span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="badge badge-light-warning text-warning border-warning fw-bolder px-3 py-2">
+                                                                        <i class="fas fa-hourglass-start me-1"></i>Pending Marksheet
+                                                                    </span>
+                                                                }
+                                                            </td>
+                                                            <td class="text-end pe-4">
+                                                                <a href="@Url.Action("GradeMarksheetStage1", "Supervisor", new { id = proj.Id })" class="btn btn-sm @(isS1SupGraded ? "btn-outline-primary" : "btn-primary") fw-bold px-3">
+                                                                    <i class="fas @(isS1SupGraded ? "fa-eye" : "fa-clipboard-check") me-1"></i> @(isS1SupGraded ? "View / Update Stage 1 Assessment" : "Grade Stage 1 Rubric")
+                                                                </a>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                }
+                                                
+                                                <!-- Stage 2 -->
+                                                <tr class="bg-white border-top"><td colspan="5" class="ps-4 py-2 border-bottom-0"><span class="badge bg-success fw-bold"><i class="fas fa-flag-checkered me-1"></i>Stage 2 Milestones</span></td></tr>
+                                                @if (proj.Stage1Grade != "Pass")
+                                                {
+                                                    <tr>
+                                                        <td colspan="5" class="text-center py-4 bg-light border-0">
+                                                            <div class="text-muted fw-bold fs-6">
+                                                                <i class="fas fa-lock me-2 text-secondary"></i>Stage 2 is locked until the student successfully completes Stage 1.
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                                else
+                                                {
+                                                    @foreach (var ms in s2)
+                                                    {
+                                                        string stText = ms.Status;
+                                                        if (!ms.SubmittedDate.HasValue && (string.IsNullOrEmpty(ms.Status) || ms.Status == "Pending")) stText = "Not Submitted";
+                                                        else if (ms.Status == "Locked") stText = "Locked";
+                                                        else if (ms.Status == "Submitted" || ms.Status == "PendingSupervisorReview" || ms.Status == "UnderReview") stText = "Pending Review";
+                                                        else if (ms.Status == "ReturnedForChanges" || ms.Status == "ReturnedForEdits" || ms.Status == "Rejected") stText = "Revision Required";
+                                                        else if (ms.Status == "Approved" || ms.Status == "Completed" || ms.Status == "SupervisorSigned" || ms.Status == "AdminApproved" || ms.Status == "PendingPanelReview" || ms.Status == "DefenseRequired" || ms.Status == "DefenseScheduled") stText = "Approved";
+
+                                                        string badgeClass = "badge-light text-muted border";
+                                                        if (stText == "Pending Review") badgeClass = "badge-light-warning text-warning border-warning";
+                                                        else if (stText == "Revision Required") badgeClass = "badge-light-danger text-danger border-danger";
+                                                        else if (stText == "Approved") badgeClass = "badge-light-success text-success border-success";
+                                                        
+                                                        bool canReview = (stText == "Pending Review");
+                                                        bool canView = (!canReview && (ms.SubmittedDate.HasValue || stText == "Approved" || stText == "Revision Required"));
+
+                                                        <tr>
+                                                            <td class="ps-4 py-3">
+                                                                <div class="d-flex align-items-center">
+                                                                    <span class="text-dark fw-bolder d-block fs-6">@ms.Title</span>
+                                                                    <span class="badge badge-light-secondary text-muted ms-2 px-2" style="font-size: 0.65rem;">@(ms.IsRequired ? "Required" : "Optional")</span>
+                                                                </div>
+                                                            </td>
+                                                            <td><span class="text-muted fw-bold d-block fs-7">@(ms.DueDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</span></td>
+                                                            <td><span class="text-dark fw-bold d-block fs-7">@(ms.SubmittedDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</span></td>
+                                                            <td class="text-center">
+                                                                <span class="badge @badgeClass fw-bolder px-3 py-2">@stText</span>
+                                                            </td>
+                                                            <td class="text-end pe-4">
+                                                                @if (canReview)
+                                                                {
+                                                                    <a href="/Supervisor/GradeSubmission/@ms.Id" class="btn btn-sm btn-outline-primary fw-bold px-3"><i class="fas fa-search me-1"></i>Review</a>
+                                                                }
+                                                                else if (canView)
+                                                                {
+                                                                    <a href="/Supervisor/GradeSubmission/@ms.Id" class="btn btn-sm btn-outline-secondary fw-bold px-3"><i class="fas fa-eye me-1"></i>View Details</a>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="text-muted fw-bold">—</span>
+                                                                }
+                                                            </td>
+                                                        </tr>
+                                                    }
+
+                                                    {
+                                                        bool isStage2Eligible = FYPTracker.Utils.GradingHelper.AreStage2DeliverablesApproved(proj.Milestones);
+                                                        bool isStage2SupDone = !string.IsNullOrEmpty(proj.Stage2SupervisorMarksheetData);
+                                                    
+                                                        if (isStage2Eligible)
+                                                        {
+                                                        <tr class="table-light border-top border-2 border-primary">
+                                                            <td class="ps-4 py-3">
+                                                                <div class="d-flex align-items-center">
+                                                                    <i class="fas fa-graduation-cap text-primary fs-5 me-2"></i>
+                                                                    <div>
+                                                                        <span class="text-dark fw-bolder d-block fs-6">Stage 2 Final Assessment Marksheet</span>
+                                                                        <small class="text-muted">Official 7-criterion joint rubric evaluation</small>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td><span class="text-muted fw-bold d-block fs-7">—</span></td>
+                                                            <td><span class="text-dark fw-bold d-block fs-7">—</span></td>
+                                                            <td class="text-center">
+                                                                @if (isStage2SupDone)
+                                                                {
+                                                                    <span class="badge badge-light-success text-success border-success fw-bolder px-3 py-2">
+                                                                        <i class="fas fa-check-circle me-1"></i>Submitted
+                                                                    </span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span class="badge badge-light-warning text-warning border-warning fw-bolder px-3 py-2">
+                                                                        <i class="fas fa-hourglass-start me-1"></i>Pending Marksheet
+                                                                    </span>
+                                                                }
+                                                            </td>
+                                                            <td class="text-end pe-4">
+                                                                <a href="@Url.Action("GradeMarksheetStage2", "Supervisor", new { id = proj.Id })" class="btn btn-sm @(isStage2SupDone ? "btn-outline-success" : "btn-success") fw-bold px-3">
+                                                                    <i class="fas @(isStage2SupDone ? "fa-eye" : "fa-clipboard-check") me-1"></i> @(isStage2SupDone ? "View / Update Stage 2 Final Assessment" : "Grade Stage 2 Final Marksheet")
+                                                                </a>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                    }
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="card border-0 shadow-sm rounded-4 text-center py-5">
+                        <div class="empty-state">
+                            <i class="fas fa-folder-open fs-1 text-muted mb-3 opacity-50"></i>
+                            <h5 class="fw-bolder text-dark mb-1">No students found</h5>
+                            <p class="text-muted mb-0">Try adjusting your filters or session selection.</p>
+                        </div>
+                    </div>
+                }
+            </div>
+            
+            @if (totalAllPages > 1)
+            {
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        @for (int i = 1; i <= totalAllPages; i++)
+                        {
+                            <li class="page-item @(i == currentPage ? "active" : "")">
+                                <button class="page-link" onclick="paginate(@i, 'all')">@i</button>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .page-hero {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        padding: 2.5rem;
+        border-radius: 1rem;
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
+    }
+    .custom-tabs .nav-link {
+        color: #64748b;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+    .custom-tabs .nav-link:hover {
+        background: #f8fafc;
+        border-color: #cbd5e1;
+    }
+    .custom-tabs .nav-link.active {
+        color: #fff;
+        background: #3b82f6;
+        border-color: #3b82f6;
+    }
+    .accordion-custom .accordion-button {
+        background: #fff;
+        color: #1e293b;
+        border: none;
+        box-shadow: none;
+    }
+    .accordion-custom .accordion-button:not(.collapsed) {
+        background: #f8fafc;
+        box-shadow: inset 0 -1px 0 #e2e8f0;
+    }
+    .accordion-custom .accordion-button::after {
+        background-size: 1.25rem;
+        transition: transform 0.3s ease;
+    }
+    .custom-table th { background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+    .custom-table td { border-bottom: 1px solid #f1f5f9; }
+    .symbol-label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        border-radius: 0.475rem;
+    }
+    .bg-light-primary { background-color: #f1faff !important; }
+    .text-inverse-primary { color: #ffffff !important; }
+</style>
+
+<script>
+    function paginate(page, tab) {
+        document.getElementById('activeTabInput').value = tab;
+        const form = document.getElementById('filterForm');
+        let pageInput = document.createElement('input');
+        pageInput.type = 'hidden';
+        pageInput.name = 'page';
+        pageInput.value = page;
+        form.appendChild(pageInput);
+        form.submit();
+    }
+</script>

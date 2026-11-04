@@ -1,0 +1,644 @@
+@using FYPTracker.Models
+@inject FYPTracker.Services.Meetings.IMeetingRequirementService MeetingReqService
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment WebHostEnv
+@inject Microsoft.Extensions.Configuration.IConfiguration AppConfig
+@model FYPProject
+@{
+    ViewData["Title"] = "Project Details";
+    var currentUser = ViewBag.CurrentUser as ApplicationUser;
+    
+    var milestones = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
+    var stage1 = milestones.Where(m => m.Stage == 1).OrderBy(m => m.DueDate ?? DateTime.MaxValue).ToList();
+    var stage2 = FYPTracker.Utils.GradingHelper.GetActiveStage2Milestones(milestones)
+        .OrderBy(m => m.DueDate ?? DateTime.MaxValue)
+        .ToList();
+
+    bool IsSubmitted(FYPMilestone m) {
+        if (m == null) return false;
+        if (m.SubmittedDate.HasValue) return true;
+        if (m.Status == "Approved" || m.Status == "Completed" || m.Status == "AdminApproved" || m.Status == "SupervisorSigned") return true;
+        return false;
+    }
+
+    var stage1Required = stage1.Where(m => m.IsRequired).ToList();
+    var stage2Required = FYPTracker.Utils.GradingHelper.GetRequiredStage2Milestones(milestones);
+
+    int stage1Completed = stage1Required.Count(m => IsSubmitted(m));
+    int stage2Completed = stage2Required.Count(m => IsSubmitted(m));
+
+    double stage1Contrib = stage1Required.Count > 0 ? ((double)stage1Completed / stage1Required.Count) * 50.0 : 0;
+    double stage2Contrib = stage2Required.Count > 0 ? ((double)stage2Completed / stage2Required.Count) * 50.0 : 0;
+    int overallProgress = (int)Math.Round(stage1Contrib + stage2Contrib);
+    string pbColor = overallProgress > 70 ? "bg-success" : (overallProgress > 30 ? "bg-primary" : "bg-warning");
+
+    var stage2EligibilityInDetails = FYPTracker.Utils.GradingHelper.CheckStage2AcademicEligibility(Model, Model?.Milestones);
+    bool isStage2UnlockedInDetails = stage2EligibilityInDetails.IsEligible;
+    bool hideStage2Override = !isStage2UnlockedInDetails;
+
+    var assignedExaminerNames = Model?.AssignedExaminers?
+        .Where(e => !string.IsNullOrWhiteSpace(e.Examiner?.FullName))
+        .Select(e => e.Examiner!.FullName)
+        .Distinct()
+        .ToList() ?? new List<string>();
+
+    string examinerDisplayName = assignedExaminerNames.Any() 
+        ? string.Join(", ", assignedExaminerNames) 
+        : "Not Assigned";
+
+    bool HasStudentVisibleFeedback(FYPMilestone ms) {
+        if (ms == null) return false;
+        
+        string st = ms.Status ?? "";
+        bool isApprovedOrCompleted = st == "Approved" || st == "Completed" || st == "AdminApproved" || st == "SupervisorSigned";
+        bool isReturned = st == "ReturnedForChanges" || st == "Rejected" || st == "ReturnedForEdits" || st == "Revision";
+        
+        if (!isApprovedOrCompleted && !isReturned) return false;
+
+        if (!string.IsNullOrWhiteSpace(ms.SupervisorFeedback)) return true;
+
+        if (ms.MilestoneCode == "IAF" || (!string.IsNullOrEmpty(ms.Title) && (ms.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || ms.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase))))
+        {
+            if (!string.IsNullOrEmpty(ms.Remarks) && ms.Remarks.Contains("JSON: "))
+            {
+                try
+                {
+                    var rawJson = ms.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1];
+                    var hist = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(rawJson);
+                    if (hist?.Attempts != null && hist.Attempts.Any(a => !string.IsNullOrWhiteSpace(a.SupervisorFeedback) || !string.IsNullOrWhiteSpace(a.PanelComments)))
+                    {
+                        return true;
+                    }
+                }
+                catch { }
+            }
+        }
+
+        if (ms.Feedbacks != null && ms.Feedbacks.Any(f => !string.IsNullOrWhiteSpace(f.Comment))) return true;
+
+        if (!string.IsNullOrWhiteSpace(ms.SupervisorMarksheetData) && !FYPTracker.Utils.GradingHelper.IsMarksheetDraft(ms.SupervisorMarksheetData))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(ms.SupervisorMarksheetData);
+                var root = doc.RootElement;
+                if ((root.TryGetProperty("Strengths", out var s) && !string.IsNullOrWhiteSpace(s.GetString())) ||
+                    (root.TryGetProperty("Improvements", out var imp) && !string.IsNullOrWhiteSpace(imp.GetString())) ||
+                    (root.TryGetProperty("Comments", out var c) && !string.IsNullOrWhiteSpace(c.GetString())))
+                {
+                    return true;
+                }
+            }
+            catch { }
+        }
+
+        if (isReturned) return true;
+
+        return false;
+    }
+}
+
+<div class="container-xxl py-4">
+    <!-- Header -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: white;">
+        <div class="card-body p-4 p-md-5 d-flex flex-wrap justify-content-between align-items-center gap-4">
+            <div>
+                <h2 class="fw-bolder mb-2">Project Details</h2>
+                <div class="text-white-50 fs-6 fw-bold">Overview and complete timeline for your FYP.</div>
+            </div>
+            <div>
+                <a href="/Student/Index" class="btn btn-outline-light fw-bold px-4 rounded-pill shadow-sm"><i class="fas fa-arrow-left me-2"></i> Back to Dashboard</a>
+            </div>
+        </div>
+    </div>
+
+    @if(Model == null) {
+        <div class="alert alert-warning border-0 shadow-sm rounded-4 p-4"><i class="fas fa-exclamation-triangle me-2"></i> No active project found.</div>
+        return;
+    }
+
+    <div class="row g-4 mb-4">
+        <!-- Project Info -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-header bg-white border-bottom pt-4 pb-3">
+                    <h5 class="fw-bolder text-dark mb-0"><i class="fas fa-laptop-code text-primary me-2"></i> Project Overview</h5>
+                </div>
+                <div class="card-body p-4">
+                    <h4 class="fw-bold text-dark mb-3">@(Model.Title ?? "Untitled Project")</h4>
+                    <p class="text-muted fs-6 mb-4">@(string.IsNullOrEmpty(Model.Description) ? "No description provided." : Model.Description)</p>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="bg-light rounded p-3 h-100 border">
+                                <div class="text-muted fs-7 fw-bold text-uppercase mb-1">Supervisor</div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;"><i class="fas fa-user-tie"></i></div>
+                                    <span class="fw-bolder text-dark">@(Model.Supervisor?.FullName ?? "Not Assigned")</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="bg-light rounded p-3 h-100 border">
+                                <div class="text-muted fs-7 fw-bold text-uppercase mb-1">Examiner</div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="bg-info text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;"><i class="fas fa-user-graduate"></i></div>
+                                    <span class="fw-bolder text-dark">@examinerDisplayName</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Mini -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4 d-flex flex-column justify-content-center text-center">
+                    <h1 class="display-3 fw-bolder text-dark mb-0">@overallProgress%</h1>
+                    <div class="text-muted fw-bold mb-4">Overall Submission Progress</div>
+                    
+                    <div class="progress mb-3" style="height: 10px; border-radius: 99px;">
+                        <div class="progress-bar @pbColor progress-bar-striped progress-bar-animated" role="progressbar" style="width: @overallProgress%"></div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between text-muted fs-7 fw-bold mb-1">
+                        <span>Stage 1 Completed:</span>
+                        <span>@stage1Completed / @stage1Required.Count</span>
+                    </div>
+                    @if (!hideStage2Override)
+                    {
+                        <div class="d-flex justify-content-between text-muted fs-7 fw-bold">
+                            <span>Stage 2 Completed:</span>
+                            <span>@stage2Completed / @stage2Required.Count</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Milestone Timeline -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-bottom pt-4 pb-3">
+            <h5 class="fw-bolder text-dark mb-0"><i class="fas fa-stream text-primary me-2"></i> Milestone Timeline</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="accordion accordion-flush" id="timelineAccordion">
+                
+                <!-- Stage 1 -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingStage1">
+                        <button class="accordion-button fw-bold fs-5 px-4 py-3" type="button" data-bs-toggle="collapse" data-bs-target="#collapseStage1" aria-expanded="true">
+                            <i class="fas fa-tasks text-primary me-2"></i> Stage 1 Milestones
+                            @if(Model.Stage1Grade == "Pass") { <span class="badge bg-success ms-3 fs-7">Passed</span> }
+                            else if(Model.Stage1Grade == "Fail") { <span class="badge bg-danger ms-3 fs-7">Failed</span> }
+                        </button>
+                    </h2>
+                    <div id="collapseStage1" class="accordion-collapse collapse show" data-bs-parent="#timelineAccordion">
+                        <div class="accordion-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th class="ps-4 text-muted fw-bold text-uppercase fs-8">Milestone</th>
+                                            <th class="text-muted fw-bold text-uppercase fs-8">Due Date</th>
+                                            <th class="text-muted fw-bold text-uppercase fs-8">Date Submitted</th>
+                                            <th class="text-center text-muted fw-bold text-uppercase fs-8">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach(var ms in stage1) {
+                                            string statusClass = "bg-light text-muted border";
+                                            string statusText = ms.Status ?? "Pending";
+                                            if (!ms.SubmittedDate.HasValue && statusText == "Pending") { statusText = "Not Submitted"; statusClass = "bg-light text-muted border"; }
+                                            else if (statusText == "Submitted" || statusText == "UnderReview" || statusText == "PendingSupervisorReview") { statusText = "Pending Review"; statusClass = "bg-warning text-dark border border-warning"; }
+                                            else if (statusText == "Approved" || statusText == "Completed" || statusText == "AdminApproved" || statusText == "SupervisorSigned") { statusText = "Approved"; statusClass = "bg-success text-white"; }
+                                            else if (statusText == "Rejected" || statusText == "Revision" || statusText == "ReturnedForChanges") { statusText = "Revision Required"; statusClass = "bg-danger text-white"; }
+                                            else if (statusText == "Locked") { statusText = "Locked"; statusClass = "bg-secondary text-white"; }
+                                            
+                                            <tr>
+                                                <td class="ps-4 py-3">
+                                                    <div class="fw-bolder text-dark">@ms.Title</div>
+                                                    <span class="badge bg-light text-muted border fs-8 mt-1">@(ms.IsRequired ? "Required" : "Optional")</span>
+                                                </td>
+                                                <td class="text-muted fw-bold fs-7">@(ms.DueDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</td>
+                                                <td class="text-dark fw-bold fs-7">@(ms.SubmittedDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</td>
+                                                <td class="text-center">
+                                                    <div class="d-inline-flex align-items-center gap-2">
+                                                        <span class="badge @statusClass px-3 py-2 fw-bold">@statusText</span>
+                                                        @if (HasStudentVisibleFeedback(ms)) {
+                                                            <button type="button" 
+                                                                    class="btn btn-sm btn-outline-primary rounded-pill px-2 py-1 fs-8 fw-bold d-inline-flex align-items-center gap-1 shadow-sm"
+                                                                    onclick="openFeedbackModal(@ms.Id)"
+                                                                    title="View Feedback">
+                                                                <i class="fas fa-comment-dots"></i> View Feedback
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                        @if(!stage1.Any()) {
+                                            <tr><td colspan="4" class="text-center py-4 text-muted">No milestones found for Stage 1.</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stage 2 -->
+                @if (!hideStage2Override)
+                {
+                    <div class="accordion-item border-bottom-0">
+                        <h2 class="accordion-header" id="headingStage2">
+                            <button class="accordion-button @(isStage2UnlockedInDetails ? "" : "collapsed") fw-bold fs-5 px-4 py-3" type="button" data-bs-toggle="collapse" data-bs-target="#collapseStage2" aria-expanded="@(isStage2UnlockedInDetails ? "true" : "false")">
+                                <i class="fas fa-flag-checkered text-success me-2"></i> Stage 2 Milestones
+                                @if(!isStage2UnlockedInDetails) { <span class="badge bg-secondary ms-3 fs-7"><i class="fas fa-lock me-1"></i> Locked</span> }
+                            </button>
+                        </h2>
+                        <div id="collapseStage2" class="accordion-collapse collapse @(isStage2UnlockedInDetails ? "show" : "")" data-bs-parent="#timelineAccordion">
+                        <div class="accordion-body p-0">
+                            @if(!isStage2UnlockedInDetails) {
+                                <div class="text-center py-5 bg-light">
+                                    <i class="fas fa-lock text-muted fs-1 opacity-25 mb-3"></i>
+                                    <h6 class="fw-bold text-dark mb-1">Stage 2 is Locked</h6>
+                                    <p class="text-muted fs-7 mb-0">@(string.IsNullOrEmpty(stage2EligibilityInDetails.Reason) ? "You must pass Stage 1 before you can unlock and access Stage 2 milestones." : stage2EligibilityInDetails.Reason)</p>
+                                </div>
+                            }
+                            else {
+                                var meetingProgressStage2 = await MeetingReqService.GetStudentProgressAsync(Model.StudentId, 2);
+                                int completedMeetings = meetingProgressStage2?.Completed ?? 0;
+                                int? requiredMeetings = meetingProgressStage2?.Required;
+                                bool isMeetingRequirementMet = FYPTracker.Utils.GradingHelper.IsStage2MeetingRequirementSatisfied(completedMeetings, requiredMeetings);
+
+                                <div class="card border-0 shadow-sm rounded-3 m-4 mb-3 border-start border-4 @(isMeetingRequirementMet ? "border-success" : "border-warning") bg-white">
+                                    <div class="card-body p-3 p-md-4">
+                                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                                            <div class="d-flex align-items-center gap-3">
+                                                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px; background: @(isMeetingRequirementMet ? "#e8fff3" : "#fff8dd"); color: @(isMeetingRequirementMet ? "#15803d" : "#b45309");">
+                                                    <i class="fas @(isMeetingRequirementMet ? "fa-calendar-check" : "fa-calendar-alt") fs-5"></i>
+                                                </div>
+                                                <div>
+                                                    <h6 class="fw-bolder text-dark mb-1">
+                                                        Stage 2 Supervisor Meetings Requirement
+                                                    </h6>
+                                                    <p class="text-muted small mb-0">
+                                                        Validated directly via signed digital meeting logs. No duplicate PDF upload is required.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-3">
+                                                <span class="badge rounded-pill px-3 py-2 fw-bold" style="background-color: @(isMeetingRequirementMet ? "#e8fff3" : "#fff8dd") !important; color: @(isMeetingRequirementMet ? "#15803d" : "#b45309") !important; border: 1px solid @(isMeetingRequirementMet ? "rgba(80, 205, 137, 0.4)" : "rgba(241, 196, 15, 0.4)") !important;">
+                                                    <i class="fas @(isMeetingRequirementMet ? "fa-check-circle" : "fa-clock") me-1"></i>
+                                                    @(isMeetingRequirementMet ? $"Requirement Satisfied ({completedMeetings}/{(requiredMeetings ?? 10)} Signed Meetings)" : $"Incomplete ({completedMeetings}/{(requiredMeetings ?? 10)} Signed Meetings)")
+                                                </span>
+                                                <a href="@Url.Action("BookMeeting", "Student")" class="btn btn-outline-primary btn-sm rounded-pill fw-bold px-3">
+                                                    <i class="fas fa-history me-1"></i> View Meeting Logs
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="bg-light">
+                                            <tr>
+                                                <th class="ps-4 text-muted fw-bold text-uppercase fs-8">Milestone</th>
+                                                <th class="text-muted fw-bold text-uppercase fs-8">Due Date</th>
+                                                <th class="text-muted fw-bold text-uppercase fs-8">Date Submitted</th>
+                                                <th class="text-center text-muted fw-bold text-uppercase fs-8">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach(var ms in stage2) {
+                                                string statusClass = "bg-light text-muted border";
+                                                string statusText = ms.Status ?? "Pending";
+                                                if (!ms.SubmittedDate.HasValue && statusText == "Pending") { statusText = "Not Submitted"; statusClass = "bg-light text-muted border"; }
+                                                else if (statusText == "Submitted" || statusText == "UnderReview" || statusText == "PendingSupervisorReview") { statusText = "Pending Review"; statusClass = "bg-warning text-dark border border-warning"; }
+                                                else if (statusText == "Approved" || statusText == "Completed" || statusText == "AdminApproved" || statusText == "SupervisorSigned") { statusText = "Approved"; statusClass = "bg-success text-white"; }
+                                                else if (statusText == "Rejected" || statusText == "Revision" || statusText == "ReturnedForChanges") { statusText = "Revision Required"; statusClass = "bg-danger text-white"; }
+                                                else if (statusText == "Locked") { statusText = "Locked"; statusClass = "bg-secondary text-white"; }
+                                                
+                                                <tr>
+                                                    <td class="ps-4 py-3">
+                                                        <div class="fw-bolder text-dark">@FYPTracker.Utils.GradingHelper.GetStage2DisplayTitle(ms)</div>
+                                                        <span class="badge bg-light text-muted border fs-8 mt-1">@(ms.IsRequired ? "Required" : "Optional")</span>
+                                                    </td>
+                                                    <td class="text-muted fw-bold fs-7">@(ms.DueDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</td>
+                                                    <td class="text-dark fw-bold fs-7">@(ms.SubmittedDate?.ToString("dd MMM yyyy, hh:mm tt") ?? "-")</td>
+                                                    <td class="text-center">
+                                                        <div class="d-inline-flex align-items-center gap-2">
+                                                            <span class="badge @statusClass px-3 py-2 fw-bold">@statusText</span>
+                                                            @if (HasStudentVisibleFeedback(ms)) {
+                                                                <button type="button" 
+                                                                        class="btn btn-sm btn-outline-primary rounded-pill px-2 py-1 fs-8 fw-bold d-inline-flex align-items-center gap-1 shadow-sm"
+                                                                        onclick="openFeedbackModal(@ms.Id)"
+                                                                        title="View Feedback">
+                                                                    <i class="fas fa-comment-dots"></i> View Feedback
+                                                                </button>
+                                                            }
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            }
+                                            @if(!stage2.Any()) {
+                                                <tr><td colspan="4" class="text-center py-4 text-muted">No milestones found for Stage 2.</td></tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                }
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Milestone Feedback Modal -->
+<div class="modal fade" id="milestoneFeedbackModal" tabindex="-1" aria-labelledby="milestoneFeedbackModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header border-bottom bg-light px-4 py-3">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                        <i class="fas fa-comment-dots fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bolder text-dark mb-0" id="milestoneFeedbackModalLabel">Milestone Feedback</h5>
+                        <small class="text-muted fw-medium" id="feedbackMilestoneSubtitle">Supervisor Review & Comments</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4" id="feedbackModalBody">
+                <!-- Content loaded dynamically via AJAX -->
+            </div>
+            <div class="modal-footer border-top bg-light px-4 py-3">
+                <button type="button" class="btn btn-secondary rounded-pill px-4 fw-bold" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function openFeedbackModal(milestoneId) {
+        var modalEl = document.getElementById('milestoneFeedbackModal');
+        var modalBody = document.getElementById('feedbackModalBody');
+        var subtitle = document.getElementById('feedbackMilestoneSubtitle');
+        if (subtitle) subtitle.innerText = 'Supervisor Review & Comments';
+        
+        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        
+        modalBody.innerHTML = `
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+                <div class="text-muted small mt-2 fw-semibold">Loading feedback details...</div>
+            </div>
+        `;
+        modal.show();
+
+        fetch('/Student/GetMilestoneFeedback?milestoneId=' + encodeURIComponent(milestoneId), {
+            headers: { 
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(async function(res) {
+            var contentType = res.headers.get('content-type') || '';
+            var isJson = contentType.indexOf('application/json') !== -1;
+            
+            if (!isJson) {
+                if (res.status === 401) {
+                    throw new Error('Your session has expired or you are not logged in. Please refresh and log in.');
+                } else if (res.status === 403) {
+                    throw new Error('You do not have permission to view feedback for this milestone.');
+                } else if (res.status === 404) {
+                    throw new Error('Milestone not found or you do not have permission to view its feedback.');
+                } else {
+                    throw new Error('Unable to load feedback at this time (Server returned a non-JSON response).');
+                }
+            }
+
+            var data;
+            try {
+                data = await res.json();
+            } catch (parseErr) {
+                throw new Error('Unable to parse server feedback response.');
+            }
+
+            if (!res.ok || !data || !data.success) {
+                var errorMsg = (data && data.message) ? data.message : 'Unable to retrieve feedback for this milestone.';
+                throw new Error(errorMsg);
+            }
+
+            renderFeedbackModal(data.data);
+        })
+        .catch(function(err) {
+            modalBody.innerHTML = `
+                <div class="alert alert-warning border-0 shadow-sm rounded-4 p-4 text-center">
+                    <i class="fas fa-exclamation-circle fs-2 mb-2 d-block text-warning"></i>
+                    <h6 class="fw-bold mb-1 text-dark">Unable to Load Feedback</h6>
+                    <p class="small text-muted mb-0">${escapeHtml(err.message || 'An unexpected error occurred while loading feedback.')}</p>
+                </div>
+            `;
+        });
+    }
+
+    function renderFeedbackModal(data) {
+        var modalBody = document.getElementById('feedbackModalBody');
+        var subtitle = document.getElementById('feedbackMilestoneSubtitle');
+        if (subtitle) subtitle.innerText = `Stage ${data.stage} - Supervisor: ${data.supervisorName}`;
+
+        var attempts = data.attempts || [];
+
+        var statusBadgeClass = 'bg-primary text-white';
+        var st = (data.status || '').toLowerCase();
+        if (st.includes('approved') || st.includes('completed')) statusBadgeClass = 'bg-success text-white';
+        else if (st.includes('return') || st.includes('reject') || st.includes('revision')) statusBadgeClass = 'bg-danger text-white';
+        else if (st.includes('pending') || st.includes('review')) statusBadgeClass = 'bg-warning text-dark';
+
+        var headerHtml = `
+            <div class="p-3 rounded-4 mb-4 border bg-white shadow-sm">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                    <h5 class="fw-bolder text-dark mb-0">${escapeHtml(data.milestoneTitle)}</h5>
+                    <span class="badge ${statusBadgeClass} px-3 py-1 rounded-pill fw-bold">${escapeHtml(data.status)}</span>
+                </div>
+                <div class="d-flex flex-wrap gap-4 text-muted fs-7">
+                    <div><i class="fas fa-user-tie text-primary me-1"></i> <strong>Supervisor:</strong> ${escapeHtml(data.supervisorName)}</div>
+                    <div><i class="fas fa-layer-group text-info me-1"></i> <strong>Stage:</strong> Stage ${data.stage}</div>
+                    ${data.latestReviewDate ? `<div><i class="fas fa-calendar-check text-success me-1"></i> <strong>Review Date:</strong> ${escapeHtml(data.latestReviewDate)}</div>` : ''}
+                </div>
+            </div>
+        `;
+
+        var hasAnyFeedback = (data.latestFeedback && data.latestFeedback.trim().length > 0) ||
+                             (data.rubricFeedback && data.rubricFeedback.trim().length > 0) ||
+                             (attempts.some(function(a) { return (a.supervisorFeedback && a.supervisorFeedback.trim().length > 0) || (a.panelFeedback && a.panelFeedback.trim().length > 0); }));
+
+        var noFeedbackBanner = '';
+        if (!hasAnyFeedback) {
+            noFeedbackBanner = `
+                <div class="alert alert-info border-0 shadow-sm rounded-4 p-3 mb-3 d-flex align-items-center gap-3">
+                    <i class="fas fa-info-circle text-info fs-4"></i>
+                    <div>
+                        <div class="fw-bold text-dark mb-0">No Written Feedback Recorded</div>
+                        <div class="small text-muted">The supervisor has reviewed this milestone, but has not entered written comments or remarks yet.</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        var attemptsHtml = '';
+        if (attempts.length > 1) {
+            attemptsHtml += `
+                <div class="mb-3">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-uppercase text-muted fw-bold fs-8"><i class="fas fa-history me-1"></i> Submission History (${attempts.length} Attempts)</span>
+                    </div>
+                    <ul class="nav nav-pills gap-2 mb-3" id="feedbackAttemptTabs" role="tablist">
+            `;
+            attempts.forEach(function(att, idx) {
+                var isActive = idx === attempts.length - 1;
+                var isLatestLabel = idx === attempts.length - 1 ? ' (Latest)' : '';
+                attemptsHtml += `
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link rounded-pill px-3 py-1 fs-7 fw-bold ${isActive ? 'active' : ''}" 
+                                id="tab-attempt-${att.attemptNumber}" 
+                                data-bs-toggle="pill" 
+                                data-bs-target="#content-attempt-${att.attemptNumber}" 
+                                type="button" role="tab">
+                            Attempt ${att.attemptNumber}${isLatestLabel}
+                        </button>
+                    </li>
+                `;
+            });
+            attemptsHtml += `
+                    </ul>
+                </div>
+                <div class="tab-content" id="feedbackAttemptTabContent">
+            `;
+
+            attempts.forEach(function(att, idx) {
+                var isActive = idx === attempts.length - 1;
+                attemptsHtml += `
+                    <div class="tab-pane fade ${isActive ? 'show active' : ''}" id="content-attempt-${att.attemptNumber}" role="tabpanel">
+                        ${renderSingleAttempt(att)}
+                    </div>
+                `;
+            });
+
+            attemptsHtml += `</div>`;
+        } else if (attempts.length === 1) {
+            attemptsHtml = renderSingleAttempt(attempts[0]);
+        } else {
+            attemptsHtml = `
+                <div class="alert alert-light border rounded-3 p-4 text-center text-muted">
+                    <i class="fas fa-info-circle me-1"></i> No review feedback recorded for this milestone.
+                </div>
+            `;
+        }
+
+        var rubricHtml = '';
+        if (data.rubricFeedback) {
+            rubricHtml = `
+                <div class="mt-4 p-3 rounded-4 border" style="background: #fdfefe;">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="fas fa-clipboard-check text-primary"></i>
+                        <h6 class="fw-bold text-dark mb-0">Evaluation Rubric Remarks</h6>
+                    </div>
+                    <div class="p-3 bg-light rounded-3 text-dark fs-7" style="white-space: pre-wrap; font-family: inherit;">${escapeHtml(data.rubricFeedback)}</div>
+                </div>
+            `;
+        }
+
+        modalBody.innerHTML = headerHtml + noFeedbackBanner + attemptsHtml + rubricHtml;
+    }
+
+    function renderSingleAttempt(att) {
+        var hasFb = att.supervisorFeedback && att.supervisorFeedback.trim().length > 0;
+        var hasPanel = att.panelFeedback && att.panelFeedback.trim().length > 0;
+        var hasRevNotes = att.revisionNotes && att.revisionNotes.trim().length > 0;
+        var hasFiles = att.files && att.files.length > 0;
+
+        var html = `<div class="card border rounded-4 shadow-none bg-white p-3">`;
+
+        html += `
+            <div class="d-flex flex-wrap justify-content-between align-items-center pb-2 mb-3 border-bottom gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-light text-dark border fw-bold fs-7">Attempt #${att.attemptNumber}</span>
+                    ${att.status ? `<span class="badge bg-secondary-subtle text-secondary rounded-pill fs-8">${escapeHtml(att.status)}</span>` : ''}
+                </div>
+                <div class="text-muted fs-8">
+                    ${att.submittedAt ? `<span class="me-3"><i class="fas fa-paper-plane me-1"></i> Submitted: ${escapeHtml(att.submittedAt)}</span>` : ''}
+                    ${att.reviewedAt ? `<span><i class="fas fa-check-circle me-1"></i> Reviewed: ${escapeHtml(att.reviewedAt)}</span>` : ''}
+                </div>
+            </div>
+        `;
+
+        if (hasFiles) {
+            html += `
+                <div class="mb-3">
+                    <span class="text-muted fs-8 fw-bold text-uppercase d-block mb-1"><i class="fas fa-paperclip me-1"></i> Submitted Documents</span>
+                    <div class="d-flex flex-wrap gap-2">
+            `;
+            att.files.forEach(function(f) {
+                html += `<span class="badge bg-light text-dark border px-2 py-1 fs-8 fw-semibold"><i class="fas fa-file-pdf text-danger me-1"></i> ${escapeHtml(f)}</span>`;
+            });
+            html += `</div></div>`;
+        }
+
+        if (hasRevNotes) {
+            html += `
+                <div class="mb-3 p-3 rounded-3" style="background: #f8fafc; border-left: 3px solid #3b82f6;">
+                    <span class="text-primary fw-bold fs-8 text-uppercase d-block mb-1"><i class="fas fa-edit me-1"></i> Student Revision Notes</span>
+                    <div class="text-dark fs-7" style="white-space: pre-wrap;">${escapeHtml(att.revisionNotes)}</div>
+                </div>
+            `;
+        }
+
+        html += `
+            <div class="p-3 rounded-3" style="background: ${hasFb ? '#f0fdf4' : '#f8fafc'}; border-left: 3px solid ${hasFb ? '#10b981' : '#cbd5e1'};">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="fas fa-comment-dots ${hasFb ? 'text-success' : 'text-muted'} fs-6"></i>
+                    <h6 class="fw-bold ${hasFb ? 'text-success' : 'text-muted'} mb-0">Supervisor Feedback</h6>
+                </div>
+                <div class="text-dark fs-7" style="white-space: pre-wrap; line-height: 1.5;">${hasFb ? escapeHtml(att.supervisorFeedback) : '<span class="text-muted fst-italic">No written feedback recorded for this attempt.</span>'}</div>
+            </div>
+        `;
+
+        if (hasPanel) {
+            html += `
+                <div class="mt-3 p-3 rounded-3" style="background: #fefce8; border-left: 3px solid #eab308;">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="fas fa-users text-warning fs-6"></i>
+                        <h6 class="fw-bold text-warning mb-0">Panel Feedback / Comments</h6>
+                    </div>
+                    <div class="text-dark fs-7" style="white-space: pre-wrap; line-height: 1.5;">${escapeHtml(att.panelFeedback)}</div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        return html;
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+</script>
+}

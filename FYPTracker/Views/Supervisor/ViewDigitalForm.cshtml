@@ -1,0 +1,442 @@
+ @model FYPTracker.Models.FYPMilestone
+@using FYPTracker.Models
+@using FYPTracker.ViewModels
+@using System.Collections.Generic
+@using System.Linq
+@using System.Text.Json
+@inject FYPTrackerContext _context
+
+@{
+    ViewData["Title"] = "View Submission";
+    Layout = null;
+
+    string raw = Model.Remarks ?? "";
+    int jsonIndex = raw.IndexOf("JSON: ", StringComparison.Ordinal);
+    string parsedJson = jsonIndex >= 0
+        ? raw.Substring(jsonIndex + "JSON: ".Length)
+        : raw;
+    var history = IafAttemptHistory.ParseOrMigrate(parsedJson);
+
+    int.TryParse(Convert.ToString(ViewData["AttemptNumber"]), out int requestedAttemptNumber);
+    var attempt = history.Attempts.FirstOrDefault(a => a.AttemptNumber == requestedAttemptNumber);
+    var formData = attempt?.FormData ?? new Dictionary<string, string>();
+    string Fv(string key) => formData.TryGetValue(key, out var value) ? value ?? "" : "";
+    
+    // Attempt to determine if someone signed (SupervisorSignature)
+    bool isSigned = !string.IsNullOrWhiteSpace(attempt?.SupervisorSignature);
+    string recordedSignerName = Fv("__iafSignedByName");
+    string currentSupervisorName = Model.Project?.Supervisor?.FullName ?? "";
+    bool hasRecordedSigner = !string.IsNullOrWhiteSpace(recordedSignerName);
+    string displayedSupervisorName = hasRecordedSigner ? recordedSignerName : currentSupervisorName;
+
+    MeetingRecordTemplateVM? viewTemplate = null;
+    if (formData.TryGetValue("__iafTemplateSnapshot", out var snapshotJson) && !string.IsNullOrWhiteSpace(snapshotJson))
+    {
+        try
+        {
+            viewTemplate = JsonSerializer.Deserialize<MeetingRecordTemplateVM>(
+                snapshotJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (viewTemplate?.Fields == null || viewTemplate.Fields.Count == 0)
+                viewTemplate = null;
+        }
+        catch (JsonException) { viewTemplate = null; }
+    }
+
+    var orderedFields = viewTemplate?.Fields.OrderBy(f => f.Order).ToList();
+    string documentTitle = viewTemplate?.Title ?? Model.Title;
+    string templateKey = viewTemplate?.TemplateKey?.ToLowerInvariant() ?? "";
+
+    bool isIaf = templateKey.Contains("initial-project") || templateKey == "iaf";
+    bool isThesisCover = templateKey.Contains("thesis-cover");
+    bool isGenAi = templateKey.Contains("group-genai") || templateKey.Contains("genai");
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@documentTitle — Attempt @requestedAttemptNumber</title>
+    <partial name="_Favicon" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+    <style>
+        body {
+            background: #f8fafc;
+            color: #1e293b;
+        }
+
+        .view-page-container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .a4-template-paper {
+            box-sizing: border-box;
+            width: 210mm;
+            max-width: 100%;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 20mm;
+            background: white;
+            color: #222;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+
+        /* Generic and IAF Form Styles */
+        .generic-preview, .iaf-preview {
+            font-family: Arial, Helvetica, sans-serif;
+            color: #222;
+            overflow-wrap: anywhere;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: bold;
+            border-bottom: 2px solid #222;
+            padding-bottom: 4px;
+            margin-bottom: 4px;
+            color: #000;
+            text-transform: uppercase;
+        }
+
+        .section-instruction {
+            font-size: 12px;
+            font-style: italic;
+            color: #555;
+            margin-bottom: 8px;
+        }
+
+        .field-label {
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 4px;
+            display: block;
+            text-align: left;
+        }
+
+        .text-line {
+            border-bottom: 1px solid #444;
+            min-height: 8mm;
+            padding: 4px 0;
+            white-space: pre-wrap;
+            text-align: left;
+        }
+
+        .text-area {
+            border: 1px solid #888;
+            background-image: repeating-linear-gradient(
+                to bottom,
+                transparent 0,
+                transparent 27px,
+                #e5e5e5 28px
+            );
+            border-radius: 4px;
+            padding: 8px;
+            white-space: pre-wrap;
+            line-height: 28px;
+            text-align: left;
+            height: auto; /* Allow auto expansion */
+        }
+
+        .signature-box {
+            border-bottom: 1px solid #444;
+            display: flex;
+            align-items: flex-start;
+            padding-bottom: 4px;
+        }
+
+        .signature-image {
+            max-width: 250px;
+            max-height: 80px;
+            object-fit: contain;
+        }
+
+        /* Thesis Cover Page Styles */
+        .cover-page-preview {
+            min-height: 257mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            text-align: center;
+            font-family: "Times New Roman", Georgia, serif;
+            color: #000;
+            overflow-wrap: anywhere;
+        }
+
+        .cover-title-block { padding-top: 22mm; }
+        .cover-thesis-title { font-size: 20pt; font-weight: bold; line-height: 1.5; }
+        .cover-student-block, .cover-bottom-block { font-size: 12pt; line-height: 1.8; }
+        .cover-bottom-block { padding-bottom: 4mm; }
+        .cover-school { margin-top: 10mm; }
+        .cover-document-date { margin-top: 12mm; }
+        .cover-info-line { margin-bottom: 2mm; }
+
+        /* GenAI Group Form Styles */
+        .genai-group-preview {
+            font-family: Arial, Helvetica, sans-serif;
+            color: #222;
+            overflow-wrap: anywhere;
+        }
+
+        .genai-group-title {
+            font-size: 16pt;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+        }
+        
+        .genai-group-intro { font-size: 10pt; margin-bottom: 20px; line-height: 1.4; }
+        .genai-group-section { border: 1px solid #000; margin-bottom: 20px; padding: 15px; }
+        .genai-group-section-title {
+            font-weight: bold;
+            background-color: #e9ecef;
+            padding: 8px;
+            margin: -15px -15px 15px -15px;
+            border-bottom: 1px solid #000;
+            text-align: left;
+        }
+
+        .genai-group-field { margin-bottom: 10px; }
+        .genai-group-label { font-weight: bold; font-size: 10pt; text-align: left; }
+        .genai-group-value {
+            border-bottom: 1px solid #000;
+            min-height: 20px;
+            display: inline-block;
+            width: 100%;
+            text-align: left;
+        }
+
+        .genai-group-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10pt; }
+        .genai-group-table th, .genai-group-table td { border: 1px solid #000; padding: 8px; text-align: left; }
+        .genai-group-table th { background-color: #f8f9fa; font-weight: bold; }
+        .genai-group-checkbox-row { margin-bottom: 10px; font-size: 10pt; text-align: left; }
+        .genai-group-checkbox {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 1px solid #000;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        /* Print and Page Breaking */
+        .section-wrapper, .field-wrapper {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+
+        @@page {
+            size: A4 portrait;
+            margin: 20mm;
+        }
+
+        @@media print {
+            .no-print { display: none !important; }
+            body { margin: 0 !important; background: white !important; }
+            .a4-template-paper {
+                width: auto !important;
+                max-width: none !important;
+                min-height: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+            }
+            .text-area {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container-xxl px-3 px-md-4 py-4">
+    <div class="view-page-container">
+        <div class="d-flex justify-content-end mb-4 no-print">
+            <button type="button" class="btn btn-primary fw-semibold px-4 py-2" onclick="window.print()">
+                <i class="fas fa-file-pdf me-2"></i>Print / Save as PDF
+            </button>
+        </div>
+
+        @if (attempt == null)
+        {
+            <div class="alert alert-warning">The requested attempt could not be found.</div>
+        }
+        else if (orderedFields != null)
+        {
+            <div class="a4-template-paper">
+                <div class="row iaf-preview">
+                    @if (!isIaf)
+                    {
+                        <div class="col-12 text-center mb-4">
+                            <h3 class="fw-bold text-uppercase">@documentTitle</h3>
+
+                            <div class="text-muted small no-print">
+                                Attempt @requestedAttemptNumber
+
+                                @if (viewTemplate != null)
+                                {
+                                    <span>
+                                        &middot; Template Version @viewTemplate.Version
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                        @if (isIaf)
+                        {
+                            var formDataMap = new Dictionary<string, string>(formData);
+                            
+                            // Map old keys to new normalized keys
+                            if (!formDataMap.ContainsKey("references") && formDataMap.ContainsKey("References")) formDataMap["references"] = formDataMap["References"];
+                            if (!formDataMap.ContainsKey("agreedSupervisor") && formDataMap.ContainsKey("Agreed Supervisor Name")) formDataMap["agreedSupervisor"] = formDataMap["Agreed Supervisor Name"];
+
+                            var iafViewModel = new FYPTracker.ViewModels.IafDocumentViewModel
+                            {
+                                Template = viewTemplate,
+                                FormData = formDataMap,
+                                RenderMode = "ReadOnly",
+                                IsLocked = true,
+                                AttemptNumber = requestedAttemptNumber,
+                                MilestoneId = Model.Id,
+                                Status = Model.Status,
+                                StudentName = !string.IsNullOrWhiteSpace(Fv("studentName")) ? Fv("studentName") : Model.Project?.Student?.FullName ?? "",
+                                CoventryId = !string.IsNullOrWhiteSpace(Fv("coventryId")) ? Fv("coventryId") : Model.Project?.Student?.CoventryId ?? "",
+                                Program = !string.IsNullOrWhiteSpace(Fv("program")) ? Fv("program") : Model.Project?.Student?.Programme ?? "",
+                                ProjectTitle = !string.IsNullOrWhiteSpace(Fv("title")) ? Fv("title") : Model.Project?.Title ?? "",
+                                SupervisorName = isSigned ? displayedSupervisorName : (!string.IsNullOrWhiteSpace(Fv("agreedSupervisor")) ? Fv("agreedSupervisor") : ""),
+                                SupervisorSignature = attempt?.SupervisorSignature ?? "",
+                                SignatureDate = attempt?.SupervisorReviewedAt,
+                                SupervisorFeedback = attempt?.SupervisorFeedback ?? "",
+                                PanelComments = attempt?.PanelComments ?? ""
+                            };
+
+                            <div class="w-100">
+                                @await Html.PartialAsync("_IafDocument", iafViewModel)
+                            </div>
+                        }
+                        else
+                        {
+                            string currentSection = "";
+
+                            @foreach (var field in orderedFields)
+                            {
+                                string sectionTitle = "";
+                                string instructions = "";
+
+                                // For generic forms, group consecutive fields logically if needed,
+                                // or assume all fall under one main body. For now, we omit hardcoded sections.
+                                sectionTitle = "Form Details";
+
+                                if (sectionTitle != currentSection && !string.IsNullOrEmpty(sectionTitle))
+                                {
+                                    currentSection = sectionTitle;
+                                    <div class="col-12 mt-4 section-wrapper">
+                                        <div class="section-title">@sectionTitle</div>
+                                        @if (!string.IsNullOrWhiteSpace(instructions))
+                                        {
+                                            <div class="section-instruction">@instructions</div>
+                                        }
+                                    </div>
+                                }
+
+                                int width = field.Columns >= 1 && field.Columns <= 12 ? field.Columns : 12;
+                                int minHeight = field.MinHeightMm;
+                                
+                                string value = "";
+                                string signatureVal = "";
+                                
+                                if (isThesisCover)
+                                {
+                                    value = field.Key switch
+                                    {
+                                        "ThesisTitle" => !string.IsNullOrWhiteSpace(Fv("Project Title")) ? Fv("Project Title") : Model.Project?.Title ?? "",
+                                        "StudentName" => Model.Project?.Student?.FullName ?? "",
+                                        "CoventryStudentId" => Model.Project?.Student?.CoventryId ?? "",
+                                        "SupervisorName" => Model.Project?.Supervisor?.FullName ?? "",
+                                        "ProgrammeName" => Model.Project?.Student?.Programme ?? "",
+                                        "DocumentDate" => !string.IsNullOrWhiteSpace(Fv("documentdate")) ? Fv("documentdate") : Model.Project?.AcademicSession ?? "N/A",
+                                        _ => Fv(field.Key)
+                                    };
+                                }
+                                else
+                                {
+                                    value = Fv(field.Key);
+                                    if (field.Type == "Signature")
+                                    {
+                                        signatureVal = value;
+                                    }
+                                }
+
+                                <div class="col-@width field-wrapper">
+                                    <div class="mb-3 text-start">
+                                        <div class="field-label">@field.Label</div>
+
+                                        @if (field.Type == "Signature")
+                                        {
+                                            <div class="row g-3 mt-1">
+                                                <div class="col-6 text-start">
+                                                    <div class="signature-box" style="min-height:@(Math.Max(15, minHeight > 0 ? minHeight : 20))mm;">
+                                                        @if (string.IsNullOrWhiteSpace(signatureVal))
+                                                        {
+                                                            <span class="text-muted small fst-italic">Not signed</span>
+                                                        }
+                                                        else if (signatureVal.StartsWith("data:image"))
+                                                        {
+                                                            <img src="@signatureVal" alt="Signature" class="signature-image" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="fst-italic">@signatureVal</span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+                                        else if (field.Type == "TextArea")
+                                        {
+                                            <div class="text-area" style="min-height:@(Math.Max(15, minHeight > 0 ? minHeight : 15))mm;">
+                                                @value
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="text-line" style="min-height:@(Math.Max(8, minHeight > 0 ? minHeight : 8))mm;">
+                                                @value
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(attempt?.PanelComments))
+                            {
+                                <div class="col-12 mt-4 section-wrapper text-start">
+                                    <div class="section-title">Panel Comments</div>
+                                    <div class="text-area" style="min-height:30mm;">
+                                        @attempt.PanelComments
+                                    </div>
+                                </div>
+                            }
+                        }  @* End IAF else (generic form) *@
+
+                    </div>  @* Close .row.iaf-preview *@
+
+                </div>  @* Close .a4-template-paper *@
+            }
+            else
+            {
+                <div class="alert alert-danger">
+                    Legacy form layouts cannot be rendered in this view.
+                </div>
+            }
+
+        </div>  @* Close .view-page-container *@
+    </div>  @* Close .container-xxl *@
+
+</body>
+</html>

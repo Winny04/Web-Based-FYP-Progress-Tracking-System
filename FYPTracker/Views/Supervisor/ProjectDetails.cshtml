@@ -1,0 +1,747 @@
+@using FYPTracker.Models
+@inject FYPTracker.Services.Meetings.IMeetingRequirementService MeetingReqService
+@model FYPProject
+@{
+    ViewData["Title"] = "Manage Project Milestones";
+}
+
+<style>
+    :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
+
+    .page-hero {
+        background: var(--hero-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
+    }
+
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid rgba(37, 99, 235, 0.1);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        padding: 24px;
+        margin-bottom: 20px;
+    }
+
+    .milestone-item {
+        border-left: 4px solid #3b82f6;
+        background: #f8fafc;
+        border-radius: 0 12px 12px 0;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+        transition: all 0.2s ease;
+    }
+    .milestone-item:hover {
+        background: #f1f5f9;
+        transform: translateX(4px);
+    }
+
+    .btn-action {
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        border: none;
+        transition: all 0.2s;
+    }
+    .btn-edit { background: #e0e7ff; color: #4f46e5; }
+    .btn-edit:hover { background: #c7d2fe; }
+    .btn-delete { background: #fee2e2; color: #dc2626; }
+    .btn-delete:hover { background: #fecaca; }
+    .btn-add { background: #2563eb; color: white; border-radius: 10px; padding: 10px 20px; font-weight: 600; }
+    .btn-add:hover { background: #1d4ed8; color: white;}
+</style>
+
+<div class="container-fluid py-4">
+    
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 shadow-sm rounded-3 mb-4">@TempData["Success"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 shadow-sm rounded-3 mb-4">@TempData["Error"]</div>
+    }
+
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <a href="/Supervisor/MyProjects" class="text-white text-decoration-none opacity-75 mb-2 d-inline-block"><i class="fas fa-arrow-left me-2"></i>Back to Projects</a>
+            <h2 class="fw-bold mb-1"><i class="fas fa-tasks me-2"></i>Milestone Management</h2>
+            <p class="mb-0 opacity-80">Configure tracking milestones for this student.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-4">
+            <div class="glass-card">
+                <h6 class="fw-bold text-dark mb-4"><i class="fas fa-user-graduate text-primary me-2"></i>Student Details</h6>
+                <div class="d-flex align-items-center gap-3 mb-4">
+                    <div style="width:50px;height:50px;border-radius:50%;background:#e0e7ff;display:flex;align-items:center;justify-content:center;color:#4f46e5;font-weight:700;font-size:18px;">
+                        @(Model.Student?.FullName?.Substring(0, 1) ?? "S")
+                    </div>
+                    <div>
+                        <div class="fw-bold text-dark fs-5">@Model.Student?.FullName</div>
+                        <div class="text-muted small">@Model.Student?.Email</div>
+                    </div>
+                </div>
+                
+                <h6 class="fw-bold text-dark mb-3"><i class="fas fa-project-diagram text-primary me-2"></i>Project Info</h6>
+                <div class="mb-3">
+                    <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 0.7rem;">Project Title</small>
+                    <span class="fw-semibold text-dark">@Model.Title</span>
+                </div>
+                <div>
+                    <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 0.7rem;">Status</small>
+                    <span class="badge bg-success rounded-pill px-3 mb-4">@Model.Status</span>
+                </div>
+                
+                <h6 class="fw-bold text-dark mb-3 mt-3"><i class="fas fa-chalkboard-teacher text-primary me-2"></i>Examiner Info</h6>
+                @if (Model.AssignedExaminers.Any())
+                {
+                    @foreach (var examinerAssignment in Model.AssignedExaminers)
+                    {
+                        var examiner = examinerAssignment.Examiner;
+                        if (examiner != null)
+                        {
+                            <div class="d-flex align-items-center gap-3 mb-4">
+                                <div style="width:50px;height:50px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;color:#15803d;font-weight:700;font-size:18px;">
+                                    @(examiner.FullName?.Substring(0, 1) ?? "E")
+                                </div>
+                                <div>
+                                    <div class="fw-bold text-dark fs-5">@examiner.FullName</div>
+                                    <div class="text-muted small">@examiner.Email</div>
+                                </div>
+                            </div>
+                        }
+                    }
+                }
+                else
+                {
+                    <div class="p-3 bg-light rounded-3 text-muted mb-3 small d-flex align-items-center gap-2">
+                        <i class="fas fa-info-circle text-primary fs-5"></i>
+                        <span>No examiner assigned yet.<br /><small class="text-muted">Examiners are assigned by the Administrator.</small></span>
+                    </div>
+                }
+
+            </div>
+
+            <!-- Turnitin & Plagiarism Card -->
+            <div class="glass-card mt-3">
+                <h6 class="fw-bold text-dark mb-4"><i class="fas fa-search text-success me-2"></i>Plagiarism & Turnitin</h6>
+                
+                @if (Model.IsTurnitinApproved)
+                {
+                    <div class="alert alert-success d-flex align-items-center mb-0 p-3 border-0 shadow-sm">
+                        <i class="fas fa-check-circle fs-4 me-3 text-success"></i>
+                        <div>
+                            <div class="fw-bold text-success mb-1">Approved (@Model.TurnitinScore%)</div>
+                            <div class="small">The examiner can now proceed to grade.</div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-warning p-3 border-0 shadow-sm mb-3">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-exclamation-triangle fs-4 me-3 text-warning"></i>
+                            <div>
+                                <div class="fw-bold text-warning mb-1">Approval Required</div>
+                                <div class="small">Pending approval. You can verify and approve the Turnitin score when grading the student's Final Report submission.</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="glass-card">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h5 class="fw-bold text-dark mb-0"><i class="fas fa-stream text-primary me-2"></i>Project Milestones</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#addProgressTaskModal">
+                            <i class="fas fa-plus me-1"></i> Add Progress Task
+                        </button>
+                    </div>
+                    
+                    @{
+                        var stage1Milestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(Model.Milestones);
+                        var stage2Deliverables = FYPTracker.Utils.GradingHelper.GetRequiredStage2Milestones(Model.Milestones);
+                        bool isAllStage2Approved = FYPTracker.Utils.GradingHelper.AreStage2DeliverablesApproved(Model.Milestones);
+                        var meetingProgressStage2 = await MeetingReqService.GetStudentProgressAsync(Model.StudentId, 2);
+                        int completedStage2Meetings = meetingProgressStage2?.Completed ?? 0;
+                        int? requiredStage2Meetings = meetingProgressStage2?.Required;
+                        var stage2UnlockStatus = FYPTracker.Utils.GradingHelper.CanUnlockStage2Grading(Model, completedStage2Meetings, requiredStage2Meetings);
+                        bool isStage2GradingUnlocked = stage2UnlockStatus.IsUnlocked;
+                        bool isStage2MeetingRequirementMet = FYPTracker.Utils.GradingHelper.IsStage2MeetingRequirementSatisfied(completedStage2Meetings, requiredStage2Meetings);
+                        bool isStage1Approved = stage1Milestone != null && (stage1Milestone.Status == "Approved" || stage1Milestone.Status == "Completed");
+                        bool isStage2Eligible = Model.Stage1Grade == "Pass";
+
+                        // Stage 1 Supervisor Evaluation Info
+                        string supStage1Marks = stage1Milestone?.SupervisorMarksheetData ?? "";
+                        bool isSupStage1Draft = FYPTracker.Utils.GradingHelper.IsMarksheetDraft(supStage1Marks);
+                        bool isSupStage1Finalized = !string.IsNullOrEmpty(supStage1Marks) && !isSupStage1Draft;
+                        double? supStage1Score = null;
+                        if (isSupStage1Finalized || isSupStage1Draft)
+                        {
+                            supStage1Score = FYPTracker.Utils.GradingHelper.CalculateStage1Score(supStage1Marks, "Supervisor");
+                        }
+
+                        // Legacy Excel upload fallback (if applicable)
+                        string supStage1FilePath = "";
+                        if (stage1Milestone != null && !string.IsNullOrEmpty(stage1Milestone.SupervisorMarksheetData) && stage1Milestone.SupervisorMarksheetData.StartsWith("{"))
+                        {
+                            try
+                            {
+                                using var doc1 = System.Text.Json.JsonDocument.Parse(stage1Milestone.SupervisorMarksheetData);
+                                if (doc1.RootElement.TryGetProperty("FilePath", out var fp)) supStage1FilePath = fp.GetString() ?? "";
+                            } catch { }
+                        }
+                        bool isStage1MarksheetUploaded = !string.IsNullOrEmpty(supStage1FilePath);
+
+                        // Stage 2 Scores & Status
+                        double? supStage2Score = FYPTracker.Utils.GradingHelper.CalculateStage2Score(Model.Stage2SupervisorMarksheetData, "Supervisor");
+                        double? exStage2Score = FYPTracker.Utils.GradingHelper.CalculateStage2Score(Model.Stage2ExaminerMarksheetData, "Examiner");
+                        double? jointStage2Score = FYPTracker.Utils.GradingHelper.CalculateJointFinalPercentage(supStage2Score, exStage2Score);
+                        bool isSupStage2Done = supStage2Score.HasValue;
+                        bool isExStage2Done = exStage2Score.HasValue;
+                        bool isStage2JointReleased = isSupStage2Done && isExStage2Done && !string.IsNullOrEmpty(Model.FinalGrade);
+                    }
+                </div>
+
+                <!-- ========================================== -->
+                <!-- SECTION 1: STAGE 1 PROPOSAL ASSESSMENT     -->
+                <!-- ========================================== -->
+                <div class="card border-0 shadow-sm rounded-3 mb-4 border-start border-4 border-primary bg-white">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <h6 class="fw-bold text-dark mb-1">
+                                    <i class="fas fa-file-alt text-primary me-2"></i>Stage 1: Proposal Assessment
+                                </h6>
+                                <small class="text-muted">Detailed Project Proposal (DPP) &bull; Online Rubric Evaluation</small>
+                            </div>
+                            <div>
+                                @if (Model.Stage1Grade == "Pass")
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fw-bold">
+                                        <i class="fas fa-check-circle me-1"></i> Stage 1 Passed
+                                    </span>
+                                }
+                                else if (isSupStage1Finalized)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fw-bold">
+                                        <i class="fas fa-check-circle me-1"></i> Evaluation Submitted
+                                    </span>
+                                }
+                                else if (isSupStage1Draft)
+                                {
+                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 rounded-pill fw-bold">
+                                        <i class="fas fa-edit me-1"></i> Draft Saved
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2 rounded-pill fw-bold">
+                                        <i class="fas fa-hourglass-start me-1"></i> Awaiting Evaluation
+                                    </span>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="row g-3 text-center mb-3">
+                            <div class="col-md-4">
+                                <div class="p-3 bg-light rounded-3 border">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Supervisor Evaluation Score</div>
+                                    @if (supStage1Score.HasValue)
+                                    {
+                                        <div class="fs-4 fw-bolder text-primary">@supStage1Score.Value.ToString("F1")</div>
+                                        <small class="@(isSupStage1Finalized ? "text-success" : "text-warning") fw-semibold">
+                                            <i class="fas @(isSupStage1Finalized ? "fa-check-circle" : "fa-edit") me-1"></i>@(isSupStage1Finalized ? "Evaluation Submitted" : "Draft Saved")
+                                        </small>
+                                    }
+                                    else
+                                    {
+                                        <div class="fs-4 fw-bolder text-muted">&mdash;</div>
+                                        <small class="text-muted">Pending Online Evaluation</small>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 bg-light rounded-3 border">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Combined Stage 1 Score</div>
+                                    @if (Model.Stage1TotalScore.HasValue)
+                                    {
+                                        <div class="fs-4 fw-bolder text-success">@Model.Stage1TotalScore.Value.ToString("F2")%</div>
+                                        <small class="text-muted">Combined Evaluation</small>
+                                    }
+                                    else
+                                    {
+                                        <div class="fs-4 fw-bolder text-muted">&mdash;</div>
+                                        <small class="text-muted">Pending Calculation</small>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 bg-light rounded-3 border">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Stage 1 Status</div>
+                                    <div class="fs-4 fw-bolder @(Model.Stage1Grade == "Pass" ? "text-success" : "text-muted")">
+                                        @(Model.Stage1Grade ?? "In Progress")
+                                    </div>
+                                    <small class="text-muted">DPP Milestone: @(stage1Milestone?.Status ?? "Pending")</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 pt-3 border-top gap-2">
+                            <div>
+                                @if (isStage1MarksheetUploaded)
+                                {
+                                    <a href="@supStage1FilePath" target="_blank" class="btn btn-outline-secondary btn-sm fw-bold me-2">
+                                        <i class="fas fa-download me-1"></i> View / Download Uploaded Excel Marksheet
+                                    </a>
+                                }
+                            </div>
+                            @if (isStage1Approved)
+                            {
+                                string buttonLabel = isSupStage1Finalized 
+                                    ? "View Stage 1 Evaluation" 
+                                    : (isSupStage1Draft ? "Continue Evaluation" : "Grade Stage 1 Rubric");
+                                string buttonIcon = isSupStage1Finalized 
+                                    ? "fa-eye" 
+                                    : (isSupStage1Draft ? "fa-edit" : "fa-clipboard-check");
+
+                                <a href="@Url.Action("GradeMarksheetStage1", "Supervisor", new { id = Model.Id })" class="btn btn-primary btn-sm fw-bold px-4 py-2 shadow-sm">
+                                    <i class="fas @buttonIcon me-1"></i> @buttonLabel
+                                </a>
+                            }
+                            else
+                            {
+                                <button class="btn btn-secondary btn-sm fw-bold px-3 shadow-sm" disabled title="Approve Stage 1 Final Submission milestone first">
+                                    <i class="fas fa-lock me-1"></i> Grade Stage 1 Rubric
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================== -->
+                <!-- SECTION 2: STAGE 2 FINAL ASSESSMENT        -->
+                <!-- ========================================== -->
+                <div class="card border-0 shadow-sm rounded-3 mb-4 @(isStage2JointReleased ? "border-start border-4 border-success" : "border-start border-4 border-warning") bg-white">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <h6 class="fw-bold text-dark mb-1">
+                                    <i class="fas fa-graduation-cap text-success me-2"></i>Stage 2: Final Assessment &amp; Joint Grading
+                                </h6>
+                                <small class="text-muted">Official 7-Criterion Rubric &bull; Formula: (0.8 &times; Supervisor + 0.7 &times; Examiner) / 1.5</small>
+                            </div>
+                            <div>
+                                @if (isStage2JointReleased)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fw-bold">
+                                        <i class="fas fa-check-double me-1"></i> Graded &amp; Joint Released
+                                    </span>
+                                }
+                                else if (isSupStage2Done || isExStage2Done)
+                                {
+                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2 rounded-pill fw-bold">
+                                        <i class="fas fa-clock me-1"></i> Submitted (Awaiting Full Joint Assessment)
+                                    </span>
+                                }
+                                else if (isStage2GradingUnlocked)
+                                {
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill fw-bold">
+                                        <i class="fas fa-check me-1"></i> Eligible for Grading
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2 rounded-pill fw-bold">
+                                        <i class="fas fa-hourglass-start me-1"></i> Milestones Pending
+                                    </span>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="row g-3 text-center mb-3">
+                            <div class="col-md-4">
+                                <div class="p-3 bg-light rounded-3 border">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Supervisor Score</div>
+                                    @if (isSupStage2Done)
+                                    {
+                                        <div class="fs-4 fw-bolder text-success">@supStage2Score.Value.ToString("F2")%</div>
+                                        <small class="text-success fw-semibold"><i class="fas fa-check-circle me-1"></i>Submitted</small>
+                                    }
+                                    else
+                                    {
+                                        <div class="fs-4 fw-bolder text-muted">&mdash;</div>
+                                        <small class="text-warning fw-semibold"><i class="fas fa-exclamation-circle me-1"></i>Pending Your Submission</small>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 bg-light rounded-3 border">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Examiner Score</div>
+                                    @if (isExStage2Done)
+                                    {
+                                        <div class="fs-4 fw-bolder text-primary">@exStage2Score.Value.ToString("F2")%</div>
+                                        <small class="text-primary fw-semibold"><i class="fas fa-check-circle me-1"></i>Submitted</small>
+                                    }
+                                    else
+                                    {
+                                        <div class="fs-4 fw-bolder text-muted">&mdash;</div>
+                                        <small class="text-muted"><i class="fas fa-hourglass me-1"></i>Awaiting Examiner</small>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 bg-light rounded-3 border">
+                                    <div class="text-muted small fw-bold text-uppercase mb-1">Joint Final Result</div>
+                                    @if (isStage2JointReleased && jointStage2Score.HasValue)
+                                    {
+                                        <div class="fs-4 fw-bolder text-success">@jointStage2Score.Value.ToString("F2")%</div>
+                                        <span class="badge bg-success px-2 py-1">@Model.FinalGrade</span>
+                                    }
+                                    else
+                                    {
+                                        <div class="fs-4 fw-bolder text-muted">&mdash;</div>
+                                        <small class="text-muted">Calculated upon both submissions</small>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 pt-3 border-top gap-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="text-muted small fw-bold text-uppercase">Assessment Status:</span>
+                                @if (isSupStage2Done)
+                                {
+                                    <span class="badge bg-success text-white px-3 py-1 rounded-pill fw-bold">
+                                        <i class="fas fa-check-circle me-1"></i> Submitted (@(supStage2Score.Value.ToString("F2"))%)
+                                    </span>
+                                }
+                                else if (isStage2GradingUnlocked)
+                                {
+                                    <span class="badge bg-warning text-dark px-3 py-1 rounded-pill fw-bold">
+                                        <i class="fas fa-hourglass-start me-1"></i> Pending Supervisor Marksheet
+                                    </span>
+                                }
+                                else if (!isAllStage2Approved)
+                                {
+                                    <span class="badge bg-secondary text-white px-3 py-1 rounded-pill fw-bold">
+                                        <i class="fas fa-lock me-1"></i> Complete required Stage 2 submissions first
+                                    </span>
+                                }
+                                else if (!isStage2MeetingRequirementMet)
+                                {
+                                    <span class="badge bg-secondary text-white px-3 py-1 rounded-pill fw-bold">
+                                        <i class="fas fa-lock me-1"></i> Requires @(requiredStage2Meetings ?? 10) signed meetings (@completedStage2Meetings/@(requiredStage2Meetings ?? 10))
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary text-white px-3 py-1 rounded-pill fw-bold">
+                                        <i class="fas fa-lock me-1"></i> Stage 1 Pass required
+                                    </span>
+                                }
+                            </div>
+                            <div>
+                                @if (isStage2GradingUnlocked || isSupStage2Done)
+                                {
+                                    <a href="@Url.Action("GradeMarksheetStage2", "Supervisor", new { id = Model.Id })" class="btn @(isSupStage2Done ? "btn-outline-success" : "btn-success") px-4 py-2 fw-bold shadow-sm">
+                                        <i class="fas @(isSupStage2Done ? "fa-eye" : "fa-clipboard-check") me-2"></i> @(isSupStage2Done ? "View / Update Stage 2 Final Assessment" : "Grade Stage 2 Final Marksheet")
+                                    </a>
+                                }
+                                else
+                                {
+                                    string lockedTitle = !isAllStage2Approved 
+                                        ? "Approve all required Stage 2 student uploads (Turnitin, Final Report, Presentation Slides) first" 
+                                        : (!isStage2MeetingRequirementMet 
+                                            ? $"Stage 2 meeting requirement incomplete ({completedStage2Meetings}/{(requiredStage2Meetings ?? 10)} signed meetings completed)" 
+                                            : "Stage 1 must be Passed first");
+                                    <button class="btn btn-secondary px-4 py-2 fw-bold shadow-sm" disabled title="@lockedTitle">
+                                        <i class="fas fa-lock me-2"></i> Grade Stage 2 Final Marksheet
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                @{
+                    var supervisorMilestones = Model.Milestones.Where(m => m.MilestoneSource == "Supervisor").OrderBy(x => x.DueDate).ToList();
+                }
+
+                <div class="d-flex justify-content-between align-items-center mb-3 mt-4 pt-3 border-top">
+                    <h6 class="fw-bold text-dark mb-0">
+                        <i class="fas fa-tasks text-primary me-2"></i>Student Progress Tasks
+                    </h6>
+                    <span class="badge bg-light text-secondary border px-3 py-1 rounded-pill small">
+                        @supervisorMilestones.Count task(s)
+                    </span>
+                </div>
+
+                @if (!supervisorMilestones.Any())
+                {
+                    <div class="text-center py-4 text-muted bg-light rounded-3 border">
+                        <i class="fas fa-folder-open fs-2 opacity-25 d-block mb-2"></i>
+                        No student progress tasks configured for this student. Click "+ Add Progress Task" to assign optional DPP work.
+                    </div>
+                }
+                else
+                {
+                    <div class="milestone-list">
+                        @foreach (var m in supervisorMilestones)
+                        {
+                            bool canEdit = m.Status != "Approved" && m.Status != "Completed";
+                            bool canDelete = m.Status == "Draft" || m.Status == "Pending";
+                            bool isAwaitingReview = m.Status == "PendingSupervisorReview" || m.Status == "Submitted" || m.Status == "UnderReview";
+
+                            <div class="milestone-item d-flex justify-content-between align-items-center flex-wrap gap-3">
+                                <div>
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        @if (m.Stage == 2)
+                                        {
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1 small fw-bold">Stage 2</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2 py-1 small fw-bold">Stage 1</span>
+                                        }
+                                        <h6 class="fw-bold text-dark mb-0">@m.Title</h6>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(m.Description))
+                                    {
+                                        <p class="text-muted small mb-2" style="max-width: 500px;">@m.Description</p>
+                                    }
+                                    <div class="d-flex align-items-center gap-3">
+                                        @{
+                                            string badgeClass = m.Status switch
+                                            {
+                                                "Completed" => "bg-success text-white",
+                                                "Approved" => "bg-success text-white",
+                                                "PendingSupervisorReview" => "bg-warning text-dark",
+                                                "Pending" => "bg-secondary text-white",
+                                                "Draft" => "bg-light text-primary border border-primary border-opacity-25",
+                                                "ReturnedForChanges" => "bg-danger text-white",
+                                                _ => "bg-primary text-white"
+                                            };
+                                            string statusDisplay = m.Status switch
+                                            {
+                                                "PendingSupervisorReview" => "Pending Your Review",
+                                                "ReturnedForChanges" => "Returned for Changes",
+                                                _ => m.Status
+                                            };
+                                        }
+                                        <span class="badge @badgeClass rounded-pill px-2 py-1">@statusDisplay</span>
+                                        @if (m.DueDate.HasValue)
+                                        {
+                                            <small class="text-muted fw-semibold"><i class="far fa-calendar-alt me-1"></i>Due: @m.DueDate.Value.ToString("dd MMM yyyy")</small>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(m.SupervisorFeedback))
+                                    {
+                                        <div class="small text-muted mt-2 p-2 bg-white rounded border">
+                                            <strong>Your Feedback:</strong> @m.SupervisorFeedback
+                                        </div>
+                                    }
+                                </div>
+                                <div class="d-flex gap-2 align-items-center">
+                                    @if (isAwaitingReview || m.Status == "Completed" || m.Status == "ReturnedForChanges" || m.Status == "Approved")
+                                    {
+                                        <a href="@Url.Action("GradeSubmission", "Supervisor", new { id = m.Id })" class="btn-action text-decoration-none" style="background: #e0f2fe; color: #0284c7;" title="Review Documents">
+                                            <i class="fas fa-file-alt me-1"></i> Review
+                                        </a>
+                                    }
+                                    @if (canEdit)
+                                    {
+                                        <button type="button" class="btn-action btn-edit" data-bs-toggle="modal" data-bs-target="#editMilestoneModal_@m.Id" title="Edit Milestone">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </button>
+                                    }
+                                    @if (canDelete)
+                                    {
+                                        <form asp-action="DeleteMilestone" asp-controller="Supervisor" method="post" class="d-inline" onsubmit="return confirmDelete(event, this)">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="milestoneId" value="@m.Id" />
+                                            <button type="submit" class="btn-action btn-delete" title="Delete Milestone">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </form>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Edit Milestone Modal -->
+                            @if (canEdit)
+                            {
+                                <div class="modal fade" id="editMilestoneModal_@m.Id" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content border-0 shadow-lg rounded-4">
+                                            <form asp-action="EditMilestone" asp-controller="Supervisor" method="post">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="milestoneId" value="@m.Id" />
+                                                <div class="modal-header border-bottom px-4 py-3">
+                                                    <h5 class="modal-title fw-bold text-dark"><i class="fas fa-edit text-primary me-2"></i>Edit Milestone</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                </div>
+                                                <div class="modal-body p-4">
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-bold text-dark">Stage</label>
+                                                        <input type="text" class="form-control bg-light" value="Stage @m.Stage" readonly />
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-bold text-dark">Title</label>
+                                                        @if (m.Status == "Draft" || m.Status == "Pending")
+                                                        {
+                                                            <input type="text" name="title" class="form-control" value="@m.Title" required />
+                                                        }
+                                                        else
+                                                        {
+                                                            <input type="text" class="form-control bg-light" value="@m.Title" readonly />
+                                                            <input type="hidden" name="title" value="@m.Title" />
+                                                            <div class="form-text text-muted">Title cannot be modified after progress has been submitted.</div>
+                                                        }
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-bold text-dark">Description</label>
+                                                        @if (m.Status == "Draft" || m.Status == "Pending")
+                                                        {
+                                                            <textarea name="description" class="form-control" rows="3">@m.Description</textarea>
+                                                        }
+                                                        else
+                                                        {
+                                                            <textarea class="form-control bg-light" rows="3" readonly>@m.Description</textarea>
+                                                            <input type="hidden" name="description" value="@m.Description" />
+                                                        }
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-bold text-dark">Due Date</label>
+                                                        <input type="date" name="dueDate" class="form-control" value="@(m.DueDate?.ToString("yyyy-MM-dd"))" />
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer border-top px-4 py-3">
+                                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                    <button type="submit" class="btn btn-primary fw-bold px-4">Save Changes</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Student Progress Task Modal -->
+<div class="modal fade" id="addProgressTaskModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <form asp-action="AddMilestone" asp-controller="Supervisor" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="projectId" value="@Model.Id" />
+                <div class="modal-header border-bottom px-4 py-3">
+                    <h5 class="modal-title fw-bold text-dark"><i class="fas fa-plus-circle text-primary me-2"></i>Add Student Progress Task</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-info py-2 px-3 small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>Student Progress Task:</strong> This creates an optional project-specific progress task for this student's DPP work. Official Academic Session submission deadlines are managed centrally by the Administrator and will not be changed.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">Stage <span class="text-danger">*</span></label>
+                        <select name="stage" class="form-select" required id="milestoneStageSelect">
+                            <option value="1">Stage 1: Proposal & Progress</option>
+                            @if (Model.Stage1Grade == "Pass")
+                            {
+                                <option value="2">Stage 2: Final Report & Progress</option>
+                            }
+                            else
+                            {
+                                <option value="2" disabled>Stage 2 (Locked — Student must pass Stage 1 first)</option>
+                            }
+                        </select>
+                        <div class="form-text text-muted">
+                            @if (Model.Stage1Grade == "Pass")
+                            {
+                                <span class="text-success"><i class="fas fa-check-circle me-1"></i>Stage 1 passed. Stage 2 progress tasks can be assigned.</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted"><i class="fas fa-lock me-1"></i>Stage 2 selection unlocks once Stage 1 has been passed.</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">Task Title <span class="text-danger">*</span></label>
+                        <input type="text" name="title" class="form-control" placeholder="e.g. Chapter 1 Literature Review or System Architecture Design" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">Description</label>
+                        <textarea name="description" class="form-control" rows="3" placeholder="Provide progress instructions or requirements for the student..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">Due Date</label>
+                        <input type="date" name="dueDate" class="form-control" />
+                    </div>
+                </div>
+                <div class="modal-footer border-top px-4 py-3">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary fw-bold px-4">Add Progress Task</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        function confirmDelete(e, form) {
+            e.preventDefault();
+            Swal.fire({
+                title: 'Delete Milestone?',
+                text: "Are you sure you want to delete this milestone? This action cannot be undone.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc2626',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Yes, delete it!',
+                background: '#ffffff',
+                customClass: { popup: 'rounded-4 shadow-lg border-0' }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        }
+
+        document.addEventListener('MilestoneUpdateEvent', function(e) {
+            const payload = e.detail;
+            payload._handled = true;
+            Swal.fire({
+                title: payload.title,
+                text: payload.message,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonText: 'Refresh Page',
+                cancelButtonText: 'Later'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.reload();
+                }
+            });
+        });
+    </script>
+}

@@ -1,0 +1,807 @@
+@using FYPTracker.Models
+@model FYPProject
+
+@{
+    var currentUser = ViewBag.CurrentUser as ApplicationUser;
+    var milestones  = Model?.Milestones?.ToList() ?? new List<FYPMilestone>();
+    var iafMilestone = milestones.FirstOrDefault(m => (m.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)) && !m.Title.Contains("Industrial", StringComparison.OrdinalIgnoreCase));
+    bool isIafApproved = iafMilestone != null && (iafMilestone.Status == "AdminApproved" || iafMilestone.Status == "Approved");
+    int iafMilestoneId = iafMilestone?.Id ?? 0;
+    bool isAttempt2Failed = false;
+    string attempt2Feedback = "";
+    if (iafMilestone != null && iafMilestone.Status == "ChangeOfTopicRequired" && !string.IsNullOrEmpty(iafMilestone.Remarks) && iafMilestone.Remarks.Contains("JSON: "))
+    {
+        try {
+            var h = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(iafMilestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None)[1]);
+            if (h.CurrentAttempt >= 2)
+            {
+                isAttempt2Failed = true;
+                var a2 = h.Attempts.FirstOrDefault(a => a.AttemptNumber == h.CurrentAttempt);
+                if (a2 != null && !string.IsNullOrEmpty(a2.PanelComments))
+                {
+                    attempt2Feedback = a2.PanelComments;
+                }
+            }
+        } catch {}
+    }
+
+    bool isIafLocked = isAttempt2Failed || (iafMilestone != null && (
+        iafMilestone.Status == "PendingSupervisorReview" ||
+        iafMilestone.Status == "SupervisorSigned" ||
+        iafMilestone.Status == "PendingPanelReview" ||
+        iafMilestone.Status == "AdminApproved" ||
+        iafMilestone.Status == "DefenseRequired" ||
+        iafMilestone.Status == "DefenseScheduled" ||
+        iafMilestone.Status == "Completed" ||
+        (iafMilestone.Status != "Draft" && iafMilestone.Status != "Pending" && iafMilestone.Status != "ReturnedForEdits" && iafMilestone.Status != "PanelRevisionRequired" && iafMilestone.Status != "ChangeOfTopicRequired" && !string.IsNullOrEmpty(iafMilestone.Status))
+    ));
+
+    var proposalMilestone = milestones.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase));
+    bool isProposalApproved = proposalMilestone != null && proposalMilestone.Status == "Approved";
+    
+    var finalMsRef = milestones.FirstOrDefault(m => m.Title.Contains("Final", StringComparison.OrdinalIgnoreCase) || m.Title.Contains("Thesis", StringComparison.OrdinalIgnoreCase));
+
+    var allProgressMilestones = milestones.Where(m => 
+        m.Id != (iafMilestone?.Id ?? -1) && 
+        m.Id != (proposalMilestone?.Id ?? -1) && 
+        m.Id != (finalMsRef?.Id ?? -1)).ToList();
+        
+    bool isAllProgressApproved = allProgressMilestones.Any() ? allProgressMilestones.All(m => m.Status == "Approved") : true;
+
+    if (isAllProgressApproved) { isProposalApproved = true; }
+    if (isProposalApproved) { isIafApproved = true; }
+}
+                    <div class="tab-pane fade @(isIafApproved ? "" : "show active")" id="iaf-form-pane" role="tabpanel" tabindex="0">
+                        <div class="card border-0 shadow-sm rounded-3 p-4">
+                            <h4 class="fw-bold text-dark mb-2"><i class="fas fa-clipboard-list text-orange me-2"></i>1. Initial Project Allocation Form (IAF)</h4>
+                            <p class="text-danger fw-bold mb-4"><i class="far fa-clock me-1"></i> Please complete and submit this form before @ViewBag.IAFDeadline.</p>
+                            
+                            @if (isAttempt2Failed)
+                            {
+                                <div class="alert alert-danger d-flex align-items-center mt-3 border-danger mb-4 shadow-sm">
+                                    <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
+                                    <div>
+                                        <h5 class="fw-bold text-dark mb-1">Defense Failed (Attempt 2)</h5>
+                                        <p class="mb-0 text-danger fw-bold">Maximum 2 IAF attempts reached. Please contact Admin regarding the FYP repeat process.</p>
+                                        @if (!string.IsNullOrEmpty(attempt2Feedback))
+                                        {
+                                            <div class="mt-2 p-2 bg-white rounded border border-danger">
+                                                <strong>Feedback:</strong> @attempt2Feedback
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            else if (isIafLocked)
+                            {
+                                <div class="alert alert-info d-flex align-items-center mt-3 border-info mb-4">
+                                    <i class="fas fa-lock fs-2 me-3 text-info"></i>
+                                    <div>
+                                        <h5 class="fw-bold text-dark mb-1">IAF Form Submitted / Locked</h5>
+                                        <p class="mb-0 text-muted">Your Initial Project Allocation Form has been submitted. Current Status: <span class="badge bg-white text-dark ms-1 shadow-sm border">
+                                            @(iafMilestone.Status == "SupervisorSigned" ? "Supervisor Signed, Pending Admin View" : iafMilestone.Status == "AdminApproved" ? "Fully Approved" : iafMilestone.Status == "Approved" ? "Approved by Supervisor, Pending Admin" : iafMilestone.Status)
+                                        </span></p>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                @if (iafMilestone != null && (iafMilestone.Status == "Rejected" || iafMilestone.Status == "ReturnedForEdits"))
+                                {
+                                    <div class="alert alert-danger d-flex align-items-center mt-3 border-danger mb-4">
+                                        <i class="fas fa-times-circle fs-2 me-3 text-danger"></i>
+                                        <div>
+                                            <h5 class="fw-bold text-dark mb-1">IAF Returned for Edits</h5>
+                                            <p class="mb-0 text-muted"><strong>Feedback:</strong> @iafMilestone.SupervisorFeedback</p>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                                
+                                <form id="iafFormElement" asp-action="SubmitDigitalForm" method="post" class="needs-validation" novalidate>
+                                    <input type="hidden" name="formType" value="Initial Project Allocation Form (IAF)" />
+                                    <input type="hidden" name="milestoneId" value="@iafMilestoneId" />
+
+                                    <div class="form-section-title">Part 1: Student & Project Info</div>
+                                    
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold">Name</label>
+                                            <input type="text" class="form-control bg-light" value="@currentUser?.FullName" readonly />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold">INTI ID</label>
+                                            <input type="text" class="form-control bg-light" value="@currentUser?.EmployeeId" readonly />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold">Coventry ID <span class="text-danger">*</span></label>
+                                            <input type="text" name="coventryId" class="form-control @(isIafLocked ? "bg-light" : "")" value="@currentUser?.CoventryId" @(isIafLocked ? "readonly" : "") placeholder="Enter your Coventry ID" required />
+                                            <div class="invalid-feedback">Coventry ID is required.</div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold">Program</label>
+                                            <input type="text" class="form-control bg-light" value="@currentUser?.Programme" readonly />
+                                        </div>
+                                        <div class="col-md-12">
+                                            <label class="form-label fw-semibold">Project Title</label>
+                                            <input type="text" name="title" class="form-control bg-light" value="@Model.Title" readonly required />
+                                        </div>
+                                    </div>
+
+                                    <div class="form-section-title">Part 2: Project Scope & Problem Statement</div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label fw-semibold">Scope of Project</label>
+                                        <select name="scope" id="scope" class="form-select" @(isIafLocked ? "disabled" : "") required>
+                                            <option value="">-- Select Scope --</option>
+                                            <option value="Development" selected="@(Model.Scope == "Development")">Development</option>
+                                            <option value="Research Based Project" selected="@(Model.Scope == "Research Based Project")">Research Based Project</option>
+                                            <option value="Hybrid" selected="@(Model.Scope == "Hybrid")">Hybrid</option>
+                                        </select>
+                                        <div class="invalid-feedback">Please select a project scope.</div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label fw-semibold">Problem Statement (supported with statistics and journal paper. Please make sure its included with in-text citation.)</label>
+                                        <textarea name="problemStatement" id="problemStatement" class="form-control" rows="5" @(isIafLocked ? "readonly" : "") required placeholder="Provide a problem statement supported with statistics and journal paper references with in-text citation...">@Model.ProblemStatement</textarea>
+                                        <div class="invalid-feedback">Problem statement is required.</div>
+                                        <div id="problemStatementError" class="text-danger small mt-1 d-none">Please include in-text citations (e.g. (Author, 2024) or [1]).</div>
+                                        @if (!isIafLocked)
+                                        {
+                                            <div class="mt-2">
+                                                <button type="button" class="btn btn-sm btn-light-primary border border-primary border-opacity-25 me-2" onclick="insertCitation('()')">
+                                                    <i class="fas fa-quote-left me-1"></i> Add (Author, Year)
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-light-info border border-info border-opacity-25" onclick="insertCitation('[]')">
+                                                    <i class="fas fa-list-ol me-1"></i> Add [1]
+                                                </button>
+                                            </div>
+                                        }
+                                        <span class="text-danger fw-bold small d-block mt-2">* Please include the references listing as well</span>
+                                    </div>
+
+                                    <div class="form-section-title">Part 3: Objectives (hint: must be in point form, must contain action verb and must be measurable)</div>
+                                    <p class="text-muted small mb-2">The number of objectives should be more than 1 and less than or equal to 3. Example: 1. To (verb) indicate the platform and detailed out the project scope and feature</p>
+                                    
+                                    <div class="mb-3">
+                                        @{
+                                            string CleanDisplayObj(string? val, int num) =>
+                                                string.IsNullOrWhiteSpace(val) ? "" :
+                                                System.Text.RegularExpressions.Regex.Replace(
+                                                    val,
+                                                    $@"^\s*({num}\.\s*)?(To\s+)+",
+                                                    "",
+                                                    System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+
+                                            var cleanObj1 = CleanDisplayObj(Model.Objective1, 1);
+                                            var cleanObj2 = CleanDisplayObj(Model.Objective2, 2);
+                                            var cleanObj3 = CleanDisplayObj(Model.Objective3, 3);
+                                        }
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text bg-light fw-bold text-muted">1. To</span>
+                                            <input type="text" name="objective1" id="objective1" class="form-control" value="@cleanObj1" @(isIafLocked ? "readonly" : "") placeholder="develop a system..." required />
+                                        </div>
+                                        <div id="objective1Error" class="text-danger small mt-1 mb-3 d-none">Objective must be at least 10 characters long.</div>
+                                        
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text bg-light fw-bold text-muted">2. To</span>
+                                            <input type="text" name="objective2" id="objective2" class="form-control" value="@cleanObj2" @(isIafLocked ? "readonly" : "") placeholder="analyze the performance..." required />
+                                        </div>
+                                        <div id="objective2Error" class="text-danger small mt-1 mb-3 d-none">Objective must be at least 10 characters long.</div>
+                                        
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text bg-light fw-bold text-muted">3. To</span>
+                                            <input type="text" name="objective3" id="objective3" class="form-control" value="@cleanObj3" @(isIafLocked ? "readonly" : "") placeholder="evaluate the findings (Optional)" />
+                                        </div>
+                                        <div id="objective3Error" class="text-danger small mt-1 mb-3 d-none">Objective must be at least 10 characters long.</div>
+                                        <div class="invalid-feedback">At least 2 objectives are required.</div>
+                                    </div>
+
+                                    <div class="form-section-title">Part 4: Supervisor Agreement</div>
+                                    
+                                    <div class="row g-3 mb-4">
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold">Supervisor's Name</label>
+                                            <input type="text" name="supervisorName" class="form-control bg-light" placeholder="Supervisor Name" value="@Model.Supervisor?.FullName" readonly />
+                                        </div>
+                                        @if (iafMilestone == null || iafMilestone.Status != "Rejected")
+                                        {
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Supervisor's Signature</label>
+                                                @{
+                                                    string sigName = "";
+                                                    if (iafMilestone != null && !string.IsNullOrEmpty(iafMilestone.Remarks) && iafMilestone.Remarks.Contains("JSON: ")) {
+                                                        try {
+                                                            var parts = iafMilestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                                                            var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parts[1]);
+                                                            if (dict != null && dict.TryGetValue("Supervisor Signature", out var sig)) {
+                                                                sigName = sig;
+                                                            }
+                                                        } catch {}
+                                                    }
+                                                }
+                                                <input type="text" class="form-control bg-light @(string.IsNullOrEmpty(sigName) ? "text-danger" : "text-success fw-bold")" value="@(string.IsNullOrEmpty(sigName) ? "Awaiting Signature" : sigName)" readonly />
+                                                <span class="text-muted small">* Note: the supervisor has to sign the form in order to acknowledge that they are the supervisor.</span>
+                                            </div>
+                                        }
+                                    </div>
+
+                                    @if (iafMilestone != null && !string.IsNullOrEmpty(iafMilestone.Remarks) && iafMilestone.Remarks.Contains("JSON: "))
+                                    {
+                                        var parts = iafMilestone.Remarks.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                                        var parsedJson = parts[1];
+
+                                        <!-- The iframe to display the generated PDF -->
+                                        <div class="bg-light rounded-4 border border-secondary border-opacity-25 shadow-sm p-2 mb-4 mt-4" style="height: 900px;">
+                                            <h6 class="fw-bold text-primary mb-2 px-2 pt-2">Form Details (PDF)</h6>
+                                            <iframe id="iafPdfIframe" style="width: 100%; height: 90%; border: none; border-radius: 8px;"></iframe>
+                                        </div>
+
+                                        <!-- Off-screen container for HTML2PDF to read -->
+                                        <div id="iafPdfSource" style="position: absolute; left: -9999px; top: -9999px;">
+                                            <h4 style="color: #0d6efd; margin-bottom: 20px; font-family: sans-serif;">@iafMilestone.Title</h4>
+                                            <p style="font-family: sans-serif; color: #555;">Student: @(currentUser?.FullName) (@(currentUser?.EmployeeId))</p>
+                                            <hr style="border: 1px solid #ddd; margin-bottom: 20px;" />
+                                            @{
+                                                try {
+                                                    var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(parsedJson);
+                                                    if (dict != null) {
+                                                        <table style="width: 100%; font-family: sans-serif; font-size: 14px; border-collapse: collapse;">
+                                                            @{
+                                                                var keysOrder = new[] { "Project Title", "Scope of Project", "Problem Statement", "Objective 1", "Objective 2", "Objective 3", "Agreed Supervisor Name", "Completion", "Supervisor Signature" };
+                                                                
+                                                                foreach (var key in keysOrder) {
+                                                                    if (dict.TryGetValue(key, out var val) && !string.IsNullOrEmpty(val)) {
+                                                                        <tr>
+                                                                            <td style="width: 30%; font-weight: bold; padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;">@key:</td>
+                                                                            <td style="padding: 8px; border-bottom: 1px solid #eee; white-space: pre-wrap;">
+                                                                                @if (key == "Supervisor Signature") {
+                                                                                    <span style="font-family: 'Brush Script MT', cursive; font-size: 24px; color: #00008B;">@val</span>
+                                                                                } else {
+                                                                                    @val
+                                                                                }
+                                                                            </td>
+                                                                        </tr>
+                                                                    }
+                                                                }
+                                                                
+                                                                foreach (var kvp in dict.Where(k => !keysOrder.Contains(k.Key))) {
+                                                                    if (!string.IsNullOrEmpty(kvp.Value)) {
+                                                                        <tr>
+                                                                            <td style="width: 30%; font-weight: bold; padding: 8px; border-bottom: 1px solid #eee; vertical-align: top;">@kvp.Key:</td>
+                                                                            <td style="padding: 8px; border-bottom: 1px solid #eee; white-space: pre-wrap;">@kvp.Value</td>
+                                                                        </tr>
+                                                                    }
+                                                                }
+                                                            }
+                                                        </table>
+                                                    }
+                                                } catch {
+                                                    <div style="font-family: monospace; white-space: pre-wrap;">@parsedJson</div>
+                                                }
+                                            }
+
+                                            @if (!string.IsNullOrEmpty(iafMilestone.SupervisorFeedback))
+                                            {
+                                                <hr style="border: 1px solid #ddd; margin: 20px 0;" />
+                                                <h5 style="color: #0d6efd; font-family: sans-serif;">Supervisor's Feedback</h5>
+                                                <p style="font-family: sans-serif; font-size: 14px; white-space: pre-wrap; background-color: #f8f9fa; padding: 15px; border-left: 4px solid #198754; color: #333;">@iafMilestone.SupervisorFeedback</p>
+                                            }
+                                        </div>
+                                    }
+
+                                    @if (iafMilestone != null && !string.IsNullOrEmpty(iafMilestone.SupervisorFeedback) && iafMilestone.Status == "Approved")
+                                    {
+                                        <div class="form-section-title">Comment/Feedback</div>
+                                        <div class="mb-4 p-3 bg-light rounded border border-success">
+                                            <p class="mb-0 text-dark fw-semibold">@iafMilestone.SupervisorFeedback</p>
+                                        </div>
+                                    }
+
+                                    @if (iafMilestone != null && iafMilestone.SubmissionFiles != null && iafMilestone.SubmissionFiles.Any(f => f.UploadedBy != Model.StudentId))
+                                    {
+                                        var gFiles = iafMilestone.SubmissionFiles.Where(f => f.UploadedBy != Model.StudentId).ToList();
+                                        <div class="mb-4">
+                                            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-file-pdf me-2"></i>Graded / Feedback Files</h6>
+                                            <div class="d-flex flex-column gap-2">
+                                                @foreach (var file in gFiles)
+                                                {
+                                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" target="_blank" class="btn btn-outline-primary text-start d-flex align-items-center rounded-3 p-3 text-decoration-none bg-light-primary border-primary border-opacity-25">
+                                                        <i class="fas fa-file-pdf text-primary me-3"></i>
+                                                        <span class="text-dark fw-bold text-truncate flex-grow-1">@file.FileName</span>
+                                                        <i class="fas fa-external-link-alt text-primary ms-3"></i>
+                                                    </a>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+
+                                    @if (!isIafLocked)
+                                    {
+                                        <div class="d-flex gap-3 justify-content-end">
+                                            <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
+                                            <button type="submit" class="btn-submit">Submit IAF Form</button>
+                                        </div>
+                                    }
+                                </form>
+                            
+                        </div>
+                    </div>
+
+                    
+                    @* ── A. PROPOSAL FORM ────────────────────────────── *@
+                    <div class="tab-pane fade @(isIafApproved && !isProposalApproved ? "show active" : "")" id="proposal-form-pane" role="tabpanel" tabindex="0">
+                        <div class="card border-0 shadow-sm rounded-3 p-4">
+                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-file-signature text-orange me-2"></i>A. Stage 1 Final Submission</h4>
+                            
+                                @* Select corresponding Milestone *@
+                                @{
+                                    var propMilestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(milestones);
+                                    int propMilestoneId = propMilestone?.Id ?? 0;
+                                    bool isStage1PassedNow = Model?.Stage1Grade == "Pass";
+                                    bool isPropLocked = FYPTracker.Utils.GradingHelper.IsStage1ProposalLocked(propMilestone, Model?.Stage1Grade);
+                                    bool canProgressToDpp = FYPTracker.Utils.GradingHelper.CanProgressToStage1Dpp(iafMilestone, ViewBag.ScheduledIafBooking as IAFDefenseBooking);
+                                }
+                                
+                                @if (!canProgressToDpp)
+                                {
+                                    <div class="alert alert-warning d-flex align-items-start mt-3 border-warning shadow-sm mb-4">
+                                        <i class="fas fa-lock fs-2 me-3 text-warning mt-1"></i>
+                                        <div class="w-100">
+                                            <h5 class="fw-bold text-dark mb-1">Stage 1 DPP Submission Locked — IAF Prerequisite Pending</h5>
+                                            <p class="mb-0 text-muted">
+                                                @if (iafMilestone?.Status == "DefenseScheduled")
+                                                {
+                                                    <span>Your IAF Defense session is currently scheduled and awaiting assessment. You cannot submit your Detailed Project Proposal (DPP) until your IAF Defense has been conducted and passed.</span>
+                                                }
+                                                else if (iafMilestone?.Status == "DefenseRequired")
+                                                {
+                                                    <span>An IAF Defense is required and awaiting scheduling by the administrator. Stage 1 DPP submission will unlock once your IAF Defense is scheduled, conducted, and marked as Passed.</span>
+                                                }
+                                                else if (iafMilestone?.Status == "ChangeOfTopicRequired")
+                                                {
+                                                    <span>Your IAF defense was unsuccessful. You must submit a revised IAF with a change of topic before proceeding with Stage 1 submissions.</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>Your Initial Project Allocation Form (IAF) has not yet been approved. Stage 1 DPP submission will unlock once your IAF is fully approved.</span>
+                                                }
+                                            </p>
+                                        </div>
+                                    </div>
+                                }
+                                else if (propMilestone != null && propMilestone.Status == "Rejected" && !isStage1PassedNow)
+                                {
+                                    <div class="alert alert-danger d-flex align-items-center mt-3 border-danger shadow-sm">
+                                        <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
+                                        <div>
+                                            <h5 class="fw-bold text-dark mb-1">Stage 1 Final Submission Rejected (Needs Revision)</h5>
+                                            <p class="mb-0 text-muted"><strong>Feedback:</strong> @propMilestone.SupervisorFeedback</p>
+                                        </div>
+                                    </div>
+                                }
+                                else if (isPropLocked)
+                                {
+                                    <div class="alert alert-info d-flex align-items-start mt-3 border-info shadow-sm">
+                                        <i class="fas fa-lock fs-2 me-3 text-info mt-1"></i>
+                                        <div class="w-100">
+                                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                                                <h5 class="fw-bold text-dark mb-0">Stage 1 DPP — Submission Completed</h5>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    @if (isStage1PassedNow)
+                                                    {
+                                                        <span class="badge bg-success text-white shadow-sm px-3 py-1 fw-bold"><i class="fas fa-check-circle me-1"></i>Stage 1 Passed</span>
+                                                    }
+                                                    <span class="badge bg-white text-dark shadow-sm border px-3 py-1"><i class="fas fa-lock me-1 text-muted"></i>Read-Only</span>
+                                                </div>
+                                            </div>
+                                            <p class="mb-2 text-muted">
+                                                <strong>Project Title:</strong> @Model.Title<br />
+                                                <strong>Submission Status:</strong> <span class="badge bg-primary text-white ms-1 shadow-sm">@(propMilestone?.Status ?? "Completed")</span>
+                                            </p>
+
+                                            @* Submitted Proposal Files (Student upload) *@
+                                            @{
+                                                var studentSubmittedFiles = propMilestone?.SubmissionFiles?
+                                                    .Where(f => !f.IsDeleted && (f.UploadedBy == Model.StudentId || (propMilestone.SubmissionFiles.All(sf => sf.UploadedBy == f.UploadedBy))))
+                                                    .OrderByDescending(f => f.UploadedDate)
+                                                    .ToList();
+                                                
+                                                if (studentSubmittedFiles == null || !studentSubmittedFiles.Any())
+                                                {
+                                                    // Fallback to any non-deleted file on the proposal milestone
+                                                    studentSubmittedFiles = propMilestone?.SubmissionFiles?
+                                                        .Where(f => !f.IsDeleted)
+                                                        .OrderByDescending(f => f.UploadedDate)
+                                                        .ToList();
+                                                }
+                                            }
+
+                                            @if (studentSubmittedFiles != null && studentSubmittedFiles.Any())
+                                            {
+                                                <hr class="my-3 border-info opacity-25">
+                                                <h6 class="fw-bold text-dark mb-2"><i class="fas fa-file-pdf text-danger me-2"></i>Submitted Final Proposal (DPP)</h6>
+                                                <div class="d-flex flex-column gap-2 mb-3">
+                                                    @foreach (var file in studentSubmittedFiles)
+                                                    {
+                                                        <div class="d-flex align-items-center justify-content-between rounded-3 p-2 bg-white border border-info border-opacity-25 shadow-sm">
+                                                            <div class="d-flex align-items-center text-truncate me-3">
+                                                                <i class="fas fa-file-pdf text-danger fs-5 me-3"></i>
+                                                                <div class="d-flex flex-column text-truncate">
+                                                                    <span class="text-dark fw-bold text-truncate">@file.FileName</span>
+                                                                    <small class="text-muted">Submitted on @(file.UploadedDate.ToString("dd MMM yyyy, hh:mm tt"))</small>
+                                                                </div>
+                                                            </div>
+                                                            <div class="d-flex gap-2 flex-shrink-0">
+                                                                <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" target="_blank" class="btn btn-sm btn-outline-primary fw-semibold">
+                                                                    <i class="fas fa-eye me-1"></i>View
+                                                                </a>
+                                                                <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" download="@file.FileName" class="btn btn-sm btn-outline-secondary fw-semibold">
+                                                                    <i class="fas fa-download me-1"></i>Download
+                                                                </a>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+
+                                            @* Supervisor Feedback / Evaluation Marksheet *@
+                                            <hr class="my-3 border-info opacity-25">
+                                            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-user-tie me-2"></i>Supervisor Evaluation &amp; Feedback</h6>
+                                            @{
+                                                string supStrengths1 = "", supImprovements1 = "", supComments1 = "";
+                                                if (propMilestone != null && !string.IsNullOrWhiteSpace(propMilestone.SupervisorMarksheetData) && !FYPTracker.Utils.GradingHelper.IsMarksheetDraft(propMilestone.SupervisorMarksheetData))
+                                                {
+                                                    try
+                                                    {
+                                                        using var sDoc1 = System.Text.Json.JsonDocument.Parse(propMilestone.SupervisorMarksheetData);
+                                                        if (sDoc1.RootElement.TryGetProperty("Strengths", out var sp1) && !string.IsNullOrWhiteSpace(sp1.GetString())) supStrengths1 = sp1.GetString()!.Trim();
+                                                        if (sDoc1.RootElement.TryGetProperty("Improvements", out var ip1) && !string.IsNullOrWhiteSpace(ip1.GetString())) supImprovements1 = ip1.GetString()!.Trim();
+                                                        if (sDoc1.RootElement.TryGetProperty("Comments", out var cp1) && !string.IsNullOrWhiteSpace(cp1.GetString())) supComments1 = cp1.GetString()!.Trim();
+                                                    }
+                                                    catch { }
+                                                }
+                                                bool hasSupRubricText1 = !string.IsNullOrEmpty(supStrengths1) || !string.IsNullOrEmpty(supImprovements1) || !string.IsNullOrEmpty(supComments1);
+                                                string directSupFeedback1 = propMilestone?.SupervisorFeedback?.Trim() ?? "";
+                                            }
+
+                                            @if (hasSupRubricText1)
+                                            {
+                                                <div class="d-flex flex-column gap-2 mb-3">
+                                                    @if (!string.IsNullOrEmpty(supStrengths1))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Strengths of Proposal:</small>
+                                                            <span>@supStrengths1</span>
+                                                        </div>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(supImprovements1))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Areas for Improvement:</small>
+                                                            <span>@supImprovements1</span>
+                                                        </div>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(supComments1))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Supervisor Comments:</small>
+                                                            <span>@supComments1</span>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                            else if (!string.IsNullOrEmpty(directSupFeedback1))
+                                            {
+                                                <div class="p-2 bg-light rounded text-dark fs-7 mb-3">
+                                                    <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Supervisor Remarks:</small>
+                                                    <span>@directSupFeedback1</span>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <p class="mb-3 text-muted fst-italic fs-7">Feedback not available</p>
+                                            }
+
+                                            @* Supervisor Feedback / Graded Files *@
+                                            @if (propMilestone?.SubmissionFiles != null && propMilestone.SubmissionFiles.Any(f => f.UploadedBy != Model.StudentId && !f.IsDeleted))
+                                            {
+                                                var gFiles = propMilestone.SubmissionFiles.Where(f => f.UploadedBy != Model.StudentId && !f.IsDeleted).ToList();
+                                                if (gFiles.Any())
+                                                {
+                                                    <hr class="my-3 border-info opacity-25">
+                                                    <h6 class="fw-bold text-primary mb-2"><i class="fas fa-file-pdf me-2"></i>Supervisor Graded / Feedback Files</h6>
+                                                    <div class="d-flex flex-column gap-2 mb-3">
+                                                        @foreach (var file in gFiles)
+                                                        {
+                                                            <div class="d-flex align-items-center justify-content-between rounded-3 p-2 bg-white border border-primary border-opacity-25 shadow-sm">
+                                                                <div class="d-flex align-items-center text-truncate me-3">
+                                                                    <i class="fas fa-file-pdf text-primary me-3"></i>
+                                                                    <span class="text-dark fw-bold text-truncate">@file.FileName</span>
+                                                                </div>
+                                                                <div class="d-flex gap-2 flex-shrink-0">
+                                                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" target="_blank" class="btn btn-sm btn-outline-primary fw-semibold">
+                                                                        <i class="fas fa-eye me-1"></i>View
+                                                                    </a>
+                                                                    <a href="@Url.Action("ViewFile", "Student", new { fileId = file.Id })" download="@file.FileName" class="btn btn-sm btn-outline-secondary fw-semibold">
+                                                                        <i class="fas fa-download me-1"></i>Download
+                                                                    </a>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                            }
+
+                                            @* Examiner Feedback / Marksheet *@
+                                            <hr class="my-3 border-info opacity-25">
+                                            <h6 class="fw-bold text-success mb-2"><i class="fas fa-user-graduate me-2"></i>Examiner Evaluation &amp; Feedback</h6>
+                                            @{
+                                                string exStrengths1 = "", exImprovements1 = "", exComments1 = "";
+                                                if (propMilestone != null && !string.IsNullOrWhiteSpace(propMilestone.ExaminerMarksheetData) && !FYPTracker.Utils.GradingHelper.IsMarksheetDraft(propMilestone.ExaminerMarksheetData))
+                                                {
+                                                    try
+                                                    {
+                                                        using var eDoc1 = System.Text.Json.JsonDocument.Parse(propMilestone.ExaminerMarksheetData);
+                                                        if (eDoc1.RootElement.TryGetProperty("Strengths", out var esp1) && !string.IsNullOrWhiteSpace(esp1.GetString())) exStrengths1 = esp1.GetString()!.Trim();
+                                                        if (eDoc1.RootElement.TryGetProperty("Improvements", out var eip1) && !string.IsNullOrWhiteSpace(eip1.GetString())) exImprovements1 = eip1.GetString()!.Trim();
+                                                        if (eDoc1.RootElement.TryGetProperty("Comments", out var ecp1) && !string.IsNullOrWhiteSpace(ecp1.GetString())) exComments1 = ecp1.GetString()!.Trim();
+                                                    }
+                                                    catch { }
+                                                }
+                                                bool hasExRubricText1 = !string.IsNullOrEmpty(exStrengths1) || !string.IsNullOrEmpty(exImprovements1) || !string.IsNullOrEmpty(exComments1);
+                                                bool hasExMarksheetFile1 = !string.IsNullOrWhiteSpace(Model.Stage1ExaminerMarksheetPath);
+                                                bool isExGraded1 = hasExRubricText1 || hasExMarksheetFile1 || !string.IsNullOrEmpty(Model.Stage1Grade);
+                                            }
+
+                                            @if (hasExRubricText1)
+                                            {
+                                                <div class="d-flex flex-column gap-2 mb-3">
+                                                    @if (!string.IsNullOrEmpty(exStrengths1))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Strengths of Proposal:</small>
+                                                            <span>@exStrengths1</span>
+                                                        </div>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(exImprovements1))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Areas for Improvement:</small>
+                                                            <span>@exImprovements1</span>
+                                                        </div>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(exComments1))
+                                                    {
+                                                        <div class="p-2 bg-light rounded text-dark fs-7">
+                                                            <small class="text-muted fw-bold d-block text-uppercase" style="font-size: 0.72rem;">Examiner Comments:</small>
+                                                            <span>@exComments1</span>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
+                                            else if (!isExGraded1)
+                                            {
+                                                <div class="p-2 bg-light rounded text-muted small d-flex align-items-center mb-3">
+                                                    <i class="fas fa-clock text-warning me-2"></i>
+                                                    <span>Examiner evaluation is currently <strong>Pending / Not Released</strong>.</span>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <p class="mb-3 text-muted fst-italic fs-7">Feedback not available</p>
+                                            }
+
+                                            @if (hasExMarksheetFile1)
+                                            {
+                                                <div class="d-flex flex-column gap-2 mb-2">
+                                                    <a href="@Url.Action("DownloadStage1ExaminerMarksheet", "Student", new { projectId = Model.Id })" target="_blank" class="btn btn-outline-success text-start d-flex align-items-center rounded-3 p-2 text-decoration-none bg-white border-success border-opacity-25 shadow-sm">
+                                                        <i class="fas fa-file-excel text-success me-3"></i>
+                                                        <div class="d-flex flex-column flex-grow-1 text-truncate">
+                                                            <span class="text-dark fw-bold text-truncate">Stage 1 Examiner Marksheet</span>
+                                                            <small class="text-muted">Completed evaluation marksheet file</small>
+                                                        </div>
+                                                        <i class="fas fa-download text-success ms-3"></i>
+                                                    </a>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+
+                                @if (canProgressToDpp && !isPropLocked)
+                                {
+                                <form id="proposalForm" asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data">
+                                    <input type="hidden" name="formType" value="Proposal Form" />
+                                    <input type="hidden" name="milestoneId" value="@propMilestoneId" />
+
+                                    @* Stage 1 Submission Guide *@
+                                    <div class="alert alert-info border-0 rounded-3 shadow-sm mb-4">
+                                        <h6 class="fw-bold text-dark mb-2"><i class="fas fa-list-check me-2"></i>Stage 1 Submission Requirements</h6>
+                                        <p class="small text-dark mb-2">Please ensure you have completed the following before the deadline. Each submission requires the correct template:</p>
+                                        <ul class="small text-dark mb-0 ps-3" style="line-height: 1.6;">
+                                            <li><strong>Submission of Initial Form (IAF)</strong> - (Already Completed)</li>
+                                            <li><strong>Submission of Detail Project Proposal (DPP)</strong> - Complete the word template below and upload.</li>
+                                            <li><strong>Submission of Meeting Log</strong> - (Downloadable from the Book Meeting page)</li>
+                                        </ul>
+                                    </div>
+
+                                <div class="form-section-title">Part 1: Proposal Details</div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold">Project Title</label>
+                                    <input type="text" name="title" class="form-control bg-light" value="@Model.Title" readonly required />
+                                </div>
+
+                                <div class="mb-4 p-4 rounded-3 border" style="background: #f8fafc; border-color: #e2e8f0 !important;">
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3 pb-3 border-bottom">
+                                        <div>
+                                            <div class="fw-bold text-dark fs-6 mb-1"><i class="fas fa-file-word text-primary me-2"></i>Official Thesis Cover Page</div>
+                                            <div class="text-muted small">Download the official editable Microsoft Word (.docx) cover page pre-populated with your student and project details.</div>
+                                        </div>
+                                        <a href="@Url.Action("DownloadThesisCoverPage", "Student")"
+                                           class="btn btn-outline-primary fw-bold rounded-3 px-3 py-2 text-decoration-none d-flex align-items-center gap-2 shadow-sm"
+                                           style="white-space: nowrap;">
+                                            <i class="fas fa-download"></i> Download Official Thesis Cover Page (.docx)
+                                        </a>
+                                    </div>
+                                    <div class="fw-bold text-dark mb-1"><i class="fas fa-list-ol text-primary me-2"></i>Stage 1 Final DPP Submission Workflow:</div>
+                                    <ol class="small text-dark mb-0 ps-3" style="line-height: 1.7;">
+                                        <li>Download the official DOCX Cover Page.</li>
+                                        <li>Combine Cover Page, Chapter 1, Chapter 2, Chapter 3, References, and Appendices where applicable.</li>
+                                        <li>Export the complete combined document as ONE PDF.</li>
+                                        <li>Upload the final PDF below. (PDF ONLY - Word documents are rejected).</li>
+                                        <li>Submit Stage 1 Final DPP.</li>
+                                    </ol>
+                                </div>
+
+                                <div class="form-section-title">Part 2: Document Attachment</div>
+                                <div class="mb-4">
+                                    <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="dropZone" onclick="document.getElementById('proposalDocument').click()">
+                                        <i class="fas fa-cloud-upload-alt fs-1 mb-3" style="color: var(--primary-orange) !important;"></i>
+                                        <h6 class="fw-bold mb-1">Drag & Drop your proposal here</h6>
+                                        <p class="text-muted small mb-0">or click to browse files (PDF ONLY)</p>
+                                        <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
+                                        <input type="file" name="attachedFile" id="proposalDocument" class="d-none" accept=".pdf" onchange="updateFileName(this)" />
+                                        <div id="proposalFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please select a PDF file before submitting.</div>
+                                        <div id="fileNameDisplay" class="mt-3 fw-bold text-success" style="display:none;">
+                                            <i class="fas fa-file-pdf me-2"></i><span id="fName"></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @if (proposalMilestone?.Status == "Rejected")
+                                {
+                                    <div class="form-section-title text-danger"><i class="fas fa-history me-2"></i>Part 3: Revision Notes</div>
+                                    <div class="mb-4">
+                                        <label class="form-label fw-semibold">What did you change in this version?</label>
+                                        <textarea name="revisionNotes" class="form-control" rows="3" placeholder="I fixed the diagrams on page 4 and updated the literature review..." required></textarea>
+                                        <div class="text-danger fw-bold small mt-1">* Revision Notes are required for resubmissions.</div>
+                                    </div>
+                                }
+
+                                <div class="d-flex gap-3 justify-content-end">
+                                    <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
+                                    <button type="submit" class="btn-submit" onclick="return validateProposalForm()">Submit Stage 1 Final Submission</button>
+                                </div>
+                            </form>
+                            }
+                        </div>
+                    </div>
+
+                    @* ── B. PROGRESS REPORT FORM ─────────────────────── *@
+                    <div class="tab-pane fade @(isProposalApproved && !isAllProgressApproved ? "show active" : "")" id="progress-form-pane" role="tabpanel" tabindex="0">
+                        <div class="card border-0 shadow-sm rounded-3 p-4">
+                            <h4 class="fw-bold text-dark mb-4"><i class="fas fa-chart-line text-orange me-2"></i>B. FYP Progress Report Form</h4>
+                            
+                            @{
+                                var progressMilestones = milestones.Where(x => 
+                                    (x.Status == "Pending" || x.Status == "Rejected")
+                                    && !x.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) 
+                                    && !x.Title.Contains("Final", StringComparison.OrdinalIgnoreCase)).ToList();
+                            }
+                            
+                            @if (!progressMilestones.Any())
+                            {
+                                <div class="alert alert-info d-flex align-items-center mt-3 border-info shadow-sm">
+                                    <i class="fas fa-lock fs-2 me-3 text-info"></i>
+                                    <div>
+                                        <h5 class="fw-bold text-dark mb-1">Progress Report Form Locked</h5>
+                                        <p class="mb-0 text-muted">You have no pending progress report milestones to submit at this time.</p>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                @foreach (var rm in progressMilestones.Where(x => x.Status == "Rejected"))
+                                {
+                                    <div class="alert alert-danger d-flex align-items-center mt-3 border-danger shadow-sm">
+                                        <i class="fas fa-exclamation-circle fs-2 me-3 text-danger"></i>
+                                        <div>
+                                            <h5 class="fw-bold text-dark mb-1">@rm.Title Rejected (Needs Revision)</h5>
+                                            <p class="mb-0 text-muted"><strong>Feedback:</strong> @rm.SupervisorFeedback</p>
+                                        </div>
+                                    </div>
+                                }
+                            <form asp-action="SubmitDigitalForm" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
+                                <input type="hidden" name="formType" value="Progress Report Form" />
+
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold text-dark" style="font-size: 0.95rem;">Select Milestone to Report On</label>
+                                    <select name="milestoneId" id="progressMilestoneSelect" class="form-select" required onchange="toggleProgressTemplate(this)">
+                                        <option value="">-- Choose a Milestone --</option>
+                                        @foreach (var m in progressMilestones)
+                                        {
+                                            <option value="@m.Id">@m.Title (@m.Status)</option>
+                                        }
+                                    </select>
+                                    <div class="invalid-feedback">Please select a milestone.</div>
+                                </div>
+
+                                <div id="progressTemplateSection" class="mb-4 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1; display: none;">
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                                        <div>
+                                            <div class="fw-bold text-dark mb-1"><i class="fas fa-file-word text-primary me-2"></i>FYP Progress Report Template</div>
+                                            <div class="text-muted small">Select a milestone above to download the pre-filled Word template for that specific progress report.</div>
+                                        </div>
+                                        <a href="@Url.Action("DownloadProgressTemplate", "Student")"
+                                           id="btnDownloadProgress"
+                                           class="btn btn-outline-dark fw-semibold rounded-3 px-4 py-2 text-decoration-none d-flex align-items-center gap-2"
+                                           style="white-space: nowrap;">
+                                            <i class="fas fa-download"></i> Download Template (.docx)
+                                        </a>
+                                    </div>
+                                </div>
+
+
+                                <div class="form-section-title">Part 1: Reporting Period</div>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">Start Period</label>
+                                        <input type="date" name="startDate" id="progressStartDate" class="form-control" required />
+                                        <div class="invalid-feedback">Start date is required.</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-semibold">End Period</label>
+                                        <input type="date" name="endDate" id="progressEndDate" class="form-control" required />
+                                        <div class="invalid-feedback">End date is required.</div>
+                                    </div>
+                                    <div class="col-12 mt-2">
+                                        <div id="progressDateError" class="text-danger fw-bold d-none"><i class="fas fa-exclamation-triangle me-1"></i>End Period must be equal to or after the Start Period.</div>
+                                    </div>
+                                </div>
+
+                                <div class="form-section-title">Part 2: Document Attachment</div>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-12">
+                                        <label class="form-label fw-semibold mb-2">Attach Completed Progress Report</label>
+                                        <div class="drag-drop-zone p-4 text-center border rounded-3" style="border: 2px dashed #cbd5e1 !important; background: #f8fafc; cursor: pointer; transition: all 0.3s ease;" id="progressDropZone" onclick="document.getElementById('progressFiles').click()">
+                                            <i class="fas fa-copy fs-1 mb-3" style="color: #3b82f6 !important;"></i>
+                                            <h6 class="fw-bold mb-1">Drag & Drop your files here</h6>
+                                            <p class="text-muted small mb-0">or click to browse (PDF ONLY)</p>
+                                            <p class="text-danger fw-bold small mt-2 mb-0">* Required</p>
+                                            <input type="file" name="attachedFiles" id="progressFiles" class="d-none" accept=".pdf" multiple onchange="updateMultiFileNames(this, 'progressFileList')" />
+                                            <div id="progressFileError" class="text-danger fw-bold mt-2 d-none"><i class="fas fa-exclamation-triangle me-1"></i>Please select at least one PDF file before submitting.</div>
+                                            <div id="progressFileList" class="mt-3 text-start small fw-semibold text-primary" style="display:none; max-width: 300px; margin: auto;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-section-title text-danger"><i class="fas fa-history me-2"></i>Part 3: Revision Notes (If Resubmitting)</div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold">What did you change in this version?</label>
+                                    <textarea name="revisionNotes" class="form-control" rows="3" placeholder="Explain what was changed based on supervisor feedback..."></textarea>
+                                    <div class="text-muted small mt-1">Leave blank if this is your first attempt.</div>
+                                </div>
+
+                                <div class="d-flex gap-3 justify-content-end">
+                                    <button type="button" class="btn-draft" onclick="saveDraftAlert()">Save Draft</button>
+                                    <button type="submit" class="btn-submit" onclick="return validateProgressForm()">Submit Progress Report</button>
+                                </div>
+                            </form>
+                            }
+                        </div>
+                    </div>
+
+                    @* ── C. FINAL SUBMISSION FORM ────────────────────── *@
+

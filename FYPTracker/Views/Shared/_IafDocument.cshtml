@@ -1,0 +1,308 @@
+@model FYPTracker.ViewModels.IafDocumentViewModel
+
+@{
+    var template = Model.Template;
+    var fields = template.Fields?.OrderBy(f => f.Order).ToList() ?? new List<FYPTracker.ViewModels.TemplateField>();
+    bool isStudentEdit = Model.RenderMode == "StudentEdit";
+    bool isSupervisorReview = Model.RenderMode == "SupervisorReview";
+    bool isPrintPdf = Model.RenderMode == "PrintPdf";
+    bool isReadOnly = Model.RenderMode == "ReadOnly";
+    
+    // Keep sections in FIELD ORDER, even when Admin moves fields between sections.
+    // A dictionary keyed by section title would regroup and reorder those fields.
+    var groupedFields = new List<(string Title, string Instruction, List<FYPTracker.ViewModels.TemplateField> Fields)>();
+
+    string StripObjectivePrefix(string? value, int number)
+    {
+        return System.Text.RegularExpressions.Regex.Replace(
+            value ?? "",
+            $@"^\s*({number}\.\s*)?(To\s+)+",
+            "",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+    }
+    
+    foreach(var field in fields)
+    {
+        string sectionTitle = "";
+        string instruction = "";
+        
+        if (new[] { "StudentName", "CoventryId", "Program", "ProjectTitle" }.Contains(field.Key)) {
+            sectionTitle = "Student and Project Information";
+        } else if (field.Key == "ScopeOfProject") {
+            sectionTitle = "Scope of Project";
+        } else if (field.Key == "ProblemStatement") {
+            sectionTitle = "Problem Statement";
+            instruction = "(with academic evidence and in-text citation)";
+        } else if (field.Key == "References") {
+            sectionTitle = "References Listing";
+        } else if (field.Key == "Objectives") {
+            sectionTitle = "Objectives";
+            instruction = "(2 to 3 measurable objectives in point form)";
+        } else if (new[] { "SupervisorName", "SupervisorSignature" }.Contains(field.Key)) {
+            sectionTitle = "Supervisor Details (Optional - Prior Agreement Only)";
+        } else if (field.Key == "CommentFeedback") {
+            sectionTitle = "Comment / Feedback";
+        } else {
+            sectionTitle = "Other Information";
+        }
+        
+        if (groupedFields.Count == 0 || groupedFields[groupedFields.Count - 1].Title != sectionTitle)
+        {
+            groupedFields.Add((sectionTitle, instruction, new List<FYPTracker.ViewModels.TemplateField>()));
+        }
+        groupedFields[groupedFields.Count - 1].Fields.Add(field);
+    }
+}
+
+<style>
+    .iaf-document {
+        font-family: Arial, Helvetica, sans-serif;
+        color: #222;
+        overflow-wrap: anywhere;
+        background-color: #fff;
+        padding: @(isPrintPdf ? "0" : "2rem");
+        margin: @(isPrintPdf ? "0" : "0 auto");
+        max-width: @(isPrintPdf ? "100%" : "210mm"); /* A4 width */
+    }
+    .iaf-document-title {
+        text-align: center;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-bottom: 1.5rem;
+        font-size: 1.25rem;
+    }
+    .iaf-section-title {
+        font-size: 16px;
+        font-weight: bold;
+        border-bottom: 2px solid #222;
+        padding-bottom: 4px;
+        margin-bottom: 4px;
+        margin-top: 20px;
+        color: #000;
+        text-transform: uppercase;
+    }
+    .iaf-instruction {
+        font-size: 12px;
+        font-style: italic;
+        color: #555;
+        margin-bottom: 8px;
+    }
+    .iaf-field-label {
+        font-size: 13px;
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
+    .iaf-field-label span.req {
+        color: red;
+        margin-left: 2px;
+    }
+    .iaf-text-line {
+        border-bottom: 1px solid #444;
+        min-height: 8mm;
+        padding-top: 2mm;
+    }
+    .iaf-text-area {
+        border: 1px solid #888;
+        background-image: repeating-linear-gradient(
+            to bottom,
+            transparent 0,
+            transparent 27px,
+            #e5e5e5 28px
+        );
+        border-radius: 4px;
+        padding: 5px;
+    }
+    .iaf-signature-box {
+        border-bottom: 1px solid #444;
+        display: flex;
+        align-items: flex-end;
+        padding-bottom: 4px;
+    }
+    .iaf-readonly-val {
+        min-height: 8mm;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        padding: 6px 10px;
+        font-size: 14px;
+    }
+</style>
+
+<div class="iaf-document">
+    <div class="iaf-document-title">
+        @(template.Title ?? "Initial Project Allocation Form")
+    </div>
+
+    @if (!isPrintPdf)
+    {
+        <div class="text-center mb-4 text-muted small">
+            @if (Model.AttemptNumber.HasValue)
+            {
+                <span>Attempt @Model.AttemptNumber · </span>
+            }
+            <span>Template Version @template.Version</span>
+        </div>
+    }
+
+    <div class="row g-3">
+        @foreach(var group in groupedFields)
+        {
+            <div class="col-12 mt-4">
+                <div class="iaf-section-title">@group.Title</div>
+                @if (!string.IsNullOrEmpty(group.Instruction))
+                {
+                    <div class="iaf-instruction">@group.Instruction</div>
+                }
+            </div>
+
+            @foreach (var field in group.Fields)
+            {
+                int width = field.Columns >= 1 && field.Columns <= 12 ? field.Columns : 12;
+                <div class="col-12 col-md-@width">
+                    <div class="iaf-field-label">
+                        @field.Label
+                    </div>
+
+                    @* Rendering logic depends on the field Key and RenderMode *@
+                    @if (field.Key == "StudentName") {
+                        <div class="iaf-readonly-val border-0 bg-transparent ps-0 border-bottom">@Model.StudentName</div>
+                    }
+                    else if (field.Key == "CoventryId") {
+                        if (isStudentEdit) {
+                            <input type="text" id="iafCoventryId" name="coventryId" class="form-control" value="@Model.CoventryId" @(Model.IsLocked ? "readonly" : "") required />
+                        } else {
+                            <div class="iaf-readonly-val border-0 bg-transparent ps-0 border-bottom">@Model.CoventryId</div>
+                        }
+                    }
+                    else if (field.Key == "Program") {
+                        <div class="iaf-readonly-val border-0 bg-transparent ps-0 border-bottom">@Model.Program</div>
+                    }
+                    else if (field.Key == "ProjectTitle") {
+                        if (isStudentEdit) {
+                            <input type="text" id="iafProjectTitle" name="title" class="form-control" value="@Model.ProjectTitle" @(Model.IsLocked ? "readonly" : "") required />
+                        } else {
+                            <div class="iaf-readonly-val border-0 bg-transparent ps-0 border-bottom">@Model.ProjectTitle</div>
+                        }
+                    }
+                    else if (field.Key == "ScopeOfProject") {
+                        var scopeVal = Model.FormData.ContainsKey("scope") ? Model.FormData["scope"] : "";
+                        if (isStudentEdit) {
+                            <select id="scope" name="scope" class="form-select" @(Model.IsLocked ? "disabled" : "") required>
+                                <option value="">-- Select Scope --</option>
+                                <option value="Development" selected="@(scopeVal == "Development")">Development</option>
+                                <option value="Research Based Project" selected="@(scopeVal == "Research Based Project")">Research Based Project</option>
+                                <option value="Hybrid" selected="@(scopeVal == "Hybrid")">Hybrid</option>
+                            </select>
+                        } else {
+                            <div class="iaf-readonly-val">@scopeVal</div>
+                        }
+                    }
+                    else if (field.Key == "ProblemStatement") {
+                        var probVal = Model.FormData.ContainsKey("problem") ? Model.FormData["problem"] : "";
+                        if (isStudentEdit) {
+                            <textarea id="problemStatement" name="problemStatement" class="form-control" rows="5" style="min-height: @(Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 30))mm;" @(Model.IsLocked ? "readonly" : "") required placeholder="Provide a problem statement...">@probVal</textarea>
+                            <div id="problemStatementError" class="text-danger small mt-1 d-none" role="status"></div>
+                        } else {
+                            <div class="iaf-readonly-val" style="min-height: @(Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 30))mm; white-space: pre-wrap;">@probVal</div>
+                        }
+                    }
+                    else if (field.Key == "References") {
+                        var refVal = Model.FormData.ContainsKey("references") ? Model.FormData["references"] : "";
+                        if (isStudentEdit) {
+                            <textarea id="iafReferences" name="references" class="form-control" rows="4" style="min-height: @(Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 30))mm;" @(Model.IsLocked ? "readonly" : "") placeholder="e.g. Smith, J. (2023). Deep Learning Approaches in Progress Tracking. IEEE Transactions on Software Engineering.">@refVal</textarea>
+                            <div id="iafReferencesError" class="text-danger small mt-1 d-none" role="status"></div>
+                        } else {
+                            <div class="iaf-readonly-val" style="min-height: @(Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 30))mm; white-space: pre-wrap;">@refVal</div>
+                        }
+                    }
+                    else if (field.Key == "Objectives") {
+                        // Stored values already contain "1. To", "2. To", etc.
+                        // Strip before adding the UI prefix to avoid "1. To 1. To...".
+                        var obj1 = StripObjectivePrefix(Model.FormData.ContainsKey("obj1") ? Model.FormData["obj1"] : "", 1);
+                        var obj2 = StripObjectivePrefix(Model.FormData.ContainsKey("obj2") ? Model.FormData["obj2"] : "", 2);
+                        var obj3 = StripObjectivePrefix(Model.FormData.ContainsKey("obj3") ? Model.FormData["obj3"] : "", 3);
+                        
+                        if (isStudentEdit) {
+                            <div class="d-grid gap-3">
+                                <div>
+                                    <div class="input-group">
+                                        <span class="input-group-text">1. To</span>
+                                        <input type="text" id="objective1" name="objective1" class="form-control" value="@obj1" @(Model.IsLocked ? "readonly" : "") required />
+                                    </div>
+                                    <div id="objective1Error" class="text-danger small mt-1 d-none" role="status"></div>
+                                </div>
+                                <div>
+                                    <div class="input-group">
+                                        <span class="input-group-text">2. To</span>
+                                        <input type="text" id="objective2" name="objective2" class="form-control" value="@obj2" @(Model.IsLocked ? "readonly" : "") required />
+                                    </div>
+                                    <div id="objective2Error" class="text-danger small mt-1 d-none" role="status"></div>
+                                </div>
+                                <div>
+                                    <div class="input-group">
+                                        <span class="input-group-text">3. To</span>
+                                        <input type="text" id="objective3" name="objective3" class="form-control" value="@obj3" @(Model.IsLocked ? "readonly" : "") />
+                                    </div>
+                                    <div id="objective3Error" class="text-danger small mt-1 d-none" role="status"></div>
+                                </div>
+                            </div>
+                        } else {
+                            <div class="iaf-readonly-val">
+                                <div>1. To @obj1</div>
+                                <div>2. To @obj2</div>
+                                @if(!string.IsNullOrWhiteSpace(obj3)) {
+                                    <div>3. To @obj3</div>
+                                }
+                            </div>
+                        }
+                    }
+                    else if (field.Key == "SupervisorName") {
+                        var supName = !string.IsNullOrWhiteSpace(Model.SupervisorName) 
+                            ? Model.SupervisorName 
+                            : (Model.FormData.ContainsKey("agreedSupervisor") ? Model.FormData["agreedSupervisor"] : "");
+                        if (isStudentEdit) {
+                            <input type="text" id="iafSupervisorName" name="supervisorName" class="form-control" value="@(Model.FormData.ContainsKey("agreedSupervisor") ? Model.FormData["agreedSupervisor"] : "")" @(Model.IsLocked ? "readonly" : "") placeholder="Optional - only if previously agreed" />
+                        } else {
+                            <div class="iaf-readonly-val border-0 bg-transparent ps-0 border-bottom">@(string.IsNullOrWhiteSpace(supName) ? "None specified" : supName)</div>
+                        }
+                    }
+                    else if (field.Key == "SupervisorSignature") {
+                        if (isSupervisorReview && !Model.IsLocked) {
+                            <div class="bg-white p-2 border rounded" style="min-height: @(Math.Max(20, field.MinHeightMm > 0 ? field.MinHeightMm : 30))mm">
+                                <!-- Supervisor Review Signature Pad logic is injected via ManageMeetings.cshtml but we can put the canvas here or fallback to readonly if signed -->
+                                @if (string.IsNullOrEmpty(Model.SupervisorSignature)) {
+                                    <canvas id="iafSignaturePad" class="w-100" style="height:150px; touch-action:none; border: 1px dashed #ccc;"></canvas>
+                                    <input type="hidden" name="supervisorSignature" id="iafSignatureData" />
+                                    <button type="button" class="btn btn-sm btn-light mt-1" onclick="clearIafSignature()">Clear</button>
+                                } else {
+                                    <img src="@Model.SupervisorSignature" style="max-height:80px; max-width:250px;" />
+                                    <input type="hidden" name="supervisorSignature" value="@Model.SupervisorSignature" />
+                                    <div class="text-success small mt-1"><i class="fas fa-check-circle me-1"></i>Signed</div>
+                                }
+                            </div>
+                        } else {
+                            <div class="iaf-signature-box border-0 bg-transparent ps-0 border-bottom" style="min-height: @(Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 20))mm;">
+                                @if (!string.IsNullOrEmpty(Model.SupervisorSignature)) {
+                                    if (Model.SupervisorSignature.StartsWith("data:image/")) {
+                                        <img src="@Model.SupervisorSignature" style="max-height:80px; max-width:250px;" />
+                                    } else {
+                                        <span style="font-family: 'Brush Script MT', cursive; font-size: 24px; color: #00008B;">@Model.SupervisorSignature</span>
+                                    }
+                                } else {
+                                    <span class="text-muted fst-italic">Pending supervisor signature</span>
+                                }
+                            </div>
+                        }
+                    }
+                    else if (field.Key == "CommentFeedback") {
+                        if (isSupervisorReview && !Model.IsLocked) {
+                            <textarea name="supervisorComments" class="form-control" rows="4">@Model.SupervisorFeedback</textarea>
+                        } else {
+                            <div class="iaf-readonly-val" style="white-space: pre-wrap; min-height: @(Math.Max(15, field.MinHeightMm > 0 ? field.MinHeightMm : 20))mm;">@(string.IsNullOrWhiteSpace(Model.SupervisorFeedback) ? "No feedback yet." : Model.SupervisorFeedback)</div>
+                        }
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>

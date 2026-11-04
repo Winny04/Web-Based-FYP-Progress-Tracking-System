@@ -1,0 +1,76 @@
+@* 
+    _InitialsAvatar Partial View
+    
+    Usage: @await Html.PartialAsync("_InitialsAvatar", new ViewDataDictionary(ViewData) { 
+        { "AvatarImage", imageUrl }, 
+        { "AvatarName", fullName }, 
+        { "AvatarSize", "lg" },       // sm | md | lg | xl  (default: md)
+        { "AvatarId", "avatarPreview" } // optional element id
+    })
+
+    Renders either an <img> tag (when image path exists) or a colored initials circle.
+*@
+
+@{
+    var image = ViewData["AvatarImage"] as string ?? "";
+    var name = ViewData["AvatarName"] as string ?? "?";
+    var size = ViewData["AvatarSize"] as string ?? "md";
+    var elementId = ViewData["AvatarId"] as string ?? "";
+    var extraClass = ViewData["AvatarExtraClass"] as string ?? "";
+
+    // Build initials from the name (first letter of first + last word)
+    var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    string initials;
+    if (parts.Length >= 2)
+    {
+        initials = $"{parts[0][0]}{parts[parts.Length - 1][0]}";
+    }
+    else if (parts.Length == 1 && parts[0].Length > 0)
+    {
+        initials = parts[0][0].ToString();
+    }
+    else
+    {
+        initials = "?";
+    }
+    initials = initials.ToUpperInvariant();
+
+    // Deterministic color index (1–8) based on first character
+    int colorIndex = (Math.Abs((int)name.Trim().ToUpperInvariant()[0]) % 8) + 1;
+
+    var sizeClass = size switch
+    {
+        "sm" => "initials-avatar-sm",
+        "md" => "initials-avatar-md",
+        "lg" => "initials-avatar-lg",
+        "xl" => "initials-avatar-xl",
+        _ => "initials-avatar-md"
+    };
+
+    bool hasImage = !string.IsNullOrEmpty(image)
+                    && !image.Contains("student_avatar")
+                    && !image.Contains("blank.png")
+                    && !image.Contains("blank.png");
+
+    // Determine pixel dimensions for img based on size
+    var imgDimensions = size switch
+    {
+        "sm" => "width:30px;height:30px;",
+        "md" => "width:48px;height:48px;",
+        "lg" => "width:140px;height:140px;",
+        "xl" => "width:125px;height:125px;",
+        _ => "width:48px;height:48px;"
+    };
+}
+
+@if (hasImage)
+{
+    <img id="@elementId" src="@image" alt="@name" 
+         class="rounded-circle @extraClass" 
+         style="@imgDimensions object-fit:cover;" />
+}
+else
+{
+    <div id="@elementId" class="initials-avatar @sizeClass @extraClass" 
+         data-color="@colorIndex" title="@name">@initials</div>
+}

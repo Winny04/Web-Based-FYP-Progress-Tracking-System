@@ -1,0 +1,235 @@
+@inject FYPTracker.Models.FYPTrackerContext _context
+@{
+    ViewData["Title"] = "Admin Dashboard";
+    var currentUser = ViewBag.CurrentUser as ApplicationUser;
+
+    var totalStudents = ViewBag.TotalStudents ?? _context.ApplicationUsers.Count(u => u.UserRoles.Any(r => r.Role.Name == "Student"));
+    var totalAcademicStaff = _context.ApplicationUsers.Count(u => u.UserRoles.Any(r => r.Role.Name == "Supervisor" || r.Role.Name == "Examiner"));
+    var supervisors = ViewBag.TotalSupervisors ?? _context.ApplicationUsers.Count(u => u.UserRoles.Any(r => r.Role.Name == "Supervisor"));
+    var examiners = _context.ApplicationUsers.Count(u => u.UserRoles.Any(r => r.Role.Name == "Examiner"));
+    
+    var pendingInvitations = _context.ApplicationUsers.Count(u => u.PassCode == null);
+    
+    var activeProjects = _context.FYPProjects.Where(p => p.Status != "Archived").ToList();
+    var projectsNoSupervisor = activeProjects.Count(p => p.SupervisorId == null);
+    // FYPProject doesn't have ExaminerId directly, we must check AssignedExaminers
+    var projectsNoExaminer = _context.FYPProjects.Count(p => p.Status != "Archived" && !p.AssignedExaminers.Any());
+}
+
+<div class="container-fluid py-4">
+
+    @* ── Welcome Hero ───────────────────────────────────────── *@
+    <div class="taskbar mb-5 d-flex justify-content-between align-items-center flex-wrap gap-4 position-relative overflow-hidden" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);">
+        <!-- Abstract background elements for premium feel -->
+        <div class="position-absolute top-0 end-0 opacity-10 pe-none" style="transform: translate(20%, -20%);">
+            <i class="fas fa-project-diagram" style="font-size: 15rem; color: #ffffff;"></i>
+        </div>
+        <div class="position-relative z-index-1">
+            <h1 class="display-5 fw-bolder mb-2 text-white" style="letter-spacing: -1px;">
+                Welcome back, <span style="background: linear-gradient(to right, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">@currentUser?.FullName</span>!
+            </h1>
+            <p class="text-white-50 fs-5 mt-1 mb-0" style="font-weight: 300;">Here's what's happening with the Final Year Projects today.</p>
+        </div>
+    </div>
+
+    @* ── Users Stats Grid ─────────────────────────────────────────── *@
+    <div class="row g-4 mb-4">
+        <div class="col-12 mb-2">
+            <h4 class="fw-bolder text-dark mb-0" style="letter-spacing: -0.5px;">User Statistics</h4>
+        </div>
+        <!-- Students -->
+        <div class="col-md-3">
+            <div class="stat-card-premium">
+                <div class="stat-icon-wrapper text-primary bg-light-primary">
+                    <i class="fas fa-user-graduate"></i>
+                </div>
+                <div>
+                    <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Total Students</h6>
+                    <h2 class="fw-bolder text-dark mb-0">@totalStudents</h2>
+                </div>
+            </div>
+        </div>
+        <!-- Total Academic Staff -->
+        <div class="col-md-3">
+            <div class="stat-card-premium">
+                <div class="stat-icon-wrapper text-info bg-light-info">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div>
+                    <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Academic Staff</h6>
+                    <h2 class="fw-bolder text-dark mb-0">@totalAcademicStaff</h2>
+                </div>
+            </div>
+        </div>
+        <!-- Supervisors -->
+        <div class="col-md-3">
+            <div class="stat-card-premium">
+                <div class="stat-icon-wrapper text-success bg-light-success">
+                    <i class="fas fa-chalkboard-teacher"></i>
+                </div>
+                <div>
+                    <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Supervisors</h6>
+                    <h2 class="fw-bolder text-dark mb-0">@supervisors</h2>
+                </div>
+            </div>
+        </div>
+        <!-- Examiners -->
+        <div class="col-md-3">
+            <div class="stat-card-premium">
+                <div class="stat-icon-wrapper text-secondary bg-light-secondary" style="background-color: #f1f5f9; color: #475569;">
+                    <i class="fas fa-search"></i>
+                </div>
+                <div>
+                    <h6 class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Examiners</h6>
+                    <h2 class="fw-bolder text-dark mb-0">@examiners</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    @* ── Quick Actions ──────────────────────────────────────── *@
+    <div class="row g-4">
+        <div class="col-12 mb-2">
+            <h4 class="fw-bolder text-dark mb-0" style="letter-spacing: -0.5px;">Quick Actions</h4>
+        </div>
+        <!-- Invite User -->
+        <div class="col-md-4 col-lg-2">
+            <a href="/Admin/ManageUsers" class="action-card-premium text-decoration-none h-100 d-block" onclick="sessionStorage.setItem('openInviteModal', 'true');">
+                <div class="p-4 d-flex flex-column align-items-center text-center gap-3">
+                    <div class="action-icon bg-gradient-primary">
+                        <i class="fas fa-user-plus text-white"></i>
+                    </div>
+                    <div>
+                        <h6 class="fw-bolder text-dark mb-1">Invite User</h6>
+                        <p class="text-muted mb-0 fs-8" style="font-size: 0.8rem;">Send new invites</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <!-- Manage Users -->
+        <div class="col-md-4 col-lg-2">
+            <a href="/Admin/ManageUsers" class="action-card-premium text-decoration-none h-100 d-block">
+                <div class="p-4 d-flex flex-column align-items-center text-center gap-3">
+                    <div class="action-icon bg-gradient-info">
+                        <i class="fas fa-users text-white"></i>
+                    </div>
+                    <div>
+                        <h6 class="fw-bolder text-dark mb-1">Manage Users</h6>
+                        <p class="text-muted mb-0 fs-8" style="font-size: 0.8rem;">Edit accounts & roles</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <!-- Manage Projects -->
+        <div class="col-md-4 col-lg-3">
+            <a href="/Admin/ManageProjects" class="action-card-premium text-decoration-none h-100 d-block">
+                <div class="p-4 d-flex flex-column align-items-center text-center gap-3">
+                    <div class="action-icon bg-gradient-success">
+                        <i class="fas fa-project-diagram text-white"></i>
+                    </div>
+                    <div>
+                        <h6 class="fw-bolder text-dark mb-1">Manage Projects</h6>
+                        <p class="text-muted mb-0 fs-8" style="font-size: 0.8rem;">Assign supervisors & examiners</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <!-- Reporting -->
+        <div class="col-md-4 col-lg-2">
+            <a href="/Admin/Reporting" class="action-card-premium text-decoration-none h-100 d-block">
+                <div class="p-4 d-flex flex-column align-items-center text-center gap-3">
+                    <div class="action-icon" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                        <i class="fas fa-chart-line text-white"></i>
+                    </div>
+                    <div>
+                        <h6 class="fw-bolder text-dark mb-1">Reporting</h6>
+                        <p class="text-muted mb-0 fs-8" style="font-size: 0.8rem;">View FYP analytics</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <!-- System Settings -->
+        <div class="col-md-4 col-lg-3">
+            <a href="/Admin/ManageLookups" class="action-card-premium text-decoration-none h-100 d-block">
+                <div class="p-4 d-flex flex-column align-items-center text-center gap-3">
+                    <div class="action-icon" style="background: linear-gradient(135deg, #64748b 0%, #475569 100%);">
+                        <i class="fas fa-cogs text-white"></i>
+                    </div>
+                    <div>
+                        <h6 class="fw-bolder text-dark mb-1">System Settings</h6>
+                        <p class="text-muted mb-0 fs-8" style="font-size: 0.8rem;">Departments, lookups & more</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Premium UI Styles for Admin Dashboard */
+    .stat-card-premium {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(0,0,0,0.05);
+        border-radius: 20px;
+        padding: 24px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .stat-card-premium:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+        border-color: rgba(37, 99, 235, 0.2);
+    }
+    .stat-icon-wrapper {
+        width: 60px;
+        height: 60px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+    
+    .action-card-premium {
+        background: #ffffff;
+        border: 1px solid rgba(0,0,0,0.05);
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+        transition: all 0.3s ease;
+    }
+    .action-card-premium:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 25px rgba(0, 0, 0, 0.08);
+        border-color: #cbd5e1;
+    }
+    .action-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    
+    .bg-gradient-primary { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
+    .bg-gradient-info { background: linear-gradient(135deg, #06b6d4 0%, #0369a1 100%); }
+    .bg-gradient-success { background: linear-gradient(135deg, #10b981 0%, #047857 100%); }
+    
+    .bg-light-primary { background-color: #eff6ff !important; color: #3b82f6 !important; }
+    .bg-light-info { background-color: #ecfeff !important; color: #06b6d4 !important; }
+    .bg-light-success { background-color: #ecfdf5 !important; color: #10b981 !important; }
+    .bg-light-warning { background-color: #fffbeb !important; color: #f59e0b !important; }
+    
+    .taskbar {
+        border-radius: 24px;
+        padding: 40px 48px;
+        box-shadow: 0 15px 35px -5px rgba(15, 23, 42, 0.4);
+    }
+    .z-index-1 { z-index: 1; }
+</style>

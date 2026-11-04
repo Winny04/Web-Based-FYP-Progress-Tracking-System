@@ -1,0 +1,309 @@
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Http
+@using FYPTracker.Models
+@using Microsoft.EntityFrameworkCore
+@inject IAuthorizationService AuthorizationService
+@inject FYPTrackerContext _context
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@{
+    // Always look up the logged-in user directly — ViewBag is NOT passed to ViewComponents
+    var userName = HttpContextAccessor.HttpContext?.User?.Identity?.Name;
+    var currentUser = (userName != null)
+        ? await _context.ApplicationUsers.FirstOrDefaultAsync(u => u.UserName == userName)
+        : null;
+        
+    var sessionRole = HttpContextAccessor.HttpContext?.Session.GetString("ActiveRole");
+    var userRoles = HttpContextAccessor.HttpContext?.User?.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList() ?? new List<string>();
+    var userType = !string.IsNullOrEmpty(sessionRole) ? sessionRole : (userRoles.FirstOrDefault() ?? "Student");
+    // Check if this student already has a confirmed (Approved) supervisor
+    bool hasSupervisor = false;
+    if (userType == "Student" && currentUser != null)
+    {
+        hasSupervisor = await _context.SupervisorRequests
+            .AnyAsync(r => r.StudentId == currentUser.Id && r.Status == "Approved")
+            || await _context.FYPProjects
+            .AnyAsync(p => p.StudentId == currentUser.Id && p.SupervisorId != null && p.Status == "Approved");
+    }
+
+    var currentPath = HttpContextAccessor.HttpContext?.Request.Path.Value ?? "";
+    var pageTitle = ViewData["Title"]?.ToString() ?? "";
+
+    int pendingRequests = 0;
+    int pendingSubmissions = 0;
+    int pendingMeetings = 0;
+    int unreadMessages = 0;
+    
+    // Admin counts
+    int adminPendingRequests = 0;
+    
+    // Student counts
+    int studentPendingSupervisorReqs = 0;
+    int studentPendingForms = 0;
+    int studentPendingMeetings = 0;
+
+    if (userType == "Supervisor" && currentUser != null)
+    {
+        pendingRequests = await _context.SupervisorRequests.CountAsync(r => r.SupervisorId == currentUser.Id && r.Status == "Pending");
+        pendingSubmissions = await _context.FYPMilestones.CountAsync(m => m.Project.SupervisorId == currentUser.Id && m.Status == "Submitted");
+        pendingMeetings = await _context.MeetingBookings.CountAsync(m => m.SupervisorId == currentUser.Id && m.Status == "Pending");
+    }
+    else if ((userType == "Admin" || userType == "SuperAdmin") && currentUser != null)
+    {
+        adminPendingRequests = await _context.SupervisorRequests.CountAsync(r => r.Status == "Pending");
+    }
+    else if (userType == "Student" && currentUser != null)
+    {
+        studentPendingSupervisorReqs = await _context.SupervisorRequests.CountAsync(r => r.StudentId == currentUser.Id && r.Status == "Pending");
+        studentPendingForms = await _context.FYPMilestones.CountAsync(m => m.Project.StudentId == currentUser.Id && (m.Status == "Rejected" || m.Status == "Revision"));
+        studentPendingMeetings = await _context.MeetingBookings.CountAsync(m => m.StudentId == currentUser.Id && (m.Status == "Pending" || m.Status == "Postponed"));
+    }
+    
+    if (currentUser != null)
+    {
+        unreadMessages = await _context.ChatMessages.CountAsync(m => m.ReceiverId == currentUser.Id && !m.IsRead);
+    }
+}
+
+<!--begin::Menu wrapper-->
+<div class="header-menu align-items-stretch" data-kt-drawer="true" data-kt-drawer-name="header-menu" data-kt-drawer-activate="{default: true, lg: false}" data-kt-drawer-overlay="true" data-kt-drawer-width="{default:'200px', '300px': '250px'}" data-kt-drawer-direction="start" data-kt-drawer-toggle="#kt_header_menu_mobile_toggle" data-kt-swapper="true" data-kt-swapper-mode="prepend" data-kt-swapper-parent="{default: '#kt_body', lg: '#kt_header_nav'}">
+    <!--begin::Menu-->
+    <div class="menu menu-lg-rounded menu-column menu-lg-row menu-state-bg menu-title-gray-700 menu-state-icon-primary menu-state-bullet-primary menu-arrow-gray-400 fw-bold my-5 my-lg-0 align-items-stretch" id="kt_header_menu" data-kt-menu="true">
+        
+        @if (userType != "Admin" && userType != "SuperAdmin" && userType != "Examiner")
+        {
+            string dashUrl = (userType == "Supervisor") ? "/Supervisor" : "/Student";
+            <div class="menu-item @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(pageTitle.Contains("Home") || pageTitle.Contains("Dashboard") ? "active border-bottom border-3 border-primary" : "")" href="@dashUrl">
+                    <span class="menu-title text-nowrap">Dashboard</span>
+                </a>
+            </div>
+        }
+
+        @if (userType == "Student")
+        {
+            @if (!hasSupervisor)
+            {
+            <div class="menu-item @(pageTitle == "Select Supervisor" ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(pageTitle == "Select Supervisor" ? "active border-bottom border-3 border-primary" : "")" href="/Student/SelectSupervisor">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        Select Supervisor
+                        @if(studentPendingSupervisorReqs > 0) { <span class="badge badge-sm badge-circle badge-warning ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingSupervisorReqs</span> }
+                    </span>
+                </a>
+            </div>
+            }
+            @if (hasSupervisor)
+            {
+                <div class="menu-item @(pageTitle.Contains("Forms") ? "here show" : "")">
+                    <a class="menu-link py-3 px-4 @(pageTitle.Contains("Forms") ? "active border-bottom border-3 border-primary" : "")" href="/Student/Forms">
+                        <span class="menu-title text-nowrap d-flex align-items-center">
+                            Assignments
+                            @if(studentPendingForms > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingForms</span> }
+                        </span>
+                    </a>
+                </div>
+                <div class="menu-item @(pageTitle == "Book Meeting" ? "here show" : "")">
+                    <a class="menu-link py-3 px-4 @(pageTitle == "Book Meeting" ? "active border-bottom border-3 border-primary" : "")" href="/Student/BookMeeting">
+                        <span class="menu-title text-nowrap d-flex align-items-center">
+                            Book Meeting
+                            @if(studentPendingMeetings > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@studentPendingMeetings</span> }
+                        </span>
+                    </a>
+                </div>
+                <div class="menu-item @(pageTitle == "Messages" ? "here show" : "")">
+                    <a class="menu-link py-3 px-4 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" asp-controller="Chat" asp-action="Index">
+                        <span class="menu-title text-nowrap d-flex align-items-center">
+                            Messages
+                            @if(unreadMessages > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@unreadMessages</span> }
+                        </span>
+                    </a>
+                </div>
+            }
+        }
+        else if (userType == "Supervisor")
+        {
+            <div class="menu-item @(pageTitle == "Supervision Requests" ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(pageTitle == "Supervision Requests" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/StudentRequests">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        Supervision Requests
+                        @if(pendingRequests > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@pendingRequests</span> }
+                    </span>
+                </a>
+            </div>
+            <div class="menu-item @(pageTitle == "My Students" ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(pageTitle == "My Students" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/MyProjects">
+                    <span class="menu-title text-nowrap">My Students</span>
+                </a>
+            </div>
+            <div class="menu-item @(pageTitle == "Review Submissions" ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(pageTitle == "Review Submissions" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ReviewSubmissions">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        Review Submissions
+                        @if(pendingSubmissions > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@pendingSubmissions</span> }
+                    </span>
+                </a>
+            </div>
+            <div class="menu-item @(pageTitle == "Manage Meetings" ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(pageTitle == "Manage Meetings" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ManageMeetings">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        Manage Meetings
+                        @if(pendingMeetings > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@pendingMeetings</span> }
+                    </span>
+                </a>
+            </div>
+            <div class="menu-item @(pageTitle == "My Availability" ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(pageTitle == "My Availability" ? "active border-bottom border-3 border-primary" : "")" href="/Supervisor/ManageAvailability">
+                    <span class="menu-title text-nowrap">My Availability</span>
+                </a>
+            </div>
+            <div class="menu-item @(pageTitle == "Messages" ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(pageTitle == "Messages" ? "active border-bottom border-3 border-primary" : "")" asp-controller="Chat" asp-action="Index">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        Messages
+                        @if(unreadMessages > 0) { <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@unreadMessages</span> }
+                    </span>
+                </a>
+            </div>
+
+        }
+        else if (userType == "Admin" || userType == "SuperAdmin")
+        {
+            bool isDashboard = currentPath == "/Admin" || currentPath == "/Admin/" || currentPath.StartsWith("/Admin/Index", StringComparison.OrdinalIgnoreCase);
+            bool isUsers = currentPath.StartsWith("/Admin/ManageUsers", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/EditUser", StringComparison.OrdinalIgnoreCase);
+            bool isProjects = currentPath.StartsWith("/Admin/ManageProjects", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/ProjectDetails", StringComparison.OrdinalIgnoreCase);
+            bool isIafReview = currentPath.StartsWith("/Admin/ApprovedIafList", StringComparison.OrdinalIgnoreCase);
+            bool isSettings = currentPath.StartsWith("/Admin/Settings", StringComparison.OrdinalIgnoreCase);
+            bool isLookups = currentPath.StartsWith("/Admin/ManageLookups", StringComparison.OrdinalIgnoreCase);
+            bool isFormTemplates = currentPath.StartsWith("/Admin/FormTemplateSettings", StringComparison.OrdinalIgnoreCase);
+            bool isDefenses = currentPath.StartsWith("/Admin/ManageDefenses", StringComparison.OrdinalIgnoreCase) || currentPath.StartsWith("/Admin/SmartScheduleDefense", StringComparison.OrdinalIgnoreCase);
+
+            bool isAcademicsGroup = isProjects || isDefenses || isIafReview;
+            bool isConfigGroup = isSettings || isFormTemplates || isLookups;
+
+            <!-- 1. Dashboard -->
+            <div class="menu-item @(isDashboard ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Admin">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        <i class="fas fa-th-large me-2 fs-6 text-muted"></i>
+                        Dashboard
+                        @if(adminPendingRequests > 0) { 
+                            <span class="badge badge-sm badge-circle badge-danger ms-2" style="width: 18px; height: 18px; font-size: 0.75rem;">@adminPendingRequests</span> 
+                        }
+                    </span>
+                </a>
+            </div>
+
+            <!-- 2. Projects & Defenses (Dropdown) -->
+            <div data-kt-menu-trigger="{default: 'click', lg: 'hover'}" data-kt-menu-placement="bottom-start" class="menu-item menu-lg-down-accordion me-lg-1 @(isAcademicsGroup ? "here show" : "")">
+                <span class="menu-link py-3 px-4 @(isAcademicsGroup ? "active border-bottom border-3 border-primary" : "")">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        <i class="fas fa-graduation-cap me-2 fs-6 text-muted"></i>
+                        Projects &amp; Defense
+                        <i class="fas fa-chevron-down ms-2 fs-9 text-muted opacity-75"></i>
+                    </span>
+                    <span class="menu-arrow d-lg-none"></span>
+                </span>
+                <div class="menu-sub menu-sub-lg-dropdown menu-column menu-rounded menu-gray-700 menu-state-bg menu-state-primary fw-bold py-3 px-2 w-225px shadow-lg border border-gray-200">
+                    <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isProjects ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/ManageProjects">
+                            <span class="menu-icon me-2"><i class="fas fa-project-diagram text-primary fs-6"></i></span>
+                            <span class="menu-title">All Projects</span>
+                        </a>
+                    </div>
+                    <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isIafReview ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/ApprovedIafList">
+                            <span class="menu-icon me-2"><i class="fas fa-file-signature text-warning fs-6"></i></span>
+                            <span class="menu-title">IAF Review &amp; Approval</span>
+                        </a>
+                    </div>
+                    <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isDefenses ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/ManageDefenses">
+                            <span class="menu-icon me-2"><i class="fas fa-calendar-check text-success fs-6"></i></span>
+                            <span class="menu-title">Manage IAF Defenses</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Users -->
+            <div class="menu-item @(isUsers ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(isUsers ? "active border-bottom border-3 border-primary" : "")" href="/Admin/ManageUsers">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        <i class="fas fa-users-cog me-2 fs-6 text-muted"></i>
+                        Manage Users
+                    </span>
+                </a>
+            </div>
+
+            <!-- 4. Configuration (Dropdown) -->
+            <div data-kt-menu-trigger="{default: 'click', lg: 'hover'}" data-kt-menu-placement="bottom-start" class="menu-item menu-lg-down-accordion me-lg-1 @(isConfigGroup ? "here show" : "")">
+                <span class="menu-link py-3 px-4 @(isConfigGroup ? "active border-bottom border-3 border-primary" : "")">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        <i class="fas fa-sliders-h me-2 fs-6 text-muted"></i>
+                        System Config
+                        <i class="fas fa-chevron-down ms-2 fs-9 text-muted opacity-75"></i>
+                    </span>
+                    <span class="menu-arrow d-lg-none"></span>
+                </span>
+                <div class="menu-sub menu-sub-lg-dropdown menu-column menu-rounded menu-gray-700 menu-state-bg menu-state-primary fw-bold py-3 px-2 w-225px shadow-lg border border-gray-200">
+                    <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isSettings ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/Settings">
+                            <span class="menu-icon me-2"><i class="fas fa-cog text-primary fs-6"></i></span>
+                            <span class="menu-title">System Settings</span>
+                        </a>
+                    </div>
+                    <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isFormTemplates ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/FormTemplateSettings">
+                            <span class="menu-icon me-2"><i class="fas fa-file-invoice text-warning fs-6"></i></span>
+                            <span class="menu-title">Form Templates</span>
+                        </a>
+                    </div>
+                    <div class="menu-item px-1">
+                        <a class="menu-link py-2 px-3 rounded-2 @(isLookups ? "active text-primary fw-bolder bg-light-primary" : "")" href="/Admin/ManageLookups">
+                            <span class="menu-icon me-2"><i class="fas fa-database text-info fs-6"></i></span>
+                            <span class="menu-title">Manage Lookups</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (userType == "Examiner")
+        {
+            bool isDashboard = currentPath == "/Examiner" || currentPath == "/Examiner/" || currentPath.StartsWith("/Examiner/Index", StringComparison.OrdinalIgnoreCase);
+            bool isAvailability = currentPath.StartsWith("/Timetable/ManageAvailability", StringComparison.OrdinalIgnoreCase);
+            bool isTimetable = currentPath.StartsWith("/Timetable/ManageTimetable", StringComparison.OrdinalIgnoreCase);
+
+            <div class="menu-item @(isDashboard ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(isDashboard ? "active border-bottom border-3 border-primary" : "")" href="/Examiner">
+                    <span class="menu-title text-nowrap d-flex align-items-center">
+                        Dashboard
+                    </span>
+                </a>
+            </div>
+            <div class="menu-item @(isTimetable ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(isTimetable ? "active border-bottom border-3 border-primary" : "")" href="/Timetable/ManageTimetable">
+                    <span class="menu-title text-nowrap">My Timetable</span>
+                </a>
+            </div>
+            <div class="menu-item @(isAvailability ? "here show" : "")">
+                <a class="menu-link py-3 px-4 @(isAvailability ? "active border-bottom border-3 border-primary" : "")" href="/Timetable/ManageAvailability">
+                    <span class="menu-title text-nowrap">My Availability</span>
+                </a>
+            </div>
+        }
+        
+        @{
+            bool isLibrary = currentPath.StartsWith("/Library", StringComparison.OrdinalIgnoreCase);
+        }
+        <div class="menu-item @(isLibrary ? "here show" : "")">
+            <a class="menu-link py-3 px-4 @(isLibrary ? "active border-bottom border-3 border-primary" : "")" href="/Library">
+                <span class="menu-title text-nowrap"><i class="fas fa-book me-2"></i>Digital Library</span>
+            </a>
+        </div>
+    </div>
+    <!--end::Menu-->
+</div>
+<!--end::Menu wrapper-->
+
+
+

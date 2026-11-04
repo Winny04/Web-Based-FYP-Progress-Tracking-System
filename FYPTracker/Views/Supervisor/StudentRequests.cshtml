@@ -1,0 +1,439 @@
+@using FYPTracker.Models
+@model IEnumerable<SupervisorRequest>
+@{
+    ViewData["Title"] = "Supervision Requests";
+}
+
+<style>
+    :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
+
+    .page-hero {
+        background: var(--hero-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
+    }
+
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid #f1f5f9;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    }
+
+    .section-title { font-size: .8rem; font-weight: 800; text-transform: uppercase; color: #475569; letter-spacing: .05em; border-bottom: 2px solid #f3f4f6; padding-bottom: 6px; margin-bottom: 12px; }
+    
+    .info-label { font-size: .75rem; color: #9ca3af; font-weight: 600; text-transform: uppercase; margin-bottom: 2px; }
+    .info-value { font-size: .95rem; color: #1f2937; font-weight: 700; margin-bottom: 12px; }
+</style>
+
+<div class="container-fluid py-4">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-3">@TempData["Success"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 rounded-3 shadow-sm mb-3">@TempData["Error"]</div>
+    }
+
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-user-clock me-2"></i>Supervision Requests</h2>
+            <p class="mb-0 opacity-80">Review and respond to students requesting your supervision.</p>
+        </div>
+        <div class="text-end d-flex flex-wrap gap-2 align-items-center">
+            @await Html.PartialAsync("_SessionFilter")
+            <div class="d-flex align-items-center position-relative my-1">
+                <i class="fas fa-user position-absolute ms-3 text-muted"></i>
+                <select id="studentFilter" class="form-select border-0 shadow-sm ps-10" style="border-radius: 10px; min-width: 200px;">
+                    <option value="">All Students</option>
+                    @foreach (var studentName in Model.Select(m => m.Student?.FullName).Where(s => !string.IsNullOrEmpty(s)).Distinct().OrderBy(s => s))
+                    {
+                        <option value="@studentName">@studentName</option>
+                    }
+                </select>
+            </div>
+            <div class="d-flex align-items-center position-relative my-1">
+                <i class="fas fa-info-circle position-absolute ms-3 text-muted"></i>
+                <select id="statusFilter" class="form-select border-0 shadow-sm ps-10" style="border-radius: 10px; min-width: 160px;">
+                    <option value="">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected">Rejected</option>
+                </select>
+            </div>
+            @{
+                int pendingCount = Model.Count(r => r.Status == "Pending");
+            }
+            <span class="badge bg-white text-dark fw-bold px-3 py-2 rounded-pill ms-2" id="pendingCountBadge">
+                @pendingCount Pending Request@(pendingCount == 1 ? "" : "s")
+            </span>
+        </div>
+    </div>
+
+    <div class="glass-card p-4">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr class="text-muted small fw-bold text-uppercase">
+                        <th>Student</th>
+                        <th>Proposed Project Title</th>
+                        <th>Date Requested</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var req in Model)
+                    {
+                        <tr class="request-item" data-student-name="@req.Student?.FullName" data-status="@req.Status">
+                            <td>
+                                <div class="fw-bold text-dark">@req.Student?.FullName</div>
+                                <div class="text-muted small">Matric: @req.MatricNumber</div>
+                            </td>
+                            <td>
+                                <div class="fw-bold text-primary">@req.ProjectTopic</div>
+                                <div class="text-muted small">@(req.RequestMessage?.Length > 50 ? req.RequestMessage.Substring(0, 47) + "..." : req.RequestMessage)</div>
+                            </td>
+                            <td>
+                                <div class="text-dark small">Requested: @req.RequestedDate.ToString("dd MMM yyyy")</div>
+                                @if (req.Status == "Pending")
+                                {
+                                    int timeoutDays = ViewBag.SupervisorRequestTimeoutDays ?? 3;
+                                    var dueDate = req.RequestedDate.AddDays(timeoutDays);
+                                    var isOverdue = dueDate.Date < DateTime.Now.Date;
+                                    <div class="mt-1 @(isOverdue ? "text-danger" : "text-warning text-dark") small fw-bold">
+                                        Response Due: @dueDate.ToString("dd MMM yyyy")
+                                    </div>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="d-flex justify-content-end align-items-center gap-2">
+                                    @if (req.Status == "Approved")
+                                    {
+                                        <span class="badge bg-success px-3 py-1 rounded-pill">Accepted</span>
+                                    }
+                                    else if (req.Status == "Rejected")
+                                    {
+                                        <span class="badge bg-danger px-3 py-1 rounded-pill">Declined</span>
+                                    }
+
+                                    <button class="btn btn-sm btn-outline-primary rounded-3 text-nowrap" onclick="viewFullForm(@req.Id, @(req.Status == "Pending" ? "true" : "false"))">
+                                        <i class="fas fa-file-alt me-1"></i> View Details
+                                    </button>
+                                    
+                                    @if (req.Status == "Pending")
+                                    {
+                                        <form asp-action="RespondRequest" method="post" id="acceptForm_@req.Id" class="m-0">
+                                            <input type="hidden" name="requestId" value="@req.Id" />
+                                            <input type="hidden" name="status" value="Approved" />
+                                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3 text-nowrap" onclick="openAcceptModal(@req.Id)">Accept Request</button>
+                                        </form>
+                                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3 text-nowrap" onclick="openRejectModal(@req.Id)">Decline</button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+
+                        <div id="formData_@req.Id" style="display:none;" 
+                             data-name="@req.Student?.FullName" 
+                             data-matric="@req.MatricNumber" 
+                             data-program="@req.Program" 
+                             data-phone="@req.PhoneNumber" 
+                             data-session="@req.SessionSemester" 
+                             data-topic="@req.ProjectTopic" 
+                             data-desc="@req.RequestMessage"
+                             data-status="@req.Status">
+                        </div>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- FULL FORM MODAL -->
+<div class="modal fade" id="formModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-dark text-white border-0">
+                <h5 class="fw-bold mb-0">Student Supervision Application</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="section-title">Part A: Personal Information</div>
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <div class="info-label">Full Name</div>
+                        <div id="modal_name" class="info-value mb-2"></div>
+                        <div class="info-label">Matric Number</div>
+                        <div id="modal_matric" class="info-value mb-2"></div>
+                        <div class="info-label">Program</div>
+                        <div id="modal_program" class="info-value mb-2"></div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <div class="info-label">Phone Number</div>
+                        <div id="modal_phone" class="info-value mb-2"></div>
+                        <div class="info-label">Session / Semester</div>
+                        <div id="modal_session" class="info-value mb-2"></div>
+                    </div>
+                </div>
+
+                <div class="section-title mt-3">Part B: Project Information</div>
+                <div class="info-label">Proposed Project Title</div>
+                <div id="modal_topic" class="info-value text-primary fs-6 mb-2"></div>
+                <div class="info-label">Description / Notes</div>
+                <div id="modal_desc" class="info-value mb-0" style="white-space:pre-wrap; font-weight:400; line-height:1.5;"></div>
+            </div>
+            <div class="modal-footer border-0 p-3 bg-light rounded-bottom-4 d-flex justify-content-between align-items-center">
+                <button type="button" class="btn btn-secondary rounded-3 px-3" data-bs-dismiss="modal">Close</button>
+                <div id="modalActionButtons" class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-danger rounded-3 px-3" id="modalBtnReject">Decline</button>
+                    <button type="button" class="btn btn-success rounded-3 px-3 fw-bold" id="modalBtnAccept">Accept Request</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- REJECT MODAL -->
+<div class="modal fade" id="rejectModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <form asp-action="RespondRequest" method="post" id="rejectRequestForm" onsubmit="preventDuplicateSubmit(this)">
+                <input type="hidden" name="requestId" id="rejectRequestId" />
+                <input type="hidden" name="status" value="Rejected" />
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="fw-bold">Decline Supervision Request</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">Please provide a reason for declining <strong id="rejectStudentName"></strong>'s supervision request.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Reason for Declining <span class="text-danger">*</span></label>
+                        <textarea name="responseNote" class="form-control rounded-3" rows="3" placeholder="e.g. Research topic not aligned, Supervisor full capacity..." required></textarea>
+                        <div class="form-text text-muted">This reason is mandatory and will be shared with the student.</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 d-flex justify-content-between">
+                    <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger rounded-3 px-4" id="btnConfirmDecline">Confirm Decline</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ACCEPT MODAL -->
+<div class="modal fade" id="acceptModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <form asp-action="RespondRequest" method="post" id="acceptRequestForm" onsubmit="preventDuplicateSubmit(this)">
+                <input type="hidden" name="requestId" id="acceptRequestId" />
+                <input type="hidden" name="status" value="Approved" />
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="fw-bold text-success">Accept Supervision Request</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">You are about to accept <strong id="acceptStudentName"></strong> as your supervised student.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Welcome Message <span class="text-danger">*</span></label>
+                        <textarea name="responseNote" class="form-control rounded-3" rows="3" placeholder="e.g. Welcome! Please book your first meeting soon." required></textarea>
+                        <div class="form-text text-muted">Write a short message to welcome the student and explain the next steps.</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 d-flex justify-content-between">
+                    <button type="button" class="btn btn-light rounded-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success rounded-3 px-4 fw-bold" id="btnConfirmAccept">Confirm Acceptance</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function viewFullForm(id, isPending) {
+        const data = document.getElementById('formData_' + id).dataset;
+        document.getElementById('modal_name').textContent = data.name;
+        document.getElementById('modal_matric').textContent = data.matric;
+        document.getElementById('modal_program').textContent = data.program;
+        document.getElementById('modal_phone').textContent = data.phone;
+        document.getElementById('modal_session').textContent = data.session;
+        document.getElementById('modal_topic').textContent = data.topic;
+        document.getElementById('modal_desc').textContent = data.desc;
+
+        var actionGroup = document.getElementById('modalActionButtons');
+        if (isPending) {
+            actionGroup.classList.remove('d-none');
+            actionGroup.classList.add('d-flex');
+            document.getElementById('modalBtnReject').onclick = function() {
+                bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();
+                openRejectModal(id, data.name);
+            };
+            document.getElementById('modalBtnAccept').onclick = function() {
+                bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();
+                openAcceptModal(id, data.name);
+            };
+        } else {
+            actionGroup.classList.remove('d-flex');
+            actionGroup.classList.add('d-none');
+        }
+
+        new bootstrap.Modal(document.getElementById('formModal')).show();
+    }
+
+    function openAcceptModal(id, name) {
+        if (!name) {
+            const dataEl = document.getElementById('formData_' + id);
+            if (dataEl) name = dataEl.dataset.name;
+        }
+        document.getElementById('acceptRequestId').value = id;
+        document.getElementById('acceptStudentName').textContent = name;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('acceptModal')).show();
+    }
+
+    function openRejectModal(id, name) {
+        if (!name) {
+            const dataEl = document.getElementById('formData_' + id);
+            if (dataEl) name = dataEl.dataset.name;
+        }
+        document.getElementById('rejectRequestId').value = id;
+        document.getElementById('rejectStudentName').textContent = name;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectModal')).show();
+    }
+
+    function preventDuplicateSubmit(form) {
+        if (!form.checkValidity()) {
+            return false;
+        }
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = 'Processing...';
+        }
+        return true;
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const openId = urlParams.get('openRequestId');
+        if (openId) {
+            const dataEl = document.getElementById('formData_' + openId);
+            if (dataEl) {
+                const isPending = dataEl.dataset.status === 'Pending';
+                viewFullForm(openId, isPending);
+                
+                // Clean up the URL so refreshing doesn't re-open it
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+
+        const reqStudentFilter = document.getElementById('studentFilter');
+        const reqStatusFilter = document.getElementById('statusFilter');
+
+        function applyReqFilters() {
+            const stVal = reqStudentFilter ? reqStudentFilter.value : '';
+            const statVal = reqStatusFilter ? reqStatusFilter.value : '';
+            
+            const items = document.querySelectorAll('.request-item');
+            
+            items.forEach(item => {
+                const matchSt = !stVal || item.getAttribute('data-student-name') === stVal;
+                const matchStat = !statVal || item.getAttribute('data-status') === statVal;
+                
+                if (matchSt && matchStat) {
+                    item.style.display = '';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        if(reqStudentFilter) reqStudentFilter.addEventListener('change', applyReqFilters);
+        if(reqStatusFilter) reqStatusFilter.addEventListener('change', applyReqFilters);
+    });
+    
+    document.addEventListener('NewSupervisorRequestEvent', function(e) {
+        const d = e.detail;
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        const tokenHtml = token ? `<input type="hidden" name="__RequestVerificationToken" value="${token}" />` : '';
+        
+        var reqDate = new Date(d.date);
+        var dueDateHtml = '';
+        if (!isNaN(reqDate.getTime())) {
+            var timeoutDays = @(ViewBag.SupervisorRequestTimeoutDays ?? 3);
+            reqDate.setDate(reqDate.getDate() + timeoutDays);
+            var isOverdue = reqDate.setHours(0,0,0,0) < new Date().setHours(0,0,0,0);
+            var dateOpts = { day: 'numeric', month: 'short', year: 'numeric' };
+            dueDateHtml = '<div class="mt-1 ' + (isOverdue ? 'text-danger' : 'text-warning text-dark') + ' small fw-bold">Response Due: ' + reqDate.toLocaleDateString('en-GB', dateOpts) + '</div>';
+        }
+
+        var newRow = `
+            <tr class="request-item" data-student-name="${d.studentName}" data-status="Pending">
+                <td>
+                    <div class="fw-bold text-dark">${d.studentName}</div>
+                    <div class="text-muted small">Matric: ${d.matric}</div>
+                </td>
+                <td>
+                    <div class="fw-bold text-primary">${d.topic}</div>
+                    <div class="text-muted small">${d.message.length > 50 ? d.message.substring(0, 47) + "..." : d.message}</div>
+                </td>
+                <td>
+                    <div class="text-dark small">Requested: ${d.date}</div>
+                    ${dueDateHtml}
+                </td>
+                <td class="text-end">
+                    <div class="d-flex justify-content-end align-items-center gap-2">
+
+                        <button class="btn btn-sm btn-outline-primary rounded-3 text-nowrap" onclick="viewFullForm(${d.id}, true)">
+                            <i class="fas fa-file-alt me-1"></i> View Details
+                        </button>
+                        
+                        <form action="/Supervisor/RespondRequest" method="post" id="acceptForm_${d.id}" class="m-0">
+                            ${tokenHtml}
+                            <input type="hidden" name="requestId" value="${d.id}" />
+                            <input type="hidden" name="status" value="Approved" />
+                            <button type="button" class="btn btn-sm btn-success rounded-3 px-3 text-nowrap" onclick="openAcceptModal(${d.id})">Accept Request</button>
+                        </form>
+                        <button type="button" class="btn btn-sm btn-outline-danger rounded-3 px-3 text-nowrap" onclick="openRejectModal(${d.id})">Decline</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+        
+        var formDataDiv = `
+            <div id="formData_${d.id}" style="display:none;" 
+                 data-name="${d.studentName}" 
+                 data-matric="${d.matric}" 
+                 data-program="${d.program}" 
+                 data-phone="${d.phone}" 
+                 data-session="${d.session}" 
+                 data-topic="${d.topic}" 
+                 data-desc="${d.message}"
+                 data-status="Pending">
+            </div>
+        `;
+        
+        var tbody = document.querySelector('table tbody');
+        if (tbody) {
+            tbody.insertAdjacentHTML('afterbegin', formDataDiv);
+            tbody.insertAdjacentHTML('afterbegin', newRow);
+        }
+        
+        var badge = document.getElementById('pendingCountBadge');
+        if (badge) {
+            var currentText = badge.innerText;
+            var num = parseInt(currentText);
+            if (!isNaN(num)) {
+                var next = num + 1;
+                badge.innerText = next + " Pending Request" + (next === 1 ? "" : "s");
+            }
+        }
+    });
+</script>
+}

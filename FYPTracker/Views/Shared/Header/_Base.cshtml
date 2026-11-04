@@ -1,0 +1,106 @@
+@using FYPTracker.Components
+<style>
+    /* Force header menu text to be dark for contrast against light background */
+    #kt_header .menu-link,
+    #kt_header .menu-title,
+    #kt_header .menu-link i,
+    .drawer .menu-link,
+    .drawer .menu-title,
+    .drawer .menu-link i {
+        color: #1e1e2d !important;
+        font-weight: 600;
+        font-size: 1.05rem !important;
+    }
+    #kt_header .menu-link:hover,
+    #kt_header .menu-link:hover i,
+    .drawer .menu-link:hover,
+    .drawer .menu-link:hover i {
+        color: #f97316 !important; /* Orange hover */
+    }
+    /* Sticky Header */
+    #kt_header {
+        position: sticky !important;
+        top: 0 !important;
+        width: 100%;
+        z-index: 1020 !important;
+
+        background-color: #ffffff;
+        border-bottom: 1px solid #e9edf3;
+        box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+    }
+
+    /* Keep navigation and profile aligned */
+    #kt_header .container-xxl {
+        min-height: 65px;
+    }
+
+    /* Smooth navigation hover */
+    #kt_header .menu-link {
+        transition: color 0.2s ease,
+                    background-color 0.2s ease;
+    }
+    @@media (max-width: 991px) {
+        #custom_mobile_nav {
+            position: fixed;
+            top: 65px; /* typical header height */
+            left: 0;
+            width: 100%;
+            height: calc(100vh - 65px);
+            background-color: #ffffff;
+            z-index: 999999 !important;
+            overflow-y: auto;
+            padding: 20px;
+            box-shadow: 0px 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        /* When Bootstrap collapse makes it block, make it flex column */
+        #custom_mobile_nav.show {
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        
+        #custom_mobile_nav:not(.show) {
+            display: none !important;
+        }
+    }
+</style>
+<!--begin::Header-->
+<div id="kt_header" class="header align-items-stretch">
+    <!--begin::Container-->
+    <div class="container-xxl d-flex align-items-center">
+        <div class="d-flex topbar align-items-center d-lg-none ms-n2 me-3" title="Show aside menu">
+            <div class="btn btn-icon btn-active-light-primary btn-custom w-30px h-30px w-md-40px h-md-40px border-0 bg-transparent" id="kt_header_menu_mobile_toggle">
+                <!--begin::Svg Icon | path: icons/duotune/abstract/abs015.svg-->
+                <span class="svg-icon svg-icon-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M21 7H3C2.4 7 2 6.6 2 6V4C2 3.4 2.4 3 3 3H21C21.6 3 22 3.4 22 4V6C22 6.6 21.6 7 21 7Z" fill="black" />
+                        <path opacity="0.3" d="M21 14H3C2.4 14 2 13.6 2 13V11C2 10.4 2.4 10 3 10H21C21.6 10 22 10.4 22 11V13C22 13.6 21.6 14 21 14ZM22 20V18C22 17.4 21.6 17 21 17H3C2.4 17 2 17.4 2 18V20C2 20.6 2.4 21 3 21H21C21.6 21 22 20.6 22 20Z" fill="black" />
+                    </svg>
+                </span>
+                <!--end::Svg Icon-->
+            </div>
+        </div>
+        <!--end::Heaeder menu toggle-->
+        <!--begin::Header Logo-->
+        <div class="header-logo flex-grow-1 flex-lg-grow-0">
+            <a href="/">
+                <img src="~/assets/media/logos/fyp-logo-whale.png" alt="FYP Tracking System" style="height: 55px; margin-top: 0px;" />
+            </a>
+        </div>
+        <!--end::Header Logo-->
+        <!--begin::Wrapper-->
+        <div class="d-flex align-items-stretch justify-content-between flex-lg-grow-1">
+            <!--begin::Navbar-->
+            <div class="d-flex align-items-stretch" id="kt_header_nav">
+                <!--layout-partial:layout/header/__menu.html-->
+                 @await Component.InvokeAsync(typeof(HeaderViewComponent))
+            </div>
+            <!--end::Navbar-->
+            <!--layout-partial:layout/header/__topbar.html-->
+              @await Component.InvokeAsync(typeof(HeaderTopBarViewComponent))
+        </div>
+        <!--end::Wrapper-->
+    </div>
+    <!--end::Container-->
+</div>
+<!--end::Header-->

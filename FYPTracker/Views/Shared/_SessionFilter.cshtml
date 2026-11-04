@@ -1,0 +1,19 @@
+@if (ViewBag.AllSessions != null && ((IEnumerable<string>)ViewBag.AllSessions).Any())
+{
+    <form method="get" class="d-flex align-items-center m-0">
+        <label class="text-white-50 me-2 mb-0 fw-bold" style="font-size: 0.9rem;">Session:</label>
+        <select name="sessionFilter" class="form-select form-select-sm border-0 shadow-sm" style="background-color: rgba(255,255,255,0.95); color: #0f172a; font-weight: 600; width: auto; min-width: 120px; border-radius: 8px;" onchange="this.form.submit()">
+            @foreach(var s in (IEnumerable<string>)ViewBag.AllSessions)
+            {
+                if (s == (string)ViewBag.CurrentSession)
+                {
+                    <option value="@s" selected="selected">@s</option>
+                }
+                else
+                {
+                    <option value="@s">@s</option>
+                }
+            }
+        </select>
+    </form>
+}

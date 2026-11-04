@@ -1,0 +1,1019 @@
+@model FYPTracker.Models.FYPProject
+@inject FYPTracker.Services.Meetings.IMeetingRequirementService MeetingReqService
+@{
+    ViewData["Title"] = "Student Project Details";
+}
+
+<style>
+    :root {
+        --bg-body: #f8fafc;
+        --card-bg: #ffffff;
+        --text-main: #1e293b;
+        --text-muted: #64748b;
+        --border-color: #e2e8f0;
+        --accent-dark: #0f172a;
+        --accent-light: #334155;
+    }
+
+    .table-hover tbody tr:hover {
+        background-color: #f8fafc;
+    }
+    .table-row-dashed > tbody > tr > td {
+        border-bottom: 1px dashed #e2e8f0;
+        padding-top: 0.85rem;
+        padding-bottom: 0.85rem;
+    }
+    .transition-icon {
+        transition: transform 0.2s ease;
+    }
+    .meeting-detail-row .card {
+        background-color: #ffffff;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <a href="@Url.Action("Index", "Examiner")" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-bold text-nowrap d-inline-flex align-items-center shadow-none">
+                    <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+                </a>
+                <span class="text-muted">/</span>
+                <span class="text-muted fw-semibold fs-7">Student Evaluation</span>
+            </div>
+            <h2 class="fw-bolder text-dark mb-1">Student Project Details</h2>
+            <span class="text-muted fw-semibold fs-7">Review student progress, milestones, meeting records, and complete assessment marksheets.</span>
+        </div>
+        @if (!string.IsNullOrEmpty(Model.FinalGrade))
+        {
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success text-white border border-success px-3 py-2 rounded-pill fw-bold fs-7">
+                    <i class="fas fa-award me-1"></i> Final Grade: @Model.FinalGrade
+                </span>
+            </div>
+        }
+    </div>
+
+    <!-- Alert Notifications (TempData) -->
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 bg-success bg-opacity-10 text-dark p-3 rounded-3 mb-4 d-flex align-items-center shadow-sm">
+            <i class="fas fa-check-circle fs-3 text-success me-3"></i>
+            <div>
+                <strong class="d-block mb-1">Success:</strong>
+                <span>@TempData["Success"]</span>
+            </div>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-dark p-3 rounded-3 mb-4 d-flex align-items-center shadow-sm">
+            <i class="fas fa-times-circle fs-3 text-danger me-3"></i>
+            <div>
+                <strong class="d-block mb-1">Error:</strong>
+                <span>@TempData["Error"]</span>
+            </div>
+        </div>
+    }
+
+    <!-- 1. Two-Column Balanced Summary Layout: Student Info & Viva Schedule -->
+    <div class="row g-4 mb-5">
+        <!-- Student & Project Information Card -->
+        <div class="col-lg-6">
+            <div class="card h-100 border-0 shadow-sm" style="border-left: 5px solid #2563eb !important;">
+                <div class="card-header border-0 pt-5 pb-2">
+                    <h3 class="card-title align-items-start flex-column mb-0">
+                        <span class="card-label fw-bolder fs-4 text-dark">
+                            <i class="fas fa-user-graduate text-primary me-2"></i>Student &amp; Project Information
+                        </span>
+                        <span class="text-muted mt-1 fw-bold fs-7">Assigned candidate and project metadata</span>
+                    </h3>
+                </div>
+                <div class="card-body py-4">
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <span class="text-muted fw-bold fs-7 d-block">Student Name</span>
+                            <span class="text-dark fw-bolder fs-6">@Model.Student?.FullName</span>
+                            <span class="text-muted small d-block">ID: @(Model.Student?.CoventryId ?? Model.Student?.EmployeeId ?? "N/A")</span>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-muted fw-bold fs-7 d-block">Supervisor</span>
+                            <span class="text-dark fw-bolder fs-6">@(Model.Supervisor?.FullName ?? "N/A")</span>
+                            <span class="text-muted small d-block">Academic Supervisor</span>
+                        </div>
+                        <div class="col-12 mt-3">
+                            <span class="text-muted fw-bold fs-7 d-block">Project Title</span>
+                            <span class="text-dark fw-bold fs-5">@Model.Title</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Viva Schedule Card -->
+        <div class="col-lg-6">
+            <div class="card h-100 border-0 shadow-sm" style="border-left: 5px solid @(Model.VivaDate.HasValue ? "#10b981" : "#f59e0b") !important;">
+                <div class="card-header border-0 pt-5 pb-2">
+                    <h3 class="card-title align-items-start flex-column mb-0">
+                        <span class="card-label fw-bolder fs-4 text-dark">
+                            <i class="fas fa-calendar-check @(Model.VivaDate.HasValue ? "text-success" : "text-warning") me-2"></i>Viva Schedule
+                        </span>
+                        <span class="text-muted mt-1 fw-bold fs-7">Official final oral presentation schedule (Admin managed)</span>
+                    </h3>
+                </div>
+                <div class="card-body py-4 d-flex flex-column justify-content-center">
+                    @if (Model.VivaDate.HasValue)
+                    {
+                        <div class="alert alert-success d-flex align-items-center p-4 mb-0 rounded-3">
+                            <i class="fas fa-calendar-alt fs-2 text-success me-3"></i>
+                            <div>
+                                <span class="fw-bolder d-block fs-6">Scheduled Viva</span>
+                                <span class="fs-5 fw-bold text-success d-block">@Model.VivaDate.Value.ToString("dd MMMM yyyy, hh:mm tt")</span>
+                                @if (!string.IsNullOrEmpty(Model.VivaVenue))
+                                {
+                                    <span class="text-dark small mt-1 d-block"><i class="fas fa-map-marker-alt me-1 text-danger"></i> Venue: <strong>@Model.VivaVenue</strong></span>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-warning d-flex align-items-center p-4 mb-0 rounded-3">
+                            <i class="fas fa-clock fs-2 text-warning me-3"></i>
+                            <div>
+                                <span class="fw-bolder d-block fs-6">Not Yet Scheduled</span>
+                                <span class="text-muted small">The Admin will schedule the Viva date. You will be notified by email and in-app notification once scheduled.</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Marksheet & Assessment Section -->
+    <div class="card mb-5 border-0 shadow-sm" style="border-left: 5px solid #6366f1 !important;">
+        <div class="card-header border-0 pt-5 pb-2">
+            <h3 class="card-title align-items-start flex-column mb-0">
+                <span class="card-label fw-bolder fs-3 text-dark">
+                    <i class="fas fa-file-signature text-primary me-2"></i>Marksheet &amp; Assessment
+                </span>
+                <span class="text-muted mt-1 fw-bold fs-7">Access submitted reports and complete official Stage 1 and Stage 2 assessment rubrics</span>
+            </h3>
+        </div>
+        <div class="card-body py-4">
+            <!-- Student's Submitted Proposal / Report Files Callout -->
+            <div class="bg-light p-4 rounded-3 mb-4 border">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                    <div>
+                        <h6 class="fw-bolder text-dark mb-1">
+                            <i class="fas fa-folder-open text-primary me-2"></i>Student's Submitted Proposal / Report Files:
+                        </h6>
+                        <p class="text-muted small mb-0">
+                            Download the student's submitted project files to review prior to evaluation:
+                        </p>
+                    </div>
+                </div>
+                @{
+                    var stage1Milestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(Model.Milestones);
+                    if (stage1Milestone != null && stage1Milestone.SubmissionFiles != null && stage1Milestone.SubmissionFiles.Any(f => !f.IsDeleted))
+                    {
+                        <div class="d-flex flex-wrap gap-2 mt-3">
+                            @foreach (var file in stage1Milestone.SubmissionFiles.Where(f => !f.IsDeleted))
+                            {
+                                <a href="@file.FilePath" class="btn btn-sm btn-white border shadow-sm px-3 py-2 fw-semibold d-inline-flex align-items-center text-primary" target="_blank" download>
+                                    <i class="fas fa-file-download text-primary me-2"></i> @file.FileName
+                                </a>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-muted small mt-2 fst-italic">
+                            <i class="fas fa-info-circle me-1"></i> No submitted proposal files available for download yet.
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Side-by-side Stage 1 & Stage 2 Assessment Columns -->
+            <div class="row g-4">
+                <!-- Stage 1 Column -->
+                <div class="col-lg-6">
+                    <div class="p-4 rounded-3 border bg-white h-100 d-flex flex-column">
+                        @{
+                            var s1FinalMilestone = FYPTracker.Utils.GradingHelper.GetStage1FinalMilestone(Model.Milestones);
+                            string exData = s1FinalMilestone?.ExaminerMarksheetData ?? "";
+                            bool isExStage1Draft = FYPTracker.Utils.GradingHelper.IsMarksheetDraft(exData);
+                            bool isExStage1Done = !string.IsNullOrEmpty(Model.Stage1ExaminerMarksheetPath) || (!string.IsNullOrEmpty(exData) && !isExStage1Draft);
+                        }
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="fw-bolder text-dark mb-0">
+                                <i class="fas fa-clipboard-check text-primary me-2"></i>Stage 1 Proposal Assessment
+                            </h4>
+                            @if (isExStage1Done)
+                            {
+                                <span class="badge bg-success text-white px-3 py-2 rounded-pill fw-bold">
+                                    <i class="fas fa-check-circle me-1"></i> Stage 1 Evaluated
+                                </span>
+                            }
+                            else if (isExStage1Draft)
+                            {
+                                <span class="badge bg-warning text-dark border border-warning px-3 py-2 rounded-pill fw-bold">
+                                    <i class="fas fa-edit me-1"></i> Draft Saved
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary text-white px-3 py-2 rounded-pill fw-bold">
+                                    <i class="fas fa-clock me-1"></i> Awaiting Evaluation
+                                </span>
+                            }
+                        </div>
+                        <p class="text-muted small mb-3">
+                            Official 6-criterion proposal assessment with interactive rubrics, qualitative feedback, and automatic grading.
+                        </p>
+
+                        <a href="@Url.Action("GradeMarksheetStage1", "Examiner", new { id = Model.Id })" class="btn btn-primary px-4 py-3 fw-bold text-nowrap shadow-sm mb-3">
+                            <i class="fas @(isExStage1Done ? "fa-eye" : (isExStage1Draft ? "fa-pencil-alt" : "fa-edit")) me-2"></i>
+                            @(isExStage1Done ? "View / Update Stage 1 Assessment" : (isExStage1Draft ? "Continue Draft Evaluation" : "Grade Stage 1 Rubric"))
+                        </a>
+
+                        @if (!string.IsNullOrEmpty(Model.Stage1ExaminerMarksheetPath))
+                        {
+                            <div class="alert alert-success p-3 d-flex align-items-center justify-content-between mb-3 rounded-3">
+                                <div class="d-flex flex-column">
+                                    <span class="fw-bolder text-dark mb-1">Stage 1 Marksheet Uploaded</span>
+                                    <span><a href="@Model.Stage1ExaminerMarksheetPath" target="_blank" class="fw-bold text-success text-decoration-underline">Download your uploaded file</a></span>
+                                    <span class="text-dark mt-1 small">Total Score extracted: <strong>@(Model.Stage1TotalScore?.ToString() ?? "N/A")</strong></span>
+                                </div>
+                                <i class="bi bi-check-circle-fill fs-2 text-success"></i>
+                            </div>
+                        }
+
+                        @{
+                            var interim = Model.Milestones?.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission"));
+                            string exStrengths = "", exImprovements = "", exComments = "";
+                            if (interim != null && !string.IsNullOrEmpty(interim.ExaminerMarksheetData) && interim.ExaminerMarksheetData.StartsWith("{"))
+                            {
+                                using var doc = System.Text.Json.JsonDocument.Parse(interim.ExaminerMarksheetData);
+                                if (doc.RootElement.TryGetProperty("Strengths", out var sProp)) exStrengths = sProp.GetString();
+                                if (doc.RootElement.TryGetProperty("Improvements", out var iProp)) exImprovements = iProp.GetString();
+                                if (doc.RootElement.TryGetProperty("Comments", out var cProp)) exComments = cProp.GetString();
+                            }
+                        }
+
+                        @if (!string.IsNullOrEmpty(exStrengths) || !string.IsNullOrEmpty(exImprovements) || !string.IsNullOrEmpty(exComments))
+                        {
+                            <div class="mt-auto pt-3 border-top">
+                                <h6 class="fw-bolder text-dark mb-2">Stage 1 Feedback Summary</h6>
+                                @if (!string.IsNullOrEmpty(exStrengths))
+                                {
+                                    <div class="mb-2">
+                                        <small class="text-muted fw-bold d-block">Strengths of Report:</small>
+                                        <div class="p-2 bg-light rounded text-dark fs-7">@exStrengths</div>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(exImprovements))
+                                {
+                                    <div class="mb-2">
+                                        <small class="text-muted fw-bold d-block">Areas for Improvement:</small>
+                                        <div class="p-2 bg-light rounded text-dark fs-7">@exImprovements</div>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(exComments))
+                                {
+                                    <div class="mb-2">
+                                        <small class="text-muted fw-bold d-block">Additional Comments:</small>
+                                        <div class="p-2 bg-light rounded text-dark fs-7">@exComments</div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Stage 2 Column -->
+                <div class="col-lg-6">
+                    <div class="p-4 rounded-3 border bg-white h-100 d-flex flex-column">
+                        @{
+                            var stage2Deliverables = FYPTracker.Utils.GradingHelper.GetRequiredStage2Milestones(Model.Milestones);
+                            bool isAllStage2Approved = FYPTracker.Utils.GradingHelper.AreStage2DeliverablesApproved(Model.Milestones);
+                            var meetingProgressStage2 = await MeetingReqService.GetStudentProgressAsync(Model.StudentId, 2);
+                            int completedStage2Meetings = meetingProgressStage2?.Completed ?? 0;
+                            int? requiredStage2Meetings = meetingProgressStage2?.Required;
+                            var stage2UnlockStatus = FYPTracker.Utils.GradingHelper.CanUnlockStage2Grading(Model, completedStage2Meetings, requiredStage2Meetings);
+                            bool isStage2GradingUnlocked = stage2UnlockStatus.IsUnlocked;
+                            bool isStage2MeetingRequirementMet = FYPTracker.Utils.GradingHelper.IsStage2MeetingRequirementSatisfied(completedStage2Meetings, requiredStage2Meetings);
+                        }
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="fw-bolder text-dark mb-0">
+                                <i class="fas fa-graduation-cap text-success me-2"></i>Stage 2 Final Assessment
+                            </h4>
+                            @if (isStage2GradingUnlocked)
+                            {
+                                <span class="badge bg-success text-white px-3 py-2 rounded-pill fw-bold">
+                                    <i class="fas fa-unlock me-1"></i> Unlocked
+                                </span>
+                            }
+                            else
+                            {
+                                string lockedTitle = !isAllStage2Approved 
+                                    ? "Stage 2 is locked until all required Stage 2 submissions (Turnitin, Final Report, Presentation Slides) are approved by the supervisor" 
+                                    : (!isStage2MeetingRequirementMet 
+                                        ? $"Stage 2 meeting requirement incomplete ({completedStage2Meetings}/{(requiredStage2Meetings ?? 10)} signed meetings completed)" 
+                                        : "Stage 1 must be Passed first");
+                                <span class="badge bg-secondary text-white px-3 py-2 rounded-pill fw-bold" title="@lockedTitle">
+                                    <i class="fas fa-lock me-1"></i> Locked
+                                </span>
+                            }
+                        </div>
+                        <p class="text-muted small mb-3">
+                            Final viva dissertation and artifact evaluation rubric, joined with Supervisor scores.
+                        </p>
+
+                        @if (isStage2GradingUnlocked || !string.IsNullOrEmpty(Model.Stage2ExaminerMarksheetData))
+                        {
+                            <a href="@Url.Action("GradeMarksheetStage2", "Examiner", new { id = Model.Id })" class="btn btn-success px-4 py-3 fw-bold text-nowrap shadow-sm mb-3">
+                                <i class="fas fa-clipboard-check me-2"></i> @(string.IsNullOrEmpty(Model.Stage2ExaminerMarksheetData) ? "Grade Stage 2 Final Marksheet" : "View / Update Stage 2 Final Assessment")
+                            </a>
+
+                            double? exStage2Score = FYPTracker.Utils.GradingHelper.CalculateStage2Score(Model.Stage2ExaminerMarksheetData, "Examiner");
+                            double? supStage2Score = FYPTracker.Utils.GradingHelper.CalculateStage2Score(Model.Stage2SupervisorMarksheetData, "Supervisor");
+                            double? jointStage2Score = FYPTracker.Utils.GradingHelper.CalculateJointFinalPercentage(supStage2Score, exStage2Score);
+                            bool isExDone = exStage2Score.HasValue;
+                            bool isSupDone = supStage2Score.HasValue;
+                            bool isJointReleased = isExDone && isSupDone && !string.IsNullOrEmpty(Model.FinalGrade);
+
+                            if (isExDone || isSupDone)
+                            {
+                                <div class="card border shadow-sm rounded-3 mb-3 bg-light">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="fw-bold text-dark fs-7"><i class="fas fa-balance-scale text-primary me-1"></i> Stage 2 Assessment Overview</span>
+                                            @if (isJointReleased)
+                                            {
+                                                <span class="badge bg-success text-white px-3 py-1 rounded-pill fw-bold">
+                                                    <i class="fas fa-check-double me-1"></i> Graded &amp; Joint Released
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning text-dark border border-warning px-3 py-1 rounded-pill fw-bold">
+                                                    <i class="fas fa-clock me-1"></i> Awaiting Joint Calculation
+                                                </span>
+                                            }
+                                        </div>
+                                        <div class="row g-2 text-center">
+                                            <div class="col-4">
+                                                <div class="p-2 bg-white rounded border">
+                                                    <small class="text-muted d-block" style="font-size: 0.72rem;">Your Score</small>
+                                                    <span class="fw-bold @(isExDone ? "text-primary" : "text-muted")">@(isExDone ? exStage2Score.Value.ToString("F2") + "%" : "Pending")</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="p-2 bg-white rounded border">
+                                                    <small class="text-muted d-block" style="font-size: 0.72rem;">Supervisor</small>
+                                                    <span class="fw-bold @(isSupDone ? "text-success" : "text-muted")">@(isSupDone ? supStage2Score.Value.ToString("F2") + "%" : "Pending")</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="p-2 bg-white rounded border">
+                                                    <small class="text-muted d-block" style="font-size: 0.72rem;">Joint Score</small>
+                                                    <span class="fw-bold @(isJointReleased ? "text-success" : "text-muted")">@(isJointReleased && jointStage2Score.HasValue ? jointStage2Score.Value.ToString("F2") + "% (" + Model.FinalGrade + ")" : "Pending")</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        @if (isExDone && !isSupDone)
+                                        {
+                                            <div class="small text-muted mt-2 text-center">
+                                                <i class="fas fa-info-circle me-1 text-primary"></i> Waiting for Supervisor to submit their marks for the final joint calculation.
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="alert alert-warning d-flex align-items-center p-3 mb-3 rounded-3">
+                                <i class="bi bi-exclamation-triangle fs-2 text-warning me-3"></i>
+                                <div class="d-flex flex-column">
+                                    <span class="fw-bolder text-dark mb-1">Evaluation Locked</span>
+                                    <span class="text-muted small">The supervisor must approve all Stage 2 milestones before you can grade the Stage 2 final evaluation rubric.</span>
+                                </div>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(Model.ExaminerMarksheetPath))
+                        {
+                            <div class="alert alert-success p-3 d-flex align-items-center mb-3 rounded-3">
+                                <i class="bi bi-check-circle-fill text-success fs-3 me-3"></i>
+                                <div class="d-flex flex-column">
+                                    <span class="fw-bolder text-dark">Historical Marksheet File</span>
+                                    <a href="@Model.ExaminerMarksheetPath" target="_blank" class="text-success fw-bold text-decoration-underline small">View Archive File</a>
+                                </div>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(Model.FinalGrade))
+                        {
+                            <div class="alert alert-primary p-3 d-flex align-items-center mb-3 rounded-3">
+                                <i class="bi bi-award-fill text-primary fs-3 me-3"></i>
+                                <div class="d-flex flex-column">
+                                    <span class="fw-bolder fs-7 text-muted">Auto-Graded Result</span>
+                                    <span class="text-dark fs-5 fw-bold">Final Grade: <span class="text-primary">@Model.FinalGrade</span></span>
+                                </div>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(Model.ExaminerStrengths) || !string.IsNullOrEmpty(Model.ExaminerImprovements) || !string.IsNullOrEmpty(Model.ExaminerComments))
+                        {
+                            <div class="mt-auto pt-3 border-top">
+                                <h6 class="fw-bolder text-dark mb-2">Stage 2 Feedback Summary</h6>
+                                @if (!string.IsNullOrEmpty(Model.ExaminerStrengths))
+                                {
+                                    <div class="mb-2">
+                                        <small class="text-muted fw-bold d-block">Strengths of Report:</small>
+                                        <div class="p-2 bg-light rounded text-dark fs-7">@Model.ExaminerStrengths</div>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(Model.ExaminerImprovements))
+                                {
+                                    <div class="mb-2">
+                                        <small class="text-muted fw-bold d-block">Areas for Improvement:</small>
+                                        <div class="p-2 bg-light rounded text-dark fs-7">@Model.ExaminerImprovements</div>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(Model.ExaminerComments))
+                                {
+                                    <div class="mb-2">
+                                        <small class="text-muted fw-bold d-block">Additional Comments:</small>
+                                        <div class="p-2 bg-light rounded text-dark fs-7">@Model.ExaminerComments</div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Milestones & Deliverable Reports Section -->
+    <div class="card mb-5 border-0 shadow-sm" style="border-left: 5px solid #0ea5e9 !important;">
+        <div class="card-header border-0 pt-5 pb-2">
+            <h3 class="card-title align-items-start flex-column mb-0">
+                <span class="card-label fw-bolder fs-3 text-dark">
+                    <i class="fas fa-tasks text-info me-2"></i>Milestones &amp; Reports
+                </span>
+                <span class="text-muted mt-1 fw-bold fs-7">Review student submissions and deliverable statuses across Stage 1 and Stage 2</span>
+            </h3>
+        </div>
+        <div class="card-body py-4">
+            @{
+                var stage1Milestones = Model.Milestones
+                    .Where(m => m.Title.Contains("IAF") || m.Title.Contains("Stage 1 Final Submission"))
+                    .OrderBy(m => m.DueDate ?? m.CreatedDate)
+                    .ToList();
+                var s2MilestonesList = Model.Milestones
+                    .Where(m => (m.Stage == 2 || m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)) && !FYPTracker.Utils.GradingHelper.IsObsoleteOrRetiredStage2Milestone(m))
+                    .OrderBy(m => m.DueDate ?? m.CreatedDate)
+                    .ToList();
+            }
+
+            <!-- Stage 1 Milestones Table -->
+            <div class="mb-5">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h5 class="fw-bolder text-dark mb-0">
+                        <span class="badge bg-primary me-2">1</span>Stage 1 Milestones &amp; Deliverables
+                    </h5>
+                    <span class="text-muted small">Proposal &amp; Interim submissions</span>
+                </div>
+                @if (stage1Milestones.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover table-row-dashed align-middle gs-0 gy-3">
+                            <thead>
+                                <tr class="fw-bolder text-muted bg-light text-uppercase fs-8">
+                                    <th class="ps-4 min-w-200px rounded-start">Milestone</th>
+                                    <th class="min-w-120px">Status</th>
+                                    <th class="min-w-140px">Date Submitted</th>
+                                    <th class="min-w-160px text-end pe-4 rounded-end">Submitted Files</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var milestone in stage1Milestones)
+                                {
+                                    <tr>
+                                        <td class="ps-4">
+                                            <span class="text-dark fw-bolder fs-6">@milestone.Title</span>
+                                            @if (milestone.DueDate.HasValue)
+                                            {
+                                                <div class="text-muted fs-8">Due: @milestone.DueDate.Value.ToString("dd MMM yyyy")</div>
+                                            }
+                                        </td>
+                                        <td>
+                                            @{
+                                                string s1BadgeClass;
+                                                string s1Icon;
+                                                if (milestone.Status == "Approved" || milestone.Status == "Completed")
+                                                {
+                                                    s1BadgeClass = "badge bg-success text-white";
+                                                    s1Icon = "fa-check-circle";
+                                                }
+                                                else if (milestone.Status == "Rejected")
+                                                {
+                                                    s1BadgeClass = "badge bg-danger text-white";
+                                                    s1Icon = "fa-times-circle";
+                                                }
+                                                else if (milestone.Status == "Pending")
+                                                {
+                                                    s1BadgeClass = "badge bg-warning text-dark border border-warning";
+                                                    s1Icon = "fa-clock";
+                                                }
+                                                else
+                                                {
+                                                    s1BadgeClass = "badge bg-secondary text-white";
+                                                    s1Icon = "fa-info-circle";
+                                                }
+                                            }
+                                            <span class="@s1BadgeClass px-3 py-1 rounded-pill fw-bold fs-8">
+                                                <i class="fas @s1Icon me-1"></i> @milestone.Status
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (milestone.SubmittedDate.HasValue)
+                                            {
+                                                <span class="text-dark fw-semibold fs-7">@milestone.SubmittedDate.Value.ToString("dd MMM yyyy")</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted fst-italic fs-8">Not submitted</span>
+                                            }
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            @{
+                                                var activeFiles = milestone.SubmissionFiles?.Where(f => !f.IsDeleted && f.UploadedBy == Model.StudentId).ToList();
+                                                var maxAttempt = activeFiles?.Any() == true ? activeFiles.Max(f => f.AttemptNumber) : 1;
+                                                var latestFiles = activeFiles?.Where(f => f.AttemptNumber == maxAttempt).OrderByDescending(f => f.UploadedDate).ToList();
+                                            }
+                                            @if (latestFiles != null && latestFiles.Any())
+                                            {
+                                                <div class="d-flex flex-wrap justify-content-end gap-1">
+                                                    @foreach (var file in latestFiles)
+                                                    {
+                                                        <a href="@file.FilePath" class="btn btn-sm btn-white border shadow-sm px-2 py-1 d-inline-flex align-items-center text-primary" target="_blank" title="Download @file.FileName">
+                                                            <i class="fas fa-file-download text-primary me-1 fs-7"></i> @file.FileName
+                                                        </a>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted fs-8 fst-italic">No files</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-muted small fst-italic p-3 bg-light rounded text-center">No Stage 1 milestones configured for this project.</div>
+                }
+            </div>
+
+            <div class="separator my-5 border-top border-light"></div>
+
+            <!-- Stage 2 Milestones Table -->
+            <div>
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h5 class="fw-bolder text-dark mb-0">
+                        <span class="badge bg-success me-2">2</span>Stage 2 Milestones &amp; Deliverables
+                    </h5>
+                    <span class="text-muted small">Implementation steps &amp; final report</span>
+                </div>
+                @if (s2MilestonesList.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover table-row-dashed align-middle gs-0 gy-3">
+                            <thead>
+                                <tr class="fw-bolder text-muted bg-light text-uppercase fs-8">
+                                    <th class="ps-4 min-w-200px rounded-start">Milestone</th>
+                                    <th class="min-w-120px">Status</th>
+                                    <th class="min-w-140px">Date Submitted</th>
+                                    <th class="min-w-160px text-end pe-4 rounded-end">Submitted Files</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var milestone in s2MilestonesList)
+                                {
+                                    <tr>
+                                        <td class="ps-4">
+                                            <span class="text-dark fw-bolder fs-6">@milestone.Title</span>
+                                            @if (milestone.DueDate.HasValue)
+                                            {
+                                                <div class="text-muted fs-8">Due: @milestone.DueDate.Value.ToString("dd MMM yyyy")</div>
+                                            }
+                                        </td>
+                                        <td>
+                                            @{
+                                                string s2BadgeClass;
+                                                string s2Icon;
+                                                if (milestone.Status == "Approved" || milestone.Status == "Completed")
+                                                {
+                                                    s2BadgeClass = "badge bg-success text-white";
+                                                    s2Icon = "fa-check-circle";
+                                                }
+                                                else if (milestone.Status == "Rejected")
+                                                {
+                                                    s2BadgeClass = "badge bg-danger text-white";
+                                                    s2Icon = "fa-times-circle";
+                                                }
+                                                else if (milestone.Status == "Pending")
+                                                {
+                                                    s2BadgeClass = "badge bg-warning text-dark border border-warning";
+                                                    s2Icon = "fa-clock";
+                                                }
+                                                else
+                                                {
+                                                    s2BadgeClass = "badge bg-secondary text-white";
+                                                    s2Icon = "fa-info-circle";
+                                                }
+                                            }
+                                            <span class="@s2BadgeClass px-3 py-1 rounded-pill fw-bold fs-8">
+                                                <i class="fas @s2Icon me-1"></i> @milestone.Status
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (milestone.SubmittedDate.HasValue)
+                                            {
+                                                <span class="text-dark fw-semibold fs-7">@milestone.SubmittedDate.Value.ToString("dd MMM yyyy")</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted fst-italic fs-8">Not submitted</span>
+                                            }
+                                        </td>
+                                        <td class="text-end pe-4">
+                                            @{
+                                                var activeFiles = milestone.SubmissionFiles?.Where(f => !f.IsDeleted && f.UploadedBy == Model.StudentId).ToList();
+                                                var latestFile = activeFiles?.OrderByDescending(f => f.UploadedDate).FirstOrDefault();
+                                            }
+                                            @if (latestFile != null)
+                                            {
+                                                <a href="@latestFile.FilePath" class="btn btn-sm btn-white border shadow-sm px-2 py-1 d-inline-flex align-items-center text-primary" target="_blank" title="Download @latestFile.FileName">
+                                                    <i class="fas fa-file-download text-primary me-1 fs-7"></i> @latestFile.FileName
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted fs-8 fst-italic">No files</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-muted small fst-italic p-3 bg-light rounded text-center">No Stage 2 milestones configured for this project.</div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Weekly Meeting Logs Section (Compact Table with Expandable Full-Detail Rows) -->
+    @{
+        var rawMeetingBookings = ViewBag.MeetingBookings as IEnumerable<dynamic>;
+        var meetingBookingsList = new List<FYPTracker.Models.MeetingBooking>();
+        if (rawMeetingBookings != null)
+        {
+            foreach (var b in rawMeetingBookings)
+            {
+                if (b is FYPTracker.Models.MeetingBooking mb)
+                {
+                    meetingBookingsList.Add(mb);
+                }
+            }
+        }
+
+        int totalMeetingsCount = meetingBookingsList.Count;
+        int s1MeetingsCount = meetingBookingsList.Count(m => m.Stage == 1);
+        int s1SignedMeetingsCount = meetingBookingsList.Count(m => m.Stage == 1 && m.MeetingLog?.LogStatus == "Signed");
+        int s2MeetingsCount = meetingBookingsList.Count(m => m.Stage == 2);
+        int s2SignedMeetingsCount = meetingBookingsList.Count(m => m.Stage == 2 && m.MeetingLog?.LogStatus == "Signed");
+    }
+    <div class="card mb-5 border-0 shadow-sm" style="border-left: 5px solid #0d9488 !important;">
+        <div class="card-header border-0 pt-4 pb-3 d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+                    <h3 class="card-title fw-bolder fs-3 text-dark mb-0 d-flex align-items-center">
+                        <i class="fas fa-book-reader me-2" style="color: #0d9488;"></i>Weekly Supervision Meeting Logs
+                    </h3>
+                    @if (totalMeetingsCount > 0)
+                    {
+                        <span class="badge text-white ms-1 fs-8 rounded-pill" style="background-color: #0d9488;">@totalMeetingsCount Total</span>
+                    }
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap text-muted fs-7">
+                    <span><strong>Stage 1:</strong> @s1MeetingsCount Meeting@(s1MeetingsCount == 1 ? "" : "s") (@s1SignedMeetingsCount Signed)</span>
+                    <span>&bull;</span>
+                    <span><strong>Stage 2:</strong> @s2MeetingsCount Meeting@(s2MeetingsCount == 1 ? "" : "s") (@s2SignedMeetingsCount Signed)</span>
+                </div>
+            </div>
+            @if (totalMeetingsCount > 0)
+            {
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" id="toggleAllMeetingLogsBtn" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold d-inline-flex align-items-center gap-1 shadow-none" onclick="toggleAllMeetingDetails()">
+                        <i class="fas fa-expand-arrows-alt"></i> <span id="toggleAllText">Expand All</span>
+                    </button>
+                </div>
+            }
+        </div>
+        <div class="card-body py-3 px-3 px-md-4">
+            @if (totalMeetingsCount > 0)
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover table-row-dashed align-middle gs-0 gy-3 mb-0" id="meetingLogsTable">
+                        <thead>
+                            <tr class="fw-bolder text-muted bg-light text-uppercase fs-8">
+                                <th class="ps-4 min-w-80px rounded-start" style="width: 10%;">Week</th>
+                                <th class="min-w-160px" style="width: 25%;">Meeting Date &amp; Time</th>
+                                <th class="min-w-100px text-center" style="width: 15%;">Stage</th>
+                                <th class="min-w-140px text-center" style="width: 20%;">Signature Status</th>
+                                <th class="min-w-180px text-end pe-4 rounded-end" style="width: 30%;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var booking in meetingBookingsList)
+                            {
+                                var log = booking.MeetingLog;
+                                string statusBadgeClass = "bg-secondary text-white";
+                                string statusIcon = "fa-clock";
+                                string statusText = "No Log Submitted";
+
+                                if (log != null)
+                                {
+                                    if (log.LogStatus == "Signed")
+                                    {
+                                        statusBadgeClass = "bg-success text-white";
+                                        statusIcon = "fa-check-circle";
+                                        statusText = "Signed";
+                                    }
+                                    else if (log.LogStatus == "Submitted")
+                                    {
+                                        statusBadgeClass = "bg-primary text-white";
+                                        statusIcon = "fa-paper-plane";
+                                        statusText = "Submitted";
+                                    }
+                                    else
+                                    {
+                                        statusBadgeClass = "bg-warning text-dark border border-warning";
+                                        statusIcon = "fa-pencil-alt";
+                                        statusText = "Draft";
+                                    }
+                                }
+
+                                string cleanFeedback = log?.DisplayComments?.Trim() ?? "";
+                                if (cleanFeedback.StartsWith("data:image", StringComparison.OrdinalIgnoreCase) ||
+                                    cleanFeedback.StartsWith("data:application", StringComparison.OrdinalIgnoreCase) ||
+                                    (cleanFeedback.Length > 100 && !cleanFeedback.Contains(" ") && !cleanFeedback.Contains(".")) ||
+                                    cleanFeedback.Contains("base64,", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    cleanFeedback = "";
+                                }
+
+                                <tr>
+                                    <!-- Week -->
+                                    <td class="ps-4">
+                                        <span class="badge bg-primary text-white fs-7 px-3 py-1 rounded-pill fw-bold">
+                                            Week @(booking.WeekNumber ?? 0)
+                                        </span>
+                                    </td>
+
+                                    <!-- Meeting Date & Time -->
+                                    <td>
+                                        <div class="text-dark fw-bold fs-7">
+                                            <i class="far fa-calendar-alt text-primary me-1"></i>@booking.MeetingDate.ToString("dd MMM yyyy")
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(booking.MeetingTime))
+                                        {
+                                            <div class="text-muted fs-8">
+                                                <i class="far fa-clock text-secondary me-1"></i>@booking.MeetingTime
+                                            </div>
+                                        }
+                                    </td>
+
+                                    <!-- Stage -->
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-dark border px-3 py-1 rounded-pill fw-semibold fs-8">
+                                            Stage @(booking.Stage ?? 1)
+                                        </span>
+                                    </td>
+
+                                    <!-- Signature Status -->
+                                    <td class="text-center">
+                                        <span class="badge @statusBadgeClass px-3 py-1 rounded-pill fw-bold fs-8 d-inline-flex align-items-center gap-1">
+                                            <i class="fas @statusIcon"></i> @statusText
+                                        </span>
+                                    </td>
+
+                                    <!-- Actions -->
+                                    <td class="text-end pe-4">
+                                        <div class="d-inline-flex align-items-center gap-2">
+                                            @if (log != null && log.LogStatus == "Signed")
+                                            {
+                                                <a href="@Url.Action("ViewMeetingLog", "Examiner", new { id = log.Id })" 
+                                                   target="_blank" 
+                                                   class="btn btn-sm btn-outline-primary fw-semibold px-3 py-1 rounded-pill d-inline-flex align-items-center text-nowrap shadow-none fs-8" 
+                                                   title="View Digital Record of Supervisor Meeting PDF">
+                                                    <i class="fas fa-file-pdf text-danger me-1"></i> View PDF
+                                                </a>
+                                            }
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-light border rounded-pill px-3 py-1 fw-semibold fs-8 text-nowrap d-inline-flex align-items-center gap-1 meeting-collapse-btn" 
+                                                    data-bs-toggle="collapse" 
+                                                    data-bs-target="#meetingDetailsRow_@booking.Id" 
+                                                    aria-expanded="false" 
+                                                    aria-controls="meetingDetailsRow_@booking.Id">
+                                                <span>View Details</span> <i class="fas fa-chevron-down fs-9 transition-icon"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Expandable Row for Full Meeting Details -->
+                                <tr class="collapse meeting-detail-row" id="meetingDetailsRow_@booking.Id">
+                                    <td colspan="5" class="p-0 border-0">
+                                        <div class="p-4 bg-light bg-opacity-75 border-bottom">
+                                            @if (log != null)
+                                            {
+                                                <div class="card border border-slate-200 shadow-none rounded-3 p-3 bg-white">
+                                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 pb-2 mb-3 border-bottom">
+                                                        <div class="fw-bold text-dark fs-7 d-flex align-items-center">
+                                                            <i class="fas fa-clipboard-list text-primary me-2"></i>
+                                                            <span>Supervision Consultation Log &bull; Week @(booking.WeekNumber ?? 0) (Stage @(booking.Stage ?? 1))</span>
+                                                        </div>
+                                                        @if (log.SignatureDate.HasValue)
+                                                        {
+                                                            <span class="badge badge-light-success text-success border border-success border-opacity-25 px-3 py-1 rounded-pill fw-semibold fs-8">
+                                                                <i class="fas fa-signature me-1"></i> Digitally Signed on @log.SignatureDate.Value.ToString("dd MMM yyyy, hh:mm tt")
+                                                            </span>
+                                                        }
+                                                    </div>
+                                                    <div class="row g-3">
+                                                        <div class="col-md-6">
+                                                            <div class="p-3 bg-light rounded-3 border h-100">
+                                                                <span class="text-muted fw-bold fs-8 text-uppercase d-block mb-1">
+                                                                    <i class="fas fa-comments text-primary me-1"></i> Key Topics Discussed
+                                                                </span>
+                                                                <div class="text-dark fs-7" style="white-space: pre-wrap; line-height: 1.5;">@(string.IsNullOrWhiteSpace(log.KeyTopicsDiscussed) ? "—" : log.KeyTopicsDiscussed)</div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="p-3 bg-light rounded-3 border h-100">
+                                                                <span class="text-muted fw-bold fs-8 text-uppercase d-block mb-1">
+                                                                    <i class="fas fa-tasks text-warning me-1"></i> Action Points for Next Meeting
+                                                                </span>
+                                                                <div class="text-dark fs-7" style="white-space: pre-wrap; line-height: 1.5;">@(string.IsNullOrWhiteSpace(log.ActionPointsForNextMeeting) ? "—" : log.ActionPointsForNextMeeting)</div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="p-3 bg-light rounded-3 border h-100">
+                                                                <span class="text-muted fw-bold fs-8 text-uppercase d-block mb-1">
+                                                                    <i class="fas fa-check-square text-success me-1"></i> Completed Actions &amp; Progress
+                                                                </span>
+                                                                <div class="text-dark fs-7" style="white-space: pre-wrap; line-height: 1.5;">@(string.IsNullOrWhiteSpace(log.CompletedActionsAndNotes) ? "—" : log.CompletedActionsAndNotes)</div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <div class="p-3 bg-light rounded-3 border h-100">
+                                                                <span class="text-muted fw-bold fs-8 text-uppercase d-block mb-1">
+                                                                    <i class="fas fa-user-edit text-info me-1"></i> Supervisor Feedback &amp; Verification
+                                                                </span>
+                                                                <div class="text-dark fs-7" style="white-space: pre-wrap; line-height: 1.5;">@(string.IsNullOrWhiteSpace(cleanFeedback) ? "—" : cleanFeedback)</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="p-3 bg-white border rounded-3 text-muted fs-7 text-center">
+                                                    <i class="fas fa-info-circle me-1 text-secondary"></i> No digital meeting logbook entry has been submitted for this consultation.
+                                                </div>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="text-center p-4 bg-light rounded-3 border">
+                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-2" style="width: 42px; height: 42px;">
+                        <i class="fas fa-calendar-times fs-5"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">No Meeting Logs Recorded</h6>
+                    <p class="text-muted small mx-auto mb-0" style="max-width: 480px;">
+                        There are currently no approved supervisor meeting bookings or logbook records submitted for this project.
+                    </p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            @if (TempData["Success"] != null)
+            {
+                <text>
+                Swal.fire({
+                    text: "@TempData["Success"]",
+                    icon: "success",
+                    buttonsStyling: false,
+                    confirmButtonText: "Ok, got it!",
+                    customClass: {
+                        confirmButton: "btn btn-primary"
+                    }
+                });
+                </text>
+            }
+            @if (TempData["Error"] != null)
+            {
+                <text>
+                Swal.fire({
+                    text: "@TempData["Error"]",
+                    icon: "error",
+                    buttonsStyling: false,
+                    confirmButtonText: "Ok, got it!",
+                    customClass: {
+                        confirmButton: "btn btn-danger"
+                    }
+                });
+                </text>
+            }
+
+            // Hook individual meeting row collapse chevron and text
+            document.querySelectorAll('.meeting-detail-row').forEach(function(row) {
+                row.addEventListener('show.bs.collapse', function() {
+                    var btn = document.querySelector('[data-bs-target="#' + row.id + '"]');
+                    if (btn) {
+                        var icon = btn.querySelector('.transition-icon');
+                        if (icon) { icon.classList.remove('fa-chevron-down'); icon.classList.add('fa-chevron-up'); }
+                        var span = btn.querySelector('span');
+                        if (span) span.textContent = 'Hide Details';
+                    }
+                });
+                row.addEventListener('hide.bs.collapse', function() {
+                    var btn = document.querySelector('[data-bs-target="#' + row.id + '"]');
+                    if (btn) {
+                        var icon = btn.querySelector('.transition-icon');
+                        if (icon) { icon.classList.remove('fa-chevron-up'); icon.classList.add('fa-chevron-down'); }
+                        var span = btn.querySelector('span');
+                        if (span) span.textContent = 'View Details';
+                    }
+                });
+            });
+        });
+
+        function toggleAllMeetingDetails() {
+            var btn = document.getElementById('toggleAllMeetingLogsBtn');
+            var textSpan = document.getElementById('toggleAllText');
+            var icon = btn.querySelector('i');
+            var rows = document.querySelectorAll('.meeting-detail-row');
+            var isExpanded = btn.getAttribute('data-expanded') === 'true';
+
+            rows.forEach(function(row) {
+                var bsCollapse = bootstrap.Collapse.getInstance(row) || new bootstrap.Collapse(row, { toggle: false });
+                if (isExpanded) {
+                    bsCollapse.hide();
+                } else {
+                    bsCollapse.show();
+                }
+            });
+
+            if (isExpanded) {
+                btn.setAttribute('data-expanded', 'false');
+                if (textSpan) textSpan.textContent = 'Expand All';
+                if (icon) { icon.className = 'fas fa-expand-arrows-alt'; }
+            } else {
+                btn.setAttribute('data-expanded', 'true');
+                if (textSpan) textSpan.textContent = 'Collapse All';
+                if (icon) { icon.className = 'fas fa-compress-arrows-alt'; }
+            }
+        }
+    </script>
+}

@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.10.12224.181 stable
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FYPTracker", "FYPTracker\FYPTracker.csproj", "{DA349133-1200-414C-AF3C-73826B82AE38}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FYPTracker.Tests", "FYPTracker.Tests\FYPTracker.Tests.csproj", "{452C3C12-6E39-425F-9479-28DE11148597}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DA349133-1200-414C-AF3C-73826B82AE38}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DA349133-1200-414C-AF3C-73826B82AE38}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DA349133-1200-414C-AF3C-73826B82AE38}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DA349133-1200-414C-AF3C-73826B82AE38}.Release|Any CPU.Build.0 = Release|Any CPU
+		{452C3C12-6E39-425F-9479-28DE11148597}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{452C3C12-6E39-425F-9479-28DE11148597}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{452C3C12-6E39-425F-9479-28DE11148597}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{452C3C12-6E39-425F-9479-28DE11148597}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {64D00116-E7A6-4F42-9273-E08965BF7D06}
+	EndGlobalSection
+EndGlobal

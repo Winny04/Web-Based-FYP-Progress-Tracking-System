@@ -1,0 +1,1512 @@
+@model FYPTracker.Models.FYPMilestone
+@inject FYPTracker.Models.FYPTrackerContext _context
+@using System.Collections.Generic
+@{
+    ViewData["Title"] = "Review Submission";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var adminUser = _context.ApplicationUsers.FirstOrDefault(u => u.UserRoles.Any(r => r.Role.Name == "Admin"));
+    var moduleLeaderName = adminUser?.FullName ?? "Admin";
+}
+
+<div class="container-fluid px-4 py-5 review-submission-page">
+    <!-- Review Submission Page Header -->
+    <div class="card border-0 shadow-sm rounded-3 mb-4 review-page-header"
+        style="background-color: #0f172a; color: white;">
+
+        <div class="card-body p-4">
+
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+
+                <!-- Title -->
+                <div>
+                    <h2 class="fw-bold text-white mb-2">
+                        <i class="fas fa-file-signature me-2"></i>
+                        Review Submission
+                    </h2>
+
+                    <p class="text-white-50 mb-3">
+                        Review submitted work and provide feedback or approval.
+                    </p>
+
+                    <!-- Breadcrumb -->
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb review-breadcrumb mb-0">
+
+                            <li class="breadcrumb-item">
+                                <a href="@Url.Action("ReviewSubmissions", "Supervisor")"
+                                class="text-white text-decoration-none">
+                                    Submissions
+                                </a>
+                            </li>
+
+                            <li class="breadcrumb-item active text-break"
+                                aria-current="page">
+                                @Model.Title
+                            </li>
+
+                        </ol>
+                    </nav>
+                </div>
+
+                <!-- Back Button -->
+                <a href="@Url.Action("ReviewSubmissions", "Supervisor")"
+                class="btn btn-light fw-semibold px-4 py-2">
+                    <i class="fas fa-arrow-left me-2"></i>
+                    Back to Submissions
+                </a>
+
+            </div>
+
+        </div>
+    </div>
+
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger shadow-sm border-0 mb-4">
+            <i class="fas fa-exclamation-triangle me-2"></i> @TempData["Error"]
+        </div>
+    }
+
+    <style>
+        .iaf-table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 20px; }
+        .iaf-table, .iaf-table th, .iaf-table td { border: 1px solid #ccc; }
+        .iaf-table th, .iaf-table td { padding: 8px; vertical-align: top; text-align: left; }
+        .iaf-label { font-weight: bold; width: 30%; }
+        .iaf-value { width: 70%; white-space: pre-wrap; }
+        .iaf-attempt-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding: 12px 16px; border: 1px solid #e4e6ef; background-color: #fff; border-radius: 10px; transition: box-shadow .2s ease, transform .2s ease; }
+        .iaf-attempt-card:hover { box-shadow: 0 4px 14px rgba(13,110,253,0.10); transform: translateY(-1px); }
+        .iaf-attempt-card .iaf-attempt-title { font-weight: 700; color: #0d6efd; margin: 0; }
+        .iaf-attempt-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; }
+        .iaf-readonly-view .iaf-value { background: #fff; }
+        @@media print {
+            .iaf-attempt-card { box-shadow: none; }
+        }
+        
+        /* ===== Review Submission Header ===== */
+
+        .review-page-header {
+            border-radius: 12px !important;
+            overflow: hidden;
+        }
+
+        .review-page-header .breadcrumb-item.active {
+            color: #cbd5e1 !important;
+        }
+
+        .review-page-header .breadcrumb-item + .breadcrumb-item::before {
+            color: #94a3b8 !important;
+        }
+
+        .review-page-header .btn-light {
+            background-color: #f8fafc;
+            color: #0f172a;
+            border-radius: 8px;
+            border: none;
+        }
+
+        .review-page-header .btn-light:hover {
+            background-color: #e2e8f0;
+            color: #0f172a;
+        }
+
+        @@media screen and (max-width: 767.98px) {
+            .review-page-header .card-body {
+                padding: 20px !important;
+            }
+
+            .review-page-header .btn-light {
+                width: 100%;
+            }
+        }
+        /* ===== Clean Review Breadcrumb ===== */
+        .review-page-header nav[aria-label="breadcrumb"],
+        .review-page-header .breadcrumb {
+            background: transparent !important;
+            background-color: transparent !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        .review-page-header .breadcrumb-item a {
+            color: #ffffff !important;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .review-page-header .breadcrumb-item a:hover {
+            text-decoration: underline;
+        }
+
+        .review-page-header .breadcrumb-item.active {
+            color: #cbd5e1 !important;
+        }
+
+        .review-page-header .breadcrumb-item + .breadcrumb-item::before {
+            color: #94a3b8 !important;
+        }
+
+        /* ===== Supervisor Review: Attempt History ===== */
+
+        .review-submission-page .iaf-attempt-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 16px 18px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
+            box-shadow: none;
+        }
+
+        .review-submission-page .iaf-attempt-card:hover {
+            transform: none;
+            border-color: #cbd5e1;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+        }
+
+        .review-submission-page .iaf-attempt-title {
+            color: #0f172a;
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .review-submission-page .iaf-attempt-meta {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px 12px;
+            font-size: 12px;
+            color: #475569;
+        }
+
+        .review-submission-page .iaf-attempt-meta .badge {
+            display: inline-flex;
+            align-items: center;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 10px;
+            border-radius: 6px;
+            letter-spacing: 0;
+            text-transform: none;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+
+        .review-submission-page .iaf-attempt-meta .badge-light-warning {
+            background-color: #fef3c7 !important;
+            color: #92400e !important;
+        }
+
+        .review-submission-page .iaf-attempt-meta .badge-light-success {
+            background-color: #dcfce7 !important;
+            color: #166534 !important;
+        }
+
+        .review-submission-page .iaf-attempt-meta .badge-light-danger {
+            background-color: #fee2e2 !important;
+            color: #991b1b !important;
+        }
+
+        .review-submission-page .iaf-attempt-meta .badge-light-secondary {
+            background-color: #f1f5f9 !important;
+            color: #475569 !important;
+        }
+
+        .review-submission-page .iaf-attempt-meta .text-muted {
+            color: #64748b !important;
+            line-height: 1.5;
+        }
+
+        /* Attempt action buttons */
+        .review-submission-page .iaf-attempt-card [id^="btnViewIaf"] {
+            background-color: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #dbeafe;
+            border-radius: 8px;
+            font-weight: 600;
+            padding: 9px 14px;
+        }
+
+        .review-submission-page .iaf-attempt-card [id^="btnViewIaf"]:hover {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+
+        .review-submission-page .iaf-attempt-card [id^="btnDownloadIaf"] {
+            border-radius: 8px;
+            padding: 9px 14px;
+            font-weight: 600;
+        }
+
+        /* Mobile */
+        @@media screen and (max-width: 767.98px) {
+            .review-submission-page .iaf-attempt-card {
+                align-items: stretch;
+                padding: 14px;
+            }
+
+            .review-submission-page .iaf-attempt-card > .d-flex {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+
+            .review-submission-page .iaf-attempt-card > .d-flex > .btn {
+                flex: 1 1 auto;
+            }
+        }
+
+        /* ===== Supervisor Overall Feedback ===== */
+        .review-submission-page .review-feedback-section {
+            margin-bottom: 0;
+        }
+
+        .review-submission-page .review-feedback-content {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-left: 3px solid #0f172a;
+            border-radius: 8px;
+            padding: 16px;
+            color: #334155;
+            font-size: 14px;
+            line-height: 1.65;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+        /* ===== Review Action Card ===== */
+        .review-submission-page .review-action-card {
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 12px !important;
+        }
+
+        .review-submission-page .review-action-card > .card-header {
+            padding: 16px 20px !important;
+        }
+
+        .review-submission-page .review-action-card > .card-body {
+            padding: 20px !important;
+        }
+
+        /* ===== Signature Method Tabs ===== */
+
+        .review-submission-page .review-signature-methods {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            background-color: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+        }
+
+        .review-submission-page .review-signature-methods .btn {
+            flex: 1;
+            min-width: 0;
+            border: none !important;
+            border-radius: 7px !important;
+            background-color: transparent;
+            color: #475569;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 11px 8px;
+            box-shadow: none !important;
+        }
+
+        /* Selected signature method */
+        .review-submission-page
+        .review-signature-methods
+        .btn-check:checked + .btn {
+            background-color: #0f172a !important;
+            color: #ffffff !important;
+        }
+
+        /* Hover */
+        .review-submission-page
+        .review-signature-methods
+        .btn:not(.active):hover {
+            background-color: #e2e8f0;
+            color: #0f172a;
+        }
+
+        /* Keyboard accessibility */
+        .review-submission-page
+        .review-signature-methods
+        .btn-check:focus-visible + .btn {
+            outline: 2px solid #2563eb;
+            outline-offset: 2px;
+        }
+
+        /* Disabled methods */
+        .review-submission-page
+        .review-signature-methods
+        .btn-check:disabled + .btn {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* ===== Signature Canvas Container ===== */
+
+        .review-submission-page #sigDrawArea {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 10px !important;
+            background-color: #ffffff !important;
+        }
+
+        /* Clear signature button */
+        .review-submission-page #sigDrawArea button {
+            border-radius: 7px;
+            background-color: #f8fafc;
+            border-color: #e2e8f0 !important;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Typed signature input */
+        .review-submission-page #sigTypeArea .form-control {
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background-color: #ffffff;
+            min-height: 52px;
+        }
+
+        /* Manual signature information */
+        .review-submission-page #sigManualArea {
+            background-color: #f8fafc !important;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 10px !important;
+        }
+        
+        /* ===== Review IAF Modal ===== */
+
+        .review-iaf-modal .modal-dialog {
+            max-width: 980px !important;
+            width: calc(100% - 32px) !important;
+            margin: 24px auto !important;
+        }
+
+        .review-iaf-modal .modal-content {
+            border: none;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 16px 48px rgba(15, 23, 42, 0.18);
+        }
+
+        /* Header */
+        .review-iaf-modal .modal-header {
+            background-color: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 18px 24px;
+        }
+
+        .review-iaf-modal .modal-title {
+            color: #0f172a;
+            font-size: 19px;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+
+        /* Body */
+        .review-iaf-modal .modal-body {
+            padding: 24px;
+            background-color: #ffffff;
+        }
+
+        /* Table */
+        .review-iaf-modal .iaf-table {
+            width: 100%;
+            margin: 0;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .review-iaf-modal .iaf-table td {
+            border: 1px solid #e2e8f0;
+            padding: 12px 14px;
+            font-size: 14px;
+            vertical-align: middle;
+            overflow-wrap: anywhere;
+        }
+
+        /* Label column */
+        .review-iaf-modal .iaf-table .iaf-label {
+            width: 30%;
+            background-color: #f8fafc !important;
+            color: #334155;
+            font-weight: 600;
+        }
+
+        /* Value column */
+        .review-iaf-modal .iaf-table .iaf-value {
+            width: 70%;
+            color: #1e293b;
+            font-weight: 400;
+        }
+
+        /* Footer */
+        .review-iaf-modal .modal-footer {
+            background-color: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            padding: 14px 24px;
+        }
+
+        .review-iaf-modal .modal-footer .btn {
+            border-radius: 8px;
+            font-weight: 600;
+            padding: 9px 22px;
+        }
+
+        /* Mobile responsiveness */
+        @@media screen and (max-width: 767.98px) {
+            .review-iaf-modal .modal-dialog {
+                width: calc(100% - 20px);
+                margin: 10px auto;
+            }
+
+            .review-iaf-modal .modal-header,
+            .review-iaf-modal .modal-body,
+            .review-iaf-modal .modal-footer {
+                padding: 14px;
+            }
+
+            .review-iaf-modal .iaf-table td {
+                padding: 10px;
+                font-size: 13px;
+            }
+
+            .review-iaf-modal .iaf-table .iaf-label {
+                width: 38%;
+            }
+
+            .review-iaf-modal .iaf-table .iaf-value {
+                width: 62%;
+            }
+        }
+        /* ===== IAF Modal Alignment Fix ===== */
+        .review-iaf-modal .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 20px 24px;
+        }
+
+        .review-iaf-modal .modal-title {
+            flex: 1;
+            min-width: 0;
+            margin: 0;
+            color: #0f172a;
+            font-size: 19px;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+
+        .review-iaf-modal .modal-header .btn-close {
+            flex-shrink: 0;
+            margin: 0;
+        }
+
+        /* Keep content inside the scrollable body */
+        .review-iaf-modal .modal-body {
+            min-height: 0;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        /* Align table with modal body */
+        .review-iaf-modal .modal-body .iaf-table {
+            width: 100%;
+            margin: 0;
+        }
+
+        /* Footer alignment */
+        .review-iaf-modal .modal-footer {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 16px 24px;
+        }
+
+    /* Feedback textarea */
+    .review-submission-page .review-action-card #remarks {
+        width: 100%;
+        min-height: 140px;
+        padding: 14px 16px;
+        background-color: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 10px !important;
+        color: #1e293b;
+        font-size: 14px;
+        line-height: 1.6;
+        resize: vertical;
+    }
+
+    .review-submission-page .review-action-card #remarks:focus {
+        background-color: #ffffff !important;
+        border-color: #2563eb !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+    }
+
+    /* Form labels */
+    .review-submission-page .review-action-card .form-label {
+        color: #334155 !important;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    /* Helper text */
+    .review-submission-page .review-action-card .form-text {
+        color: #64748b !important;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    /* File upload */
+    .review-submission-page .review-action-card #gradedFile {
+        background-color: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 9px !important;
+        color: #334155;
+        font-size: 14px;
+        padding: 8px;
+        max-width: 100%;
+    }
+
+    /* File choose button */
+    .review-submission-page
+    .review-action-card
+    #gradedFile::file-selector-button {
+        background-color: #e2e8f0;
+        color: #334155;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin-right: 12px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    /* Review action buttons */
+    .review-submission-page
+    .review-action-card
+    button[type="submit"][name="status"] {
+        min-height: 50px;
+        border-radius: 10px !important;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.4;
+        white-space: normal;
+    }
+
+    /* Buttons spacing */
+    .review-submission-page
+        .review-action-card
+    .d-flex.flex-wrap.gap-2.mt-5 {
+        margin-top: 24px !important;
+    }
+
+    </style>
+
+    @{
+        bool isStage2StepMilestone = !string.IsNullOrEmpty(Model.Title) && Model.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase);
+        bool hasStage2SupSubmitted = Model.Project != null && !string.IsNullOrEmpty(Model.Project.Stage2SupervisorMarksheetData);
+    }
+
+    @if (isStage2StepMilestone)
+    {
+        <div class="card border-0 shadow-sm rounded-3 mb-4 border-start border-4 @(hasStage2SupSubmitted ? "border-success" : "border-primary") bg-white">
+            <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; background: #e0f2fe; color: #0284c7;">
+                        <i class="fas fa-graduation-cap fs-4"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold text-dark mb-1">Stage 2 Final Evaluation Marksheet</h5>
+                        <p class="text-muted small mb-0">
+                            Milestone approvals confirm document completion. The official Stage 2 final assessment is graded using the 7-criterion rubric marksheet.
+                            @if (hasStage2SupSubmitted)
+                            {
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill ms-1">Marksheet Submitted</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill ms-1">Final Marksheet Pending</span>
+                            }
+                        </p>
+                    </div>
+                </div>
+                <div>
+                    <a href="@Url.Action("GradeMarksheetStage2", "Supervisor", new { id = Model.Project?.Id ?? Model.FYPProjectId })" class="btn @(hasStage2SupSubmitted ? "btn-outline-primary" : "btn-primary") px-4 py-2 fw-bold shadow-sm">
+                        <i class="fas @(hasStage2SupSubmitted ? "fa-eye" : "fa-clipboard-check") me-2"></i> @(hasStage2SupSubmitted ? "View / Update Stage 2 Final Assessment" : "Grade Stage 2 Final Marksheet")
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (Model.Status == "DefenseScheduled")
+    {
+        <div class="alert alert-danger mb-4 rounded-3 shadow-sm d-flex justify-content-between align-items-center" style="border: 2px solid #f1416c;">
+            <div>
+                <h5 class="fw-bold mb-1"><i class="fas fa-lock me-2"></i>Submission Locked (Defense Required)</h5>
+                <p class="mb-0">This student is required to attend a Defense Session. They cannot re-submit the digital form until the Admin unlocks it after their Defense Session.</p>
+            </div>
+            
+        </div>
+    }
+
+    <div class="row g-4">
+        <!-- Details Column -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm rounded-3">
+                <div class="card-header bg-white border-bottom py-3 px-4">
+                    <h5 class="card-title fw-bold text-dark mb-0">
+                        <i class="fas fa-file-alt text-primary me-2"></i>Submission Details
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center me-3 flex-shrink-0"style="width: 48px; height: 48px; background-color: #e8f0ff;">
+                            <i class="fas fa-user-graduate" style="color: #0f172a; font-size: 20px;"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-0 fw-bold text-dark">@Model.Project?.Student?.FullName</h6>
+                            <span class="text-muted small">@Model.Project?.Student?.EmployeeId</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <h6 class="text-muted text-uppercase fw-bold" style="font-size: 0.8rem; letter-spacing: 1px;">Project Title</h6>
+                        <p class="text-dark fw-semibold mb-0">@(Model.Project?.Title ?? "Untitled Project")</p>
+                    </div>
+
+                    @{
+                        string raw = Model.Remarks ?? "";
+                        string parsedJson = "";
+                        string formInfo = "";
+                        if (raw.Contains("JSON: ")) {
+                            var parts = raw.Split(new[] { "JSON: " }, StringSplitOptions.None);
+                            formInfo = parts[0].Trim();
+                            parsedJson = parts[1];
+                        }
+                    }
+
+                    @if (!string.IsNullOrEmpty(formInfo))
+                    {
+                        <div class="alert alert-primary bg-light-primary border-primary border-dashed d-flex align-items-center p-3 mb-4 rounded-3">
+                            <i class="fas fa-info-circle fs-3 text-primary me-3"></i>
+                            <div class="d-flex flex-column">
+                                <span class="fw-bold text-dark">Submission Information</span>
+                                <span class="text-muted" style="font-size: 0.9rem;">@formInfo</span>
+                            </div>
+                        </div>
+                    }
+
+                    @{
+                        bool isProposalOrProgress = false;
+                        if (!string.IsNullOrEmpty(formInfo)) {
+                            var fi = formInfo.ToLower();
+                            if (fi.Contains("proposal") || fi.Contains("progress")) {
+                                isProposalOrProgress = true;
+                            }
+                        }
+                    }
+                    @if (!string.IsNullOrEmpty(parsedJson) && !isProposalOrProgress)
+                    {
+                        bool isIafMilestone = !string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase));
+
+                        <div>
+                            @{
+                                try {
+                                    var history = FYPTracker.Models.IafAttemptHistory.ParseOrMigrate(parsedJson);
+                                    if (history.Attempts.Count == 0) {
+                                        <div class="alert alert-danger font-monospace">
+                                            <strong>Warning: ParseOrMigrate returned 0 attempts.</strong><br/><br/>
+                                            Raw JSON input: @parsedJson
+                                        </div>
+                                    }
+                                    
+                                    var signedAttempts = history.Attempts.Where(a => !string.IsNullOrEmpty(a.SupervisorSignature)).OrderByDescending(a => a.AttemptNumber).ToList();
+                                    var latestSignedAttempt = signedAttempts.FirstOrDefault();
+                                    if (isIafMilestone && latestSignedAttempt != null)
+                                    {
+                                        var snapshotFile = Model.SubmissionFiles?.FirstOrDefault(f => f.AttemptNumber == latestSignedAttempt.AttemptNumber && f.FileName.StartsWith("Signed IAF", StringComparison.OrdinalIgnoreCase));
+                                        var attStatus = string.IsNullOrEmpty(latestSignedAttempt.Status) ? (Model.Status ?? "Pending") : latestSignedAttempt.Status;
+                                        var statusBadge = attStatus switch {
+                                            "Approved" or "AdminApproved" => "badge-light-success",
+                                            "PendingPanelReview" => "badge-light-warning text-dark",
+                                            "SupervisorSigned" => "badge-light-info text-primary",
+                                            "Rejected" or "PanelRevisionRequired" or "ChangeOfTopicRequired" => "badge-light-danger",
+                                            "Draft" => "badge-light-secondary",
+                                            _ => "badge-light-warning"
+                                        };
+
+                                        <div class="mb-4" id="supervisorSignedIafSection">
+                                            <div class="d-flex align-items-center justify-content-between mb-3">
+                                                <h6 class="fw-bold text-success mb-0 d-flex align-items-center gap-2">
+                                                    <i class="fas fa-file-signature text-success"></i>
+                                                    Signed IAF Documents
+                                                </h6>
+                                                <span class="badge bg-light-success text-success border border-success border-opacity-25 rounded-pill px-3 py-1 fw-bold">
+                                                    <i class="fas fa-check-circle me-1"></i>Supervisor Signed
+                                                </span>
+                                            </div>
+                                            <div class="d-flex flex-column gap-3">
+                                                <div class="card border border-success border-opacity-25 shadow-sm rounded-3 p-3 bg-white" id="signedIafDocCard@(latestSignedAttempt.AttemptNumber)">
+                                                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                                                        <div>
+                                                            <div class="d-flex align-items-center gap-2">
+                                                                <i class="fas fa-file-pdf text-danger fs-4"></i>
+                                                                <span class="fw-bold text-dark fs-6">Signed IAF — Attempt @latestSignedAttempt.AttemptNumber</span>
+                                                                @if (latestSignedAttempt.AttemptNumber == history.CurrentAttempt)
+                                                                {
+                                                                    <span class="badge bg-primary text-white rounded-pill px-2">Latest</span>
+                                                                }
+                                                            </div>
+                                                            <div class="d-flex flex-wrap gap-2 align-items-center mt-2 small">
+                                                                <span class="badge badge-light-success border">
+                                                                    <i class="fas fa-signature me-1 text-success"></i>Supervisor Signed
+                                                                </span>
+                                                                <span class="badge @statusBadge border">
+                                                                    Academic Status: @attStatus
+                                                                </span>
+                                                                @if (latestSignedAttempt.SupervisorReviewedAt.HasValue)
+                                                                {
+                                                                    <span class="text-muted">
+                                                                        <i class="far fa-calendar-check me-1 text-primary"></i>Reviewed: @latestSignedAttempt.SupervisorReviewedAt.Value.ToString("dd MMM yyyy, hh:mm tt")
+                                                                    </span>
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                        <div class="d-flex gap-2">
+                                                            <a href="@Url.Action("ViewDigitalForm", "Supervisor", new { milestoneId = Model.Id, attemptNumber = latestSignedAttempt.AttemptNumber })"
+                                                               target="_blank"
+                                                               rel="noopener noreferrer"
+                                                               class="btn btn-sm btn-outline-primary fw-semibold px-3"
+                                                               id="btnViewSignedIaf@(latestSignedAttempt.AttemptNumber)">
+                                                                <i class="fas fa-eye me-1"></i>View IAF
+                                                            </a>
+                                                            @if (snapshotFile != null) {
+                                                                <a class="btn btn-sm btn-success fw-semibold px-3 shadow-sm text-white" 
+                                                                   id="btnDownloadSignedIaf@(latestSignedAttempt.AttemptNumber)" 
+                                                                   href="@Url.Action("DownloadFile", "Supervisor", new { fileId = snapshotFile.Id })">
+                                                                    <i class="fas fa-file-download me-1"></i>Download PDF
+                                                                </a>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+
+                                    <div class="mb-4" id="supervisorAttemptHistorySection">
+                                        <h6 class="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
+                                            <i class="fas fa-history text-primary"></i>
+                                            @(isIafMilestone ? "IAF Attempt History" : "Form Details & History")
+                                        </h6>
+                                        @foreach (var attempt in history.Attempts.OrderByDescending(a => a.AttemptNumber)) {
+                                            var snapshotFile = Model.SubmissionFiles?.FirstOrDefault(f => f.AttemptNumber == attempt.AttemptNumber && f.FileName.StartsWith("Signed IAF", StringComparison.OrdinalIgnoreCase));
+                                            var fd = attempt.FormData ?? new Dictionary<string, string>();
+                                            var isSigned = !string.IsNullOrEmpty(attempt.SupervisorSignature);
+                                            var attStatus = string.IsNullOrEmpty(attempt.Status) ? (Model.Status ?? "Pending") : attempt.Status;
+                                            var statusBadge = attStatus switch {
+                                                "Approved" or "AdminApproved" or "SupervisorSigned" or "PendingPanelReview" => "badge-light-success",
+                                                "Rejected" or "PanelRevisionRequired" or "ChangeOfTopicRequired" or "ReturnedForEdits" => "badge-light-danger",
+                                                "Draft" => "badge-light-secondary",
+                                                _ => "badge-light-warning"
+                                            };
+                                            var isDisplayedInSignedSection = (isIafMilestone && latestSignedAttempt != null && attempt.AttemptNumber == latestSignedAttempt.AttemptNumber);
+
+                                            <div class="iaf-attempt-card" id="iafAttemptCard@(attempt.AttemptNumber)">
+                                                <div>
+                                                    <p class="iaf-attempt-title">
+                                                        Attempt @attempt.AttemptNumber 
+                                                        @(attempt.AttemptNumber == history.CurrentAttempt ? "(Latest)" : "")
+                                                    </p>
+                                                    <div class="iaf-attempt-meta mt-1">
+                                                        <span class="badge @statusBadge">@attStatus</span>
+                                                        @if (isSigned) {
+                                                            <span class="badge badge-light-success"><i class="fas fa-signature me-1 text-success"></i>Supervisor Signed</span>
+                                                        } else {
+                                                            <span class="badge badge-light-secondary"><i class="fas fa-hourglass-half me-1"></i>Not Signed</span>
+                                                        }
+                                                        <span class="text-muted"><i class="far fa-calendar me-1"></i>Reviewed: @(attempt.SupervisorReviewedAt?.ToString("dd MMM yyyy, hh:mm tt") ?? "—")</span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    @if (isDisplayedInSignedSection) {
+                                                        <span class="badge bg-light text-muted border px-3 py-2 d-inline-flex align-items-center" title="Access the latest signed IAF document above">
+                                                            <i class="fas fa-arrow-up me-1 text-primary"></i>Available above
+                                                        </span>
+                                                    } else {
+                                                        <div class="d-flex gap-2">
+                                                            <a href="@Url.Action("ViewDigitalForm", "Supervisor",
+                                                                new { milestoneId = Model.Id, attemptNumber = attempt.AttemptNumber })"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            class="btn btn-sm btn-light-primary"
+                                                            id="btnViewIaf@(attempt.AttemptNumber)">
+                                                                <i class="fas fa-eye me-1"></i>
+                                                                View IAF
+                                                            </a>
+
+                                                            @if (snapshotFile != null) {
+                                                                <a class="btn btn-sm btn-light" id="btnDownloadIaf@(attempt.AttemptNumber)" href="@Url.Action("DownloadFile", "Supervisor", new { fileId = snapshotFile.Id })"><i class="fas fa-download me-1"></i>Download PDF</a>
+                                                            }
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                } catch (Exception ex) {
+                                    <div class="alert alert-danger font-monospace">
+                                        <strong>Error parsing JSON:</strong> @ex.Message<br/><br/>
+                                        Raw JSON: @parsedJson
+                                    </div>
+                                }
+                            }
+
+                            @if (!string.IsNullOrEmpty(Model.SupervisorFeedback))
+                            {
+                                <div class="review-feedback-section mt-4 pt-3 border-top">
+
+                                    <h6 class="fw-bold text-dark mb-3">
+                                        <i class="fas fa-comment-alt text-primary me-2"></i>
+                                        Supervisor's Overall Feedback
+                                    </h6>
+
+                                    <div class="review-feedback-content">@Model.SupervisorFeedback</div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    
+                    @if (Model.SubmissionFiles != null && Model.SubmissionFiles.Any(f => f.UploadedBy == Model.Project?.StudentId && !f.IsDeleted))
+                    {
+                        var primaryFile = Model.SubmissionFiles.Where(f => f.UploadedBy == Model.Project?.StudentId && !f.IsDeleted).OrderByDescending(f => f.AttemptNumber).FirstOrDefault();
+                        if (primaryFile != null)
+                        {
+                            <div class="bg-light rounded-4 border border-secondary border-opacity-25 shadow-sm p-2 mb-4" style="height: 900px;">
+                                <h6 class="fw-bold text-primary mb-2 px-2 pt-2">Student Attached Document (@primaryFile.FileName)</h6>
+                                <iframe src="@Url.Action("ViewFile", "Supervisor", new { fileId = primaryFile.Id })" style="width: 100%; height: 90%; border: none; border-radius: 8px;"></iframe>
+                            </div>
+                        }
+                    }
+
+                    @if (Model.SubmissionFiles != null && Model.SubmissionFiles.Any(f => !f.IsDeleted))
+                    {
+                        var studentFiles = Model.SubmissionFiles.Where(f => f.UploadedBy == Model.Project?.StudentId && !f.IsDeleted).OrderByDescending(f => f.AttemptNumber).ToList();
+                        var supervisorFiles = Model.SubmissionFiles.Where(f => f.UploadedBy != Model.Project?.StudentId && !f.FileName.StartsWith("Signed IAF", StringComparison.OrdinalIgnoreCase) && !f.IsDeleted).ToList();
+
+                        if (studentFiles.Any())
+                        {
+                            <div class="mb-4">
+                                <h6 class="text-muted text-uppercase fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;">Student Attached Files (Version History)</h6>
+                                <div class="d-flex flex-column gap-3">
+                                    @for (int i = 0; i < studentFiles.Count; i++)
+                                    {
+                                        var file = studentFiles[i];
+                                        // Find the most recent file from a PREVIOUS attempt
+                                        var previousFile = studentFiles.FirstOrDefault(f => f.AttemptNumber < file.AttemptNumber);
+                                        
+                                        <div class="card border-0 shadow-sm rounded-3">
+                                            <div class="card-body p-3 d-flex flex-column gap-2">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = file.Id })" target="_blank" class="text-dark fw-bold text-decoration-none d-flex align-items-center">
+                                                        <i class="fas fa-paperclip text-primary me-2"></i> @file.FileName <span class="badge bg-secondary ms-2">Attempt @file.AttemptNumber</span>
+                                                    </a>
+                                                    @if (previousFile != null)
+                                                    {
+                                                        <button type="button" class="btn btn-sm btn-outline-primary" data-toggle="modal" data-target="#compareModal" onclick="setupCompareModal('@Url.Action("ViewFile", "Supervisor", new { fileId = previousFile.Id })', '@Url.Action("ViewFile", "Supervisor", new { fileId = file.Id })')">
+                                                            <i class="fas fa-columns me-1"></i> Compare with Attempt @previousFile.AttemptNumber
+                                                        </button>
+                                                    }
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(file.RevisionNotes))
+                                                {
+                                                    <div class="alert alert-warning m-0 p-2 mt-2 border-0">
+                                                        <div class="fw-bold text-dark" style="font-size:0.85rem;"><i class="fas fa-history text-danger me-1"></i> Revision Notes:</div>
+                                                        <div class="text-dark small">@file.RevisionNotes</div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        if (supervisorFiles.Any())
+                        {
+                            <div class="mb-0">
+                                <h6 class="text-muted text-uppercase fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;">Feedback Attachments / Graded Files</h6>
+                                <div class="d-flex flex-column gap-2">
+                                    @foreach (var file in supervisorFiles)
+                                    {
+                                        <a href="@Url.Action("ViewFile", "Supervisor", new { fileId = file.Id })" target="_blank" class="btn btn-outline-primary text-start d-flex align-items-center rounded-3 p-3 text-decoration-none bg-light-primary border-primary border-opacity-25">
+                                            <i class="fas fa-file-pdf text-primary me-3"></i>
+                                            <span class="text-dark fw-bold text-truncate flex-grow-1">@file.FileName</span>
+                                            <i class="fas fa-external-link-alt text-primary ms-3"></i>
+                                        </a>
+                                    }
+                                </div>
+                            </div>
+                        }
+
+                        string supStrengths = "", supImprovements = "", supComments = "";
+                        if (!string.IsNullOrEmpty(Model.SupervisorMarksheetData) && Model.SupervisorMarksheetData.StartsWith("{"))
+                        {
+                            using var doc = System.Text.Json.JsonDocument.Parse(Model.SupervisorMarksheetData);
+                            if (doc.RootElement.TryGetProperty("Strengths", out var sProp)) supStrengths = sProp.GetString();
+                            if (doc.RootElement.TryGetProperty("Improvements", out var iProp)) supImprovements = iProp.GetString();
+                            if (doc.RootElement.TryGetProperty("Comments", out var cProp)) supComments = cProp.GetString();
+                        }
+                        
+                        if (!string.IsNullOrEmpty(supStrengths) || !string.IsNullOrEmpty(supImprovements) || !string.IsNullOrEmpty(supComments))
+                        {
+                            <div class="mb-0 mt-4 border-top pt-4">
+                                <h6 class="text-primary text-uppercase fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;"><i class="fas fa-magic me-2"></i>Extracted from Marksheet</h6>
+                                
+                                @if (!string.IsNullOrEmpty(supStrengths))
+                                {
+                                    <div class="mb-3">
+                                        <div class="fw-bold text-dark fs-7 mb-1">Strengths of Report</div>
+                                        <div class="bg-light p-2 rounded text-muted fs-7">@supStrengths</div>
+                                    </div>
+                                }
+                                
+                                @if (!string.IsNullOrEmpty(supImprovements))
+                                {
+                                    <div class="mb-3">
+                                        <div class="fw-bold text-dark fs-7 mb-1">Areas for Improvement</div>
+                                        <div class="bg-light p-2 rounded text-muted fs-7">@supImprovements</div>
+                                    </div>
+                                }
+                                
+                                @if (!string.IsNullOrEmpty(supComments))
+                                {
+                                    <div class="mb-3">
+                                        <div class="fw-bold text-dark fs-7 mb-1">Additional Comments</div>
+                                        <div class="bg-light p-2 rounded text-muted fs-7">@supComments</div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Grading Column -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm rounded-3 sticky-top review-action-card" tyle="top: 2rem;">
+                <div class="card-header bg-white border-bottom py-3 px-4">
+                    <h5 class="card-title fw-bold text-dark mb-0">
+                        <i class="fas fa-check-circle text-success me-2"></i>Review Action
+                    </h5>
+                </div>
+                <div class="card-body p-4">
+                    @if (Model.MilestoneSource == "Supervisor" && (Model.Stage == 1 || Model.Stage == 2))
+                    {
+                        <div class="mb-3">
+                            <span class="badge rounded-pill px-3 py-2 fw-semibold" style="color: #009ef7 !important; background-color: #f1faff !important; border: 1px solid rgba(0, 158, 247, 0.3) !important;"><i class="fas fa-tasks me-1"></i>@(Model.Stage == 2 ? "Stage 2 Progress Milestone (not a formal submission)" : "DPP Work & Progress (not a formal submission)")</span>
+                            <div class="small text-muted mt-2">Current status: <strong>@(Model.Status == "PendingSupervisorReview" ? "Pending Supervisor Review" : Model.Status == "ReturnedForChanges" ? "Returned for Changes" : Model.Status)</strong></div>
+                        </div>
+                        @if (Model.Status == "PendingSupervisorReview")
+                        {
+                            <form asp-action="ReviewProgressMilestone" method="post">
+                                <input type="hidden" name="milestoneId" value="@Model.Id" />
+                                <label class="form-label fw-bold text-dark" for="progressFeedback">Supervisor Feedback</label>
+                                <textarea id="progressFeedback" name="feedback" class="form-control mb-3" rows="4" placeholder="Required when returning for changes">@Model.SupervisorFeedback</textarea>
+                                <div class="d-flex gap-2">
+                                    <button type="submit" name="decision" value="return" id="btnProgressReturn" class="btn btn-outline-warning fw-bold flex-fill"><i class="fas fa-undo me-1"></i>Return for Changes</button>
+                                    <button type="submit" name="decision" value="complete" id="btnProgressComplete" class="btn btn-success fw-bold flex-fill"><i class="fas fa-check me-1"></i>Mark Completed</button>
+                                </div>
+                            </form>
+                        }
+                        else if (!string.IsNullOrEmpty(Model.SupervisorFeedback))
+                        {
+                            <div class="alert alert-light border small mb-0"><strong>Feedback:</strong> @Model.SupervisorFeedback</div>
+                        }
+                    }
+                    else
+                    {
+                    <form class="needs-validation" novalidate asp-action="ReviewSubmission" method="post" enctype="multipart/form-data">
+                        <input type="hidden" name="milestoneId" value="@Model.Id" />
+                        
+                        @{
+                            // Lock the form if the milestone has already been graded
+                            bool isLocked = Model.Status == "Approved" || Model.Status == "Rejected" || Model.Status == "SupervisorSigned" || Model.Status == "ReturnedForEdits" || Model.Status == "PendingPanelReview" || Model.Status == "DefenseRequired" || Model.Status == "DefenseScheduled" || Model.Status == "AdminApproved" || Model.Status == "Completed";
+                            bool isMarksheetStage = !string.IsNullOrEmpty(Model.Title) && Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase);
+                            bool isStage1Dpp = !string.IsNullOrEmpty(Model.Title) &&
+                                (Model.Title.Contains("Stage 1 Final Submission", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("DPP", StringComparison.OrdinalIgnoreCase)) &&
+                                !Model.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase);
+                        }
+                        
+                        @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            <div class="mb-4">
+                                <label class="form-label fw-bold text-dark"><i class="fas fa-signature text-primary me-2"></i>Supervisor Signature</label>
+                                
+                                <div class="btn-group w-100 mb-3 review-signature-methods" role="group">
+                                    <input type="radio" class="btn-check" name="sigMethod" id="sigTypeDraw" value="draw" checked @(isLocked ? "disabled" : "")>
+                                    <label class="btn btn-outline-primary" for="sigTypeDraw">Draw</label>
+                                    
+                                    <input type="radio" class="btn-check" name="sigMethod" id="sigTypeType" value="type" @(isLocked ? "disabled" : "")>
+                                    <label class="btn btn-outline-primary" for="sigTypeType">Type</label>
+                                    
+                                    <input type="radio" class="btn-check" name="sigMethod" id="sigTypeManual" value="manual" @(isLocked ? "disabled" : "")>
+                                    <label class="btn btn-outline-primary" for="sigTypeManual">Manual</label>
+                                </div>
+                                
+                                <input type="hidden" name="supervisorSignature" id="supervisorSignatureHidden" />
+
+                                <div id="sigDrawArea" class="border rounded bg-white overflow-hidden position-relative" style="height: 150px; border-color: #dee2e6;">
+                                    <canvas id="signatureCanvas" style="width: 100%; height: 100%; cursor: crosshair; touch-action: none;" @(isLocked ? "style='pointer-events:none;'" : "")></canvas>
+                                    @if(!isLocked)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-light position-absolute top-0 end-0 m-2 shadow-sm border" onclick="clearSignature()"><i class="fas fa-eraser"></i> Clear</button>
+                                    }
+                                </div>
+
+                                <div id="sigTypeArea" class="d-none">
+                                    <input type="text" id="typedSignature" class="form-control form-control-lg form-control-solid" placeholder="Type your full name..." style="font-family: 'Brush Script MT', cursive; font-size: 24px;" @(isLocked ? "disabled" : "") />
+                                </div>
+
+                                <div id="sigManualArea" class="d-none bg-light-info border-info border rounded p-3 text-center">
+                                    <i class="fas fa-file-upload fs-3 text-info mb-2"></i>
+                                    <p class="mb-0 small text-dark fw-semibold">You have chosen manual signature. Please upload the physical signed document below.</p>
+                                </div>
+
+                                <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Required to officially approve the Initial Project Allocation Form.</div>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(Model.Title) && Model.Title.Contains("Progress", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <div class="mb-4">
+                                <label class="form-label fw-bold text-dark"><i class="fas fa-percentage text-primary me-2"></i>Completion Rating</label>
+                                <select name="pctComplete" class="form-select form-select-solid form-select-lg" @(isLocked ? "disabled" : "required")>
+                                    <option value="">- Select rating -</option>
+                                    <option value="10%">10%</option>
+                                    <option value="25%">25%</option>
+                                    <option value="50%">50%</option>
+                                    <option value="75%">75%</option>
+                                    <option value="90%">90%</option>
+                                    <option value="100%">100%</option>
+                                </select>
+                                <div class="invalid-feedback">Please select a completion rating.</div>
+                                <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Rate the student's progress.</div>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Turnitin", StringComparison.OrdinalIgnoreCase)))
+                        {
+
+                            <div class="mb-4 p-3 bg-light-warning border border-warning border-dashed rounded-3">
+                                <label class="form-label fw-bold text-dark"><i class="fas fa-search text-warning me-2"></i>Turnitin Similarity Index (%)</label>
+                                <input type="number" name="turnitinScore" class="form-control form-control-solid form-control-lg" min="0" max="100" value="@Model.Project?.TurnitinScore" placeholder="e.g. 14" @(isLocked ? "disabled" : "required") />
+                                <div class="invalid-feedback">Please enter the Turnitin score.</div>
+                                <div class="form-text text-muted mt-2"><i class="fas fa-exclamation-triangle me-1 text-warning"></i>Must be 20% or less to approve the Turnitin Report. The examiner cannot grade until this is approved.</div>
+                            </div>
+                        }
+
+
+                        
+                        <div class="mb-4">
+                            <label class="form-label fw-bold text-dark">Feedback / Remarks</label>
+                            <textarea name="remarks" id="remarks" class="form-control form-control-solid rounded-3" rows="6" placeholder="Provide detailed feedback for the student here..." @(isLocked ? "readonly" : "required")>@Model.SupervisorFeedback</textarea>
+                            <div class="invalid-feedback">Please provide feedback or remarks.</div>
+                            
+                            <div class="form-text mt-2">This feedback will be visible to the student immediately.</div>
+                        </div>
+
+                        <div class="mb-4">
+                            @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                <label class="form-label fw-bold text-dark"><i class="fas fa-file-upload text-danger me-2"></i>Optional Feedback / Signed Document</label>
+                            }
+                            else
+                            {
+                                <label class="form-label fw-bold text-dark"><i class="fas fa-file-upload text-danger me-2"></i>Upload Feedback File (Optional)</label>
+                            }
+                            @* Stage 1 Marksheet Template panel removed: official grading is conducted via Online Rubric *@
+
+                            <input type="file" id="gradedFile" name="gradedFile" accept=".pdf,.doc,.docx,.xls,.xlsx" class="form-control form-control-solid form-control-lg" @(isLocked ? "disabled" : "") />
+                            <div class="form-text text-muted mt-2"><i class="fas fa-info-circle me-1"></i>Upload Additional Feedback (Optional): annotated PDF, Word, or Excel document. Official marks are evaluated via the online rubric.</div>
+                        </div>
+
+                        @if (isLocked)
+                        {
+                            <div class="alert alert-warning mt-4 mb-0 border-warning shadow-sm">
+                                <i class="fas fa-lock me-2 text-warning"></i>This submission has already been reviewed and locked.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-wrap gap-2 mt-5">
+                                @if (!string.IsNullOrEmpty(Model.Title) && (Model.Title.Contains("Initial Project Allocation", StringComparison.OrdinalIgnoreCase) || Model.Title.Contains("IAF", StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    <button type="submit" name="status" value="Approved" class="btn btn-success btn-lg rounded-3 fw-bold shadow-sm flex-fill" style="flex: 1 1 auto; min-width: 120px;" onclick="if(typeof updateSignatureData === 'function') updateSignatureData();">
+                                        <i class="fas fa-check-circle me-1"></i> Acknowledge (Sign)
+                                    </button>
+                                    <button type="submit" name="status" value="Rejected" class="btn btn-warning btn-lg rounded-3 fw-bold shadow-sm flex-fill text-dark" style="flex: 1 1 auto; min-width: 120px;" onclick="if(typeof updateSignatureData === 'function') updateSignatureData();">
+                                        <i class="fas fa-undo me-1"></i> Return to Student for Edits
+                                    </button>
+                                }
+                                else if (isStage1Dpp)
+                                {
+                                    <button type="submit" name="status" value="Approved" class="btn btn-success btn-lg rounded-3 fw-bold shadow-sm flex-fill" style="flex: 1 1 auto; min-width: 140px;">
+                                        <i class="fas fa-check-circle me-1"></i> Approve Submission
+                                    </button>
+                                    <button type="submit" name="status" value="Rejected" class="btn btn-danger btn-lg rounded-3 fw-bold shadow-sm flex-fill" style="flex: 1 1 auto; min-width: 140px;">
+                                        <i class="fas fa-times-circle me-1"></i> Reject Submission
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button type="submit" name="status" value="Approved" class="btn btn-success btn-lg rounded-3 fw-bold shadow-sm flex-fill" style="flex: 1 1 auto; min-width: 120px;" onclick="if(typeof updateSignatureData === 'function') updateSignatureData();">
+                                        <i class="fas fa-check-circle me-1"></i> Approve
+                                    </button>
+                                    <button type="submit" name="status" value="Rejected" class="btn btn-warning btn-lg rounded-3 fw-bold shadow-sm flex-fill text-dark" style="flex: 1 1 auto; min-width: 120px;" onclick="if(typeof updateSignatureData === 'function') updateSignatureData();">
+                                        <i class="fas fa-edit me-1"></i> Request Revision
+                                    </button>
+                                    <button type="submit" name="status" value="UnderReview" class="btn btn-danger btn-lg rounded-3 fw-bold shadow-sm flex-fill" style="flex: 1 1 auto; min-width: 120px;" onclick="if(typeof updateSignatureData === 'function') updateSignatureData();">
+                                        <i class="fas fa-times-circle me-1"></i> Reject
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </form>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", async function() {
+            const iframe = document.getElementById('iafPdfIframe');
+            if (iframe) {
+                // If it's already set to a PDF URL in the HTML, we don't need to generate it.
+            }
+        });
+
+        // Real-time Bootstrap Validation
+        var forms = document.querySelectorAll('.needs-validation');
+        Array.prototype.slice.call(forms).forEach(function (form) {
+            // Validate on input/change
+            form.addEventListener('input', function(e) {
+                if (e.target.hasAttribute('required')) {
+                    if (e.target.checkValidity()) {
+                        e.target.classList.remove('is-invalid');
+                        e.target.classList.add('is-valid');
+                    } else {
+                        e.target.classList.remove('is-valid');
+                        e.target.classList.add('is-invalid');
+                    }
+                }
+            });
+            form.addEventListener('change', function(e) {
+                if (e.target.hasAttribute('required') && e.target.tagName === 'SELECT') {
+                    if (e.target.checkValidity()) {
+                        e.target.classList.remove('is-invalid');
+                        e.target.classList.add('is-valid');
+                    } else {
+                        e.target.classList.remove('is-valid');
+                        e.target.classList.add('is-invalid');
+                    }
+                }
+            });
+
+            // Track clicked button for max compatibility
+            let clickedSubmitButton = null;
+            const submitButtons = form.querySelectorAll('button[type="submit"]');
+            submitButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    clickedSubmitButton = this;
+                });
+            });
+
+            // Validate on submit
+            form.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                
+                const submitter = event.submitter || clickedSubmitButton;
+                
+                if (!form.checkValidity()) {
+                    event.stopPropagation();
+                    form.classList.add('was-validated');
+                    return;
+                }
+                form.classList.add('was-validated');
+                
+                const submitBtn = submitter || form.querySelector('button[type="submit"]');
+                const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Submitting...';
+                }
+
+                try {
+                    const formData = new FormData(form);
+                    if (submitter && submitter.name) {
+                        formData.append(submitter.name, submitter.value);
+                    }
+                    const actionUrl = form.getAttribute('action') || window.location.href;
+                    
+                    const response = await fetch(actionUrl, {
+                        method: form.getAttribute('method') || 'POST',
+                        body: formData
+                    });
+
+                    if (response.ok) {
+                        if (response.redirected) {
+                            window.location.href = response.url;
+                        } else {
+                            window.location.href = '@Url.Action("ReviewSubmissions", "Supervisor")';
+                        }
+                    } else {
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = originalBtnText;
+                        }
+                        
+                        let errorMsg = "A server error occurred. Please try again.";
+                        try {
+                            const errData = await response.json();
+                            errorMsg = errData.message || errorMsg;
+                        } catch(e) {
+                            if (response.status === 400) errorMsg = "Validation failed. Please check your inputs.";
+                            if (response.status === 500) errorMsg = "A database transaction error occurred. Your input has been saved locally, please try again.";
+                        }
+                        
+                        let errorContainer = document.getElementById('ajax-error-container');
+                        if (!errorContainer) {
+                            errorContainer = document.createElement('div');
+                            errorContainer.id = 'ajax-error-container';
+                            form.insertBefore(errorContainer, form.firstChild);
+                        }
+                        errorContainer.innerHTML = `<div class="alert alert-danger shadow-sm border-danger"><i class="fas fa-exclamation-circle me-2"></i>${errorMsg}</div>`;
+                    }
+                } catch (error) {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnText;
+                    }
+                    
+                    let errorContainer = document.getElementById('ajax-error-container');
+                    if (!errorContainer) {
+                        errorContainer = document.createElement('div');
+                        errorContainer.id = 'ajax-error-container';
+                        form.insertBefore(errorContainer, form.firstChild);
+                    }
+                    errorContainer.innerHTML = `<div class="alert alert-danger shadow-sm border-danger"><i class="fas fa-wifi me-2"></i>Network error occurred. Please check your connection.</div>`;
+                }
+            }, false);
+        });
+
+        function insertFeedback(text) {
+            const remarks = document.getElementById('remarks');
+            if (!remarks || remarks.readOnly) return;
+            
+            if (remarks.value.trim().length > 0) {
+                remarks.value = remarks.value + '\n' + text;
+            } else {
+                remarks.value = text;
+            }
+            
+            remarks.focus();
+            remarks.dispatchEvent(new Event('input'));
+        }
+
+        function setupCompareModal(oldFileUrl, newFileUrl) {
+            document.getElementById('compareOldIframe').src = oldFileUrl;
+            document.getElementById('compareNewIframe').src = newFileUrl;
+        }
+
+        // Turnitin Front-end Validation
+        document.addEventListener("DOMContentLoaded", function() {
+            const turnitinInput = document.querySelector('input[name="turnitinScore"]');
+            const statusSelect = document.querySelector('select[name="status"]');
+            
+            if (turnitinInput && statusSelect) {
+                function validateTurnitin() {
+                    const score = parseFloat(turnitinInput.value);
+                    const approveOption = statusSelect.querySelector('option[value="Approved"]');
+                    
+                    if (!isNaN(score) && score > 20) {
+                        turnitinInput.classList.add('border-danger');
+                        if (statusSelect.value === 'Approved') {
+                            statusSelect.value = '';
+                        }
+                        if (approveOption) {
+                            approveOption.disabled = true;
+                            approveOption.innerHTML = 'Approve (Blocked: Turnitin > 20%)';
+                        }
+                    } else {
+                        turnitinInput.classList.remove('border-danger');
+                        if (approveOption) {
+                            approveOption.disabled = false;
+                            approveOption.innerHTML = 'Approve (Passed)';
+                        }
+                    }
+                }
+                
+                turnitinInput.addEventListener('input', validateTurnitin);
+                validateTurnitin();
+            }
+
+            // Optional feedback file requirement handling
+        });
+        // Signature Handling
+        let sigCanvas, sigCtx, drawing = false;
+
+        function initSignatureCanvas() {
+            const canvas = document.getElementById('signatureCanvas');
+            if (!canvas) return;
+            sigCanvas = canvas;
+            sigCtx = canvas.getContext('2d');
+            
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            sigCtx.lineWidth = 2;
+            sigCtx.lineCap = 'round';
+            sigCtx.strokeStyle = '#00008B';
+
+            const startDraw = (e) => {
+                drawing = true;
+                draw(e);
+            };
+            const stopDraw = () => {
+                drawing = false;
+                sigCtx.beginPath();
+                updateSignatureData();
+            };
+            const draw = (e) => {
+                if (!drawing) return;
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                let x, y;
+                if (e.touches && e.touches.length > 0) {
+                    x = e.touches[0].clientX - rect.left;
+                    y = e.touches[0].clientY - rect.top;
+                } else {
+                    x = e.clientX - rect.left;
+                    y = e.clientY - rect.top;
+                }
+                sigCtx.lineTo(x, y);
+                sigCtx.stroke();
+                sigCtx.beginPath();
+                sigCtx.moveTo(x, y);
+            };
+
+            canvas.addEventListener('mousedown', startDraw);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDraw);
+            canvas.addEventListener('mouseout', stopDraw);
+            
+            canvas.addEventListener('touchstart', startDraw);
+            canvas.addEventListener('touchmove', draw);
+            canvas.addEventListener('touchend', stopDraw);
+        }
+
+        window.clearSignature = function() {
+            if(sigCtx && sigCanvas) {
+                sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+                updateSignatureData();
+            }
+        };
+
+        window.updateSignatureData = function() {
+            const method = document.querySelector('input[name="sigMethod"]:checked')?.value;
+            const hiddenInput = document.getElementById('supervisorSignatureHidden');
+            if (!hiddenInput) return;
+
+            if (method === 'draw') {
+                if(sigCanvas) {
+                    const isCanvasBlank = (canvas) => {
+                        const ctx = canvas.getContext('2d');
+                        const pixelBuffer = new Uint32Array(ctx.getImageData(0, 0, canvas.width, canvas.height).data.buffer);
+                        return !pixelBuffer.some(color => color !== 0);
+                    }
+                    hiddenInput.value = isCanvasBlank(sigCanvas) ? '' : sigCanvas.toDataURL('image/png');
+                }
+            } else if (method === 'type') {
+                hiddenInput.value = document.getElementById('typedSignature').value;
+            } else if (method === 'manual') {
+                hiddenInput.value = "Manual Signature (See Attached Document)";
+            }
+        };
+
+        // Handle Signature Method Change
+        const methodRadios = document.querySelectorAll('input[name="sigMethod"]');
+        if (methodRadios.length > 0) {
+            initSignatureCanvas();
+            methodRadios.forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    document.getElementById('sigDrawArea').classList.add('d-none');
+                    document.getElementById('sigTypeArea').classList.add('d-none');
+                    document.getElementById('sigManualArea').classList.add('d-none');
+                    
+                    if (e.target.value === 'draw') {
+                        document.getElementById('sigDrawArea').classList.remove('d-none');
+                    } else if (e.target.value === 'type') {
+                        document.getElementById('sigTypeArea').classList.remove('d-none');
+                    } else if (e.target.value === 'manual') {
+                        document.getElementById('sigManualArea').classList.remove('d-none');
+                    }
+                    updateSignatureData();
+                });
+            });
+            
+            const typeInput = document.getElementById('typedSignature');
+            if (typeInput) {
+                typeInput.addEventListener('input', updateSignatureData);
+            }
+        }
+    </script>
+}
+
+<!-- Compare Versions Modal -->
+<div class="modal fade" id="compareModal" tabindex="-1" aria-labelledby="compareModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content bg-light">
+            <div class="modal-header bg-dark text-white border-0">
+                <h5 class="modal-title fw-bold" id="compareModalLabel"><i class="fas fa-columns text-primary me-2"></i> Document Version Comparison</h5>
+                <button type="button" class="btn-close btn-close-white" data-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="row g-0 h-100">
+                    <div class="col-6 h-100 border-end border-2 border-dark">
+                        <div class="bg-secondary text-white text-center py-2 fw-bold" style="font-size: 0.9rem;">
+                            <i class="fas fa-history me-1"></i> Previous Version
+                        </div>
+                        <iframe id="compareOldIframe" src="" style="width:100%; height:calc(100vh - 100px); border:none;"></iframe>
+                    </div>
+                    <div class="col-6 h-100">
+                        <div class="bg-primary text-white text-center py-2 fw-bold" style="font-size: 0.9rem;">
+                            <i class="fas fa-star me-1"></i> New Version
+                        </div>
+                        <iframe id="compareNewIframe" src="" style="width:100%; height:calc(100vh - 100px); border:none;"></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+

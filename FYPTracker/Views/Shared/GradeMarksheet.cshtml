@@ -1,0 +1,362 @@
+@model FYPTracker.Models.FYPMilestone
+@{
+    ViewData["Title"] = "Joint Marking Evaluation";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    string postAction = ViewBag.Role == "Examiner" ? "GradeMarksheet" : "GradeMarksheet";
+    string postController = ViewBag.Role == "Examiner" ? "Examiner" : "Supervisor";
+    var latestFile = Model.SubmissionFiles.OrderByDescending(f => f.UploadedDate).FirstOrDefault();
+    
+    // Parse existing marks if any (for returning to edit)
+    string existingMarks = ViewBag.Role == "Examiner" ? Model.ExaminerMarksheetData : Model.SupervisorMarksheetData;
+}
+
+<div class="d-flex flex-column h-100" style="background: #f8fafc; min-height: calc(100vh - 100px);">
+    <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center shadow-sm">
+        <div>
+            <h3 class="fw-bold mb-1 text-dark"><i class="fas fa-clipboard-check text-primary me-2"></i> Joint Marking Evaluation</h3>
+            <p class="mb-0 text-muted">
+                Candidate: <span class="fw-bold text-dark">@Model.Project.Student.FullName</span> | 
+                Dissertation: <span class="fw-bold text-dark">@Model.Project.Title</span>
+            </p>
+        </div>
+        <div>
+            <a href="javascript:history.back()" class="btn btn-outline-secondary rounded-pill px-4"><i class="fas fa-arrow-left me-2"></i>Back</a>
+        </div>
+    </div>
+
+    <div class="row g-0 flex-grow-1">
+        <!-- PDF Viewer (Left Side) -->
+        <div class="col-lg-6 border-end bg-dark">
+            @if (latestFile != null)
+            {
+                <iframe src="@latestFile.FilePath" style="width: 100%; height: calc(100vh - 180px); border: none;" allowfullscreen></iframe>
+            }
+            else
+            {
+                <div class="d-flex align-items-center justify-content-center h-100 text-white flex-column">
+                    <i class="fas fa-file-pdf fa-4x mb-3 text-secondary"></i>
+                    <h5>No final document uploaded</h5>
+                </div>
+            }
+        </div>
+
+        <!-- Evaluation Form (Right Side) -->
+        <div class="col-lg-6 bg-white overflow-auto" style="height: calc(100vh - 180px);">
+            <div class="p-4 p-xl-5">
+                <form asp-controller="@postController" asp-action="@postAction" method="post" id="marksheetForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="milestoneId" value="@Model.Id" />
+                    <!-- We'll store the JSON data here -->
+                    <input type="hidden" name="marksheetData" id="marksheetData" value="@existingMarks" />
+
+                    <div class="d-flex align-items-center justify-content-between mb-4 pb-2 border-bottom">
+                        <div>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill fs-8 fw-bold text-uppercase">
+                                <i class="fas fa-layer-group me-1"></i> Stage 1 Rubric
+                            </span>
+                        </div>
+                        <div class="text-muted small">
+                            Role: <span class="fw-bold text-dark">@ViewBag.Role</span>
+                        </div>
+                    </div>
+
+                    <!-- Technical Depth Card -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">1. Technical Depth & Complexity</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valTech">0/100</span>
+                            </div>
+                            <p class="text-muted small mb-3">Evaluates the complexity of the solution, analytical rigor, and depth of technical discussion.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreTech" oninput="updateScore('Tech')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightTech">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Literature Review Card -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">2. Literature Review & Research</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valLit">0/100</span>
+                            </div>
+                            <p class="text-muted small mb-3">Evaluates the comprehensive use of sources, critical analysis of existing work, and synthesis of ideas.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreLit" oninput="updateScore('Lit')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightLit">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Methodology Card -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">3. Methodology & Approach</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valMeth">0/100</span>
+                            </div>
+                            <p class="text-muted small mb-3">Evaluates the systematic approach, experimental design, and justification of methods used.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scoreMeth" oninput="updateScore('Meth')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightMeth">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Presentation Card -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4 criterion-card">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold fs-6 text-dark mb-0">4. Presentation & Formatting</label>
+                                <span class="badge bg-dark fs-7 px-3 py-2 rounded-pill" id="valPres">0/100</span>
+                            </div>
+                            <p class="text-muted small mb-3">Evaluates clarity, grammar, structural flow, citations, and overall academic formatting.</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <input type="range" class="form-range custom-range w-75" min="0" max="4" step="1" value="0" id="scorePres" oninput="updateScore('Pres')">
+                                <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightPres">Weight: 0/4</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (ViewBag.Role == "Supervisor")
+                    {
+                        <!-- Supervisor only: Process & Attitude Card -->
+                        <div class="card border-primary border-opacity-25 shadow-sm rounded-3 mb-4 criterion-card" style="background: rgba(139, 92, 246, 0.03);">
+                            <div class="card-body p-4">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="fw-bold fs-6 text-primary mb-0"><i class="fas fa-user-graduate me-2"></i>5. Process & Attitude (Supervisor Only)</label>
+                                    <span class="badge bg-primary fs-7 px-3 py-2 rounded-pill" id="valAttitude">0/100</span>
+                                </div>
+                                <p class="text-muted small mb-3">Evaluates the student's independence, consistency in meetings, and response to feedback throughout the semester.</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <input type="range" class="form-range custom-range custom-range-primary w-75" min="0" max="4" step="1" value="0" id="scoreAttitude" oninput="updateScore('Attitude')">
+                                    <span class="badge bg-light text-dark border ms-3 px-3 py-2" id="weightAttitude">Weight: 0/4</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Qualitative Feedback Card -->
+                    <div class="card border border-light-subtle shadow-sm rounded-3 mb-4">
+                        <div class="card-body p-4">
+                            <label class="fw-bold fs-6 text-dark mb-2"><i class="fas fa-comment-alt text-primary me-2"></i>Overall Qualitative Feedback</label>
+                            <p class="text-muted small mb-2">Provide detailed observations, strengths, and areas requiring remediation.</p>
+                            <textarea class="form-control bg-light" id="feedbackText" rows="5" placeholder="Provide detailed feedback, strengths, and areas for improvement..."></textarea>
+                        </div>
+                    </div>
+
+                    @if (ViewBag.Role == "Examiner")
+                    {
+                        <!-- Stage 1 Pass / Fail Decision Card -->
+                        <div class="card border-danger border-opacity-25 shadow-sm rounded-3 mb-4" style="background: rgba(239, 68, 68, 0.03);">
+                            <div class="card-body p-4">
+                                <label class="fw-bold fs-6 text-danger mb-2"><i class="fas fa-gavel me-2"></i>Stage 1 Result Decision</label>
+                                <p class="text-muted small mb-3">Please determine the Stage 1 outcome. If remediation is required, Stage 2 may continue concurrently.</p>
+                                <select class="form-select border-danger" name="stage1Grade" id="stage1Grade" required>
+                                    <option value="" disabled selected>-- Select Result --</option>
+                                    <option value="Pass" selected="@(Model.Project?.Stage1Grade == "Pass")">Pass - Stage 1 Completed</option>
+                                    <option value="Fail" selected="@(Model.Project?.Stage1Grade == "Fail")">Fail - Stage 1 Remediation Required (Stage 2 may continue concurrently)</option>
+                                </select>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Sticky / Border Bottom Submission Footer -->
+                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                        <div class="fs-4 fw-bold text-dark">
+                            Total Score: <span id="totalScore" class="text-primary">0</span><span class="text-muted fs-5">/100</span>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-lg px-5 rounded-pill shadow-sm d-flex align-items-center" onclick="confirmSubmission()">
+                            <i class="fas fa-paper-plane me-2"></i> Submit Final Marks
+                        </button>
+                    </div>
+
+                    <!-- Confirmation Modal -->
+                    <div class="modal fade" id="submitConfirmModal" tabindex="-1" aria-labelledby="submitConfirmModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content border-0 shadow">
+                                <div class="modal-header bg-light">
+                                    <h5 class="modal-title fw-bold text-dark" id="submitConfirmModalLabel"><i class="fas fa-check-circle text-primary me-2"></i>Confirm Final Submission</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body p-4">
+                                    <p class="mb-3 text-dark">Are you sure you want to submit your final marks for <strong class="text-primary">@Model.Project?.Student?.FullName</strong>?</p>
+                                    <div class="p-3 bg-light rounded-3 border mb-3">
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted small">Calculated Raw Total:</span>
+                                            <span class="fw-bold text-dark" id="modalConfirmTotal">0/100</span>
+                                        </div>
+                                        @if (ViewBag.Role == "Examiner")
+                                        {
+                                            <div class="d-flex justify-content-between">
+                                                <span class="text-muted small">Selected Result:</span>
+                                                <span class="fw-bold text-dark" id="modalConfirmResult">-</span>
+                                            </div>
+                                        }
+                                    </div>
+                                    <p class="text-muted small mb-0"><i class="fas fa-info-circle me-1"></i>Once submitted, your evaluation will be saved and ready for joint grading calculation.</p>
+                                </div>
+                                <div class="modal-footer bg-light">
+                                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="button" class="btn btn-primary rounded-pill px-4" id="modalConfirmSubmitBtn" onclick="executeSubmit()">Confirm & Submit</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Custom Range Sliders */
+    .custom-range::-webkit-slider-thumb {
+        background: #0f172a;
+        width: 24px;
+        height: 24px;
+        border: 4px solid white;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    .custom-range::-webkit-slider-runnable-track {
+        background: #cbd5e1;
+        height: 8px;
+        border-radius: 4px;
+    }
+    .custom-range-primary::-webkit-slider-thumb {
+        background: #8b5cf6;
+    }
+    .criterion-card {
+        transition: box-shadow 0.2s ease-in-out;
+    }
+    .criterion-card:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08) !important;
+    }
+</style>
+
+@section Scripts {
+    <script>
+        // Init scores from existing data if any
+        let existing = document.getElementById('marksheetData').value;
+        if (existing) {
+            try {
+                let data = JSON.parse(existing);
+                document.getElementById('scoreTech').value = data.Tech || 0;
+                document.getElementById('scoreLit').value = data.Lit || 0;
+                document.getElementById('scoreMeth').value = data.Meth || 0;
+                document.getElementById('scorePres').value = data.Pres || 0;
+                if (document.getElementById('scoreAttitude')) document.getElementById('scoreAttitude').value = data.Attitude || 0;
+                document.getElementById('feedbackText').value = data.Feedback || "";
+                
+                ['Tech', 'Lit', 'Meth', 'Pres', 'Attitude'].forEach(cat => {
+                    if(document.getElementById('val' + cat)) updateScore(cat, false);
+                });
+            } catch(e) {}
+        }
+
+        function formatScore(val) {
+            let rounded = Math.round(val * 100) / 100;
+            if (rounded % 1 === 0) return rounded.toString();
+            return (Math.round(rounded * 10) / 10 === rounded) ? rounded.toFixed(1) : rounded.toFixed(2);
+        }
+
+        function updateScore(category, updateAvg = true) {
+            let weight = parseInt(document.getElementById('score' + category).value) || 0;
+            if (document.getElementById('weight' + category)) {
+                document.getElementById('weight' + category).innerText = "Weight: " + weight + "/4";
+            }
+            
+            let role = '@ViewBag.Role';
+            let fullMark = (role === 'Supervisor') ? 20 : 25;
+            let score = (weight / 4.0) * fullMark;
+            
+            document.getElementById('val' + category).innerText = formatScore(score) + "/" + fullMark;
+            
+            if (updateAvg) calculateTotal();
+        }
+
+        function calculateTotal() {
+            let techW = parseInt(document.getElementById('scoreTech').value) || 0;
+            let litW = parseInt(document.getElementById('scoreLit').value) || 0;
+            let methW = parseInt(document.getElementById('scoreMeth').value) || 0;
+            let presW = parseInt(document.getElementById('scorePres').value) || 0;
+            
+            let total = 0;
+            let role = '@ViewBag.Role';
+            
+            if (role === 'Supervisor') {
+                let attW = parseInt(document.getElementById('scoreAttitude').value) || 0;
+                total = ((techW/4)*20) + ((litW/4)*20) + ((methW/4)*20) + ((presW/4)*20) + ((attW/4)*20);
+            } else {
+                total = ((techW/4)*25) + ((litW/4)*25) + ((methW/4)*25) + ((presW/4)*25);
+            }
+            
+            document.getElementById('totalScore').innerText = formatScore(total);
+            
+            // Validation: Examiner cannot select Pass if score < 40
+            let stage1GradeSelect = document.getElementById('stage1Grade');
+            if (stage1GradeSelect) {
+                let passOption = stage1GradeSelect.querySelector('option[value="Pass"]');
+                if (passOption) {
+                    if (total < 40) {
+                        passOption.disabled = true;
+                        if (stage1GradeSelect.value === 'Pass') {
+                            stage1GradeSelect.value = ''; 
+                        }
+                    } else {
+                        passOption.disabled = false;
+                    }
+                }
+            }
+        }
+
+        function confirmSubmission() {
+            let form = document.getElementById('marksheetForm');
+            if (!form.reportValidity()) {
+                return; // Prevent modal if required fields (like Pass/Fail select) are missing
+            }
+
+            let totalText = document.getElementById('totalScore').innerText;
+            document.getElementById('modalConfirmTotal').innerText = totalText + "/100";
+
+            let stage1GradeSelect = document.getElementById('stage1Grade');
+            if (stage1GradeSelect) {
+                let resText = stage1GradeSelect.options[stage1GradeSelect.selectedIndex]?.text || '-';
+                document.getElementById('modalConfirmResult').innerText = resText;
+            }
+
+            let modalEl = document.getElementById('submitConfirmModal');
+            let modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        function executeSubmit() {
+            let form = document.getElementById('marksheetForm');
+            let confirmBtn = document.getElementById('modalConfirmSubmitBtn');
+            if (confirmBtn) {
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Submitting...';
+            }
+
+            let data = {
+                Tech: document.getElementById('scoreTech').value,
+                Lit: document.getElementById('scoreLit').value,
+                Meth: document.getElementById('scoreMeth').value,
+                Pres: document.getElementById('scorePres').value,
+                Feedback: document.getElementById('feedbackText').value,
+                Total: document.getElementById('totalScore').innerText
+            };
+            if (document.getElementById('scoreAttitude')) {
+                data.Attitude = document.getElementById('scoreAttitude').value;
+            }
+
+            document.getElementById('marksheetData').value = JSON.stringify(data);
+            form.submit();
+        }
+        
+        // Initial calculation
+        calculateTotal();
+    </script>
+}

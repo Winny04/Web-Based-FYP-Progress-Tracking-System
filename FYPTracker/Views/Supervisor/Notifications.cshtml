@@ -1,0 +1,392 @@
+@using FYPTracker.Models
+@model IEnumerable<FYPNotification>
+@{
+    ViewData["Title"] = "Notifications";
+    var currentUser = ViewBag.CurrentUser as ApplicationUser;
+    var unreadCount = (int)(ViewBag.UnreadCount ?? 0);
+    var notifications = Model?.ToList() ?? new List<FYPNotification>();
+
+    var studentReqs = notifications.Count(n => n.Type == "SupervisionRequest");
+    var meetings    = notifications.Count(n => n.Type == "MeetingRequest" || n.Type == "MeetingUpdate");
+    var submissions = notifications.Count(n => n.Type == "Submission");
+}
+
+<style>
+    .page-hero {
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
+    }
+
+    .glass-card {
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid #f3f4f6;
+        box-shadow: 0 4px 20px rgba(0,0,0,.05);
+    }
+
+    /* Filter tabs */
+    .notif-filters {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 16px 20px;
+        border-bottom: 1px solid #f3f4f6;
+    }
+    .notif-filter-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 16px;
+        border-radius: 20px;
+        border: 1.5px solid #e5e7eb;
+        background: #fff;
+        font-size: .82rem;
+        font-weight: 600;
+        color: #6b7280;
+        cursor: pointer;
+        transition: all .15s;
+    }
+    .notif-filter-btn:hover {
+        border-color: #d1d5db;
+        background: #f9fafb;
+        color: #374151;
+    }
+    .notif-filter-btn.active {
+        border-color: #334155;
+        background: #f1f5f9;
+        color: #1e293b;
+    }
+    .notif-filter-btn .count-badge {
+        background: #f3f4f6;
+        color: #374151;
+        border-radius: 20px;
+        padding: 1px 8px;
+        font-size: .72rem;
+    }
+    .notif-filter-btn.active .count-badge {
+        background: #cbd5e1;
+        color: #1e293b;
+    }
+
+    /* Notification items */
+    .notif-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 16px 20px;
+        border-bottom: 1px solid #f9fafb;
+        transition: background .12s;
+    }
+    .notif-item:last-child { border-bottom: none; }
+    .notif-item:hover { background: #fafafa; }
+    .notif-item.unread { background: #f8fafc; }
+    .notif-item.unread:hover { background: #f1f5f9; }
+
+    .unread-dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: #475569;
+        flex-shrink: 0;
+        margin-top: 8px;
+    }
+    .read-dot {
+        width: 8px; height: 8px;
+        flex-shrink: 0;
+    }
+
+    .notif-icon-wrap {
+        width: 38px; height: 38px;
+        border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+
+    .category-tag {
+        display: inline-block;
+        font-size: .68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        padding: 1px 8px;
+        border-radius: 6px;
+        margin-right: 6px;
+    }
+
+    .btn-read {
+        background: none;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 3px 12px;
+        font-size: .75rem;
+        font-weight: 600;
+        color: #6b7280;
+        transition: all .15s;
+    }
+    .btn-read:hover { border-color: #475569; color: #1e293b; background: #f1f5f9; }
+
+    .btn-mark-all {
+        background: #fff;
+        color: #1e293b;
+        border: 1.5px solid rgba(255,255,255,0.5);
+        border-radius: 10px;
+        padding: 8px 20px;
+        font-weight: 700;
+        font-size: .85rem;
+        transition: opacity .2s;
+    }
+    .btn-mark-all:hover { background: rgba(255,255,255,0.9); }
+
+    #notifList { min-height: 100px; }
+</style>
+
+<div class="container-fluid py-4">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success border-0 rounded-3 shadow-sm mb-3 d-flex align-items-center gap-2">
+            <i class="fas fa-check-circle fs-5"></i> <span>@TempData["Success"]</span>
+        </div>
+    }
+
+    @* ── Hero ─────────────────────────────────────── *@
+    <div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fas fa-bell me-2"></i>Notifications</h2>
+            <p class="mb-0 opacity-80">Stay updated with student submissions, meetings, and requests.</p>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            @if (unreadCount > 0)
+            {
+                <span class="badge bg-white fw-bold px-3 py-2 rounded-pill" style="color:#854d0e;">
+                    @unreadCount Unread
+                </span>
+                <form asp-action="MarkAllRead" asp-controller="Supervisor" method="post">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-mark-all">
+                        <i class="fas fa-check-double me-1"></i>Mark All Read
+                    </button>
+                </form>
+            }
+            else
+            {
+                <span class="badge bg-white fw-bold px-3 py-2 rounded-pill text-success">No unread notifications ✓</span>
+            }
+        </div>
+    </div>
+
+    <div class="glass-card">
+
+        @* ── Filter Tabs ──────────────────────────── *@
+        <div class="notif-filters">
+            <button class="notif-filter-btn active" onclick="filterNotifs('all', this)">
+                All <span class="count-badge">@notifications.Count</span>
+            </button>
+            <button class="notif-filter-btn" onclick="filterNotifs('unread', this)">
+                Unread <span class="count-badge">@unreadCount</span>
+            </button>
+            <button class="notif-filter-btn" onclick="filterNotifs('SupervisionRequest', this)">
+                <i class="fas fa-user-plus"></i> Student Requests <span class="count-badge">@studentReqs</span>
+            </button>
+            <button class="notif-filter-btn" onclick="filterNotifs('Meeting', this)">
+                <i class="fas fa-calendar-alt"></i> Meetings <span class="count-badge">@meetings</span>
+            </button>
+            <button class="notif-filter-btn" onclick="filterNotifs('Submission', this)">
+                <i class="fas fa-file-upload"></i> Submissions <span class="count-badge">@submissions</span>
+            </button>
+        </div>
+
+        @* ── List ─────────────────────────────────── *@
+        @if (!notifications.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="fas fa-bell-slash fs-1 d-block mb-3 opacity-30"></i>
+                <p class="fw-semibold mb-0">No notifications yet.</p>
+                <small>Notifications will appear here when there are updates.</small>
+            </div>
+        }
+        else
+        {
+            <div id="notifList">
+                @foreach (var n in notifications.OrderByDescending(n => n.CreatedDate))
+                {
+                    // Icon + colors per type
+                    var iconCls = n.Type switch {
+                        "SupervisionRequest" => "fas fa-user-plus",
+                        "MeetingUpdate"      => "fas fa-calendar-check",
+                        "MeetingRequest"     => "fas fa-calendar-plus",
+                        "Submission"         => "fas fa-file-upload",
+                        "VivaScheduled"      => "fas fa-graduation-cap",
+                        _                   => "fas fa-bell"
+                    };
+                    var iconBg = n.Type switch {
+                        "SupervisionRequest" => "#f0fdf4",
+                        "MeetingUpdate"      => "#eff6ff",
+                        "MeetingRequest"     => "#eff6ff",
+                        "Submission"         => "#f5f3ff",
+                        "VivaScheduled"      => "#eff6ff",
+                        _                   => "#f9fafb"
+                    };
+                    var iconColor = n.Type switch {
+                        "SupervisionRequest" => "#16a34a",
+                        "MeetingUpdate"      => "#2563eb",
+                        "MeetingRequest"     => "#2563eb",
+                        "Submission"         => "#7c3aed",
+                        "VivaScheduled"      => "#2563eb",
+                        _                   => "#6b7280"
+                    };
+                    var catLabel = n.Type switch {
+                        "SupervisionRequest" => "Student",
+                        "MeetingUpdate"      => "Meeting",
+                        "MeetingRequest"     => "Meeting",
+                        "Submission"         => "Submission",
+                        "VivaScheduled"      => "Viva",
+                        _                   => "System"
+                    };
+                    var catLabelBg = n.Type switch {
+                        "SupervisionRequest" => "#dcfce7;color:#15803d",
+                        "MeetingUpdate"      => "#dbeafe;color:#1d4ed8",
+                        "MeetingRequest"     => "#dbeafe;color:#1d4ed8",
+                        "Submission"         => "#ede9fe;color:#6d28d9",
+                        "VivaScheduled"      => "#dbeafe;color:#1d4ed8",
+                        _                   => "#f3f4f6;color:#374151"
+                    };
+                    var diff = DateTime.Now - n.CreatedDate;
+                    string timeAgo = diff.TotalMinutes < 1  ? "Just now"
+                                   : diff.TotalMinutes < 60 ? $"{(int)diff.TotalMinutes}m ago"
+                                   : diff.TotalHours   < 24 ? $"{(int)diff.TotalHours}h ago"
+                                   : diff.TotalDays    < 7  ? $"{(int)diff.TotalDays}d ago"
+                                   : n.CreatedDate.ToString("dd MMM yyyy");
+                    var dataType = (n.Type == "MeetingRequest" || n.Type == "MeetingUpdate") ? "Meeting" : n.Type;
+
+                    <div class="notif-item @(n.IsRead ? "" : "unread")"
+                         data-type="@dataType"
+                         data-read="@(n.IsRead ? "read" : "unread")">
+
+                        @* Unread dot *@
+                        @if (!n.IsRead) { <div class="unread-dot"></div> }
+                        else            { <div class="read-dot"></div>   }
+
+                        @* Icon *@
+                        <div class="notif-icon-wrap" style="background:@iconBg;color:@iconColor;">
+                            <i class="@iconCls"></i>
+                        </div>
+
+                        @* Content *@
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-1">
+                                <div>
+                                    <span class="category-tag" style="background:@catLabelBg;">@catLabel</span>
+                                    <span class="fw-bold text-dark" style="font-size:.91rem;">@n.Title</span>
+                                </div>
+                                <small class="text-muted flex-shrink-0">@timeAgo</small>
+                            </div>
+                            @if (!string.IsNullOrEmpty(n.Message))
+                            {
+                                <div class="text-muted mb-2" style="font-size:.84rem;">@n.Message</div>
+                            }
+
+                            <div class="d-flex align-items-center flex-wrap gap-2">
+                                <small class="text-muted">@n.CreatedDate.ToString("dd MMM yyyy, h:mm tt")</small>
+
+                                @if (!n.IsRead)
+                                {
+                                    <form asp-action="MarkAsRead" asp-controller="Supervisor" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="notificationId" value="@n.Id" />
+                                        <button type="submit" class="btn-read">
+                                            <i class="fas fa-check me-1"></i>Mark Read
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <small class="text-success"><i class="fas fa-check-circle me-1"></i>Read</small>
+                                }
+                            </div>
+
+                            @if (!n.IsRead)
+                            {
+                                <div class="mt-3">
+                                    @if (n.Type == "MeetingRequest" && n.RelatedRecordId != null)
+                                    {
+                                        <form asp-action="RespondMeetingFromNotification" asp-controller="Supervisor" method="post" style="width: 100%; max-width: 300px;">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="meetingId" value="@n.RelatedRecordId" />
+                                            <input type="hidden" name="notificationId" value="@n.Id" />
+                                            
+                                            <div class="mb-2">
+                                                <input type="text" name="note" class="form-control form-control-sm w-100" placeholder="Note (required)..." style="border-radius:8px;" required minlength="10" />
+                                            </div>
+                                            <div class="d-flex gap-2">
+                                                <button type="submit" name="status" value="Approved" class="btn btn-sm btn-success fw-bold px-3" style="border-radius:8px;">Approve</button>
+                                                <button type="submit" name="status" value="Rejected" class="btn btn-sm btn-danger fw-bold px-3" style="border-radius:8px;">Reject</button>
+                                            </div>
+                                        </form>
+                                    }
+                                    else if (n.Type == "SupervisionRequest")
+                                    {
+                                        <a href="/Supervisor/StudentRequests@(n.RelatedRecordId != null ? "?openRequestId=" + n.RelatedRecordId : "")"
+                                           class="btn btn-sm btn-outline-success fw-bold px-3" style="border-radius:8px;font-size:.78rem;">
+                                            <i class="fas fa-arrow-right me-1"></i>Review Request
+                                        </a>
+                                    }
+                                    else if (n.Type == "Submission")
+                                    {
+                                        <a href="@(n.RelatedRecordId != null ? "/Supervisor/GradeSubmission/" + n.RelatedRecordId : "/Supervisor/ReviewSubmissions")"
+                                           class="btn btn-sm btn-outline-primary fw-bold px-3" style="border-radius:8px;font-size:.78rem;">
+                                            <i class="fas fa-arrow-right me-1"></i>Review Submission
+                                        </a>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* Empty state shown by JS when filter has no results *@
+            <div id="emptyFilter" class="text-center py-5 text-muted d-none">
+                <i class="fas fa-filter fs-2 d-block mb-3 opacity-30"></i>
+                <p class="fw-semibold mb-0">No notifications in this category.</p>
+            </div>
+        }
+
+    </div>
+</div>
+
+@section scripts {
+<script>
+    function filterNotifs(filter, btn) {
+        // Update active tab
+        document.querySelectorAll('.notif-filter-btn').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
+
+        let visibleCount = 0;
+        document.querySelectorAll('.notif-item').forEach(item => {
+            let show = false;
+            if (filter === 'all') {
+                show = true;
+            } else if (filter === 'unread') {
+                show = item.dataset.read === 'unread';
+            } else if (filter === 'Meeting') {
+                show = item.dataset.type === 'Meeting';
+            } else {
+                show = item.dataset.type === filter;
+            }
+            item.style.display = show ? '' : 'none';
+            if (show) visibleCount++;
+        });
+
+        // Show/hide empty state
+        const empty = document.getElementById('emptyFilter');
+        if (empty) {
+            empty.classList.toggle('d-none', visibleCount > 0);
+        }
+    }
+</script>
+}

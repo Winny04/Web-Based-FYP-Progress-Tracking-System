@@ -1,0 +1,830 @@
+@using FYPTracker.Models
+@inject FYPTracker.Services.Time.ISystemClock SystemClock
+@model IEnumerable<FYPProject>
+@{
+    ViewData["Title"] = "My Students";
+    string simulatedToday = SystemClock.Now.ToString("yyyy-MM-dd");
+    var allMilestoneTemplates = Model.SelectMany(p => p.Milestones)
+                                    .GroupBy(m => new { m.Title, m.Stage, m.MilestoneSource })
+                                    .Select(g => g.First())
+                                    .OrderBy(m => m.DueDate ?? DateTime.MaxValue)
+                                    .ToList();
+                                    
+    var stage1Templates = allMilestoneTemplates.Where(m => m.Stage == 1).ToList();
+    var stage2Templates = allMilestoneTemplates.Where(m => m.Stage == 2).ToList();
+    
+    var defaultMilestones = allMilestoneTemplates.Where(m => m.MilestoneSource == "Default").ToList();
+    var supervisorMilestones = allMilestoneTemplates.Where(m => m.MilestoneSource == "Supervisor").ToList();
+    
+    var supervisorMilestoneTitles = supervisorMilestones
+                                    .Select(m => m.Title)
+                                    .Distinct()
+                                    .OrderBy(t => t)
+                                    .ToList();
+}
+
+<style>
+    :root { --hero-grad: linear-gradient(135deg, #1e293b 0%, #334155 100%); }
+
+    /* Custom Timeline Stepper Horizontal */
+    .timeline-stepper {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        overflow-x: auto;
+        padding-bottom: 15px;
+        margin-bottom: 10px;
+        gap: 15px;
+    }
+    /* Horizontal Line drawn per item to support scrolling */
+    .stepper-item::before {
+        content: '';
+        position: absolute;
+        top: 12px;
+        left: 50%;
+        width: 100%;
+        height: 3px;
+        background: #e2e8f0;
+        z-index: 0;
+    }
+    .stepper-item:last-child::before {
+        display: none;
+    }
+    .stepper-item {
+        position: relative;
+        text-align: center;
+        flex: 1 1 150px;
+        min-width: 150px;
+        z-index: 1;
+        padding: 0 5px;
+    }
+    .stepper-icon {
+        margin: 0 auto 12px auto;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #3b82f6;
+        border: 4px solid #fff;
+        box-shadow: 0 0 0 2px #3b82f6;
+        position: relative;
+    }
+    .stepper-item.stage2 .stepper-icon {
+        background: #10b981;
+        box-shadow: 0 0 0 2px #10b981;
+    }
+    
+    /* Scrollbar styling for timeline */
+    .timeline-stepper::-webkit-scrollbar {
+        height: 6px;
+    }
+    .timeline-stepper::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 3px;
+    }
+    
+    .page-hero {
+        background: var(--hero-grad);
+        border-radius: 20px;
+        padding: 28px 32px;
+        color: white;
+        margin-bottom: 28px;
+        box-shadow: 0 8px 32px rgba(30,41,59,.18);
+    }
+</style>
+
+<div class="container-xxl py-4">
+
+<div class="page-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+        <h2 class="fw-bold mb-1 text-white"><i class="fas fa-user-graduate me-2"></i>My Students</h2>
+        <p class="mb-0 text-white opacity-75">Manage your assigned students, track their progress, and view official session milestone deadlines.</p>
+    </div>
+    <div class="d-flex my-2 gap-2 align-items-center">
+        @await Html.PartialAsync("_SessionFilter")
+        <button class="btn btn-light fw-bold shadow-sm" type="button" data-bs-toggle="modal" data-bs-target="#viewSessionMilestonesModal">
+            <i class="fas fa-calendar-alt text-primary me-2"></i> View Session Milestones
+        </button>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success border-0 shadow-sm rounded-3 mb-4">
+        <i class="fas fa-check-circle me-2"></i>@TempData["Success"]
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger border-0 shadow-sm rounded-3 mb-4">
+        <i class="fas fa-exclamation-circle me-2"></i>@TempData["Error"]
+    </div>
+}
+
+<div class="row g-4">
+    @foreach (var proj in Model)
+    {
+        <div class="col-md-6 col-xl-4">
+            <div class="card h-100 shadow-sm border-0" style="border-radius: 16px;">
+                <div class="card-body d-flex flex-column p-4">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center justify-content-between mb-4">
+                            @if (proj.Status == "Completed")
+                            {
+                                <span class="badge bg-success text-white px-3 py-2 rounded-pill"><i class="fas fa-check-circle me-1"></i> Completed</span>
+                            }
+                            else if (proj.Status == "Failed")
+                            {
+                                <span class="badge bg-danger text-white px-3 py-2 rounded-pill"><i class="fas fa-times-circle me-1"></i> Failed</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-primary fw-bold px-3 py-2 rounded-pill border border-primary border-opacity-25">@(string.IsNullOrEmpty(proj.Status) ? "In Progress" : (proj.Status == "Approved" || proj.Status == "InProgress" ? "In Progress" : proj.Status))</span>
+                            }
+                            <span class="text-muted small fw-bold"><i class="fas fa-calendar-alt me-1"></i>@proj.CreatedDate.ToString("dd MMM yyyy")</span>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="text-muted small fw-bold text-uppercase mb-1">Student</div>
+                            <div class="fs-5 fw-bold text-dark">@proj.Student?.FullName</div>
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="text-muted small fw-bold text-uppercase mb-1">Project Title</div>
+                            <div class="fs-6 text-dark" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 3em;">
+                                @proj.Title
+                            </div>
+                        </div>
+
+                        @if (proj.AssignedExaminers != null && proj.AssignedExaminers.Any())
+                        {
+                            var examinerName = proj.AssignedExaminers.FirstOrDefault()?.Examiner?.FullName;
+                            <div class="bg-light-success px-3 py-2 rounded text-success small fw-bold mb-3">
+                                <i class="fas fa-user-check me-2"></i> Examiner: @(string.IsNullOrEmpty(examinerName) ? "Assigned" : examinerName)
+                            </div>
+                        }
+                    </div>
+
+                    <div class="mt-auto pt-3 border-top border-light">
+                        <div class="bg-light rounded-3 p-3 mb-3 border border-light">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted small fw-bold"><i class="fas fa-file-alt text-primary me-1"></i> Stage 1</span>
+                                @if (proj.Stage1Grade == "Pass")
+                                {
+                                    <span class="badge bg-success text-white rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #ffffff !important; background-color: #50cd89 !important;">
+                                        <i class="fas fa-check-circle me-1 text-white"></i>Passed@(proj.Stage1TotalScore.HasValue ? $" ({proj.Stage1TotalScore.Value:0.0})" : "")
+                                    </span>
+                                }
+                                else if (proj.Stage1Grade == "Fail")
+                                {
+                                    <span class="badge bg-danger text-white rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #ffffff !important; background-color: #f1416c !important;">
+                                        <i class="fas fa-times-circle me-1 text-white"></i>Failed
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #1e293b !important; background-color: #e2e8f0 !important;">
+                                        <i class="fas fa-clock me-1" style="color: #64748b !important;"></i>In Progress
+                                    </span>
+                                }
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted small fw-bold"><i class="fas fa-graduation-cap text-success me-1"></i> Stage 2</span>
+                                @if (proj.Status == "Completed" || !string.IsNullOrEmpty(proj.FinalGrade))
+                                {
+                                    <span class="badge bg-success text-white rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #ffffff !important; background-color: #50cd89 !important;">
+                                        <i class="fas fa-trophy me-1 text-white"></i>@(string.IsNullOrEmpty(proj.FinalGrade) ? "Completed" : $"Graded ({proj.FinalGrade})")
+                                    </span>
+                                }
+                                else if (proj.Stage1Grade == "Pass")
+                                {
+                                    <span class="badge bg-primary text-white rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #ffffff !important; background-color: #009ef7 !important;">
+                                        <i class="fas fa-arrow-right me-1 text-white"></i>In Progress
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge rounded-pill px-3 py-1 fw-bold text-nowrap" style="color: #64748b !important; background-color: #e2e8f0 !important;">
+                                        <i class="fas fa-lock me-1" style="color: #64748b !important;"></i>Locked
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                        <a href="/Supervisor/ProjectDetails/@proj.Id" class="btn btn-outline-primary w-100 fw-bold rounded-pill">
+                            View Details
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    @if (!Model.Any())
+    {
+        <div class="col-12">
+            <div class="card border-0 shadow-sm text-center py-5" style="border-radius: 16px;">
+                <div class="card-body text-muted">
+                    <i class="fas fa-user-slash fs-1 mb-3" style="color: #cbd5e1;"></i>
+                    <h5 class="fw-bold text-dark mb-1">No Assigned Students</h5>
+                    <p class="mb-0">You do not currently have any active FYP projects under your supervision for this session.</p>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- View Session Milestones Modal -->
+<div class="modal fade" id="viewSessionMilestonesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-bottom px-4 py-3">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle">
+                        <i class="fas fa-calendar-check fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold text-dark mb-0">Official Academic Session Milestones</h5>
+                        <small class="text-muted">Authoritative Institutional Submission Deadlines</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert alert-primary bg-primary bg-opacity-10 border-0 rounded-3 mb-4">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="fas fa-info-circle text-primary mt-1"></i>
+                        <div>
+                            <strong>Academic Session: @(ViewBag.EffectiveSessionName ?? ViewBag.CurrentSession ?? "Current Session")</strong>
+                            <div class="small mt-1">
+                                All students enrolled in this Academic Session share identical official submission deadlines. Official deadlines are centrally administered and cannot be changed by Supervisors.
+                            </div>
+                            <div class="small text-muted mt-1">
+                                <i class="fas fa-lightbulb text-warning me-1"></i>To assign optional individual student progress tasks, open that student's <strong>Project Details</strong> and select <strong>+ Add Progress Task</strong>.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stage 1 Official Milestones -->
+                <div class="mb-4">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <h6 class="fw-bold text-primary mb-0">
+                            <i class="fas fa-flag me-2"></i>Stage 1 Official Milestones
+                        </h6>
+                        <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill small">Official Academic Milestones</span>
+                    </div>
+                    <div class="table-responsive border rounded-3 bg-white">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr class="text-muted small text-uppercase">
+                                    <th class="ps-3">Milestone Title</th>
+                                    <th>Code / Type</th>
+                                    <th>Status / Rule</th>
+                                    <th class="text-end pe-3">Official Due Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{
+                                    var officialStage1 = (ViewBag.OfficialSessionMilestones as List<DefaultMilestoneTemplate>)?.Where(t => t.Stage == 1).ToList() 
+                                                         ?? stage1Templates.Where(m => m.MilestoneSource == "Default").Select(m => new DefaultMilestoneTemplate { Title = m.Title, MilestoneCode = m.MilestoneCode, DueDate = m.DueDate, IsRequired = m.IsRequired }).ToList();
+                                }
+                                @if (officialStage1 != null && officialStage1.Any())
+                                {
+                                    @foreach (var t in officialStage1)
+                                    {
+                                        <tr>
+                                            <td class="ps-3 fw-semibold text-dark">@t.Title</td>
+                                            <td><span class="badge bg-light text-secondary border">@(string.IsNullOrEmpty(t.MilestoneCode) ? "DEFAULT" : t.MilestoneCode)</span></td>
+                                            <td>
+                                                @if (t.IsRequired)
+                                                {
+                                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Required</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary bg-opacity-10 text-secondary">Optional</span>
+                                                }
+                                            </td>
+                                            <td class="text-end pe-3 fw-bold text-dark">
+                                                @(t.DueDate?.ToString("dd MMMM yyyy") ?? "No deadline set")
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="4" class="text-center py-3 text-muted">No Stage 1 official milestone templates found for this session.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Stage 2 Official Deadlines -->
+                <div>
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <h6 class="fw-bold text-success mb-0">
+                            <i class="fas fa-graduation-cap me-2"></i>Stage 2 Official Milestones
+                        </h6>
+                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill small">Official Academic Milestones</span>
+                    </div>
+                    <div class="table-responsive border rounded-3 bg-white">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr class="text-muted small text-uppercase">
+                                    <th class="ps-3">Milestone Title</th>
+                                    <th>Stage</th>
+                                    <th>Status / Rule</th>
+                                    <th class="text-end pe-3">Official Due Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{
+                                    var officialStage2 = stage2Templates.Where(m => (m.Stage == 2 || m.Title.StartsWith("Step")) && !FYPTracker.Utils.GradingHelper.IsObsoleteOrRetiredStage2Milestone(m)).ToList();
+                                }
+                                @if (officialStage2.Any())
+                                {
+                                    @foreach (var s2 in officialStage2)
+                                    {
+                                        <tr>
+                                            <td class="ps-3 fw-semibold text-dark">@s2.Title</td>
+                                            <td><span class="badge bg-light text-secondary border">Stage 2</span></td>
+                                            <td><span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Required</span></td>
+                                            <td class="text-end pe-3 fw-bold text-dark">
+                                                @(s2.DueDate?.ToString("dd MMMM yyyy") ?? "No deadline set")
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="4" class="text-center py-3 text-muted">No Stage 2 official milestones recorded for this session.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top px-4 py-3">
+                <button type="button" class="btn btn-secondary px-4 fw-bold" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        var sysProposalDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Stage 1 Final Submission"))?.DueDate?.ToString("yyyy-MM-dd"))";
+
+        var sysFinalDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Step 5"))?.DueDate?.ToString("yyyy-MM-dd"))";
+        var sysStep1Date = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("Step 1"))?.DueDate?.ToString("yyyy-MM-dd"))";
+
+        document.addEventListener('DOMContentLoaded', function() {
+
+            function setupDynamicFiltering(formId, rowClass) {
+                var form = document.getElementById(formId);
+                if(form) {
+                    var selectElement = form.querySelector('select[name="targetTitle"]');
+                    if(selectElement) {
+                        selectElement.addEventListener('change', function() {
+                            var selectedTitle = this.value;
+
+                            if (formId === 'bulkEditForm') {
+                                var titleInput = document.getElementById('bulkNewTitle');
+                                var dateInput = document.getElementById('bulkNewDueDate');
+                                var titleWarning = document.getElementById('bulkTitleWarning');
+                                var dateWarning = document.getElementById('bulkDateWarning');
+
+                                if (titleInput && dateInput) {
+                                    // Reset states
+                                    titleInput.readOnly = false;
+                                    titleInput.classList.remove('bg-light');
+                                    dateInput.readOnly = false;
+                                    dateInput.classList.remove('bg-light');
+                                    if(titleWarning) titleWarning.style.display = 'none';
+                                    if(dateWarning) dateWarning.style.display = 'none';
+
+                                    if (selectedTitle) {
+                                        var isIaf = selectedTitle.includes('IAF') || selectedTitle.includes('Initial Project');
+                                        var isSystem = isIaf || selectedTitle.includes('Stage 1 Final Submission') || selectedTitle.includes('Progress') || selectedTitle.includes('Final');
+
+                                        if (isSystem) {
+                                            titleInput.readOnly = true;
+                                            titleInput.value = '';
+                                            titleInput.classList.add('bg-light');
+                                            if(titleWarning) titleWarning.style.display = 'block';
+                                        }
+
+                                        if (isIaf) {
+                                            dateInput.readOnly = true;
+                                            dateInput.value = '';
+                                            dateInput.classList.add('bg-light');
+                                            if(dateWarning) dateWarning.style.display = 'block';
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Student rows removed, no need to filter them here
+                        });
+                        
+                        // Initialize state on load
+                        selectElement.dispatchEvent(new Event('change'));
+                    }
+                }
+            }
+
+            setupDynamicFiltering('bulkEditForm');
+            setupDynamicFiltering('bulkDeleteForm');
+
+            // --- Auto-trigger modals based on query parameters ---
+            const urlParams = new URLSearchParams(window.location.search);
+            const action = urlParams.get('action');
+            const target = urlParams.get('target');
+
+            if (action === 'bulk-edit') {
+                var modalElement = document.getElementById('bulkEditMilestoneModal');
+                if (modalElement) {
+                    var modal = new bootstrap.Modal(modalElement);
+                    if (target) {
+                        var select = document.querySelector('#bulkEditForm select[name="targetTitle"]');
+                        if(select) { 
+                            select.value = target; 
+                            select.dispatchEvent(new Event('change')); 
+                        }
+                    }
+                    modal.show();
+                }
+            } else if (action === 'bulk-delete') {
+                var modalElement = document.getElementById('bulkDeleteMilestoneModal');
+                if (modalElement) {
+                    var modal = new bootstrap.Modal(modalElement);
+                    if (target) {
+                        var select = document.querySelector('#bulkDeleteForm select[name="targetTitle"]');
+                        if(select) { 
+                            select.value = target; 
+                            select.dispatchEvent(new Event('change')); 
+                        }
+                    }
+                    modal.show();
+                }
+            } else if (action === 'bulk-add') {
+                var modalElement = document.getElementById('bulkAddMilestoneModal');
+                if (modalElement) {
+                    var modal = new bootstrap.Modal(modalElement);
+                    modal.show();
+                }
+            }
+        });
+
+        window.updateTitlePreview = function() {
+            var stage = document.getElementById('addStage').value;
+            var titleInput = document.getElementById('addTitle');
+            var preview = document.getElementById('addTitlePreview');
+            
+            var baseTitle = titleInput.value.trim();
+            if (!baseTitle) {
+                preview.value = "";
+            } else {
+                if (stage === "1") {
+                    preview.value = "" + baseTitle;
+                } else {
+                    preview.value = "" + baseTitle;
+                }
+            }
+            window.validateBulkAddRealtime();
+        };
+
+        // --- Real-time Validation ---
+        window.validateBulkAddRealtime = function(isSubmit = false) {
+            var title = document.getElementById('addTitle');
+            var titleError = document.getElementById('addTitleError');
+            var date = document.getElementById('addDueDate');
+            var dateError = document.getElementById('addDueDateError');
+            var desc = document.getElementById('addDescription');
+            var descError = document.getElementById('addDescriptionError');
+            var isValid = true;
+
+            // Title Validation
+            var titleVal = title.value.trim();
+            if (titleVal.length === 0) {
+                if (isSubmit || title.classList.contains('is-invalid') || title.classList.contains('is-valid')) {
+                    title.classList.remove('is-valid');
+                    title.classList.add('is-invalid');
+                    titleError.innerText = "Custom title is required.";
+                    titleError.classList.remove('d-none');
+                }
+                isValid = false;
+            } else if (titleVal.length < 3) {
+                title.classList.remove('is-valid');
+                title.classList.add('is-invalid');
+                titleError.innerText = "Title must be at least 3 characters long.";
+                titleError.classList.remove('d-none');
+                isValid = false;
+            } else {
+                title.classList.remove('is-invalid');
+                title.classList.add('is-valid');
+                titleError.classList.add('d-none');
+            }
+
+            // Date Validation
+            if (!date.value) {
+                if (isSubmit || date.classList.contains('is-invalid') || date.classList.contains('is-valid')) {
+                    date.classList.remove('is-valid');
+                    date.classList.add('is-invalid');
+                    dateError.innerText = "Due date is required.";
+                    dateError.classList.remove('d-none');
+                }
+                isValid = false;
+            } else {
+                var selectedDate = new Date(date.value);
+                var simulatedTodayStr = "@simulatedToday";
+                var today = simulatedTodayStr ? new Date(simulatedTodayStr + "T00:00:00") : new Date();
+                today.setHours(0,0,0,0);
+                
+                var propDate = sysProposalDate ? new Date(sysProposalDate) : null;
+                var sysIafDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("IAF"))?.DueDate?.ToString("yyyy-MM-dd"))";
+                var iafDate = sysIafDate ? new Date(sysIafDate) : null;
+                var finalDate = sysFinalDate ? new Date(sysFinalDate) : null;
+                var step1Date = sysStep1Date ? new Date(sysStep1Date) : null;
+                var previewTitle = document.getElementById('addTitlePreview').value || "";
+                var isFinalReport = previewTitle.includes("Final");
+                var isProposal = previewTitle.includes("Stage 1 Final Submission");
+                var isIaf = previewTitle.includes("IAF") || previewTitle.includes("Initial Project");
+                var isStage2 = previewTitle.startsWith("Step ");
+
+                // Helper to format date as dd-mmm-yyyy
+                var formatDate = function(d) {
+                    if (!d) return "";
+                    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
+                };
+                
+                if (isNaN(selectedDate.getTime())) {
+                    date.classList.remove('is-valid');
+                    date.classList.add('is-invalid');
+                    dateError.innerText = "Please select a valid due date.";
+                    dateError.classList.remove('d-none');
+                    isValid = false;
+                } else if (selectedDate < today) {
+                    date.classList.remove('is-valid');
+                    date.classList.add('is-invalid');
+                    dateError.innerText = "Due date cannot be in the past.";
+                    dateError.classList.remove('d-none');
+                    isValid = false;
+                } else if (isStage2 && !previewTitle.includes("Step 1") && step1Date && selectedDate < step1Date) {
+                    date.classList.remove('is-valid');
+                    date.classList.add('is-invalid');
+                    dateError.innerText = "Date Error: Stage 2 milestones cannot be before Step 1 (" + formatDate(step1Date) + ").";
+                    dateError.classList.remove('d-none');
+                    isValid = false;
+                } else if (!isFinalReport && !isProposal && !isIaf) {
+                    // Chronological Validation
+                    if (!isStage2) {
+                        if (iafDate && selectedDate < iafDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be before the Initial Assessment Form due date (" + formatDate(iafDate) + ").";
+                            dateError.classList.remove('d-none');
+                            isValid = false;
+                        } else if (propDate && selectedDate > propDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be after the Stage 1 Final Submission due date (" + formatDate(propDate) + ").";
+                            dateError.classList.remove('d-none');
+                            isValid = false;
+                        } else {
+                            date.classList.remove('is-invalid');
+                            date.classList.add('is-valid');
+                            dateError.classList.add('d-none');
+                        }
+                    } else {
+                        if (finalDate && selectedDate > finalDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be after the Presentation Slides due date (" + formatDate(finalDate) + ").";
+                            dateError.classList.remove('d-none');
+                            isValid = false;
+                        } else {
+                            date.classList.remove('is-invalid');
+                            date.classList.add('is-valid');
+                            dateError.classList.add('d-none');
+                    }
+                } else {
+                    date.classList.remove('is-invalid');
+                    date.classList.add('is-valid');
+                    dateError.classList.add('d-none');
+                }
+            }
+
+            // Description Validation (Optional)
+            var descVal = desc.value.trim();
+            if (descVal.length > 0 && descVal.length < 10) {
+                desc.classList.remove('is-valid');
+                desc.classList.add('is-invalid');
+                descError.innerText = "Description must be at least 10 characters long.";
+                descError.classList.remove('d-none');
+                isValid = false;
+            } else if (descVal.length >= 10) {
+                desc.classList.remove('is-invalid');
+                desc.classList.add('is-valid');
+                descError.classList.add('d-none');
+            } else {
+                desc.classList.remove('is-invalid', 'is-valid');
+                descError.classList.add('d-none');
+            }
+
+            return isValid;
+        };
+
+        window.validateBulkAdd = function() {
+            var isValid = window.validateBulkAddRealtime(true);
+            if(!isValid) {
+                Swal.fire({ text: "Please fix the validation errors before submitting.", icon: "error", confirmButtonText: "Got it" });
+            }
+            return isValid;
+        };
+
+        window.validateBulkEditRealtime = function(isSubmit = false) {
+            var target = document.getElementById('editTargetTitle');
+            var targetError = document.getElementById('editTargetError');
+            var title = document.getElementById('bulkNewTitle');
+            var titleError = document.getElementById('editTitleError');
+            var date = document.getElementById('bulkNewDueDate');
+            var dateError = document.getElementById('bulkDateWarning');
+            var desc = document.getElementById('bulkNewDescription');
+            var descError = document.getElementById('editDescriptionError');
+            var isValid = true;
+
+            if (!target.value && isSubmit) {
+                target.classList.add('is-invalid');
+                target.classList.remove('is-valid');
+                targetError.classList.remove('d-none');
+                isValid = false;
+            } else if (target.value) {
+                target.classList.remove('is-invalid');
+                target.classList.add('is-valid');
+                targetError.classList.add('d-none');
+            } else {
+                target.classList.remove('is-invalid', 'is-valid');
+                targetError.classList.add('d-none');
+            }
+
+            if (title.value && title.value.trim().length < 5) {
+                title.classList.add('is-invalid');
+                title.classList.remove('is-valid');
+                titleError.classList.remove('d-none');
+                isValid = false;
+            } else if (title.value) {
+                title.classList.remove('is-invalid');
+                title.classList.add('is-valid');
+                titleError.classList.add('d-none');
+            } else {
+                title.classList.remove('is-invalid', 'is-valid');
+                titleError.classList.add('d-none');
+            }
+            
+            if (date.value) {
+                var selectedDate = new Date(date.value);
+                var simulatedTodayStr = "@simulatedToday";
+                var today = simulatedTodayStr ? new Date(simulatedTodayStr + "T00:00:00") : new Date();
+                today.setHours(0,0,0,0);
+                
+                var propDate = sysProposalDate ? new Date(sysProposalDate) : null;
+                var sysIafDate = "@(allMilestoneTemplates.FirstOrDefault(m => m.Title.Contains("IAF"))?.DueDate?.ToString("yyyy-MM-dd"))";
+                var iafDate = sysIafDate ? new Date(sysIafDate) : null;
+                var finalDate = sysFinalDate ? new Date(sysFinalDate) : null;
+                var step1Date = sysStep1Date ? new Date(sysStep1Date) : null;
+                var targetTitleToValidate = title.value.trim() || target.value || "";
+                
+                var isFinalReport = targetTitleToValidate.includes("Final");
+                var isProposal = targetTitleToValidate.includes("Stage 1 Final Submission");
+                var isIaf = targetTitleToValidate.includes("IAF") || targetTitleToValidate.includes("Initial Project");
+                var isStage2 = targetTitleToValidate.startsWith("Step ");
+
+                var formatDate = function(d) {
+                    if (!d) return "";
+                    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
+                };
+
+                if (isNaN(selectedDate.getTime())) {
+                    date.classList.add('is-invalid');
+                    date.classList.remove('is-valid');
+                    dateError.innerText = "Please select a valid due date.";
+                    dateError.style.display = 'block';
+                    isValid = false;
+                } else if (selectedDate < today) {
+                    date.classList.add('is-invalid');
+                    date.classList.remove('is-valid');
+                    dateError.innerText = "Due date cannot be in the past.";
+                    dateError.style.display = 'block';
+                    isValid = false;
+                } else if (isStage2 && !targetTitleToValidate.includes("Step 1") && step1Date && selectedDate < step1Date) {
+                    date.classList.remove('is-valid');
+                    date.classList.add('is-invalid');
+                    dateError.innerText = "Date Error: Stage 2 milestones cannot be before Step 1 (" + formatDate(step1Date) + ").";
+                    dateError.style.display = 'block';
+                    isValid = false;
+                } else if (!isFinalReport && !isProposal && !isIaf) {
+                    // Chronological Validation
+                    if (!isStage2) {
+                        if (iafDate && selectedDate < iafDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be before the Initial Assessment Form due date (" + formatDate(iafDate) + ").";
+                            dateError.style.display = 'block';
+                            isValid = false;
+                        } else if (propDate && selectedDate > propDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be after the Stage 1 Final Submission due date (" + formatDate(propDate) + ").";
+                            dateError.style.display = 'block';
+                            isValid = false;
+                        } else {
+                            date.classList.remove('is-invalid');
+                            date.classList.add('is-valid');
+                            dateError.style.display = 'none';
+                        }
+                    } else {
+                        if (finalDate && selectedDate > finalDate) {
+                            date.classList.remove('is-valid');
+                            date.classList.add('is-invalid');
+                            dateError.innerText = "Date Error: Cannot be after the Presentation Slides due date (" + formatDate(finalDate) + ").";
+                            dateError.style.display = 'block';
+                            isValid = false;
+                        } else {
+                            date.classList.remove('is-invalid');
+                            date.classList.add('is-valid');
+                            dateError.style.display = 'none';
+                        }
+                    }
+                } else {
+                    date.classList.remove('is-invalid');
+                    date.classList.add('is-valid');
+                    dateError.style.display = 'none';
+                }
+            } else {
+                date.classList.remove('is-invalid', 'is-valid');
+                dateError.style.display = 'none';
+            }
+            
+            if (desc.value && desc.value.trim().length < 10) {
+                desc.classList.add('is-invalid');
+                desc.classList.remove('is-valid');
+                descError.classList.remove('d-none');
+                isValid = false;
+            } else if (desc.value) {
+                desc.classList.remove('is-invalid');
+                desc.classList.add('is-valid');
+                descError.classList.add('d-none');
+            } else {
+                desc.classList.remove('is-invalid', 'is-valid');
+                descError.classList.add('d-none');
+            }
+
+            return isValid;
+        };
+
+        window.validateBulkEdit = function() {
+            var isValid = window.validateBulkEditRealtime(true);
+            if(!isValid) {
+                Swal.fire({ text: "Please fix the validation errors before submitting.", icon: "error", confirmButtonText: "Got it" });
+            }
+            return isValid;
+        };
+
+        window.validateBulkDeleteRealtime = function(isSubmit = false) {
+            var target = document.getElementById('deleteTargetTitle');
+            var targetError = document.getElementById('deleteTargetError');
+            
+            if (!target.value && isSubmit) {
+                target.classList.add('is-invalid');
+                target.classList.remove('is-valid');
+                targetError.classList.remove('d-none');
+                return false;
+            } else if (target.value) {
+                target.classList.remove('is-invalid');
+                target.classList.add('is-valid');
+                targetError.classList.add('d-none');
+                return true;
+            } else {
+                target.classList.remove('is-invalid', 'is-valid');
+                targetError.classList.add('d-none');
+                return true;
+            }
+        };
+
+        window.validateBulkDelete = function() {
+            var isValid = window.validateBulkDeleteRealtime(true);
+            if(!isValid) {
+                Swal.fire({ text: "Please select a milestone before deleting.", icon: "error", confirmButtonText: "Got it" });
+            }
+            return isValid;
+        };
+
+    </script>
+}
+</div>

@@ -1,0 +1,830 @@
+@using FYPTracker.Models
+@model IEnumerable<FYPTracker.ViewModels.ManageProjectItemVM>
+@{
+    ViewData["Title"] = "Project Management";
+    var availableExaminers = ViewBag.AvailableExaminers as IEnumerable<ApplicationUser> ?? Enumerable.Empty<ApplicationUser>();
+
+    var depts = availableExaminers
+        .Where(u => !string.IsNullOrEmpty(u.EmpDepartment?.Name))
+        .SelectMany(u => u.EmpDepartment!.Name.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        .Select(d => d.Trim())
+        .Distinct()
+        .OrderBy(d => d);
+
+    var progs = availableExaminers
+        .Where(u => !string.IsNullOrEmpty(u.Programme))
+        .SelectMany(u => u.Programme!.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        .Select(p => p.Trim())
+        .Distinct()
+        .OrderBy(p => p);
+
+    var specs = availableExaminers
+        .Where(u => !string.IsNullOrEmpty(u.Specialization))
+        .SelectMany(u => u.Specialization!.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        .Select(s => s.Trim())
+        .Distinct()
+        .OrderBy(s => s);
+}
+
+<style>
+    /* ========================================================= */
+    /* Premium Glassmorphism & Micro-animations UI               */
+    /* ========================================================= */
+    .premium-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        border-radius: 20px;
+    }
+    .table-premium tbody tr {
+        transition: all 0.3s ease;
+    }
+    .table-premium tbody tr:hover {
+        background-color: #f8fafc !important;
+        transform: scale(1.002);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        z-index: 10;
+        position: relative;
+        border-radius: 12px;
+    }
+    .badge-premium {
+        padding: 0.5rem 0.8rem;
+        border-radius: 8px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+    }
+    .btn-ai-assign {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border: none;
+        box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+        transition: all 0.3s ease;
+    }
+    .btn-ai-assign:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(37, 99, 235, 0.35);
+    }
+    #projectMilestonesModal .modal-dialog {
+        max-width: 1200px !important;
+        width: 94% !important;
+        margin: 1.75rem auto !important;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <div class="card premium-card border-0 mb-5">
+        <div class="card-header border-0 pt-5 px-5 d-flex justify-content-between align-items-center flex-wrap gap-3 bg-transparent">
+            <div>
+                <h2 class="fw-bolder text-dark mb-1" style="letter-spacing: -0.5px;">
+                    <i class="fas fa-project-diagram text-primary me-2"></i>Project Command Center
+                </h2>
+                <p class="text-muted mb-0" style="font-size: 0.95rem;">Monitor and manage all final year projects, milestones, and examiner assignments with AI assistance.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2 w-100 mt-3 bg-light p-3 rounded-3 shadow-sm align-items-center justify-content-between">
+                <div class="d-flex gap-2 flex-wrap flex-grow-1">
+                    <select id="filterSession" class="form-select form-select-sm form-select-solid w-auto fw-bold min-w-125px">
+                        <option value="">All Sessions</option>
+                    </select>
+                    <select id="filterStatus" class="form-select form-select-sm form-select-solid w-auto fw-bold min-w-125px">
+                        <option value="">All Statuses</option>
+                        <option value="Active">Active</option>
+                        <option value="Proposed">Proposed</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
+                    <select id="filterSupervisor" class="form-select form-select-sm form-select-solid w-auto fw-bold min-w-150px">
+                        <option value="">All Supervisors</option>
+                    </select>
+                    <select id="filterExaminer" class="form-select form-select-sm form-select-solid w-auto fw-bold min-w-150px">
+                        <option value="">All Examiners</option>
+                    </select>
+                    <select id="filterMissing" class="form-select form-select-sm form-select-solid w-auto fw-bold min-w-150px">
+                        <option value="">Assignment State</option>
+                        <option value="No Supervisor">No Supervisor</option>
+                        <option value="No Examiner">No Examiner</option>
+                        <option value="Viva Not Set">Viva Not Set</option>
+                    </select>
+                </div>
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <div class="position-relative">
+                        <span class="svg-icon svg-icon-1 position-absolute ms-3 text-muted" style="top:50%; transform:translateY(-50%);">
+                            <i class="fas fa-search"></i>
+                        </span>
+                        <input type="text" id="customSearch" class="form-control form-control-sm form-control-solid w-200px" style="padding-left: 2.5rem !important; border-radius: 10px;" placeholder="Search projects...">
+                    </div>
+                    <a href="/Admin/ExportProjectsExcel" class="btn btn-sm btn-success fw-bold d-flex align-items-center" style="border-radius: 10px;">
+                        <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export Data
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        @if (TempData["Success"] != null)
+        {
+            var successTitle = TempData["SuccessTitle"] as string ?? "Success";
+            var examinerName = TempData["SuccessExaminerName"] as string;
+            var projectTitle = TempData["SuccessProjectTitle"] as string;
+            var secondaryMsg = TempData["SuccessSecondary"] as string;
+
+            <div class="alert alert-success border-0 shadow-sm rounded-3 mt-3 mb-0 mx-4 d-flex align-items-start gap-3 p-3">
+                <div class="d-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success rounded-circle flex-shrink-0" style="width: 38px; height: 38px;">
+                    <i class="fas fa-check-circle fs-5"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="fw-bold text-success-emphasis fs-6 mb-1">@successTitle</div>
+                    @if (!string.IsNullOrEmpty(examinerName) && !string.IsNullOrEmpty(projectTitle))
+                    {
+                        <div class="text-dark">
+                            <span class="fw-semibold text-primary">@examinerName</span> has been assigned as the examiner for <span class="fw-semibold text-dark">@projectTitle</span>.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-dark">@TempData["Success"]</div>
+                    }
+                    @if (!string.IsNullOrEmpty(secondaryMsg))
+                    {
+                        <div class="small text-muted mt-1">@secondaryMsg</div>
+                    }
+                </div>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+        @if (TempData["Error"] != null)
+        {
+            <div class="alert alert-danger border-0 shadow-sm rounded-3 mt-3 mb-0 mx-4 d-flex align-items-center gap-3 p-3">
+                <div class="d-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle flex-shrink-0" style="width: 38px; height: 38px;">
+                    <i class="fas fa-exclamation-triangle fs-5"></i>
+                </div>
+                <div class="flex-grow-1 text-dark">
+                    @TempData["Error"]
+                </div>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table id="projectsTable" class="table table-premium align-middle mb-0">
+                    <thead class="bg-light text-muted text-uppercase fw-bolder" style="font-size: 0.75rem; letter-spacing: 0.5px;">
+                        <tr>
+                            <th class="ps-5 min-w-150px border-bottom-0">Student</th>
+                            <th class="min-w-100px border-bottom-0">Session</th>
+                            <th class="min-w-200px border-bottom-0">Project Title</th>
+                            <th class="min-w-150px border-bottom-0">Supervisor</th>
+                            <th class="min-w-150px border-bottom-0">Examiner</th>
+                            <th class="min-w-100px border-bottom-0">Stage 1</th>
+                            <th class="min-w-100px border-bottom-0">Stage 2</th>
+                            <th class="min-w-100px border-bottom-0">Status</th>
+                            <th class="text-end min-w-150px pe-5 border-bottom-0">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="border-top-0">
+                        @foreach (var item in Model)
+                        {
+                            var student = item.Student;
+                            var project = item.Project;
+                            var assignedExaminer = project?.AssignedExaminers?.FirstOrDefault()?.Examiner;
+                            <tr class="border-bottom border-light">
+                                <td class="ps-5">
+                                    <div class="d-flex align-items-center">
+                                        <div class="symbol symbol-circle symbol-40px overflow-hidden me-3" style="width:40px; height:40px; background:#f1f5f9; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:bold; color:#3b82f6;">
+                                            @(student.FullName?.Substring(0, 1) ?? "S")
+                                        </div>
+                                        <div class="d-flex flex-column">
+                                            <span class="text-dark fw-bolder text-hover-primary mb-1">@student.FullName</span>
+                                            <span class="text-muted fw-bold d-block fs-7">@student.UserName</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="text-primary fw-bolder bg-light-primary px-3 py-1 rounded-3 d-inline-block fs-7" style="border: 1px solid #dbeafe;">@(student.AcademicSession ?? "-")</div>
+                                </td>
+                                <td>
+                                    <div class="fw-bolder text-dark text-truncate" style="max-width: 250px; font-size: 0.95rem;" title="@(project?.Title ?? "No Project")">@(project?.Title ?? "No Project")</div>
+                                </td>
+                                <td>
+                                    @if (project != null && project.Supervisor != null) {
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-user-tie text-muted me-2"></i>
+                                            <span class="text-dark fw-bold fs-7">@project.Supervisor.FullName</span>
+                                        </div>
+                                    } else {
+                                        <span class="badge badge-light-danger fs-7 px-3"><i class="fas fa-exclamation-triangle text-danger me-1"></i> Not Assigned</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (assignedExaminer != null) {
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-user-check text-success me-2"></i>
+                                            <span class="text-dark fw-bold fs-7">@assignedExaminer.FullName</span>
+                                        </div>
+                                    } else {
+                                        <span class="badge badge-light-danger fs-7 px-3"><i class="fas fa-user-slash text-danger me-1"></i> Not Assigned</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (project != null && project.Stage1TotalScore.HasValue) {
+                                        var passCls = project.Stage1Grade == "Pass" ? "badge-light-success border-success" : "badge-light-warning border-warning";
+                                        <span class="badge @passCls fs-8 fw-bolder border px-2 py-1">@project.Stage1TotalScore.Value.ToString("0.0") (@project.Stage1Grade)</span>
+                                    } else {
+                                        <span class="text-muted small">-</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (project != null && !string.IsNullOrEmpty(project.FinalGrade)) {
+                                        <span class="badge badge-light-success fs-8 fw-bolder border border-success px-2 py-1">@project.FinalGrade</span>
+                                    } else {
+                                        <span class="text-muted small">-</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if(student.IsResign)
+                                    {
+                                        <span class="badge bg-danger rounded-pill px-3 py-2 text-white shadow-sm">Inactive</span>
+                                    }
+                                    else if(project != null)
+                                    {
+                                        @switch (project.Status)
+                                        {
+                                            case "Approved": <span class="badge bg-success rounded-pill px-3 py-2 shadow-sm"><i class="fas fa-circle fs-9 text-white me-1"></i> Active</span> break;
+                                            case "Proposed": <span class="badge bg-info rounded-pill px-3 py-2 shadow-sm">Proposed</span> break;
+                                            case "Completed": <span class="badge bg-primary rounded-pill px-3 py-2 shadow-sm"><i class="fas fa-trophy fs-9 text-white me-1"></i> Completed</span> break;
+                                            default: <span class="badge bg-secondary rounded-pill px-3 py-2 text-dark shadow-sm">@project.Status</span> break;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger rounded-pill px-3 py-2 text-white shadow-sm">Inactive</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-5">
+                                    <button class="btn btn-sm btn-light btn-active-light-primary btn-icon rounded-circle shadow-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end border-0 shadow-sm rounded-3 py-2">
+                                        @if(project != null)
+                                        {
+                                            <li>
+                                                <a class="dropdown-item fw-bold text-gray-700 py-2 px-4 btn-open-milestones-modal" href="#"
+                                                   data-project-id="@project.Id"
+                                                   data-project-title="@project.Title"
+                                                   data-student-name="@student.FullName">
+                                                    <i class="fas fa-tasks text-primary me-2 w-15px"></i> View Details
+                                                </a>
+                                            </li>
+                                            <li><hr class="dropdown-divider opacity-25"></li>
+
+                                            @if (!string.IsNullOrEmpty(project.Stage1ExaminerMarksheetPath)) {
+                                                <li>
+                                                    <a class="dropdown-item fw-bold text-muted py-2 px-4" href="#" onclick="return false;" title="Locked after grading">
+                                                        <i class="fas fa-lock text-muted me-2 w-15px"></i> Reassign Examiner
+                                                    </a>
+                                                </li>
+                                            } else {
+                                                <li>
+                                                    <form asp-action="AutoAssignExaminer" asp-controller="Admin" method="post" class="m-0">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="projectId" value="@project.Id" />
+                                                        <button type="submit" class="dropdown-item fw-bold text-gray-700 py-2 px-4" onclick="return confirm('Let AI auto-assign the best-matched examiner?')">
+                                                            <i class="fas fa-magic text-info me-2 w-15px"></i> @(assignedExaminer != null ? "Reassign AI Examiner" : "AI Assign Examiner")
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                            }
+
+                                            @if (assignedExaminer == null)
+                                            {
+                                                <li>
+                                                    <a class="dropdown-item fw-bold text-muted py-2 px-4" href="#" onclick="return false;" title="Assign Examiner First">
+                                                        <i class="fas fa-calendar-check text-muted me-2 w-15px"></i> Set Viva
+                                                    </a>
+                                                </li>
+                                            }
+                                             else
+                                            {
+                                                <li>
+                                                    <a class="dropdown-item fw-bold text-success py-2 px-4 btn-open-viva-modal" href="#" 
+                                                       data-bs-toggle="modal" data-bs-target="#setVivaModal"
+                                                       data-project-id="@project.Id"
+                                                       data-project-title="@project.Title"
+                                                       data-student-name="@student.FullName"
+                                                       data-viva-date="@(project.VivaDate?.ToString("yyyy-MM-ddTHH:mm"))"
+                                                       data-viva-venue="@project.VivaVenue">
+                                                        <i class="fas fa-calendar-alt text-success me-2 w-15px"></i> @(project.VivaDate.HasValue ? "Update Viva Date" : "Set Viva Date")
+                                                    </a>
+                                                </li>
+                                            }
+
+                                            <li><hr class="dropdown-divider opacity-25"></li>
+                                            @if (project.Status != "Completed")
+                                            {
+                                                bool allStage2Approved = FYPTracker.Utils.GradingHelper.AreStage2DeliverablesApproved(project.Milestones);
+                                                bool hasStage2Milestones = allStage2Approved || (project.Milestones?.Any(m => (m.Stage == 2 || m.Title.StartsWith("Step", StringComparison.OrdinalIgnoreCase)) && !FYPTracker.Utils.GradingHelper.IsObsoleteOrRetiredStage2Milestone(m)) ?? false);
+                                                bool vivaConcluded = project.VivaDate.HasValue && project.VivaDate.Value <= DateTime.Now;
+                                                bool hasExaminerMarking = !string.IsNullOrWhiteSpace(project.ExaminerMarksheetPath) || !string.IsNullOrWhiteSpace(project.Stage2ExaminerMarksheetData);
+                                                
+                                                bool isEligibleToComplete = project.Stage1Grade == "Pass" 
+                                                    && vivaConcluded 
+                                                    && !string.IsNullOrWhiteSpace(project.FinalGrade)
+                                                    && hasExaminerMarking
+                                                    && allStage2Approved;
+
+                                                string ineligibleReason = "";
+                                                if (project.Stage1Grade != "Pass") ineligibleReason = "Stage 1 Pass required";
+                                                else if (!project.VivaDate.HasValue) ineligibleReason = "Final Viva must be scheduled";
+                                                else if (project.VivaDate.Value > DateTime.Now) ineligibleReason = "Final Viva has not yet been conducted";
+                                                else if (!hasExaminerMarking) ineligibleReason = "Examiner marksheet assessment required";
+                                                else if (string.IsNullOrWhiteSpace(project.FinalGrade)) ineligibleReason = "Final Grade required";
+                                                else if (!hasStage2Milestones) ineligibleReason = "Stage 2 milestones must be initialized";
+                                                else if (!allStage2Approved) ineligibleReason = "All Stage 2 milestones must be Approved/Completed";
+
+                                                if (isEligibleToComplete)
+                                                {
+                                                    <li>
+                                                        <form asp-action="CompleteProject" asp-controller="Admin" method="post" class="m-0">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="projectId" value="@project.Id" />
+                                                            <button type="submit" class="dropdown-item fw-bold text-primary py-2 px-4" onclick="return confirm('Mark this project as Completed? This finalizes the FYP cycle.')">
+                                                                <i class="fas fa-check-double text-primary me-2 w-15px"></i> Mark as Completed
+                                                            </button>
+                                                        </form>
+                                                    </li>
+                                                }
+                                                else
+                                                {
+                                                    <li>
+                                                        <span class="dropdown-item fw-bold text-muted py-2 px-4" title="Completion Locked: @ineligibleReason" style="cursor: not-allowed; opacity: 0.65;">
+                                                            <i class="fas fa-lock text-muted me-2 w-15px"></i> Mark as Completed
+                                                        </span>
+                                                    </li>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <li>
+                                                    <form asp-action="ReopenProject" asp-controller="Admin" method="post" class="m-0">
+                                                        @Html.AntiForgeryToken()
+                                                        <input type="hidden" name="projectId" value="@project.Id" />
+                                                        <button type="submit" class="dropdown-item fw-bold text-warning py-2 px-4" onclick="return confirm('Re-open this completed project back to Active?')">
+                                                            <i class="fas fa-undo text-warning me-2 w-15px"></i> Reopen to Active
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <li>
+                                                <span class="dropdown-item fw-bold text-muted py-2 px-4"><i class="fas fa-ban me-2 w-15px"></i> No Details Available</span>
+                                            </li>
+                                        }
+                                    </ul>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================== -->
+<!-- Set Viva Modal                                                 -->
+<!-- ============================================================== -->
+<div class="modal fade" id="setVivaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-light border-bottom-0 p-4">
+                <h5 class="modal-title fw-bolder text-dark d-flex align-items-center">
+                    <i class="fas fa-calendar-alt text-success me-2"></i> Schedule Viva
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="/Admin/SetVivaDate" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="projectId" id="vivaModalProjectId" value="" />
+                
+                <div class="modal-body p-4 pt-3">
+                    <div class="mb-3">
+                        <label class="fw-bold text-muted small text-uppercase d-block mb-1">Project</label>
+                        <div class="fw-bold text-dark" id="vivaModalProjectTitle">-</div>
+                        <div class="text-primary small mt-1" id="vivaModalStudentName">-</div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-muted small text-uppercase">Date & Time</label>
+                        <input type="datetime-local" name="vivaDate" id="vivaModalDate" class="form-control rounded-3" required />
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-muted small text-uppercase">Venue (Optional)</label>
+                        <input type="text" name="vivaVenue" id="vivaModalVenue" class="form-control rounded-3" placeholder="e.g. DK1 or Zoom Link" />
+                    </div>
+
+                    <div class="alert alert-primary bg-light-primary border-primary border-dashed p-3 mb-0 d-flex align-items-start gap-2">
+                        <i class="fas fa-info-circle text-primary mt-1"></i>
+                        <span class="small text-muted">The student, supervisor, and examiner will instantly receive an email and an in-app notification when you save.</span>
+                    </div>
+                </div>
+                
+                <div class="modal-footer border-top-0 bg-light p-3">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success fw-bold px-4">Save Viva Details</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================== -->
+<!-- Project Milestones Modal (Dynamic)                             -->
+<!-- ============================================================== -->
+<div class="modal fade" id="projectMilestonesModal" tabindex="-1" aria-labelledby="projectMilestonesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" style="max-width: 1200px !important; width: 94% !important;">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-light border-bottom px-4 py-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;">
+                        <i class="fas fa-tasks fs-4 text-primary"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bolder text-dark mb-0" id="projectMilestonesModalLabel">Project Milestones</h5>
+                        <small class="text-muted fw-semibold" id="milestonesModalHeaderSubtitle">Loading details...</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 bg-light bg-opacity-25" id="projectMilestonesModalContent">
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="text-muted small mt-3 fw-semibold">Loading project milestones...</div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top px-4 py-3 d-flex justify-content-between align-items-center">
+                <span class="text-muted small"><i class="fas fa-info-circle me-1"></i>Read-only view for administrative monitoring.</span>
+                <button type="button" class="btn btn-secondary rounded-pill px-4 fw-bold" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            var table = $('#projectsTable').DataTable({
+                "pageLength": 10,
+                "ordering": true,
+                "info": true,
+                "autoWidth": false,
+                "language": {
+                    "search": "",
+                    "searchPlaceholder": "Search projects..."
+                },
+                "columnDefs": [
+                    { "orderable": false, "targets": 8 }
+                ]
+            });
+
+            // Populate Session Dropdown dynamically
+            var sessionOptions = new Set();
+            var supOptions = new Set();
+            var exmOptions = new Set();
+            
+            table.rows().every(function () {
+                var data = this.data();
+                var sessVal = $('<div>' + data[1] + '</div>').text().trim();
+                if (sessVal && sessVal !== '-') sessionOptions.add(sessVal);
+                
+                var supVal = $('<div>' + data[3] + '</div>').text().trim();
+                if (supVal && supVal !== 'Not Assigned') supOptions.add(supVal);
+                
+                var exmVal = $('<div>' + data[4] + '</div>').text().trim();
+                if (exmVal && exmVal !== 'Not Assigned') exmOptions.add(exmVal);
+            });
+            
+            var sessionSelect = $('#filterSession');
+            Array.from(sessionOptions).sort().reverse().forEach(function(sess) {
+                sessionSelect.append('<option value="' + sess + '">' + sess + '</option>');
+            });
+            
+            var supSelect = $('#filterSupervisor');
+            Array.from(supOptions).sort().forEach(function(sup) {
+                supSelect.append('<option value="' + sup + '">' + sup + '</option>');
+            });
+            
+            var exmSelect = $('#filterExaminer');
+            Array.from(exmOptions).sort().forEach(function(exm) {
+                exmSelect.append('<option value="' + exm + '">' + exm + '</option>');
+            });
+
+            // Custom Filtering Logic
+            $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+                var selectedSession = $('#filterSession').val();
+                var selectedStatus = $('#filterStatus').val();
+                var selectedSupervisor = $('#filterSupervisor').val();
+                var selectedExaminer = $('#filterExaminer').val();
+                var selectedMissing = $('#filterMissing').val();
+
+                var rowSession = data[1] || "";
+                var rowSup = data[3] || "";
+                var rowExm = data[4] || "";
+                var rowStatus = data[7] || "";
+                var rowActions = data[8] || ""; // For Viva Not Set
+
+                var rowSupText = $('<div>' + rowSup + '</div>').text().trim();
+                var rowExmText = $('<div>' + rowExm + '</div>').text().trim();
+
+                if (selectedSession && !rowSession.includes(selectedSession)) {
+                    return false;
+                }
+                
+                if (selectedSupervisor && rowSupText !== selectedSupervisor) {
+                    return false;
+                }
+                
+                if (selectedExaminer && rowExmText !== selectedExaminer) {
+                    return false;
+                }
+                
+                if (selectedStatus && !rowStatus.includes(selectedStatus)) {
+                    return false;
+                }
+
+                if (selectedMissing === 'No Supervisor' && !rowSup.includes('Not Assigned')) {
+                    return false;
+                }
+                if (selectedMissing === 'No Examiner' && !rowExm.includes('Not Assigned')) {
+                    return false;
+                }
+                if (selectedMissing === 'Viva Not Set' && (!rowActions.includes('Set Viva Date') && !rowActions.includes('Set Viva'))) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            // Trigger table redraw on filter changes
+            $('#filterSession, #filterStatus, #filterSupervisor, #filterExaminer, #filterMissing').on('change', function () {
+                table.draw();
+            });
+
+            $('#customSearch').keyup(function () {
+                table.search($(this).val()).draw();
+            });
+            
+            $('.dataTables_filter').hide();
+            $('.dataTables_length select').addClass('form-select form-select-solid');
+
+            // Handle Opening Assign Examiner Modal via delegation to support DataTables pagination
+            $('#projectsTable').on('click', '.btn-open-assign-modal', function () {
+                const projectId = $(this).data('project-id');
+                const projectTitle = $(this).data('project-title');
+                const studentName = $(this).data('student-name');
+                const examinerId = $(this).data('examiner-id');
+                const examinerName = $(this).data('examiner-name');
+
+                $('#modalProjectTitle').text(projectTitle || '-');
+                $('#modalStudentName').text(studentName || '-');
+                $('.modal-input-project-id').val(projectId);
+                $('#removeProjectId').val(projectId);
+
+                if (examinerId && examinerId > 0 && examinerName) {
+                    $('#modalCurrentExaminer').html('<span class="badge bg-light-success text-success fw-bold px-3 py-2 border border-success"><i class="fas fa-check-circle me-1"></i>' + examinerName + '</span>');
+                    $('#removeExaminerForm').show();
+                } else {
+                    $('#modalCurrentExaminer').html('<span class="text-muted fst-italic">None Assigned</span>');
+                    $('#removeExaminerForm').hide();
+                }
+
+                // Reset filters and cards view
+                $('#examinerSearch').val('');
+                $('#deptFilter').val('');
+                $('#progFilter').val('');
+                $('#specFilter').val('');
+                filterExaminers();
+
+                // Highlight and disable currently assigned card
+                $('.examiner-card-wrapper').each(function () {
+                    const cardExmId = $(this).data('examiner-id');
+                    const btn = $(this).find('.btn-select-examiner');
+                    if (examinerId && cardExmId == examinerId) {
+                        btn.prop('disabled', true)
+                           .addClass('is-assigned')
+                           .html('<i class="fas fa-check-circle me-1"></i> Currently Assigned');
+                    } else {
+                        btn.prop('disabled', false)
+                           .removeClass('is-assigned')
+                           .html('Select Examiner');
+                    }
+                });
+            });
+
+            // Handle Opening Set Viva Modal
+            $('#projectsTable').on('click', '.btn-open-viva-modal', function () {
+                const projectId = $(this).data('project-id');
+                const projectTitle = $(this).data('project-title');
+                const studentName = $(this).data('student-name');
+                const vivaDate = $(this).data('viva-date');
+                const vivaVenue = $(this).data('viva-venue');
+
+                $('#vivaModalProjectTitle').text(projectTitle || '-');
+                $('#vivaModalStudentName').text(studentName || '-');
+                $('#vivaModalProjectId').val(projectId);
+                
+                // Set min date to current time to enforce future scheduling in browser
+                const now = new Date();
+                const nowIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                $('#vivaModalDate').attr('min', nowIso);
+
+                if (vivaDate) {
+                    $('#vivaModalDate').val(vivaDate);
+                } else {
+                    $('#vivaModalDate').val('');
+                }
+                
+                $('#vivaModalVenue').val(vivaVenue || '');
+            });
+
+            // Handle Opening Project Milestones Modal via delegation (supports DataTables pagination & filtering)
+            $('#projectsTable').on('click', '.btn-open-milestones-modal', function (e) {
+                e.preventDefault();
+                const projectId = $(this).data('project-id');
+                const projectTitle = $(this).data('project-title');
+                const studentName = $(this).data('student-name');
+                openProjectMilestonesModal(projectId, projectTitle, studentName);
+            });
+
+            // Handle legacy direct link or redirect (?openProjectId=id)
+            const urlParams = new URLSearchParams(window.location.search);
+            const openProjectId = urlParams.get('openProjectId');
+            if (openProjectId) {
+                openProjectMilestonesModal(openProjectId, '', '');
+            }
+        });
+
+        // Function to dynamically load and display Project Milestones modal
+        function openProjectMilestonesModal(projectId, projectTitle, studentName) {
+            if (!projectId) return;
+
+            const modalEl = document.getElementById('projectMilestonesModal');
+            if (!modalEl) return;
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+            $('#milestonesModalHeaderSubtitle').text((studentName ? studentName + ' — ' : '') + (projectTitle || ('Project #' + projectId)));
+            $('#projectMilestonesModalContent').html(`
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="text-muted small mt-3 fw-semibold">Loading project milestones...</div>
+                </div>
+            `);
+
+            modal.show();
+
+            fetch('/Admin/GetProjectMilestones/' + encodeURIComponent(projectId), {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(async function(res) {
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        throw new Error('Project not found or no milestone records exist.');
+                    } else if (res.status === 401 || res.status === 403) {
+                        throw new Error('Your session has expired or you do not have permission.');
+                    } else {
+                        throw new Error('Server returned error code ' + res.status);
+                    }
+                }
+                return res.text();
+            })
+            .then(function(html) {
+                $('#projectMilestonesModalContent').html(html);
+            })
+            .catch(function(err) {
+                $('#projectMilestonesModalContent').html(`
+                    <div class="alert alert-danger border-0 rounded-4 p-4 d-flex align-items-center gap-3">
+                        <i class="fas fa-exclamation-circle fs-2 text-danger"></i>
+                        <div>
+                            <h6 class="fw-bold mb-1 text-danger">Unable to Load Milestones</h6>
+                            <div class="small text-muted">${err.message || 'An error occurred while loading project milestones.'}</div>
+                        </div>
+                    </div>
+                `);
+            });
+        }
+
+        // SweetAlert2 confirmation for assigning an examiner
+        function handleAssignClick(btn) {
+            // Strictly guard against clicking assigned card
+            if ($(btn).is(':disabled') || $(btn).hasClass('is-assigned')) {
+                return false;
+            }
+
+            const form = $(btn).closest('form');
+            const card = $(btn).closest('.examiner-card-wrapper');
+            const examinerName = card.find('h6').text().trim();
+            const projectTitle = $('#modalProjectTitle').text().trim();
+
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: 'Assign Examiner?',
+                    html: '<p class="mb-2 text-muted">Are you sure you want to assign <strong>' + examinerName + '</strong> as the Examiner for:</p>' +
+                          '<div class="p-3 bg-light rounded-3 text-primary fw-bold text-start border">' + projectTitle + '</div>',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#2563eb',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: '<i class="fas fa-check me-1"></i> Yes, Assign',
+                    cancelButtonText: 'Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        form[0].submit();
+                    }
+                });
+            } else {
+                form[0].submit();
+            }
+        }
+
+        // SweetAlert2 confirmation for removing an assigned examiner
+        function handleRemoveClick() {
+            const examinerName = $('#modalCurrentExaminer').text().trim();
+            const projectTitle = $('#modalProjectTitle').text().trim();
+
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: 'Remove Examiner?',
+                    html: '<p class="mb-2 text-muted">Are you sure you want to unassign the current examiner from:</p>' +
+                          '<div class="p-3 bg-light rounded-3 text-danger fw-bold text-start border">' + projectTitle + '</div>',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#dc2626',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: '<i class="fas fa-trash-alt me-1"></i> Yes, Remove',
+                    cancelButtonText: 'Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        document.getElementById('removeExaminerForm').submit();
+                    }
+                });
+            } else {
+                document.getElementById('removeExaminerForm').submit();
+            }
+        }
+
+        // Filter examiners function (matching Supervisor pattern)
+        function filterExaminers() {
+            const searchTerm = document.getElementById('examinerSearch').value.toLowerCase().trim();
+            const deptFilter = document.getElementById('deptFilter').value;
+            const progFilter = document.getElementById('progFilter').value;
+            const specFilter = document.getElementById('specFilter').value;
+
+            const cards = document.querySelectorAll('.examiner-card-wrapper');
+            let visibleCount = 0;
+
+            cards.forEach(card => {
+                const name = card.getAttribute('data-name') || "";
+                const email = card.getAttribute('data-email') || "";
+                const dept = card.getAttribute('data-dept') || "";
+                const prog = card.getAttribute('data-prog') || "";
+                const spec = card.getAttribute('data-spec') || "";
+
+                const matchesSearch = name.includes(searchTerm) || email.includes(searchTerm);
+                
+                const hasDept = deptFilter === "" || dept.split(',').map(s => s.trim()).includes(deptFilter);
+                const hasProg = progFilter === "" || prog.split(',').map(s => s.trim()).includes(progFilter);
+                const hasSpec = specFilter === "" || spec.split(',').map(s => s.trim()).includes(specFilter);
+
+                if (matchesSearch && hasDept && hasProg && hasSpec) {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            
+            const container = document.getElementById('examinerCardsContainer');
+            let emptyMsg = document.getElementById('examiner-empty-msg');
+            if (visibleCount === 0) {
+                if (!emptyMsg) {
+                    emptyMsg = document.createElement('div');
+                    emptyMsg.id = 'examiner-empty-msg';
+                    emptyMsg.className = 'col-12 text-center py-4 text-muted';
+                    emptyMsg.innerHTML = '<i class="fas fa-search fa-2x mb-2 text-muted"></i><p class="mb-0">No examiners match your criteria.</p>';
+                    container.appendChild(emptyMsg);
+                } else {
+                    emptyMsg.style.display = 'block';
+                }
+            } else if (emptyMsg) {
+                emptyMsg.style.display = 'none';
+            }
+        }
+    </script>
+}
