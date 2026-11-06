@@ -409,3 +409,17 @@ FYPTracker/scratch_inspect.py
 .env
 .env.*
 !.env.example
+# User uploads & profile contents
+FYPTracker/wwwroot/UploadedContent/
+FYPTracker/wwwroot/uploads/
+
+# Development configuration files
+FYPTracker/appsettings.*.json
+!FYPTracker/appsettings.example.json
+
+# Root temporary scratch/patch files
+/*.txt
+/*.py
+/*.cs
+/*.html
+/update.sql
