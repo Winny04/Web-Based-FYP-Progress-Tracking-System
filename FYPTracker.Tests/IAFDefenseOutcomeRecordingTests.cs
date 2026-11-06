@@ -25,7 +25,7 @@ namespace FYPTracker.Tests
         {
             var inMemorySettings = new Dictionary<string, string?>
             {
-                { "ConnectionStrings:Entities", "Server=Boon\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;" }
+                { "ConnectionStrings:Entities", "Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;" }
             };
 
             return new ConfigurationBuilder()

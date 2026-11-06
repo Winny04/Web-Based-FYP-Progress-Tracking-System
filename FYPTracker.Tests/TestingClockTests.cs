@@ -49,7 +49,7 @@ namespace FYPTracker.Tests
         public void TestingSystemClock_WhenPermitted_AllowsSettingSimulatedTime()
         {
             var env = CreateEnv("Testing");
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;");
             var clock = new TestingSystemClock(env, config);
 
             var targetDate = new DateTime(2026, 3, 15, 10, 30, 0);
@@ -68,7 +68,7 @@ namespace FYPTracker.Tests
         public void TestingSystemClock_WhenPermitted_AllowsAdvancingTime()
         {
             var env = CreateEnv("Testing");
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;");
             var clock = new TestingSystemClock(env, config);
 
             var targetDate = new DateTime(2026, 4, 1, 9, 0, 0);
@@ -84,7 +84,7 @@ namespace FYPTracker.Tests
         public void TestingSystemClock_InDevelopment_RejectsSetTimeAndFallsBackToRealTime()
         {
             var env = CreateEnv("Development");
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Development;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Development;Trusted_Connection=True;");
             var clock = new TestingSystemClock(env, config);
 
             Assert.Throws<InvalidOperationException>(() => clock.SetTime(new DateTime(2026, 5, 1)));
@@ -100,7 +100,7 @@ namespace FYPTracker.Tests
         public void TestingClockController_WhenNotPermitted_ReturnsForbid()
         {
             var env = CreateEnv("Development");
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Development;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Development;Trusted_Connection=True;");
             var clock = new RealSystemClock();
             var controller = new TestingClockController(clock, env, config);
 
@@ -113,7 +113,7 @@ namespace FYPTracker.Tests
         public void TestingClockController_WhenPermitted_SetsTimeAndRedirects()
         {
             var env = CreateEnv("Testing");
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;");
             var clock = new TestingSystemClock(env, config);
             var controller = new TestingClockController(clock, env, config)
             {

@@ -31,7 +31,7 @@ namespace FYPTracker.Tests
         public void DevelopmentEnvironment_UsesDefaultDirectories()
         {
             var env = CreateEnv("Development");
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Development;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Development;Trusted_Connection=True;");
 
             string contentRoot = Path.Combine(Path.GetTempPath(), "DevRoot_" + Guid.NewGuid());
             try
@@ -58,7 +58,7 @@ namespace FYPTracker.Tests
         public void TestingEnvironment_WithFYPTrackerTest_UsesIsolatedTestingDirectories()
         {
             var env = CreateEnv("Testing");
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;");
 
             string contentRoot = Path.Combine(Path.GetTempPath(), "TestRoot_" + Guid.NewGuid());
             try
@@ -88,7 +88,7 @@ namespace FYPTracker.Tests
             // Testing + FYPTracker_Development must NOT fall back to development paths.
             // It MUST throw InvalidOperationException and completely deny access.
             var env = CreateEnv("Testing");
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Development;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Development;Trusted_Connection=True;");
             string contentRoot = Path.Combine(Path.GetTempPath(), "TestRootFailClosed_" + Guid.NewGuid());
 
             try
@@ -122,7 +122,7 @@ namespace FYPTracker.Tests
 
                 // 2. Perform write operation in Testing environment
                 var env = CreateEnv("Testing");
-                var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;");
+                var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;");
 
                 string testingSubmissionsDir = TestingStorageProvider.GetSubmissionsDirectory(root, env, config);
                 string testFile = Path.Combine(testingSubmissionsDir, "important_dev_file.pdf"); // Same filename!

@@ -36,7 +36,7 @@ namespace FYPTracker.Tests
         public void EmailService_WhenTestingAndFYPTracker_TestAndOfflineTrue_SkipsEmailWithoutException()
         {
             var env = CreateEnv("Testing");
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;");
             var smtpSettings = new SmtpSettings { Offline = true };
 
             var emailService = new EmailService(smtpSettings, env, config);
@@ -52,7 +52,7 @@ namespace FYPTracker.Tests
         public async Task EmailService_WhenTestingAndFYPTracker_TestAndOfflineTrue_AsyncSend_SkipsEmailWithoutException()
         {
             var env = CreateEnv("Testing");
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;");
             var smtpSettings = new SmtpSettings { Offline = true };
 
             var emailService = new EmailService(smtpSettings, env, config);
@@ -68,7 +68,7 @@ namespace FYPTracker.Tests
         public void EmailService_WhenDevelopmentAndOfflineTrue_ThrowsInvalidOperationException()
         {
             var env = CreateEnv("Development");
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Development;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Development;Trusted_Connection=True;");
             var smtpSettings = new SmtpSettings { Offline = true, DevRedirectEmail = "boonwinny04@gmail.com" };
 
             var emailService = new EmailService(smtpSettings, env, config);
@@ -84,7 +84,7 @@ namespace FYPTracker.Tests
         {
             var env = CreateEnv("Testing");
             // Wrong database: FYPTracker_Development or backup should NOT get testing offline email bypass
-            var config = CreateConfig("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Development;Trusted_Connection=True;");
+            var config = CreateConfig("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Development;Trusted_Connection=True;");
             var smtpSettings = new SmtpSettings { Offline = true };
 
             var emailService = new EmailService(smtpSettings, env, config);

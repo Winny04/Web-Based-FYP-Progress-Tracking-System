@@ -87,7 +87,7 @@ namespace FYPTracker.Tests
         }
 
         private static IConfiguration CreateConfig(
-            string connStr = "Server=Winny\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;",
+            string connStr = "Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;",
             bool flagEnabled = true,
             bool smtpOffline = true)
         {
@@ -110,7 +110,7 @@ namespace FYPTracker.Tests
         {
             var env = new TestWebHostEnvironment { EnvironmentName = "Testing" };
             var config = CreateConfig(
-                connStr: "Server=Winny\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;",
+                connStr: "Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;",
                 flagEnabled: true,
                 smtpOffline: true);
 
@@ -129,7 +129,7 @@ namespace FYPTracker.Tests
         {
             var env = new TestWebHostEnvironment { EnvironmentName = envName };
             var config = CreateConfig(
-                connStr: "Server=Winny\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;",
+                connStr: "Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;",
                 flagEnabled: true,
                 smtpOffline: true);
 
@@ -145,7 +145,7 @@ namespace FYPTracker.Tests
         {
             var env = new TestWebHostEnvironment { EnvironmentName = "Testing" };
             var config = CreateConfig(
-                connStr: "Server=Winny\\SQLEXPRESS;Database=FYPTracker_Development;Trusted_Connection=True;",
+                connStr: "Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Development;Trusted_Connection=True;",
                 flagEnabled: true,
                 smtpOffline: true);
 
@@ -161,7 +161,7 @@ namespace FYPTracker.Tests
         {
             var env = new TestWebHostEnvironment { EnvironmentName = "Testing" };
             var config = CreateConfig(
-                connStr: "Server=Winny\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;",
+                connStr: "Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;",
                 flagEnabled: true,
                 smtpOffline: false);
 
@@ -177,7 +177,7 @@ namespace FYPTracker.Tests
         {
             var env = new TestWebHostEnvironment { EnvironmentName = "Testing" };
             var config = CreateConfig(
-                connStr: "Server=Winny\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;",
+                connStr: "Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;",
                 flagEnabled: false,
                 smtpOffline: true);
 
@@ -946,7 +946,7 @@ namespace FYPTracker.Tests
 
             var env = new TestWebHostEnvironment { EnvironmentName = "Testing" };
             var config = CreateConfig(
-                connStr: "Server=Winny\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;",
+                connStr: "Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;",
                 flagEnabled: true,
                 smtpOffline: true);
 

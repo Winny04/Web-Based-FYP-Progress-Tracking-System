@@ -41,7 +41,7 @@ namespace FYPTracker.Tests
         public void IsFlexibleTestingBookingAllowed_WhenTestingAndFYPTracker_Test_ReturnsTrue()
         {
             var env = CreateEnv("Testing");
-            var config = CreateConfigWithConnectionString("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;MultipleActiveResultSets=True;TrustServerCertificate=True");
+            var config = CreateConfigWithConnectionString("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;MultipleActiveResultSets=True;TrustServerCertificate=True");
 
             var result = TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(env, config);
 
@@ -52,7 +52,7 @@ namespace FYPTracker.Tests
         public void IsFlexibleTestingBookingAllowed_WhenDevelopment_ReturnsFalse()
         {
             var env = CreateEnv("Development");
-            var config = CreateConfigWithConnectionString("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Development;Trusted_Connection=True;MultipleActiveResultSets=True;TrustServerCertificate=True");
+            var config = CreateConfigWithConnectionString("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Development;Trusted_Connection=True;MultipleActiveResultSets=True;TrustServerCertificate=True");
 
             var result = TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(env, config);
 
@@ -64,7 +64,7 @@ namespace FYPTracker.Tests
         {
             var env = CreateEnv("Testing");
             // Even if environment is Testing, if InitialCatalog is FYPTracker_Development, must return false!
-            var config = CreateConfigWithConnectionString("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Development;Trusted_Connection=True;MultipleActiveResultSets=True;TrustServerCertificate=True");
+            var config = CreateConfigWithConnectionString("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Development;Trusted_Connection=True;MultipleActiveResultSets=True;TrustServerCertificate=True");
 
             var result = TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(env, config);
 
@@ -98,7 +98,7 @@ namespace FYPTracker.Tests
         {
             var env = CreateEnv("Testing");
             // E.g. FYPTracker_Test_Backup or Fake_FYPTracker_Test should not pass
-            var config = CreateConfigWithConnectionString("Server=Boon\\SQLEXPRESS;Database=FYPTracker_Test_Backup;Trusted_Connection=True;");
+            var config = CreateConfigWithConnectionString("Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test_Backup;Trusted_Connection=True;");
 
             var result = TestingEnvironmentGuard.IsFlexibleTestingBookingAllowed(env, config);
 

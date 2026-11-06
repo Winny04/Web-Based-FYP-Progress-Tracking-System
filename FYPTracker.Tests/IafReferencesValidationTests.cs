@@ -109,7 +109,7 @@ namespace FYPTracker.Tests
             var env = new TestWebHostEnvironment { EnvironmentName = "Development", ContentRootPath = tempDir, WebRootPath = tempDir };
             var inMemorySettings = new Dictionary<string, string?>
             {
-                { "ConnectionStrings:Entities", "Server=Winny\\SQLEXPRESS;Database=FYPTracker_Test;Trusted_Connection=True;" },
+                { "ConnectionStrings:Entities", "Server=(localdb)\\mssqllocaldb;Database=FYPTracker_Test;Trusted_Connection=True;" },
                 { "DemoUiOverrides:EnforceIafReferencesValidationProjectIds:0", configureProject53ForReferences ? "53" : "999" }
             };
             var config = new ConfigurationBuilder().AddInMemoryCollection(inMemorySettings).Build();
