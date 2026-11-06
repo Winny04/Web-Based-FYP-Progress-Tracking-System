@@ -293,7 +293,7 @@ BEGIN
         ([FullName],[UserName],[ShortName],[PassCode],[Email],[UserType],[DepartmentId],[DateCreated],[IsNotificationOn],[IsResign])
     VALUES
         ('Administrator','admin','Admin',
-         '0192023a7bbd73250516f069df18b500',   -- MD5 of "Admin@123"
+         '141172320311816333238671555391902910',   -- Encryption.GetHash("Admin@123")
          'admin@fyp.edu.my','Admin',1,GETDATE(),1,0);
     PRINT 'Seeded Admin user.';
 END

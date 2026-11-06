@@ -3,65 +3,75 @@
 ## Description
 The **Web-Based FYP Progress Tracking System** is a comprehensive web application built with ASP.NET Core MVC. It is designed to streamline, manage, and evaluate the entire lifecycle of Final Year Projects for academic institutions. The platform facilitates seamless collaboration and communication between Students, Supervisors, External Examiners, and Administrators, ensuring project milestones are met efficiently.
 
-## Features
-* **Role-Based Access Control:** Dedicated dashboards and tailored functionalities for Students, Supervisors, External Examiners, and Administrators.
+---
+
+## Key Features
+* **Role-Based Access Control:** Tailored portals and dashboards for Administrators, Supervisors, External Examiners, and Students.
 * **Student Portal:**
-  * Register for topics, submit Initial Project Allocation Forms (IAF), and sign digital meeting logbooks.
-  * Upload progress reports, deliverables, and Stage 1 / Stage 2 milestones.
-  * Interactive messaging and chat attachments with assigned supervisors.
+  * Topic exploration and online Initial Project Allocation Form (IAF) submission.
+  * Meeting scheduling and digital signature submission on supervision logbooks.
+  * Stage 1 & Stage 2 deliverable uploads, document revision histories, and progress tracking.
+  * Real-time direct chat and attachment sharing with assigned supervisors.
 * **Supervisor Portal:**
-  * Review, accept, or reject student project applications.
+  * Review, accept, or reject student supervision requests.
   * Conduct and record supervision meetings with auto-calculated meeting week numbers.
-  * Digitally sign meeting logs with instantaneous PDF generation.
-  * Provide milestone feedback, rubrics assessment, and marksheet uploads.
+  * One-click digital logbook signing with instant PDF generation.
+  * Milestone feedback submission, rubric-based evaluation, and Excel marksheet grading.
+* **External Examiner Portal:**
+  * Dedicated examination portal for Stage 1 / Stage 2 defense evaluations and marksheet submissions.
 * **Admin Dashboard:**
-  * Manage academic sessions, users, departments, specializations, and default milestone templates.
-  * System-wide progress monitoring, schedule overrides, and automated reporting.
+  * Manage academic sessions, system users, departments, specializations, and default milestone templates.
+  * Centralized progress monitoring, schedule overrides, and audit reporting.
 * **Real-Time Communication:** Live SignalR messaging and file-sharing between students and supervisors.
-* **Email Notifications:** Automated email notifications for proposals, status updates, and milestones (via MailKit).
-* **Document Processing:** Dynamic HTML-to-PDF rendering, signed logbook generation, and Excel marksheet evaluation (via PuppeteerSharp, iTextSharp, and NPOI).
+* **Automated Notifications:** Email alerts for applications, status updates, and milestone deadlines (powered by MailKit).
+* **Document Processing:** Dynamic HTML-to-PDF rendering, signed logbook generation, and Excel marksheet evaluation (powered by PuppeteerSharp, iTextSharp, and NPOI).
+
+---
 
 ## Tech Stack
 * **Framework:** ASP.NET Core MVC (.NET 10.0 / .NET 6.0+)
-* **Database:** SQL Server (LocalDB, SQL Express, or Full SQL Server)
+* **Database:** Microsoft SQL Server (LocalDB, SQL Express, or Enterprise)
 * **ORM:** Entity Framework Core
 * **Real-time Engine:** ASP.NET Core SignalR
 * **Frontend:** HTML5, CSS3, JavaScript, Bootstrap 5, Metronic UI Components
 * **Key Libraries:**
-  * **MailKit & MimeKit** (Email communication)
-  * **PuppeteerSharp** (High-fidelity PDF document rendering)
-  * **NPOI & iTextSharp** (Marksheet Excel & PDF handling)
-  * **Quartz.NET** (Background scheduling)
+  * **MailKit & MimeKit** (Email communication with offline development mode)
+  * **PuppeteerSharp** (Chromium-based high-fidelity PDF rendering)
+  * **NPOI & iTextSharp** (Excel marksheet processing and PDF generation)
+  * **Quartz.NET** (Automated background task scheduling)
 
 ---
 
 ## Prerequisites
-To run this project locally, ensure you have installed:
+Before setting up the project locally, ensure you have:
 * [.NET SDK](https://dotnet.microsoft.com/download) (.NET 10.0 SDK recommended or compatible runtime)
 * [SQL Server](https://www.microsoft.com/en-us/sql-server/sql-server-downloads) (SQL Server Express or LocalDB)
-* An IDE such as [Visual Studio 2022+](https://visualstudio.microsoft.com/) or [Visual Studio Code](https://code.visualstudio.com/)
+* [Visual Studio 2022+](https://visualstudio.microsoft.com/) or [Visual Studio Code](https://code.visualstudio.com/)
 
 ---
 
-## Getting Started
+## Quick Start Guide
 
-Follow these steps to set up and run the system locally from GitHub:
+Follow these steps to get the project up and running locally:
 
-### 1. Clone the repository
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/Winny04/Web-Based-FYP-Progress-Tracking-System.git
 cd Web-Based-FYP-Progress-Tracking-System
-git checkout latest
 ```
 
-### 2. Configure `appsettings.json`
-Copy the provided sample configuration template to create your local development settings:
+### 2. Configure Local Settings
+Create your local configuration by copying the provided example template:
+
 ```bash
+# On Windows PowerShell:
+Copy-Item FYPTracker/appsettings.example.json FYPTracker/appsettings.Development.json
+
+# On Bash / macOS / Linux:
 cp FYPTracker/appsettings.example.json FYPTracker/appsettings.Development.json
 ```
-*(On Windows PowerShell, use: `Copy-Item FYPTracker/appsettings.example.json FYPTracker/appsettings.Development.json`)*
 
-Open `FYPTracker/appsettings.Development.json` and adjust the database connection string to point to your local SQL Server instance:
+Open `FYPTracker/appsettings.Development.json` and adjust the connection string to match your local SQL Server instance:
 ```json
 {
   "EnvironmentName": "Development",
@@ -81,18 +91,18 @@ Open `FYPTracker/appsettings.Development.json` and adjust the database connectio
   }
 }
 ```
-> **Tip:** Setting `"Offline": true` in `SmtpSettings` allows you to run and test all workflows without needing an active SMTP mail server.
+> **Tip:** Keeping `"Offline": true` in `SmtpSettings` allows all registration, notification, and workflow tests to run locally without connecting to an external mail server.
 
-### 3. Database Setup
-You can initialize the database using either of the following methods:
+### 3. Initialize the Database
+You can initialize the database schema and default seed data using either method:
 
-- **Option A (SQL Script - Recommended):**
-  Open SQL Server Management Studio (SSMS) or Azure Data Studio, connect to your local SQL Server, and execute:
+* **Option A (SQL Script - Recommended):**
+  Open SQL Server Management Studio (SSMS) or Azure Data Studio, connect to your SQL Server instance, and run:
   ```
   FYPTracker/setup_fyp_database.sql
   ```
 
-- **Option B (EF Core Migrations):**
+* **Option B (EF Core Migrations):**
   ```bash
   cd FYPTracker
   dotnet ef database update
@@ -105,16 +115,28 @@ dotnet build
 cd FYPTracker
 dotnet run --launch-profile Run
 ```
-Or open `FYPTracker.sln` in **Visual Studio** and select the **Run** profile (`F5`).
+Or open `FYPTracker.sln` in **Visual Studio** and press **F5** (Run profile).
 
-The application will be accessible at:
+The web application will be live at:
 * **HTTPS:** `https://localhost:7262`
 * **HTTP:** `http://localhost:5262`
 
 ---
 
-## Running Unit & Integration Tests
-To execute the automated test suite:
+## Default Demo Accounts
+When initialized via `setup_fyp_database.sql`, the system provides pre-configured demo accounts for testing all user roles:
+
+| Role | Username | Password | Notes |
+| :--- | :--- | :--- | :--- |
+| **Admin** | `admin` | `Admin@123` | Full administrative control & system settings |
+| **Supervisor** | `dr.lim` | `Student@123` | Faculty of Computer Science & IT supervisor |
+| **Supervisor** | `dr.siti` | `Student@123` | Faculty of Engineering supervisor |
+| **Student** | `student` | `Student@123` | Active student account |
+
+---
+
+## Running Automated Tests
+To run the full suite of unit and workflow verification tests:
 ```bash
 dotnet test
 ```
@@ -135,7 +157,7 @@ Web-Based-FYP-Progress-Tracking-System/
 │   ├── appsettings.example.json # Sanitized configuration template
 │   └── setup_fyp_database.sql   # Database initialization script
 ├── FYPTracker.Tests/            # xUnit Test Project
-├── FYPTracker.sln               # Solution File
+├── FYPTracker.sln               # Visual Studio Solution File
 └── README.md                    # Project Documentation & Setup Guide
 ```
 
