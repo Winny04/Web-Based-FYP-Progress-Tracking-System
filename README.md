@@ -1,82 +1,145 @@
 # Web-Based Final Year Project (FYP) Progress Tracking System
 
 ## Description
-The **Web-Based FYP Progress Tracking System** is a comprehensive web application built with ASP.NET Core MVC. It is designed to streamline, manage, and evaluate the entire lifecycle of Final Year Projects for academic institutions. The platform facilitates seamless collaboration and communication between Students, Supervisors, and Administrators, ensuring project milestones are met efficiently.
+The **Web-Based FYP Progress Tracking System** is a comprehensive web application built with ASP.NET Core MVC. It is designed to streamline, manage, and evaluate the entire lifecycle of Final Year Projects for academic institutions. The platform facilitates seamless collaboration and communication between Students, Supervisors, External Examiners, and Administrators, ensuring project milestones are met efficiently.
 
 ## Features
-* **Role-Based Access Control:** Dedicated dashboards and tailored functionalities for Students, Supervisors, and Administrators.
+* **Role-Based Access Control:** Dedicated dashboards and tailored functionalities for Students, Supervisors, External Examiners, and Administrators.
 * **Student Portal:**
-  * Register for topics and submit project proposals.
-  * Upload progress reports and milestones.
-  * View feedback and evaluations from supervisors.
+  * Register for topics, submit Initial Project Allocation Forms (IAF), and sign digital meeting logbooks.
+  * Upload progress reports, deliverables, and Stage 1 / Stage 2 milestones.
+  * Interactive messaging and chat attachments with assigned supervisors.
 * **Supervisor Portal:**
-  * Review, accept, or reject student proposals.
-  * Monitor assigned students' progress.
-  * Provide continuous feedback, grading, and document reviews.
+  * Review, accept, or reject student project applications.
+  * Conduct and record supervision meetings with auto-calculated meeting week numbers.
+  * Digitally sign meeting logs with instantaneous PDF generation.
+  * Provide milestone feedback, rubrics assessment, and marksheet uploads.
 * **Admin Dashboard:**
-  * Manage user accounts (Students, Supervisors) and system configurations.
-  * Oversee the overall FYP timeline and processes.
-* **Email Notifications:** Automated email alerts for important updates and submissions (via MailKit).
-* **Scheduled Tasks:** Background jobs for deadlines and reminders (via Quartz).
-* **Document Generation:** Generate and export reports in PDF and Excel formats (via iTextSharp and NPOI).
+  * Manage academic sessions, users, departments, specializations, and default milestone templates.
+  * System-wide progress monitoring, schedule overrides, and automated reporting.
+* **Real-Time Communication:** Live SignalR messaging and file-sharing between students and supervisors.
+* **Email Notifications:** Automated email notifications for proposals, status updates, and milestones (via MailKit).
+* **Document Processing:** Dynamic HTML-to-PDF rendering, signed logbook generation, and Excel marksheet evaluation (via PuppeteerSharp, iTextSharp, and NPOI).
 
 ## Tech Stack
-* **Framework:** ASP.NET Core MVC (.NET 6.0)
-* **Database:** SQL Server
-* **ORM:** Entity Framework Core (EF Core 6.0)
-* **Frontend:** HTML, CSS, JavaScript, Bootstrap 5, CoreUI Icons
-* **Other Libraries:**
-  * AutoMapper (Object mapping)
-  * MailKit & MimeKit (Email services)
-  * Quartz.NET (Task scheduling)
-  * iTextSharp & NPOI (Document processing)
-  * PuppeteerSharp (PDF generation from HTML)
+* **Framework:** ASP.NET Core MVC (.NET 10.0 / .NET 6.0+)
+* **Database:** SQL Server (LocalDB, SQL Express, or Full SQL Server)
+* **ORM:** Entity Framework Core
+* **Real-time Engine:** ASP.NET Core SignalR
+* **Frontend:** HTML5, CSS3, JavaScript, Bootstrap 5, Metronic UI Components
+* **Key Libraries:**
+  * **MailKit & MimeKit** (Email communication)
+  * **PuppeteerSharp** (High-fidelity PDF document rendering)
+  * **NPOI & iTextSharp** (Marksheet Excel & PDF handling)
+  * **Quartz.NET** (Background scheduling)
+
+---
 
 ## Prerequisites
-To run this project locally, ensure you have the following installed:
-* [.NET 6.0 SDK](https://dotnet.microsoft.com/download/dotnet/6.0)
-* [SQL Server](https://www.microsoft.com/en-us/sql-server/sql-server-downloads) or SQL Server Express
-* A suitable IDE like [Visual Studio 2022](https://visualstudio.microsoft.com/) or [Visual Studio Code](https://code.visualstudio.com/)
+To run this project locally, ensure you have installed:
+* [.NET SDK](https://dotnet.microsoft.com/download) (.NET 10.0 SDK recommended or compatible runtime)
+* [SQL Server](https://www.microsoft.com/en-us/sql-server/sql-server-downloads) (SQL Server Express or LocalDB)
+* An IDE such as [Visual Studio 2022+](https://visualstudio.microsoft.com/) or [Visual Studio Code](https://code.visualstudio.com/)
+
+---
 
 ## Getting Started
 
-Follow these steps to set up the project on your local machine:
+Follow these steps to set up and run the system locally from GitHub:
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/Winny04/Web-Based-FYP-Progress-Tracking-System.git
-   cd Web-Based-FYP-Progress-Tracking-System
-   ```
+### 1. Clone the repository
+```bash
+git clone https://github.com/Winny04/Web-Based-FYP-Progress-Tracking-System.git
+cd Web-Based-FYP-Progress-Tracking-System
+git checkout latest
+```
 
-2. **Database Setup:**
-   * Open SQL Server Management Studio (SSMS).
-   * Execute the `setup_fyp_database.sql` script located in the `FYPTracker` directory to create the database schema and initial data.
-   * *Alternatively*, you can use Entity Framework Core tools to update the database:
-     ```bash
-     cd FYPTracker
-     dotnet ef database update
-     ```
+### 2. Configure `appsettings.json`
+Copy the provided sample configuration template to create your local development settings:
+```bash
+cp FYPTracker/appsettings.example.json FYPTracker/appsettings.Development.json
+```
+*(On Windows PowerShell, use: `Copy-Item FYPTracker/appsettings.example.json FYPTracker/appsettings.Development.json`)*
 
-3. **Configure the Application:**
-   * Open `appsettings.json` (or `appsettings.Development.json`) in the `FYPTracker` folder.
-   * Update the `"Entities"` ConnectionString to match your local SQL Server instance.
-     ```json
-     "ConnectionStrings": {
-       "Entities": "Server=YOUR_SERVER_NAME;Database=FYPTracker;Trusted_Connection=True;MultipleActiveResultSets=true"
-     }
-     ```
+Open `FYPTracker/appsettings.Development.json` and adjust the database connection string to point to your local SQL Server instance:
+```json
+{
+  "EnvironmentName": "Development",
+  "ConnectionStrings": {
+    "Entities": "Server=localhost\\SQLEXPRESS;Database=FYPTracker_Development;Trusted_Connection=True;MultipleActiveResultSets=True;TrustServerCertificate=True"
+  },
+  "SmtpSettings": {
+    "Offline": true,
+    "DevRedirectEmail": "your-email@example.com",
+    "EmailFrom": "no-reply@example.com",
+    "SmtpHost": "smtp.example.com",
+    "SmtpPort": 587,
+    "SmtpUser": "your-username"
+  },
+  "FeatureFlags": {
+    "IAFAlternativeTimeRequestEnabled": true
+  }
+}
+```
+> **Tip:** Setting `"Offline": true` in `SmtpSettings` allows you to run and test all workflows without needing an active SMTP mail server.
 
-4. **Run the Application:**
-   * Open the `.sln` file in Visual Studio and press `F5` (or click "Start") to build and run the app.
-   * *Alternatively*, run via .NET CLI:
-     ```bash
-     dotnet build
-     dotnet run
-     ```
-   * The application will typically start at `https://localhost:7198` (check `Properties/launchSettings.json` for exact ports).
+### 3. Database Setup
+You can initialize the database using either of the following methods:
 
-## Usage
-Upon navigating to the homepage, users will be prompted to log in. Depending on the account type (Student, Supervisor, Admin), the system will redirect to the respective dashboard where the user can begin managing their FYP tasks.
+- **Option A (SQL Script - Recommended):**
+  Open SQL Server Management Studio (SSMS) or Azure Data Studio, connect to your local SQL Server, and execute:
+  ```
+  FYPTracker/setup_fyp_database.sql
+  ```
+
+- **Option B (EF Core Migrations):**
+  ```bash
+  cd FYPTracker
+  dotnet ef database update
+  ```
+
+### 4. Build and Run
+From the root directory:
+```bash
+dotnet build
+cd FYPTracker
+dotnet run --launch-profile Run
+```
+Or open `FYPTracker.sln` in **Visual Studio** and select the **Run** profile (`F5`).
+
+The application will be accessible at:
+* **HTTPS:** `https://localhost:7262`
+* **HTTP:** `http://localhost:5262`
+
+---
+
+## Running Unit & Integration Tests
+To execute the automated test suite:
+```bash
+dotnet test
+```
+
+---
+
+## Project Structure
+```text
+Web-Based-FYP-Progress-Tracking-System/
+├── FYPTracker/                  # Main ASP.NET Core MVC Application
+│   ├── Controllers/             # MVC Controllers (Admin, Student, Supervisor, etc.)
+│   ├── Hubs/                    # SignalR Real-Time Chat Hubs
+│   ├── Models/                  # EF Core Data & Identity Models
+│   ├── Services/                # Domain & Background Services
+│   ├── Utils/                   # PDF & Marksheet Helper Utilities
+│   ├── Views/                   # Razor Views & Metronic Partial Templates
+│   ├── FormTemplates/           # JSON Schemas for dynamic FYP forms
+│   ├── appsettings.example.json # Sanitized configuration template
+│   └── setup_fyp_database.sql   # Database initialization script
+├── FYPTracker.Tests/            # xUnit Test Project
+├── FYPTracker.sln               # Solution File
+└── README.md                    # Project Documentation & Setup Guide
+```
+
+---
 
 ## License
-This project is open-source and available under the terms of the MIT License. Feel free to fork and customize it as needed for your institution.
+This project is open-source and available under the terms of the MIT License.
